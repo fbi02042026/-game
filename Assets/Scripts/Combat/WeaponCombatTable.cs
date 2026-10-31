@@ -184,4 +184,15 @@ public static class WeaponCombatTable
         float role = isBoss ? GameConfig.BOSS_TTK_HP_MUL : GameConfig.ELITE_TTK_HP_MUL;
         return scale * role;
     }
+
+    /// <summary>
+    /// 【2026-10-31 B2 落地】带大关的重载：普通怪在 Monster.Init 走的是「章 × 大关 × 小关」三因子，
+    /// 精英/Boss 必须同一口径，否则篇内越往后走 Boss 反而相对越软。
+    /// </summary>
+    public static float EliteBossHpMul(int chapter, int grandIndex1Based, bool isBoss, int stageIndex0Based)
+    {
+        float scale = GameConfig.GetStatScale(chapter, grandIndex1Based, stageIndex0Based);
+        float role = isBoss ? GameConfig.BOSS_TTK_HP_MUL : GameConfig.ELITE_TTK_HP_MUL;
+        return scale * role;
+    }
 }

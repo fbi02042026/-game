@@ -154,6 +154,25 @@ public static class MercHireSession
         return false;
     }
 
+    // 【2026-10-31 主人需求「招募界面不足时按钮字变红，统一其他界面」】
+    /// <summary>余额不足时价格文字统一红色（与 MercObtainPopupUI.ApplyFallenCharm「没护符字变红」先例同值）。</summary>
+    public static readonly Color InsufficientPriceColor = new Color(1f, 0.4f, 0.4f);
+
+    /// <summary>
+    /// 招募购买力统一判定（单一出口）：普通=金币够不够；稀有/传奇=对应卷轴有没有。
+    /// 招募三选一卡钮（MercenaryRecruitPopupUI）、佣兵信息弹窗购买钮（MercObtainPopupUI）
+    /// 与点击拦截口（OnBuyButtonClicked / TryHireOffer）同用这一套口径，不许各写各的。
+    /// </summary>
+    public static bool CanAffordOffer(MercenaryData offer)
+    {
+        if (offer == null) return false;
+        var rarity = OfferRarity(offer);
+        if (rarity == MercRosterDefs.MercRarity.Common)
+            return ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold)
+                >= GoldCost(offer);
+        return HasScrollFor(rarity);
+    }
+
     public static bool TrySpendScroll(MercRosterDefs.MercRarity rarity)
     {
         var data = SaveSystem.Instance?.Data;

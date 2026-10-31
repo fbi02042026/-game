@@ -183,9 +183,13 @@ public partial class BattleManager
                 ArenaBattleSkip.Restore();   // 跳过加速跑到死亡收尾即恢复（timeScale=1）
                 var arenaData = SaveSystem.Instance?.Data;
                 ArenaRules.ApplyBattleOutcome(arenaData, ArenaChallengeRowIdx, false, out int arenaPts, out _);
-                BattleResultScreen.Show(false, null, () =>
+                // 【2026-10-31 主人拍板「竞技场没有复活 失败只有返回」】失败界面只有【返回】一个钮
+                //（无复活钮、不接点任意处收 —— 旧 holdUntilTap 口径作废）；点返回 → toast 扣分 + 回城，
+                // 回城后重开竞技场弹窗（PendingOpenAfterBattle，「从竞技场返回的时候回到竞技场界面」）。
+                BattleResultScreen.ShowArenaFailure(() =>
                 {
-                    GlobalToastUI.Show($"积分 {arenaPts}");   // 新口径败局也 +10（安慰奖），照旧带符号
+                    GlobalToastUI.Show($"积分 {arenaPts}");   // 败局扣分带符号（-10，2026-10-30 20:00 拍板口径）
+                    ArenaPopupUI.PendingOpenAfterBattle = true;
                     EndRunAndReturnToTown();
                 });
                 return;

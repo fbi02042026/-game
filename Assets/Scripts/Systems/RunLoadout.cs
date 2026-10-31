@@ -119,7 +119,7 @@ public static class RunLoadout
         _themeCache.Clear();
         _starRecord.Clear();
         BeginNew(job);
-        Debug.Log("[RunLoadout] 进入内存模式（引导局构筑不与存档互通）");
+        Debug.Log("[RunLoadout] 进入内存模式（引导局/竞技场构筑只留内存，不与存档互通）");
     }
 
     /// <summary>结束内存模式：整包丢掉，不落盘。</summary>
@@ -130,7 +130,7 @@ public static class RunLoadout
         _data = null;
         _themeCache.Clear();
         _starRecord.Clear();
-        Debug.Log("[RunLoadout] 退出内存模式，引导局构筑已丢弃");
+        Debug.Log("[RunLoadout] 退出内存模式，本局构筑已丢弃（不落盘）");
     }
 
     // ============================================================

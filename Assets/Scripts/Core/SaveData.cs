@@ -129,6 +129,10 @@ public class SaveData
     public string shareRewardDayKey = "";
     /// <summary>好评引导已弹日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地），跨天可再弹（2026-10-25 主人拍板：每日最多弹一次）</summary>
     public string taptapRateDayKey = "";
+    /// <summary>结算双倍日键 yyyyMMdd（本地日，0 点刷新；2026-10-31 主人拍板新增结算双倍广告位）</summary>
+    public string settleDoubleDayKey = "";
+    /// <summary>当日已看结算双倍次数（每日 3 次，见 Systems/SettleDoubleAd.cs）</summary>
+    public int settleDoubleCount = 0;
 
     // === 无限裂隙（2026-10-17 主人拍板）===
     /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 ShopDefs.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
@@ -201,6 +205,10 @@ public class SaveData
     public int arenaPlayerPos = -1;
     /// <summary>竞技场积分分布/规则版本（对照 ArenaRules.DistVersion）：低于当前值时整榜重建、按积分重新插位（v2=曲线分布+吃分差，2026-10-29）。</summary>
     public int arenaDistVersion = 0;
+    /// <summary>竞技场累计对战场次（不论胜负；驱动机器人分数天花板随游玩进度水涨船高，2026-10-30 20:10 主人拍板）。</summary>
+    public int arenaBattlesTotal = 0;
+    /// <summary>机器人分数上次「游玩中刷新」的 Unix 时间戳（0=未刷过，下次检查立即刷；间隔见 ArenaRules.BotRefreshSeconds）。</summary>
+    public long arenaBotRefreshAt = 0;
     /// <summary>赛季结算横幅（跨月后第一次打开竞技场时展示一次后清空）</summary>
     public string arenaSeasonNotice = "";
     /// <summary>新赛季新手必赢剩余场次（赛季开始/首进竞技场置为 NewbieWinsPerSeason，每打一场 -1；2026-10-29 晚主人拍板「刚进来的玩家可以赢几次」）</summary>
@@ -389,6 +397,64 @@ public class SaveData
 
     // === 章节进度 ===
     public int maxUnlockedChapter = 1; // 最大解锁章节（兼容字段；权威来源是 ChapterRouteTable.AvailableChapters）
+
+    /// <summary>
+    /// 【2026-10-31 B2 落地】每篇已通关的大关数（下标 = 篇号-1，值 = 已通关大关数 0..GrandCountOf(篇)）。
+    /// 真源是这里 + clearedStages（关级），<see cref="CurrentGrand"/> 由两者推出。
+    /// 老档迁移：clearedChapterIds 里已通关的篇 → 直接记满（见 MigrateGrandProgress）。
+    /// JsonUtility 不能序列化 Dictionary，故用 List&lt;int&gt; 定长 8。
+    /// </summary>
+    public List<int> grandProgress = new List<int>();
+
+    /// <summary>该篇已通关大关数（钳到 0..GrandCountOf）。</summary>
+    public int GrandClearedCount(int chapter)
+    {
+        if (chapter <= 0) return 0;
+        EnsureGrandProgress();
+        int i = chapter - 1;
+        if (i < 0 || i >= grandProgress.Count) return 0;
+        return ClampInt(grandProgress[i], 0, ActProgressionDefs.GrandCountOf(chapter));
+    }
+
+    /// <summary>该篇当前应打第几座大关（1 起；整篇已通关 → 回 1，重打从第一座开始）。</summary>
+    public int CurrentGrand(int chapter)
+    {
+        int total = ActProgressionDefs.GrandCountOf(chapter);
+        int cleared = GrandClearedCount(chapter);
+        if (total > 0 && cleared >= total) return 1;   // 整篇通关 → 重打从第 1 座（与旧「整章通关重打从 1-1」同口径）
+        return ClampInt(cleared + 1, 1, total < 1 ? 1 : total);
+    }
+
+    /// <summary>标记该篇某座大关已通关（幂等，取最大值，不回退）。</summary>
+    public void MarkGrandCleared(int chapter, int grand)
+    {
+        if (chapter <= 0 || grand <= 0) return;
+        EnsureGrandProgress();
+        int i = chapter - 1;
+        if (i < 0 || i >= grandProgress.Count) return;
+        int total = ActProgressionDefs.GrandCountOf(chapter);
+        int v = ClampInt(grand, 0, total);
+        if (v <= grandProgress[i]) return;
+        grandProgress[i] = v;
+    }
+
+    /// <summary>该篇小关总数（= ActProgressionDefs.StageCountOf，进度/UI 共用）。</summary>
+    public int ChapterSubTotal(int chapter) => ActProgressionDefs.StageCountOf(ClampInt(chapter, 1, ActProgressionDefs.ActCount));
+
+    /// <summary>本文件不引 UnityEngine，整数钳制自带一个（避免为一个 Mathf 拉整包依赖）。</summary>
+    static int ClampInt(int v, int min, int max)
+    {
+        if (v < min) return min;
+        if (v > max) return max;
+        return v;
+    }
+
+    /// <summary>补齐 grandProgress 到 8 项（老档/新档统一入口，幂等）。</summary>
+    public void EnsureGrandProgress()
+    {
+        grandProgress ??= new List<int>();
+        while (grandProgress.Count < ActProgressionDefs.ActCount) grandProgress.Add(0);
+    }
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
     public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
     /// <summary>已通关章节集合（权威；章节分叉后 maxUnlockedChapter 的减法不再成立，一律读这里）</summary>
@@ -452,6 +518,9 @@ public class SaveData
     /// <summary>酒馆闲话图标：上次使用日期（yyyyMMdd）与今日已用次数（每日 3 次，跨天重置）。</summary>
     public int tavernGossipDay = 0;
     public int tavernGossipUsed = 0;
+    /// <summary>【2026-10-31 主人拍板「闲聊文案按情节/次数变，不要总是两句」】闲话累计回数（跨天不清零）：
+    /// 老板娘招呼/正句按它轮换，见 TavernLore.InnkeeperGreeting / InnkeeperLine。</summary>
+    public int tavernGossipCount = 0;
     /// <summary>初期开放的抽奖池格数（总容量 5，见 <see cref="DrawPoolMaxSlots"/>；开放进度见 <see cref="DrawPoolSlots"/>）。</summary>
     public const int DrawPoolDefaultSlots = 3;
     /// <summary>抽奖池总容量（UI 画 5 格，后期逐格开放）。</summary>
@@ -1048,8 +1117,11 @@ public class SaveData
         MigrateClearedChapters();
         // 【2026-10-29 主人拍板】支线岛改为「通关第 1 章后才开放」：若第 1 章尚未通关却已派定支线岛
         // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
-        // 等第 1 章通关后由 EnsureForkRoll 重新随机派定。HasClearedChapter(1) 在 MigrateClearedChapters 后已就绪。
-        if (!HasClearedChapter(1)) { branchRoll1 = 0; branchRoll2 = 0; }
+        // 等门槛到了由 EnsureForkRoll 重新随机派定。
+        // 【2026-10-31 对齐 FeatureUnlock.SideIslandOpen】B2 后「通第 1 章」= 50 小关会把支线岛拖到第 2 天，
+        // 派岛门槛改成「第 1 篇第 1 座大关通关」（≈25 体力）。grandProgress 在上面的
+        // MigrateClearedChapters → MigrateGrandProgress 里已就绪，这里读的是迁移后的值。
+        if (GrandClearedCount(1) < 1) { branchRoll1 = 0; branchRoll2 = 0; }
         MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
@@ -1069,16 +1141,39 @@ public class SaveData
             var e = clearedChapterEntries[i];
             if (e != null && e.id > 0) clearedChapterIds.Add(e.id);
         }
-        if (clearedChapterIds.Count > 0) return;
 
-        for (int i = 0; i < chapterClearCounts.Count; i++)
+        if (clearedChapterIds.Count == 0)
         {
-            var e = chapterClearCounts[i];
-            if (e != null && e.chapter > 0 && e.clearCount > 0)
-                clearedChapterIds.Add(e.chapter);
+            for (int i = 0; i < chapterClearCounts.Count; i++)
+            {
+                var e = chapterClearCounts[i];
+                if (e != null && e.chapter > 0 && e.clearCount > 0)
+                    clearedChapterIds.Add(e.chapter);
+            }
+            if (clearedChapterIds.Count > 0)
+                clearedChapterEntries = FromIntIdSet(clearedChapterIds);
         }
-        if (clearedChapterIds.Count > 0)
-            clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+
+        // 【2026-10-31 B2 落地】大关进度迁移必须在 clearedChapterIds 定稿之后跑（依赖它判「整篇已通」）。
+        MigrateGrandProgress();
+    }
+
+    /// <summary>
+    /// 【2026-10-31 B2 落地】老档大关进度迁移（幂等）：
+    /// · 已通关的篇 → 大关进度直接记满（老档没有大关概念，通关即视为整篇通关）；
+    /// · 未通关的篇 → 保持 0（老档 clearedStages 的 0~4 正好是第 1 座大关的 5 小关，无需换算）。
+    /// 新档 grandProgress 全 0，走同一入口无副作用。
+    /// </summary>
+    void MigrateGrandProgress()
+    {
+        EnsureGrandProgress();
+        for (int ch = 1; ch <= ActProgressionDefs.ActCount; ch++)
+        {
+            if (!HasClearedChapter(ch)) continue;
+            int full = ActProgressionDefs.GrandCountOf(ch);
+            if (ch - 1 < grandProgress.Count && grandProgress[ch - 1] < full)
+                grandProgress[ch - 1] = full;
+        }
     }
 
     /// <summary>
@@ -1289,6 +1384,7 @@ public class SaveData
         }
         if (tavernGossipUsed >= TavernGossipDailyLimit) return false;
         tavernGossipUsed++;
+        tavernGossipCount++;   // 【2026-10-31】累计回数（跨天不清零），老板娘文案轮换的驱动源；落盘由调用方 Save 负责
         return true;
     }
 

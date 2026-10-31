@@ -156,9 +156,28 @@ public class BattleSideHud : MonoBehaviour
             ApplyKillDigits(0);
         }
 
-        // —— 下一波倒计时（无黑底，大字）——
-        var waveGo = CreatePanel("WavePanel", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-            new Vector2(0.5f, 1f), new Vector2(0f, -96f), new Vector2(200f, 72f), transparent: true);
+        // —— 下一波倒计时 ——
+        // 【2026-10-31 主人拍板「往下点 加个底 紧贴右侧边 大点的数字」】：
+        // ① 位置从顶中 (0,-96) 改贴 HUD 右缘再外推 KillCounterRightInset → 底框右缘正好贴屏幕右缘；
+        // ② 往下 -96 → WavePanelTopOffset(-160)；
+        // ③ 加深色底（半透明 0.72，与 CreatePanel 非透明底同色）——按钮 Image 仍透明（Button 变色会乘透明），
+        //    底单独挂 WaveBg 子节点，不参与按钮变色；
+        // ④ 字号 36 → 44。
+        const float WavePanelTopOffset = -160f;
+        var waveGo = CreatePanel("WavePanel", root, new Vector2(1f, 1f), new Vector2(1f, 1f),
+            new Vector2(1f, 1f), new Vector2(KillCounterRightInset, WavePanelTopOffset), new Vector2(230f, 68f), transparent: true);
+        {
+            var waveBgGo = new GameObject("WaveBg", typeof(RectTransform), typeof(Image));
+            waveBgGo.transform.SetParent(waveGo.transform, false);
+            var bgRt = (RectTransform)waveBgGo.transform;
+            bgRt.anchorMin = Vector2.zero;
+            bgRt.anchorMax = Vector2.one;
+            bgRt.offsetMin = Vector2.zero;
+            bgRt.offsetMax = Vector2.zero;
+            var bgImg = waveBgGo.GetComponent<Image>();
+            bgImg.color = new Color(0.08f, 0.1f, 0.16f, 0.72f);
+            bgImg.raycastTarget = false;
+        }
         _waveGroup = waveGo.AddComponent<CanvasGroup>();
         _waveGroup.alpha = 0f;
         _waveGroup.blocksRaycasts = false;
@@ -176,8 +195,8 @@ public class BattleSideHud : MonoBehaviour
         _waveBtn.targetGraphic = img;
         _waveBtn.onClick.AddListener(OnWaveClicked);
 
-        _waveTitle = CreateText(waveGo.transform, "WaveLine", "下一波 8.0", 36, TextAnchor.MiddleCenter,
-            Vector2.zero, new Vector2(196f, 64f));
+        _waveTitle = CreateText(waveGo.transform, "WaveLine", "下一波 8", 44, TextAnchor.MiddleCenter,
+            Vector2.zero, new Vector2(222f, 60f));
         _waveTitle.color = new Color(1f, 0.28f, 0.22f, 0.98f);
         _waveTitle.fontStyle = FontStyle.Bold;
         _waveTimer = null;
@@ -545,7 +564,7 @@ public class BattleSideHud : MonoBehaviour
 
         int sec = Mathf.Max(0, Mathf.CeilToInt(secondsLeft));
         if (_waveTitle != null)
-            _waveTitle.text = "下一波 " + sec;
+            _waveTitle.text = "下一波 " + sec;   // 【2026-10-31 主人拍板】整数秒（原 0.1 秒精度小数取消）
         else if (_waveTimer != null)
             _waveTimer.text = secondsLeft.ToString("0.0");
         if (_waveHint != null)

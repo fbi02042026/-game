@@ -172,6 +172,10 @@ public static class StoryProgress
         AdventureCodex.UnlockWorld("W007");
         AdventureCodex.UnlockWorld("W003");
         AdventureLogAchievements.OnTutorialDone();
+        // 【2026-10-31 主人拍板】引导结束 = 佣兵队列开放（FeatureUnlock.MercQueueOpen 看 tutorialDone）。
+        // 引导最后一站就是酒馆，玩家此刻可能正站在这页上 —— 立即刷一次功能卡锁态，
+        // 否则要退出再进来才亮，看着像 bug。页面没建时全部 null-safe。
+        if (TavernUI.Instance != null) TavernUI.Instance.RefreshFeatureLocksNow();
         // 【2026-10-18 主人拍板】引导完成后不再送「稀有·暮火之杖」——提示和发放整段删掉，
         // 玩家继续用职业初始武器；里程等级奖励里的领取口子（AdventureLogMileage）保留。
         // 【2026-10-16 主人拍板】欢迎信照发，但**不在这里弹**「您有新的邮件」——

@@ -305,6 +305,16 @@ public partial class BattleUI : MonoBehaviour
         {
             Transform t = FindDeepChildIgnoreCase(dd, "DraftCoinText");
             if (t != null) draftCoinText = t.GetComponent<Text>();
+            // 【2026-10-31 主人报「竞技场剩余次数字有点大 而且是不是拉伸了」】根因两处（绑定态修，不动预制体文件）：
+            // ① 拉伸 = DraftCoinText 的 RectTransform localScale 是 (1,1.3,1)——父级 DraftDisplay 已整体
+            //    等比 1.3，这个子节点自己又纵向叠了 1.3 → 字被单向拉长。归一成 (1,1,1) 只去拉伸，
+            //    主人摆的 DraftDisplay 整体 1.3 原样保留。
+            // ② 字大 = 字号 25 偏大 → 20（同「30→24 减 20%」历史口径；字号属「字体可改」白名单）。
+            if (draftCoinText != null)
+            {
+                draftCoinText.rectTransform.localScale = Vector3.one;
+                draftCoinText.fontSize = 20;
+            }
         }
         Transform iconT = FindDeepChildIgnoreCase(dd, "DraftCoinIcon");
         if (iconT != null)

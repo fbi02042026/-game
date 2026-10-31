@@ -77,9 +77,12 @@ public static class BattleResultScreen
     /// 默认 true，原战斗流程调用方零改动。
     /// 【2026-10-30 竞技场真战斗】extraCells = 调用方组装好的追加奖励格（默认 null = 原行为零改动）：
     /// 竞技场胜利传 [积分格]（图标 +「+N」），拼在 stats 格之后展示；失败路不传，界面零改动（失败只有图）。
+    /// 【2026-10-31 主人报「失败我没点自己就消失回城了」】holdUntilTap = 失败界面不自动收，
+    /// 停 1.2s 后改为等玩家点击任意处（点一下才淡出走 onDone）——竞技场失败专用
+    /// （普通关失败停留自动收的老口径不变，调用方不传 = 零改动）。
     /// </summary>
     public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true,
-        List<SettlementRewardCell> extraCells = null)
+        List<SettlementRewardCell> extraCells = null, bool holdUntilTap = false)
     {
         if (!Application.isPlaying || (battleSceneOnly && !GameSceneGate.IsBattle))
         {
@@ -99,7 +102,7 @@ public static class BattleResultScreen
         // 显式限定 UnityEngine.Object；本类非 MonoBehaviour，不能裸调 Instantiate。
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
-        ui.Play(victory, stats, onDone, extraCells);
+        ui.Play(victory, stats, onDone, extraCells, holdUntilTap);
     }
 
     /// <summary>
@@ -126,6 +129,31 @@ public static class BattleResultScreen
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
         ui.PlayChoice(revivePrice, onRevive, onGiveUp, reviveLabel);
+    }
+
+    /// <summary>
+    /// 竞技场失败界面（2026-10-31 主人拍板「竞技场没有复活 胜利有返回和分享 失败只有返回」）：
+    /// 失败图 + 主人手摆的【取消】钮（文本「返回」）一个出口；【确定】（复活钮）整颗隐藏，
+    /// 不接 Dim / 败图「点击任意处跳过」（旧 holdUntilTap 点任意处回城口径作废，只有点返回才走）。
+    /// onReturn 在界面销毁后回调（toast 扣分 + 回城链放这里）。
+    /// </summary>
+    public static void ShowArenaFailure(Action onReturn)
+    {
+        if (!Application.isPlaying || !GameSceneGate.IsBattle)
+        {
+            onReturn?.Invoke();
+            return;
+        }
+        var prefab = Resources.Load<GameObject>(PrefabPath);
+        if (prefab == null)
+        {
+            Debug.LogError($"[BattleResultScreen] 找不到预制体 Resources/{PrefabPath}，竞技场失败界面不播直接收尾");
+            onReturn?.Invoke();
+            return;
+        }
+        var go = UnityEngine.Object.Instantiate(prefab);
+        var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
+        ui.PlayArenaFailure(onReturn);
     }
 
     /// <summary>
@@ -197,11 +225,21 @@ public class BattleResultScreenUI : MonoBehaviour
     Func<bool> _onRevive;
     Action _onGiveUp;
 
+    // —— 失败停留等点击（2026-10-31 主人报「失败我没点自己就消失回城了」，竞技场失败专用）——
+    bool _holdUntilTap;
+
+    // —— 竞技场失败·仅返回（2026-10-31 主人拍板「失败只有返回」）——
+    Action _arenaReturn;
+    bool _arenaReturned;
+
     /// <summary>按胜负摆节点 + 自适应 + 接线 + 开播。
-    /// 【2026-10-30 竞技场】extraCells = 调用方组装好的追加奖励格（默认 null，原调用方零改动），透传给奖励区。</summary>
-    public void Play(bool victory, BattleRunStats stats, Action onDone, List<SettlementRewardCell> extraCells = null)
+    /// 【2026-10-30 竞技场】extraCells = 调用方组装好的追加奖励格（默认 null，原调用方零改动），透传给奖励区。
+    /// 【2026-10-31】holdUntilTap = 失败界面停留后不自动收，等点击（见 <see cref="BattleResultScreen.Show"/>）。</summary>
+    public void Play(bool victory, BattleRunStats stats, Action onDone, List<SettlementRewardCell> extraCells = null,
+        bool holdUntilTap = false)
     {
         _onDone = onDone;
+        _holdUntilTap = holdUntilTap;
 
         // 统一适配入口（2026-10-24 主人拍板「接下自适应」）：一次修预制体三处硬伤 ——
         // ① worldCamera 为空（不绑相机整块不显示）；② 根节点 localScale=(0,0,0)（EnsureRootStretch 归一）；
@@ -234,6 +272,9 @@ public class BattleResultScreenUI : MonoBehaviour
         showNode.gameObject.SetActive(true);
         hideNode.gameObject.SetActive(false);   // 另一个节点的粒子随失活停止（预制体两节点默认全 active）
 
+        // 【2026-10-31 主人拍板】胜负曲接入：结果界面弹出即播对应 jingle（胜利/失败统一门，含竞技场）
+        GameSting.PlayBattleResult(victory);
+
         // 点击任意处跳过：Dim 全屏钮 + 胜负图上的钮，同一个出口（2026-10-24 主人拍板）
         WireSkip(rootT.Find("Dim"));
         WireSkip(showNode);
@@ -252,8 +293,17 @@ public class BattleResultScreenUI : MonoBehaviour
         }
         else
         {
+            ShiftFailNodeUp(showNode as RectTransform);   // 【2026-10-31 主人拍板「战斗失败节点往上挪100」】
             StartCoroutine(CoPlay());   // 失败非选择模式照旧：停留后自动收
         }
+    }
+
+    /// <summary>失败节点整体上移 100（2026-10-31 主人拍板「战斗失败节点往上挪100 胜利节点不动」；
+    /// 纵向 y 属必要介入口径，x/尺寸一律不碰）。三种失败显示（直出 / 复活选择 / 竞技场仅返回）共用。</summary>
+    static void ShiftFailNodeUp(RectTransform failRt)
+    {
+        if (failRt == null) return;
+        failRt.anchoredPosition = new Vector2(failRt.anchoredPosition.x, failRt.anchoredPosition.y + 100f);
     }
 
     /// <summary>
@@ -292,7 +342,10 @@ public class BattleResultScreenUI : MonoBehaviour
         confirmBtn.onClick.RemoveAllListeners();
         confirmBtn.onClick.AddListener(OnConfirmClicked);
         var lbl = confirmBtn.GetComponentInChildren<Text>(true);
-        if (lbl != null) lbl.text = "确定";
+        // 【2026-10-31 主人拍板「胜利有返回和分享」】竞技场胜利的确认钮文案 = 返回（行为不变 = 收下结算回城）；
+        // 普通关照旧「确定」。
+        if (lbl != null)
+            lbl.text = BattleManager.Instance != null && BattleManager.Instance.IsArena ? "返回" : "确定";
 
         // 【2026-10-29 主人拍板 v4（预制体手摆版）】分享钮/说明改绑主人手摆节点，不再运行时克隆：
         // 「分享按钮」（奖励 Panel 下）接线 OnShareClicked；「分享」说明（胜利节点下）跟随显隐。
@@ -581,6 +634,7 @@ public class BattleResultScreenUI : MonoBehaviour
         BindSprite(showNode, victory: false);
         showNode.gameObject.SetActive(true);
         hideNode.gameObject.SetActive(false);
+        ShiftFailNodeUp(showNode as RectTransform);   // 【2026-10-31 主人拍板「战斗失败节点往上挪100」】
 
         // 选择模式：Dim 与失败大图上的钮一律不接「点击任意处」（防误触放弃复活机会）
         var dimBtn = rootT.Find("Dim") != null ? rootT.Find("Dim").GetComponent<Button>() : null;
@@ -614,6 +668,9 @@ public class BattleResultScreenUI : MonoBehaviour
 
         _cg = gameObject.AddComponent<CanvasGroup>();
         _cg.alpha = 0f;
+        // 【2026-10-31 主人拍板】失败选择窗（复活/返回）同样先播失败曲（战斗 BGM 由 GameSting 淡出，
+        // 复活成功回战斗时 OnDestroy 里恢复战斗曲）
+        GameSting.PlayBattleResult(false);
         StartCoroutine(CoPlayChoice());
     }
 
@@ -625,6 +682,110 @@ public class BattleResultScreenUI : MonoBehaviour
         btn.transition = Selectable.Transition.None;
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(action);
+    }
+
+    /// <summary>
+    /// 竞技场失败·仅返回（2026-10-31 主人拍板）：失败图 + 【取消】钮（文本主人已写好「返回」）一个出口。
+    /// · 【确定】（复活钮）整颗隐藏 —— 竞技场没有复活（ArenaBattleMode.OffersRevive=false 同拍板）；
+    /// · Dim / 失败大图一律不接「点击任意处跳过」（旧 holdUntilTap 点任意处回城口径作废）；
+    /// · 缺【取消】钮 = 预制体结构被改过，LogError 后退回 Dim 点击收尾（出口必须留一个，不锁死玩家）。
+    /// </summary>
+    public void PlayArenaFailure(Action onReturn)
+    {
+        _arenaReturn = onReturn;
+
+        UICanvasSetup.ApplyPopup(GetComponent<Canvas>(), GameConfig.UiSort.BattleResult);
+
+        var rootT = transform.Find("Root");
+        var panelT = rootT != null ? rootT.Find("Panel") : null;
+        _panel = panelT as RectTransform;
+        var showNode = panelT != null ? panelT.Find("失败") : null;
+        var hideNode = panelT != null ? panelT.Find("胜利") : null;
+        if (rootT == null || _panel == null || showNode == null || hideNode == null)
+        {
+            Debug.LogError("[BattleResultScreen] 预制体缺 Root/Panel/失败/胜利 节点，竞技场失败界面不播直接收尾");
+            Destroy(gameObject);
+            onReturn?.Invoke();
+            return;
+        }
+        BindSprite(showNode, victory: false);
+        showNode.gameObject.SetActive(true);
+        hideNode.gameObject.SetActive(false);
+        ShiftFailNodeUp(showNode as RectTransform);   // 【2026-10-31 主人拍板「战斗失败节点往上挪100」】
+
+        // 唯一出口 = 主人手摆的【取消】钮（文本「返回」）；【确定】（复活钮）整颗隐藏
+        var confirmT = showNode.Find("确定");
+        if (confirmT != null) confirmT.gameObject.SetActive(false);
+        var cancelT = showNode.Find("取消");
+        if (cancelT == null)
+        {
+            Debug.LogError("[BattleResultScreen] 失败节点下缺【取消】预制钮（预制体结构被改过？），退回 Dim 点击收尾");
+            var dimT = rootT.Find("Dim");
+            if (dimT == null)
+            {
+                Debug.LogError("[BattleResultScreen] Dim 也没有，竞技场失败界面无出口，直接收尾");
+                Destroy(gameObject);
+                onReturn?.Invoke();
+                return;
+            }
+            WireChoiceButton(dimT.gameObject, OnArenaReturnClicked);
+        }
+        else
+        {
+            WireChoiceButton(cancelT.gameObject, OnArenaReturnClicked);
+            // Dim 不接跳过：失败只有「返回」一个出口（拍板口径）
+            var dimBtn = rootT.Find("Dim") != null ? rootT.Find("Dim").GetComponent<Button>() : null;
+            if (dimBtn != null) dimBtn.onClick.RemoveAllListeners();
+            var imgBtn = showNode.GetComponent<Button>();
+            if (imgBtn != null) imgBtn.onClick.RemoveAllListeners();
+        }
+
+        _cg = gameObject.AddComponent<CanvasGroup>();
+        _cg.alpha = 0f;
+        GameSting.PlayBattleResult(false);
+        StartCoroutine(CoPlayArenaFailure());
+    }
+
+    void OnArenaReturnClicked()
+    {
+        if (_arenaReturned) return;
+        _arenaReturned = true;
+    }
+
+    /// <summary>竞技场失败时间轴：淡入弹出 → 等【返回】 → 淡出 → onReturn（toast 扣分 + 回城 + 重开竞技场弹窗）。</summary>
+    IEnumerator CoPlayArenaFailure()
+    {
+        Vector3 baseScale = _panel.localScale;   // 读预制体基准值只做倍乘（铁律 2/32，不写死 1）
+
+        // 段一：淡入 + 弹出（与失败直出同一手感）
+        float t = 0f;
+        while (t < InDur)
+        {
+            t += Dt();
+            float k = Mathf.Clamp01(t / InDur);
+            _cg.alpha = k;
+            _panel.localScale = baseScale * Mathf.Lerp(0.5f, 1f, BackOut(k));
+            yield return null;
+        }
+        _cg.alpha = 1f;
+        _panel.localScale = baseScale;
+
+        // 段二：等玩家点【返回】（唯一出口，不自动收）
+        while (!_arenaReturned)
+            yield return null;
+
+        // 段三：淡出 → 销毁 → onReturn
+        t = 0f;
+        while (t < OutDur)
+        {
+            t += Dt();
+            _cg.alpha = 1f - Mathf.Clamp01(t / OutDur);
+            yield return null;
+        }
+        _cg.alpha = 0f;
+        _finished = true;
+        Destroy(gameObject);
+        _arenaReturn?.Invoke();
     }
 
     void OnReviveClicked()
@@ -662,6 +823,10 @@ public class BattleResultScreenUI : MonoBehaviour
         ShareService.ShareRewardGranted -= OnShareRewardGranted;   // 实例销毁必退订（防悬空事件）
         if (BattleResultScreen._activeChoice == this)
             BattleResultScreen._activeChoice = null;
+        // 【2026-10-31 主人拍板】复活成功回战斗：失败曲停掉 + 恢复战斗曲
+        //（仅选择模式且选定复活时触发；返回/胜利/失败直出走场景切换自动停，不在这恢复）
+        if (_choiceMode && _chosen && !_choseGiveUp)
+            GameSting.StopAndResumeBattleBgm();
     }
 
     IEnumerator CoPlayChoice()
@@ -753,12 +918,22 @@ public class BattleResultScreenUI : MonoBehaviour
             yield return null;
         }
 
-        // 段二：停留（点击可跳过）
-        t = 0f;
-        while (t < HoldDur && !_skipped)
+        // 段二：停留（点击可跳过）。
+        // 【2026-10-31 主人报「失败我没点自己就消失回城了」】holdUntilTap = 停留段过后不自动收，
+        // 一直等到玩家点击任意处才走淡出（选择模式的「不自动收」口径；普通关失败老口径不变）。
+        if (_holdUntilTap)
         {
-            t += Dt();
-            yield return null;
+            while (!_skipped)
+                yield return null;
+        }
+        else
+        {
+            t = 0f;
+            while (t < HoldDur && !_skipped)
+            {
+                t += Dt();
+                yield return null;
+            }
         }
 
         // 段三：淡出（跳过走缩短版；先从弹出中途归位再淡，避免跳过瞬间画面跳变）

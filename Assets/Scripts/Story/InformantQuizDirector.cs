@@ -192,6 +192,82 @@ public class InformantQuizDirector : MonoBehaviour
             yield return null;
     }
 
+    /// <summary>一句台词按「说话人：」前缀拆行后的结果（2026-10-31 修名牌错乱时新增）。</summary>
+    struct SpeakerLine
+    {
+        public bool IsLady;
+        public string Text;
+    }
+
+    /// <summary>
+    /// 把表里的多行台词拆成逐拍：以「老板娘：」开头的归老板娘，「独眼：／莫洛克：」开头的归独眼，
+    /// 无前缀的行沿用上一句说话人（首行默认独眼）；「—」空占位直接丢弃。
+    /// </summary>
+    static System.Collections.Generic.List<SpeakerLine> SplitSpeakerLines(string raw)
+    {
+        var list = new System.Collections.Generic.List<SpeakerLine>();
+        if (string.IsNullOrEmpty(raw)) return list;
+
+        bool lastLady = false;
+        string[] lines = raw.Replace("\r\n", "\n").Split('\n');
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string s = lines[i].Trim();
+            if (string.IsNullOrEmpty(s) || s == "—" || s == "-" || s == "–") continue;
+
+            int idx = s.IndexOf('：');
+            if (idx < 0) idx = s.IndexOf(':');
+            if (idx > 0 && idx <= 6)
+            {
+                string who = s.Substring(0, idx).Trim();
+                if (who == "老板娘") { lastLady = true; s = s.Substring(idx + 1).Trim(); }
+                else if (who == "独眼" || who == "莫洛克") { lastLady = false; s = s.Substring(idx + 1).Trim(); }
+            }
+
+            if (string.IsNullOrEmpty(s)) continue;
+            list.Add(new SpeakerLine { IsLady = lastLady, Text = s });
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// 逐拍播一段（可能含多个说话人的）台词。多行＝双人站台（独眼左／老板娘右），且每拍要玩家点一下
+    /// 才继续（否则后一句会盖掉前一句）；单行问题保持「打完字直接出选项」的原交互。
+    /// </summary>
+    IEnumerator CoSpeakLines(DialogueUI ui, string raw, Sprite informantSp, Sprite landladySp, bool isReply)
+    {
+        var lines = SplitSpeakerLines(raw);
+        if (lines.Count == 0) yield break;
+
+        bool multi = lines.Count > 1;
+        bool requireClick = isReply || multi;
+
+        for (int k = 0; k < lines.Count; k++)
+        {
+            bool done = false;
+            ui.ShowLine(
+                "独眼",
+                multi ? "老板娘" : "",
+                lines[k].Text,
+                informantSp,
+                multi ? landladySp : null,
+                null,
+                speakerIsInitiator: !lines[k].IsLady,
+                onAdvance: requireClick ? (System.Action)(() => { done = true; }) : null,
+                onSkip: requireClick ? (System.Action)(() => { done = true; }) : null,
+                soloCentered: !multi,
+                initiatorPortraitId: InformantPortraitId,
+                otherPortraitId: multi ? LandladyPortraitId : null,
+                normalizePortraitSize: true);
+
+            while (!ui.IsTypeComplete)
+                yield return null;
+            if (requireClick)
+                while (!done)
+                    yield return null;
+        }
+    }
+
     /// <summary>铺酒馆背景 + 暗化，与剧情/引导同一套表现（2026-10-15 主人）。</summary>
     static void ApplyTavernBackdrop(DialogueUI ui)
     {
@@ -245,6 +321,7 @@ public class InformantQuizDirector : MonoBehaviour
         ui.PrepareForStoryBeat();
         ApplyTavernBackdrop(ui);
         Sprite informant = ResolveInformantPortrait();
+        Sprite landlady = ResolveLandladyPortrait();
 
         bool failed = false;
         int boostTurns = 3;
@@ -255,23 +332,9 @@ public class InformantQuizDirector : MonoBehaviour
             if (round.BoostTurns > 0)
                 boostTurns = round.BoostTurns;
 
-            ui.ShowLine(
-                "独眼",
-                "",
-                round.Question,
-                informant,
-                null,
-                null,
-                speakerIsInitiator: true,
-                onAdvance: null,
-                onSkip: null,
-                soloCentered: true,
-                initiatorPortraitId: InformantPortraitId,
-                otherPortraitId: null,
-                normalizePortraitSize: true);
-
-            while (!ui.IsTypeComplete)
-                yield return null;
+            // 【2026-10-31 修】原实现把整段台词塞给「独眼」一个名牌，表里「老板娘：」开头的行
+            // 会连同前缀一起显示在独眼名下（IQ 剧情轮 8 处）。改为按行拆拍、按前缀换说话人与立绘。
+            yield return CoSpeakLines(ui, round.Question, informant, landlady, isReply: false);
 
             int picked = -1;
             ui.ShowChoices(round.Options, idx => { picked = idx; });
@@ -281,27 +344,7 @@ public class InformantQuizDirector : MonoBehaviour
 
             if (round.IsStory)
             {
-                string reply = CleanReply(round.ReplyOk);
-                if (!string.IsNullOrEmpty(reply))
-                {
-                    bool replyDone = false;
-                    ui.ShowLine(
-                        "独眼",
-                        "",
-                        reply,
-                        informant,
-                        null,
-                        null,
-                        speakerIsInitiator: true,
-                        onAdvance: () => { replyDone = true; },
-                        onSkip: () => { replyDone = true; },
-                        soloCentered: true,
-                        initiatorPortraitId: InformantPortraitId,
-                        otherPortraitId: null,
-                        normalizePortraitSize: true);
-                    while (!replyDone)
-                        yield return null;
-                }
+                yield return CoSpeakLines(ui, round.ReplyOk, informant, landlady, isReply: true);
                 continue;
             }
 
@@ -310,23 +353,7 @@ public class InformantQuizDirector : MonoBehaviour
             if (string.IsNullOrEmpty(quizReply))
                 quizReply = correct ? "答对了。" : "答错了。";
 
-            bool done = false;
-            ui.ShowLine(
-                "独眼",
-                "",
-                quizReply,
-                informant,
-                null,
-                null,
-                speakerIsInitiator: true,
-                onAdvance: () => { done = true; },
-                onSkip: () => { done = true; },
-                soloCentered: true,
-                initiatorPortraitId: InformantPortraitId,
-                otherPortraitId: null,
-                normalizePortraitSize: true);
-            while (!done)
-                yield return null;
+            yield return CoSpeakLines(ui, quizReply, informant, landlady, isReply: true);
 
             if (!correct)
             {

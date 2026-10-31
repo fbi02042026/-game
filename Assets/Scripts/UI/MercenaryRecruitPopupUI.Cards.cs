@@ -98,6 +98,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         int gold = MercHireSession.GoldCost(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
         bool isLegendary = rarity == MercRosterDefs.MercRarity.Legendary;
+        // 【2026-10-31 主人需求】买不起 → 货币钮文字变红（判定走单一出口 MercHireSession.CanAffordOffer）
+        bool affordable = MercHireSession.CanAffordOffer(offer);
 
         // 【2026-10-19 主人拍板】一卡一钮，货币跟稀有度走：普通=金币；稀有=普通卷；传奇=稀有卷（高级卷）。
         // 两钮显隐每次显式设置（旧版漏关卷钮 → 同一张卡同时出现金币+卷轴两种购买方式，主人报过）。
@@ -110,22 +112,26 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (useScrollNode)
         {
             FillCurrencyButton(c.scrollButtonImage, c.scrollIcon, c.scrollLabel1,
-                c.scrollIconDefault, isCommon, isLegendary, gold);
+                c.scrollIconDefault, isCommon, isLegendary, gold, affordable);
         }
         else if (c.goldButton != null)
         {
             FillCurrencyButton(c.goldButton.GetComponent<Image>(), c.goldIcon, c.goldLabel,
-                c.goldIconDefault, isCommon, isLegendary, gold);
+                c.goldIconDefault, isCommon, isLegendary, gold, affordable);
         }
     }
+
+    /// <summary>余额不足时货币钮文字红色（2026-10-31 主人需求「不足变红，统一其他界面」；色值唯一出口 MercHireSession.InsufficientPriceColor）。</summary>
+    static readonly Color InsufficientLabelColor = MercHireSession.InsufficientPriceColor;
 
     /// <summary>
     /// 货币钮统一填充：普通=金币钮「600金币」（金币图）；稀有=「普通卷×1」；传奇=「稀有卷×1」（卷图）。
     /// 外观按快照统一（金币一种样子、卷轴一种样子）：底图/颜色/尺寸/Label颜色都从快照套用，
     /// 字号统一 13（预制体金币钮 Label 16 / 卷钮 Label 11 不一致，主人报「按钮的字大小不一致」）。
+    /// 【2026-10-31 主人需求】买不起（affordable=false）→ Label 变红；买得起用快照原色。
     /// </summary>
     void FillCurrencyButton(Image btnImg, Image icon, Text label, Sprite iconDefault,
-        bool isCommon, bool isLegendary, int gold)
+        bool isCommon, bool isLegendary, int gold, bool affordable)
     {
         if (btnImg != null)
         {
@@ -163,12 +169,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             label.fontSize = 13;
             if (isCommon)
             {
-                if (_goldBtnSprite != null) label.color = _goldLabelColor;
+                if (_goldBtnSprite != null) label.color = affordable ? _goldLabelColor : InsufficientLabelColor;
                 label.text = gold + "金币";
             }
             else
             {
-                if (_scrollBtnSprite != null) label.color = _scrollLabelColor;
+                if (_scrollBtnSprite != null) label.color = affordable ? _scrollLabelColor : InsufficientLabelColor;
                 label.text = isLegendary ? "稀有卷×1" : "普通卷×1";
             }
         }

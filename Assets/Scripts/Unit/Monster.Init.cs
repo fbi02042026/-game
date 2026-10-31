@@ -97,6 +97,16 @@ public partial class Monster
     }
 
     /// <summary>
+    /// 【2026-10-31 B2 落地】取当前该吃的大关号（1 起）。
+    /// 只有主线正式关才吃大关爬坡；副本 / 裂隙 / 支线岛 / 竞技场一律返回 1（= ×1，零行为变化）。
+    /// </summary>
+    static int GrandIndexForStatScale()
+    {
+        if (BattleManager.Instance == null || !BattleManager.Instance.IsFormalMainRun) return 1;
+        return ChapterManager.Instance != null ? ChapterManager.Instance.currentGrand : 1;
+    }
+
+    /// <summary>
     /// ?????
     /// </summary>
     /// <param name="scaleMultiplier">????????.0 / ??1.5 / Boss2.0</param>
@@ -180,7 +190,7 @@ public partial class Monster
         bool endlessRift = BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift;
         float statScale = endlessRift
             ? GameConfig.EndlessDifficultyMul(BattleManager.Instance.EndlessRiftStage)
-            : GameConfig.GetStatScale(chapter, stageIdx0);
+            : GameConfig.GetStatScale(chapter, GrandIndexForStatScale(), stageIdx0);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = statScale * guildScale * diffScale;
@@ -252,7 +262,7 @@ public partial class Monster
                 ttkMul *= GameConfig.ENDLESS_BIGBOSS_HP_MUL;
         }
         else if (bossUnit || eliteWave)
-            ttkMul = WeaponCombatTable.EliteBossHpMul(monsterChapter, bossUnit, stageIdx0);
+            ttkMul = WeaponCombatTable.EliteBossHpMul(monsterChapter, GrandIndexForStatScale(), bossUnit, stageIdx0);
         else
             ttkMul = GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????

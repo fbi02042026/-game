@@ -120,7 +120,17 @@ public partial class AdventureUI
         if (chapterTitle != null)
         {
             // 玩家看不到「第X章」：只显示地图名
+            // 【2026-10-31 B2 落地】篇内改成多座大关后，标题补一个「第 N/M 座」进度，否则玩家看不出还有多远。
             string name = GameConfig.GetChapterMapName(_selectedChapter);
+            var saveD = SaveSystem.Instance?.Data;
+            if (saveD != null)
+            {
+                int grandTotal = ActProgressionDefs.GrandCountOf(_selectedChapter);
+                int grandNow = saveD.CurrentGrand(_selectedChapter);
+                bool chapterCleared = saveD.HasClearedChapter(_selectedChapter);
+                if (!chapterCleared && grandTotal > 1)
+                    name = name + "　第 " + grandNow + "/" + grandTotal + " 座";
+            }
             string branchHint = BuildBranchHint();
             chapterTitle.text = string.IsNullOrEmpty(branchHint) ? name : name + "\n" + branchHint;
         }
@@ -164,12 +174,12 @@ public partial class AdventureUI
     /// </summary>
     void EnsureWorldMapEntry()
     {
-        // 【2026-10-22 主人拍板】世界地图入口只在主线冒险模式显示（裂隙等其它模式一概隐藏），
-        // 原解锁条件（已通关第 1 章）保留。
+        // 【2026-10-22 主人拍板】世界地图入口只在主线冒险模式显示（裂隙等其它模式一概隐藏）。
         // 【2026-10-23 主人新布局】入口节点搬到 RightContent/主线 下。
+        // 【2026-10-31】门槛改走 FeatureUnlock.WorldMapOpen（第 1 座大关通关 = D1）——它是主线导航，
+        // B2 后若还挂「通第 1 章」= 50 小关，首日连地图都打不开。
         bool show = IsMainMode(_selectedMode)
-                    && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
-                    && SaveSystem.Instance.Data.HasClearedChapter(1);
+                    && FeatureUnlock.WorldMapOpen(SaveSystem.Instance?.Data);
         var pre = transform.Find("RightContent/" + MainNodeName + "/WorldMapBtn");
         if (pre == null) pre = transform.Find("RightContent/WorldMapBtn");   // 旧布局残留路径
         if (pre != null) pre.gameObject.SetActive(show);
@@ -187,13 +197,12 @@ public partial class AdventureUI
         MarkWorldMapGuideDone();
     }
 
-    /// <summary>通关第 1 章后，在世界地图入口按钮下挂「点击世界地图」脉冲引导；点开一次永久关闭。</summary>
+    /// <summary>世界地图入口解锁后，在按钮下挂「点击世界地图」脉冲引导；点开一次永久关闭。</summary>
     void RefreshWorldMapGuide()
     {
         bool need = IsMainMode(_selectedMode)
-            && SaveSystem.Instance != null && SaveSystem.Instance.Data != null
-            && SaveSystem.Instance.Data.HasClearedChapter(1)
-            && !PlayerPrefs.HasKey(WorldMapGuideDoneKey);
+                    && FeatureUnlock.WorldMapOpen(SaveSystem.Instance?.Data)
+                    && !PlayerPrefs.HasKey(WorldMapGuideDoneKey);
         if (!need)
         {
             if (_wmGuide != null) _wmGuide.gameObject.SetActive(false);

@@ -696,6 +696,35 @@ public static partial class GameConfig
     {
         return GetChapterStatScale(gameChapter) * GetStageStatScale(stageIndex0Based);
     }
+
+    // ===== 【2026-10-31 B2 落地】篇内多座大关的爬坡 =====
+    /// <summary>
+    /// 每多打一座大关，怪物属性额外 +2%（1 + 0.02×(大关-1)，封顶 ×1.60）。
+    /// 为什么需要：B2 后一篇有 10~20 座大关，章倍率只按「篇」变，
+    /// 若不加这层，同篇 20 座大关的怪数值完全一样（体检报告 F1/F2 的「同质化」问题会放大 20 倍）。
+    /// 想调手感只改这两个常量；设 GRAND_STAT_STEP=0 即恢复「篇内全平」的旧口径。
+    /// </summary>
+    public const float GRAND_STAT_STEP = 0.02f;
+    /// <summary>大关爬坡封顶（防止第 20 座大关叠到离谱）。</summary>
+    public const float GRAND_STAT_MAX = 1.60f;
+
+    /// <summary>篇内第几座大关的额外倍率（1 起；1 = 无加成）。</summary>
+    public static float GetGrandStatScale(int grandIndex1Based)
+    {
+        if (grandIndex1Based <= 1) return 1f;
+        return Mathf.Min(GRAND_STAT_MAX, 1f + GRAND_STAT_STEP * (grandIndex1Based - 1));
+    }
+
+    /// <summary>
+    /// <b>怪物属性总倍率的唯一出口（带大关）</b> = 章倍率 × 大关爬坡 × 大关内小关倍率。
+    /// B2 落地后主线正式关一律走这个重载；副本/裂隙/支线岛传 grand=1（零影响）。
+    /// </summary>
+    public static float GetStatScale(int gameChapter, int grandIndex1Based, int stageIndex0Based)
+    {
+        return GetChapterStatScale(gameChapter)
+             * GetGrandStatScale(grandIndex1Based)
+             * GetStageStatScale(stageIndex0Based);
+    }
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public static float ELITE_TTK_HP_MUL => CombatTuningTable.Get("ELITE_TTK_HP_MUL", 1.15f);

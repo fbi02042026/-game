@@ -73,13 +73,17 @@ public class MercSkillCaster : MonoBehaviour
 
     void Update()
     {
+        // 【2026-10-31 主人拍板「佣兵进队别先走CD，开打后再走」】冷却倒数也吃 UnitsCanAct 闸：
+        // 进场走位/剧情冻场/中途抽奖冻结期间 CD 不倒数（Bind 的「开局满 CD」原样保留），
+        // 解冻（开打）那一刻才开始走 —— 与普攻/施放的 UnitsCanAct 口径一致。
+        // 战斗管理器不在场时同样不倒数（反正 TryCast 也放不出）。
+        if (BattleManager.Instance == null || !BattleManager.Instance.UnitsCanAct) return;
         if (_cooldownRemain > 0f)
             _cooldownRemain -= Time.deltaTime;
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return;
         // 眩晕/被控期间不自动施放（含引导「原地眩晕」的引导佣兵 H003 塔克）
         if (_merc.IsStunned || _merc.TutorialStunned) return;
         if (_cooldownRemain > 0f) return;
-        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct) return;
         // 【2026-10-23 主人拍板】CD 好但放不出去（场上无怪/蓝不足）时按 0.25s 节流重试，
         // 不再每帧跑 MercSkillNeedsTarget 查表 + FindNearestEnemy 空转。
         // 只影响「放不出去」的局面；能放时 _retryTimer 恒为 0，首发时机与原来完全一致。

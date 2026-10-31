@@ -116,12 +116,12 @@ public static class TavernLore
         if (branchOpen)
             return "裂隙第二层有两条岔路，以前没人活着回来讲过。\n你要么是第一个，要么是死得最慢的那个。";
         if (far >= 6)
-            return "你知道最难受的是什么？\n他们真觉得自己在救人。这就是最难办的部分。";
+            return "你知道最难受的是什么？\n他们真觉得自己在救人。这就是最难办的部分。\n我在这店里蹲了六年，一半为了情报，一半为了她。";
         if (far >= 5)
-            return "你找到那个箱子了。\n那我就不装了——<b>装那个箱子的人还活着。</b> 我见过。";
+            return "你找到那个箱子了。\n那我就不装了——<b>装那个箱子的人还活着。</b> 我见过。\n她只说过一句：下面那东西，是在等一个人。";
         if (far >= 3)
-            return "公会每年这个时候都会「例行检修」。\n检修什么没人说，但检修单我记得。每年都有。";
-        return "三年前也来过一队愣头青，问了一样的问题。\n他们现在不问了。";
+            return "公会每年这个时候都会「例行检修」。\n检修什么没人说，但检修单我记得。每年都有。\n——顺便说一句，这店里的酒不好喝。我留下，不是为酒。";
+        return "去年也来过一队愣头青，问了一样的问题。\n他们现在不问了。";
     }
 
     /// <summary>请酒结算：发放对应章节的一份 Tier-2/3 线索页，让玩家有理由主动来找他。</summary>
@@ -146,21 +146,78 @@ public static class TavernLore
 
     // ---------- NPC：老板娘（新增角色） ----------
 
-    /// <summary>老板娘按进度说的话。她负责给出数字与情绪。</summary>
-    public static string InnkeeperLine()
+    /// <summary>老板娘按进度说的话（闲聊正句）。她负责给出数字与情绪。</summary>
+    /// <para>【2026-10-31 主人拍板「按情节/点击次数改文案，不要总是这两句」】：
+    /// 传累计闲聊次数 count（SaveData.tavernGossipCount）时——每三回里前两回说进度台词（情节线，
+    /// 句内多句按 count 轮换），第三回说一句酒馆闲话（InnkeeperChatter 氛围池）；
+    /// 不传（旧调用口：Toast / 选项兜底文案）按会话内轮换，口径同 SquadQuote。</para>
+    /// </summary>
+    public static string InnkeeperLine(int count = -1)
     {
         var d = SaveSystem.Instance?.Data;
         int far = d == null ? 0 : HighestClearedChapter(d);
 
+        string line;
         if (StoryEnding.AnyAchieved())
-            return "这张桌子我留着。谁要坐我都说有人了。";
-        if (far >= 7)
-            return "三年前最后一晚，那孩子在这儿坐到天亮。\n她只点了一杯，没喝。";
-        if (far >= 5)
-            return "登记簿我看得懂。有些人回来，有些名字更新了位置。";
-        if (far >= 2)
-            return "这几年新来的见习越来越多了。上一波还是三年前。";
-        return "第一次来？酒钱可以先记着。\n这儿的账，还没人不认过。";
+            line = "这张桌子我留着。谁要坐我都说有人了。\n我不缺这店的钱。我缺一个说法。";
+        else if (far >= 7)
+            line = "三个月前最后一晚，那孩子在这儿坐到天亮。\n她说下面有人在数人头。我当她是喝多了。";
+        else if (far >= 5)
+            line = "登记簿我看得懂。有些人回来，有些名字更新了位置。\n名字我另抄了一份。抄了整整一本。";
+        else if (far >= 2)
+            line = "这几年新来的见习越来越多了。上一波还是去年冬天。\n他们点酒都点最便宜的，好像省下这几枚铜板，就能活着回来。";
+        else
+            line = "第一次来？酒钱可以先记着。\n这儿的账，还没人不认过。";
+
+        if (count >= 0)
+        {
+            // 第三回说氛围闲话（池内按 count/3 轮换）；前两回走进度台词
+            if (count % 3 == 2)
+                return InnkeeperChatter[(count / 3) % InnkeeperChatter.Length];
+            return RotateLine(line, count);
+        }
+        return RotateLine(line, _loreLineIdx++);
+    }
+
+    // 【2026-10-31 主人拍板】老板娘闲聊开场招呼池：按累计闲聊次数轮换（TavernUI 开场第一拍）。
+    public static readonly string[] InnkeeperGreetings =
+    {
+        "哟，坐下聊！今天想听点什么？",
+        "来啦？杯子自己拿，想听什么挑一个。",
+        "又来了。这回想聊人还是聊事？",
+        "坐。今天的酒不算你账上。",
+        "稀客——虽然你这稀客来得比谁都勤。",
+    };
+
+    public static string InnkeeperGreeting(int count)
+    {
+        return InnkeeperGreetings[Mathf.Abs(count) % InnkeeperGreetings.Length];
+    }
+
+    // 【2026-10-31 主人拍板】酒馆闲话池（氛围向，与进度无关；闲聊第三回说一句）。
+    // 【2026-10-31 二次拍板】补两条独眼向：老板娘嘴上嫌弃、账上记着，等于把"互有好感"摊在日常里。
+    // 文案为代拟稿，主人可随时改字。
+    static readonly string[] InnkeeperChatter =
+    {
+        "雨季一到，来喝酒的佣兵就少。裂隙里那些，倒是一个没少。",
+        "楼下那桌又在吹牛，说见着了二层的光。光有什么好吹的，活着回来才算数。",
+        "今晚炖肉放了不少胡椒。你们这种卖命的，吃口热的比什么都实在。",
+        "有人在墙上刻了一道杠，说是一天一层。后来没再来刻过。",
+        "别老盯着那张空桌子看。人没回来，桌子我天天擦。",
+        "独眼那家伙，一只眼睛还老往我这儿瞟。装得跟真看不见似的。",
+        "他欠我的账，我一条一条都记着。等哪天他想赖，我就拿账本砸他。",
+    };
+
+    // 多句台词轮换：按 \n 拆句取一句（idx 传累计闲聊次数即天然轮换；不传 count 的旧口用 _loreLineIdx 会话内轮）。
+    // 只接「句子相互独立」的台词——拆开后没头没尾的（情报商的「要么是第一个…」等）不接。
+    static int _loreLineIdx;
+
+    static string RotateLine(string line, int idx)
+    {
+        if (string.IsNullOrEmpty(line)) return line;
+        string[] parts = line.Split('\n');
+        if (parts.Length <= 1) return line;
+        return parts[Mathf.Abs(idx) % parts.Length];
     }
 
     // ---------- 常驻佣兵：复用现有 Lore，轮换展示 ----------

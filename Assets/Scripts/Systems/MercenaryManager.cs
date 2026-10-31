@@ -414,6 +414,73 @@ public class MercenaryManager : Singleton<MercenaryManager>
         return merc;
     }
 
+    /// <summary>
+    /// 敌方「玩家形象」单位生成（2026-10-31 主人拍板「竞技场机器人一定要有玩家的形象 不能只有佣兵」）：
+    /// 视觉 = 玩家 SPUM 预制体 <see cref="ArenaRules.HeroFigurePrefab"/>（Units/wanjia，与玩家本体同一份资源），
+    /// 属性/技能按传入 mercId（模板职业 101 佣兵）查表 —— 形象与数值解耦。
+    /// 生成链照 <see cref="SpawnEnemyMercenary"/>（isAlly=false、不进 _activeMercs、不 SetHireId 防养成加成）；
+    /// 额外处理 wanjia 根节点的 RectTransform（AutoGameInitializer 同款：pivot 置中，防 SPUM 根锚点漂移），
+    /// 缩放用 GameConfig.UNIT_SCALE（玩家本体的同一基准，AutoGameInitializer 同源）。
+    /// 唯一调用方 = ArenaEnemySpawner（机器人阵容第 0 位）。
+    /// </summary>
+    public Mercenary SpawnEnemyHeroFigure(string statMercId, Vector3 position, int level, int star)
+    {
+        if (string.IsNullOrEmpty(statMercId)) return null;
+
+        GameObject prefab = Resources.Load<GameObject>(ArenaRules.HeroFigurePrefab);
+        if (prefab == null)
+        {
+            Debug.LogError($"[MercenaryManager] 玩家形象预制体不存在: {ArenaRules.HeroFigurePrefab}（不静默）");
+            return null;
+        }
+
+        position.y = UnitBase.GROUND_Y;
+        if (BattleManager.Instance != null && BattleManager.Instance.unitRoot != null)
+            position.z = BattleManager.Instance.unitRoot.position.z;
+
+        GameObject go = Instantiate(prefab);
+        go.name = "EnemyHeroFigure_" + statMercId;
+        go.SetActive(true);
+
+        GameConfig.AttachToUnitRoot(go.transform);
+        GameConfig.SetWorldPosition(go, position);
+        go.transform.rotation = Quaternion.identity;
+
+        // wanjia 根是 RectTransform（SPUM 玩家预制体同款坑，AutoGameInitializer 同口径重置）
+        var rootRT = go.GetComponent<RectTransform>();
+        if (rootRT != null)
+        {
+            Vector3 worldPos = go.transform.position;
+            rootRT.anchorMin = new Vector2(0.5f, 0.5f);
+            rootRT.anchorMax = new Vector2(0.5f, 0.5f);
+            rootRT.pivot = new Vector2(0.5f, 0.5f);
+            rootRT.sizeDelta = new Vector2(100, 100);
+            GameConfig.SetWorldPosition(go, worldPos);
+        }
+
+        // 缩放与玩家本体同一基准（不抄 Hero.Instance 缩放——玩家形象本尊就是这个基准）
+        go.transform.localScale = Vector3.one * GameConfig.UNIT_SCALE;
+
+        Rigidbody2D rb = go.GetComponent<Rigidbody2D>();
+        if (rb == null) rb = go.AddComponent<Rigidbody2D>();
+        rb.gravityScale = 0;
+        rb.freezeRotation = true;
+
+        Mercenary merc = go.GetComponent<Mercenary>();
+        if (merc == null) merc = go.AddComponent<Mercenary>();
+        merc.Init(statMercId, level, star);   // 属性真源 = 模板职业佣兵（lv+★ 两维进属性）
+        merc.isAlly = false;                  // 🔴 敌方阵营（索敌/AI/治疗全按 isAlly 分流）
+
+        // 【2026-10-31 主人拍板「为啥敌方没有武器装备什么」】玩家形象武器外观 = 同职业 101 佣兵手上武器
+        //（铁律 11 口径；纯外观，数值走战力阀门，见 EnemyFigureWeapon 类头注释）
+        EnemyFigureWeapon.Apply(go, statMercId);
+
+        GameConfig.SetWorldPosition(go, position);
+
+        Debug.Log($"[MercenaryManager] 敌方玩家形象单位已生成（属性={statMercId}）Lv{level}★{star} isAlly=false pos={go.transform.position}");
+        return merc;
+    }
+
     public void ResetMercenaries(Vector3 basePosition)
     {
         var mercs = GetActiveMercs();

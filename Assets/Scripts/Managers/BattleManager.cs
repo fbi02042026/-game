@@ -183,28 +183,15 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         if (Rules.Active)
             Debug.Log("[BattleManager] 新手引导战斗：短关+强制撤离（规则包 TutorialRules）");
 
-        // === 局内构筑（肉鸽影子）：技能 + 佣兵全部走本局 loadout，不读城镇酒馆存档 ===
-        // 新手引导局：V6 起也开构筑（走内存模式），让玩家在引导里就学会三选一与技能顺序
-        if (!Rules.Active || Rules.EnableRunDraft)
-            RunDraftDirector.Ensure(this).OnRunStart();
-
-        // loadout 生效时不再走城镇酒馆雇佣；否则保留旧路径（异常/特殊规则兜底）
-        if (!RunLoadout.IsActive && !GameConfig.SOLO_PLAYER_BATTLE && !Rules.SkipMercPrecall)
-        {
-            EnsureTestMercenaries();
-            SpawnMercenaries();
-        }
-
-        int targetChapter = AdventureUI.PendingBattleChapter;
-        if (targetChapter < 1)
-            targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
-        if (targetChapter < 1) targetChapter = 1;
-        BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
-        // IsGoldDungeon 不再在这里写入：它由 Mode 派生（见属性定义）。
-        // PendingGoldDungeon 只保留「读完即清」，避免下一局被上一局的静态标志污染。
         // 【2026-10-22 主人拍板「打一关回一次」】parked 局续/弃判定（必须在清 Pending* 标志之前）：
         // · 同章再进 → 续局：起始关 = RunLoadout.stageIndex（最后通关的小关）+ 1（见下方 BuildChapter 后跳关）
         // · 换章 / 进无限裂隙 / 进金币本 → parked 局作废（裂隙与金币本是独立进本，现状口径的延伸）
+        // 🔴【2026-10-30 修竞技场「技能槽已满」根因】本块必须放在下方 OnRunStart 之前：
+        // 原顺序 OnRunStart 先跑（ResumeOrBegin→BeginNew→Save 落盘），这里 PeekResumable 读到的
+        // 永远是刚落盘的活跃局 → 独立进本（竞技场/金币本/徽记本…）分支必然 Clear →
+        // 整场战斗 RunLoadout._data == null → 抽中技能 TryAddSkill 失败弹「技能槽已满」
+        //（佣兵同「佣兵位已满」），与实际槽位无关。RunLoadout.PeekResumable 的注释契约
+        // 本来就写明「此时 RunDraftDirector 还没跑 ResumeOrBegin」—— 现在只是恢复契约顺序。
         var savedRun = RunLoadout.PeekResumable();
         bool resumeRun = false;
         if (savedRun != null && !StoryProgress.ShouldStartTutorialBattle())
@@ -228,6 +215,29 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             else
                 resumeRun = true;
         }
+
+        // === 局内构筑（肉鸽影子）：技能 + 佣兵全部走本局 loadout，不读城镇酒馆存档 ===
+        // 新手引导局：V6 起也开构筑（走内存模式），让玩家在引导里就学会三选一与技能顺序
+        // （放在 parked 判定之后：独立进本先弃旧局，这里 ResumeOrBegin 才开得出全新构筑）
+        if (!Rules.Active || Rules.EnableRunDraft)
+            RunDraftDirector.Ensure(this).OnRunStart();
+
+        // loadout 生效时不再走城镇酒馆雇佣；否则保留旧路径（异常/特殊规则兜底）
+        if (!RunLoadout.IsActive && !GameConfig.SOLO_PLAYER_BATTLE && !Rules.SkipMercPrecall)
+        {
+            EnsureTestMercenaries();
+            SpawnMercenaries();
+        }
+
+        int targetChapter = AdventureUI.PendingBattleChapter;
+        if (targetChapter < 1)
+            targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
+        if (targetChapter < 1) targetChapter = 1;
+        BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
+        // IsGoldDungeon 不再在这里写入：它由 Mode 派生（见属性定义）。
+        // PendingGoldDungeon 只保留「读完即清」，避免下一局被上一局的静态标志污染。
+        // （parked 局续/弃判定已整体上移到 OnRunStart 之前 —— 2026-10-30 修竞技场「技能槽已满」，
+        //   见上方同注释块；原位置在 OnRunStart 之后会把刚建好的局又 Clear 掉。）
         AdventureUI.PendingBattleChapter = 0;
         AdventureUI.PendingBattleDifficulty = 0;
         AdventureUI.PendingGoldDungeon = false;
@@ -295,7 +305,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关改精确判单关：第一个未通关的关（0 起），
             // 整章已通关重打 → 从第 1 关（原口径不变）。不再用最大通关号推断——中断续局跳关会留下
             // 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），max 口径会跳到更后面的关、永久漏关。
-            int startIdx = FirstUnclearedStageIndex0(targetChapter, stageCount);
+            int startIdx = FirstUnclearedStageIndex0(targetChapter, ChapterManager.Instance.currentGrand, stageCount);
             if (startIdx >= stageCount) startIdx = 0;   // 整章通关 → 重打从第 1 关
             var next = ChapterManager.Instance.stageMap[startIdx];
             if (next != null)
@@ -332,11 +342,13 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     /// （<see cref="MaxClearedStageOneBased"/> 保留备用不再调用：跳关记录会把没打的关跳过去）。
     /// 与 AdventureUI.FirstUnclearedStage 同口径（那边 1 起 UI 用，这边 0 起索引用）。
     /// </summary>
-    static int FirstUnclearedStageIndex0(int chapter, int stageCount)
+    static int FirstUnclearedStageIndex0(int chapter, int grand, int stageCount)
     {
         var cleared = SaveSystem.Instance?.Data?.clearedStages;
+        // 【2026-10-31 B2 落地】存档 key 是「篇内小关下标」，本座大关的起点 = (大关-1)*5
+        int baseSub = ActProgressionDefs.Sub0Of(grand, 0);
         for (int s0 = 0; s0 < stageCount; s0++)
-            if (cleared == null || !cleared.Contains(chapter + "_" + s0)) return s0;
+            if (cleared == null || !cleared.Contains(chapter + "_" + (baseSub + s0))) return s0;
         return stageCount;
     }
 
@@ -352,11 +364,14 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         if (cleared == null || cleared.Count == 0) return 0;
         int max = 0;
         string prefix = chapter + "_";
+        int chapterTotal = SaveSystem.Instance?.Data != null
+            ? SaveSystem.Instance.Data.ChapterSubTotal(chapter)
+            : GameConfig.STAGES_PER_GRAND;
         foreach (var key in cleared)
         {
             if (string.IsNullOrEmpty(key) || !key.StartsWith(prefix, System.StringComparison.Ordinal)) continue;
             if (int.TryParse(key.Substring(prefix.Length), out int stage0)
-                && stage0 >= 0 && stage0 < GameConfig.STAGES_PER_GRAND)
+                && stage0 >= 0 && stage0 < chapterTotal)
                 max = Mathf.Max(max, stage0 + 1);
         }
         return max;

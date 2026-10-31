@@ -21,7 +21,7 @@
 #                upgrade_talent     点 target_count 次天赋
 #                daily_login        每日登录（进度读 DailyLoginSystem）
 #                daily_clear_stages 今日通关 N 关（发奖真源 = SaveData.DAILY_CLEAR_TASK_NEED，改数量两处同步！）
-#                daily_arena_battle 今日竞技场对战 N 场（2026-10-30 新增；一场一计不论胜负，写入=ArenaRules.ResolveChallenge）
+#                daily_arena_battle 今日竞技场对战 N 场——【2026-10-31 主人拍板「竞技场不给经验/打了还是升级了」任务行删除（原 daily_arena_1 经验×20 / daily_arena_5 经验×50，10-30 新增）；计数器 dailyArenaBattle 保留，要恢复任务改非经验奖励再说一声
 # target_param  目标参数（无则留空）
 # target_count  目标数量（进度上限）
 # reward_stones 主线完成发天赋石数（0 = 战斗类走现有关卡/章节里程碑，不重复给）
@@ -79,6 +79,4 @@ daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,
 daily_recruit,日常,0,招贤纳士,今日获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,0,5,经验 ×30,计数=SaveData.UnlockMerc 新解锁(任何来源都算),30
 daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,0,6,经验 ×50,与除害共用计数,50
 daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,0,7,经验 ×80,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,80
-daily_arena_1,日常,0,打一场,今日对战 {0}/{1} 场,daily_arena_battle,,1,0,8,经验 ×20,计数=ArenaRules.ResolveChallenge 一场一计(不论胜负)；DailyTaskSystem 自动发奖,20
-daily_arena_5,日常,0,连战五场,今日对战 {0}/{1} 场,daily_arena_battle,,5,0,9,经验 ×50,与「打一场」共用计数；每日免费 10 次(ArenaRules.DailyTries)够打,50
 weekly_starup,周常,0,百战精锐,本周升星 {0}/{1} 个佣兵,weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释

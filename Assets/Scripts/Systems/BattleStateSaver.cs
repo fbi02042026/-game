@@ -102,6 +102,10 @@ public class BattleStateSaver : MonoBehaviour
     {
         var bm = BattleManager.Instance;
         if (bm == null) return false;
+        // 【2026-10-31 主人拍板「竞技场中途退出 不要显示上次战斗中途退出什么金币什么的」】
+        // 竞技场不写中断快照：单场挑战中途退出 = 挑战未完成（无胜负、无结算），
+        // 下次启动不弹「继续上一局」、不弹「按撤离失败结算，本局金币已保留」的提示。
+        if (bm.Mode != null && bm.Mode.Id == BattleModeId.Arena) return false;
         if (!bm.isInBattle) return false;
         if (bm.currentStage == null) return false;
         if (bm.currentStage.type == StageType.Rest) return false;

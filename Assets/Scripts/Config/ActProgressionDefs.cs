@@ -85,6 +85,33 @@ public static class ActProgressionDefs
         return (gi - 1) * SUBS_PER_GRAND + s;
     }
 
+    // ============================================================
+    // 【2026-10-31 B2 落地】篇内「大关 ↔ 小关」换算（进度层唯一出口）
+    // 运行时进度一律用「篇内小关下标 sub0（0 起，0..StageCountOf(篇)-1）」当主键：
+    //   存档 clearedStages 的 key = "章_sub0"（沿用旧格式，老档 0..4 正好是第一座大关）；
+    //   大关号 = sub0 / 5 + 1，大关内小关 = sub0 % 5。
+    // 任何地方要在大关号与小关下标之间换算，只调这四个函数，禁止自己除 5 取模。
+    // ============================================================
+
+    /// <summary>某篇的小关总数（= <see cref="StageCountOf"/>，别名只为语义清楚）。</summary>
+    public static int SubCountOf(int act) => StageCountOf(act);
+
+    /// <summary>篇内小关下标（0 起）→ 篇内第几座大关（1 起）。越界按首/尾大关钳。</summary>
+    public static int GrandOfSub0(int act, int sub0)
+    {
+        int total = Mathf.Max(SUBS_PER_GRAND, StageCountOf(act));
+        int s = Mathf.Clamp(sub0, 0, total - 1);
+        return s / SUBS_PER_GRAND + 1;
+    }
+
+    /// <summary>篇内小关下标（0 起）→ 大关内第几小关（0 起，0~4）。</summary>
+    public static int SubInGrand0(int sub0)
+        => ((sub0 % SUBS_PER_GRAND) + SUBS_PER_GRAND) % SUBS_PER_GRAND;
+
+    /// <summary>（大关, 大关内小关 0 起）→ 篇内小关下标（0 起）。</summary>
+    public static int Sub0Of(int grand, int sub0)
+        => (Mathf.Max(1, grand) - 1) * SUBS_PER_GRAND + Mathf.Clamp(sub0, 0, SUBS_PER_GRAND - 1);
+
     /// <summary>
     /// 小关类型（只管 Boss / 精英 / 普通三种战斗型）：
     /// 第 5 小关 = Boss；第 3 小关 = 精英（概率真源 <see cref="StageRoller.PinnedEliteChance"/>）；其余普通。

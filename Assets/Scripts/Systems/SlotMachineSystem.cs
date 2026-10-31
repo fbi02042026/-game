@@ -394,6 +394,9 @@ public static class SlotMachineSystem
         // 【2026-10-29 主人拍板】无限裂隙不出金币方向：每层 3 抽全免费、抽满即收面板，
         // 币在裂隙内没有消费出口，抽到金币卡等于白占一张名额。概率公示与实际同源（BuildOddsRows 也走这里）。
         if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift) return false;
+        // 【2026-10-31 主人拍板「金币也不用了」】竞技场同口径：抽奖吃 5 次额度、不吃金币，
+        // 场内金币没有消费出口（竞技场商店走积分），抽回金币卡 = 白占一次额度，不出。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsArena) return false;
         if (InGuaranteeWindow()) return false;
         if (MercGuaranteeActive() && AvailableCategories().Contains(DraftCategory.Merc))
             return false;

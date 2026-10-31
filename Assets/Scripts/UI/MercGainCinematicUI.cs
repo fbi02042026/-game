@@ -160,14 +160,15 @@ public class MercGainCinematicUI : MonoBehaviour
         // 再取 _nameBasePos（名字动画基准要取贴台后的位置）
         FitStageAlignment(nameTr);
 
-        // 【2026-10-28 主人拍板·最小增量】安全区适配：刘海/挖孔屏顶部避让、底部手势条避让。
+        // 【2026-10-31 主人报「背景没有全屏有个缝」】panl 的顶部避让整体删除：
+        // EnsureTopOffset 内部恒定附带顶栏专用的固定下移量 TopBarExtraDropUnits=20
+        //（SafeAreaFitter.TotalTopInsetUnits），全屏背景跟着下移就会在顶部露出一条
+        // 底层界面的缝——编辑器/无刘海机也照露。全屏演出背景不做顶部避让：
+        // 背景图里「恭喜获得」横幅顶沿距顶约 126 设计单位，常规刘海（≈90~110）盖不到。
+        // 底部手势条避让只挂 NamePlate：只挪名字、不动 panl → BG 四边始终铺满全屏。
         // 必须挂在 FitStageAlignment 之后——SafeAreaFitter.Offset 模式把「当前 anchoredPosition」当基准，
-        // 这样贴台 ×k 的 y 与 safeArea 偏移叠加而非被覆盖；名字基准 _nameBasePos 也在本次挂载后取值，
+        // 贴台 ×k 的 y 与 safeArea 偏移叠加而非被覆盖；名字基准 _nameBasePos 也在本次挂载后取值，
         // 使底部手势条偏移一并算进名字动画基准（CoNameIn 的每帧覆写不再把它抹掉）。
-        // 顶部挂 panl 根：BG/立绘/名字整体随 panl 下移，与 FitStageAlignment 的贴台关系一起平移，立绘仍踩在台上；
-        // 底部只挂 NamePlate：不动 panl → BG 底不被拉起露黑边。两者都不挂根 Canvas（由 Canvas 每帧驱动，无效）。
-        // （panlRt 已在上方全屏化处取得）
-        if (panlRt != null) SafeAreaFitter.EnsureTopOffset(panlRt);
         SafeAreaFitter.EnsureBottomOffset(nameTr as RectTransform);
 
         _name = nameTr.GetComponent<Text>();
@@ -259,6 +260,25 @@ public class MercGainCinematicUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 【2026-10-31 主人报「人物离开底座了」】出场动画播完后的贴台重钉：
+    /// 出场片段把 Stand 位置冻在片内落点（按 720×1280 摆的），Animator 播放期间每帧
+    /// 覆写 anchoredPosition，FitStageAlignment 的 ×k 补偿进不去。播完关掉 Animator 后
+    /// 把落点 y 按「BG 实际高 ÷ 设计高 1280」重乘一次，口径与 FitStageAlignment ① 完全一致；
+    /// 720×1280（k=1）时数值不变。x 居中不动。
+    /// </summary>
+    void RepinStandToStage()
+    {
+        var srt = _stand as RectTransform;
+        if (srt == null || _bgRt == null) return;
+        float h = _bgRt.rect.height;
+        if (h <= 0f) return;
+        float k = h / GameConfig.DESIGN_HEIGHT;
+        if (Mathf.Approximately(k, 1f)) return;
+        var p = srt.anchoredPosition;
+        srt.anchoredPosition = new Vector2(p.x, p.y * k);
+    }
+
     static CanvasGroup EnsureGroup(GameObject go, out float targetAlpha)
     {
         var img = go.GetComponent<Image>();
@@ -285,7 +305,16 @@ public class MercGainCinematicUI : MonoBehaviour
         //    旧的三段式程序化登场（CoPortraitEntrance），不让演出整段报废。
         var anim = GetComponentInChildren<Animator>();
         if (anim != null && anim.runtimeAnimatorController != null)
+        {
             yield return CoWaitEntranceDone(anim);
+            // 【2026-10-31 主人报「人物离开底座了」】chuchang 是非循环片段，播完姿态冻结、
+            // Animator 每帧仍覆写 Stand —— FitStageAlignment 在 Play 时做的贴台 ×k 进不去。
+            // 片内落点（y=-676）是按 720×1280（k=1）摆的；瘦屏逻辑高>1280（k>1）时台面随
+            // 背景拉伸下移、人物却停在 k=1 的落点 → 悬空。播完后关掉 Animator 再按同一
+            // 口径把落点 y 重乘 k（720×1280 时 k=1，一个像素不动）。
+            anim.enabled = false;
+            RepinStandToStage();
+        }
         else
         {
             Debug.LogError("[MercGainCinematic] 预制体上没有可用的 Animator/控制器（出场动画不播），退回程序化登场");

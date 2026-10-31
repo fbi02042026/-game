@@ -710,7 +710,9 @@ public partial class AdventureUI
         }
 
         var data = SaveSystem.Instance?.Data;
-        int total = GameConfig.STAGES_PER_GRAND;
+        // 【2026-10-31 B2 落地】每篇的小关总数不再是 5，而是 50/50/70/80/90/90/100/100
+        // （ActProgressionDefs.StageCountOf）。「关」= 篇内小关下标（1 起），宝箱列按大关窗口铺。
+        int total = ChapterSubTotal(_selectedChapter, data);
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关 key），
         // 不再用「最大通关号 + 1」推断——中断续局跳关会留下「后关已通、前关未通」的记录。
         int current = FirstUnclearedStage(_selectedChapter, total, data);   // 1 起；全通 = total+1
@@ -794,27 +796,38 @@ public partial class AdventureUI
         }
 
         float rhythm = SlotRhythm();
-        int total = GameConfig.STAGES_PER_GRAND;
         // 跨章铺列的最后一章（选中章起连续 ChestSpanChapters 章，钳到章上限）
         int lastChapter = Mathf.Min(_selectedChapter + ChestSpanChapters - 1, ChestRouteMaxChapter);
         int curCh = _selectedChapter;
-        int curStage = 0;
+        int curTotal = ChapterSubTotal(curCh, data);
+        // 窗口起点 = 当前大关第 1 小关（篇内 1 起）；已打完的大关不再回溯展示（与旧「3 章窗口」同口径）。
+        // 15 个槽位 = 3 座大关 × 5 小关，跨篇时自然接上「下一章的 1-1」。
+        int curStage = data != null
+            ? Mathf.Clamp((data.CurrentGrand(curCh) - 1) * GameConfig.STAGES_PER_GRAND, 0, Mathf.Max(0, curTotal - 1))
+            : 0;
         int currentSlot = -1;
         for (int slot = 0; slot < _slotNodes.Count; slot++)
         {
-            // 找下一个入槽的关（本章铺完接下一章；章超出范围 → 槽位隐藏）
+            // 找下一个入槽的关（本篇铺完接下一章；章超出范围 → 槽位隐藏）
             int sCh = -1, sStage = -1, sCur = 0;
+            int sTotal = 0;
             bool sLocked = true;
             while (curCh <= lastChapter)
             {
-                curStage++;
-                if (curStage > total) { curCh++; curStage = 0; continue; }
+                if (curStage >= curTotal)
+                {
+                    curCh++;
+                    curStage = 0;
+                    curTotal = ChapterSubTotal(curCh, data);
+                    continue;
+                }
                 // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关），
                 // 不再用 max+1 推断；「是否已通关」在 WriteSlotContent 内按单关 key 判定。
-                int chCur = FirstUnclearedStage(curCh, total, data);
+                int chCur = FirstUnclearedStage(curCh, curTotal, data);
                 bool chLocked = !ChapterRouteTable.CanEnterAtDiff(curCh, _selectedDiff, data);
                 // 【2026-10-29 主人拍板】已通关/已领取的关一律照常入槽（变灰留在列里），不再 skip 让位
-                sCh = curCh; sStage = curStage; sCur = chCur; sLocked = chLocked;
+                sCh = curCh; sStage = curStage + 1; sCur = chCur; sLocked = chLocked; sTotal = curTotal;
+                curStage++;
                 break;
             }
             if (slot < _slotStage.Count) _slotStage[slot] = sStage;
@@ -832,7 +845,7 @@ public partial class AdventureUI
                 _slotNodes[slot].gameObject.SetActive(true);
             WriteSlotContent(slot, sCh, sStage, sCur, sLocked, data);
             // 「进行中的当前关」（下一关）：列里最早的命中槽 = 进度前沿（多章内只会有一个）
-            if (!sLocked && sStage == sCur && sStage <= total && currentSlot < 0)
+            if (!sLocked && sStage == sCur && sStage <= sTotal && currentSlot < 0)
                 currentSlot = slot;
             // 内容下移一档（新关来自更上面的旧槽，跨章按章号比）→ +rhythm 偏移；内容上移/新出现直接就位
             if (slot < _slotSlideOffset.Count)
@@ -938,13 +951,21 @@ public partial class AdventureUI
             _slotFloatBasePos[i] = new Vector2(_slotFloatBasePos[i].x, _slotFloatBasePos[i].y + half);
     }
 
+    /// <summary>该篇的小关总数（B2 后 50/50/70/80/90/90/100/100；存档取不到时按表算）。</summary>
+    static int ChapterSubTotal(int chapter, SaveData data)
+    {
+        if (data != null) return data.ChapterSubTotal(chapter);
+        return ActProgressionDefs.StageCountOf(Mathf.Clamp(chapter, 1, ActProgressionDefs.ActCount));
+    }
+
     /// <summary>按小关号取三态图路径（2026-10-24 从 WriteSlotContent 抽出：动效切图与刷新共用一个出口）。
-    /// 第 3 关银、第 5 关（Boss）金，其余木（【2026-10-23 批 B1】沿用）。</summary>
+    /// 大关内第 3 小关银、第 5 小关（Boss）金，其余木（【2026-10-23 批 B1】沿用；
+    /// 【2026-10-31 B2】关号变成篇内下标，按 %5 还原成大关内位置）。</summary>
     static string[] ChestPathsForStage(int stage)
     {
-        int total = GameConfig.STAGES_PER_GRAND;
-        return stage == ChestSilverStage ? ChestSilverPaths
-             : stage == total ? ChestGoldPaths
+        int s = ((stage - 1) % GameConfig.STAGES_PER_GRAND + GameConfig.STAGES_PER_GRAND) % GameConfig.STAGES_PER_GRAND + 1;
+        return s == ChestSilverStage ? ChestSilverPaths
+             : s == GameConfig.STAGES_PER_GRAND ? ChestGoldPaths
              : ChestWoodPaths;
     }
 
@@ -958,11 +979,12 @@ public partial class AdventureUI
         if (cleared == null || cleared.Count == 0) return 0;
         int max = 0;
         string prefix = chapter + "_";
+        int total = ChapterSubTotal(chapter, SaveSystem.Instance?.Data);
         foreach (var key in cleared)
         {
             if (string.IsNullOrEmpty(key) || !key.StartsWith(prefix, StringComparison.Ordinal)) continue;
             if (int.TryParse(key.Substring(prefix.Length), out int stage0)
-                && stage0 >= 0 && stage0 < GameConfig.STAGES_PER_GRAND)
+                && stage0 >= 0 && stage0 < total)
                 max = Mathf.Max(max, stage0 + 1);
         }
         return max;
@@ -1224,14 +1246,23 @@ public partial class AdventureUI
         if (!data.MarkChestClaimed(slotCh, stage1 - 1)) return;   // 防重复发奖
         // 先标记再取/发：保证只发一次；Take 返回 null = 该关没有记录（重复通关补领），不弹窗直接退场
         var notice = AdventureRewardNotice.Take(slotCh, stage1 - 1);
-        bool isBossChest = stage1 == GameConfig.STAGES_PER_GRAND;
+        // 【2026-10-31 B2】关号变成篇内下标，Boss 箱 = 大关内第 5 小关（%5==0）
+        bool isBossChest = ((stage1 - 1) % GameConfig.STAGES_PER_GRAND) == GameConfig.STAGES_PER_GRAND - 1;
         var entries = BuildChestRewardEntries(notice, bossDiamond: isBossChest);
         if (isBossChest)
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, ChestClaimDiamond, save: false, notify: true);
         }
         if (entries.Count > 0)
-            RewardPopupUI.Show(entries);
+        {
+            // 【2026-10-31 结算双倍】有本关金币可翻时，弹窗上多一颗「看广告 · 金币×2」
+            //（每日 3 次，走 SettleDoubleAd；不满足条件就退回原弹窗，界面零变化）。
+            long doubleGold = notice != null ? notice.gold : 0;
+            if (SettleDoubleAd.CanOffer(doubleGold))
+                RewardPopupUI.Show(entries, onResult => SettleDoubleAd.Request(doubleGold, onResult));
+            else
+                RewardPopupUI.Show(entries);
+        }
         SaveSystem.Instance?.Save();
 
         _claimRoutine = StartCoroutine(ChestClaimExitAnim(slot));

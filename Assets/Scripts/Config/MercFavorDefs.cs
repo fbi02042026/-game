@@ -18,7 +18,8 @@ public static class MercFavorDefs
 {
     // —— 核心数值（就这一处，改这里）——
 
-    /// <summary>好感进度爱心颗数（预制体「好感进度/爱心1..6」已摆 6 颗，全显示为空心 + 进度条填充）。</summary>
+    /// <summary>好感进度爱心颗数（预制体「好感进度/爱心1..6」已摆 6 颗；2026-10-31 主人拍板：
+    /// 爱心本体即进度条——每颗心内部随好感一点点涨满，每颗对应 <see cref="FavorPerHeart"/> 分）。</summary>
     public const int HeartCount = 6;
 
     /// <summary>每颗心对应的好感分（总满值 = HeartCount × FavorPerHeart = 60）。</summary>

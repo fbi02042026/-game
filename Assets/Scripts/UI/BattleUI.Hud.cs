@@ -216,6 +216,15 @@ public partial class BattleUI : MonoBehaviour
     public void UpdateDraftCoin(long coins)
     {
         if (draftCoinText == null) return;
+        // 【2026-10-31 主人拍板「那个抽奖币的金币也不用了 改成剩余几次」】竞技场不吃金币：
+        // 顶栏抽奖币位改显示剩余抽奖次数（真源 = SlotMachineSystem.FreeDrawsLeft，随每抽刷新）。
+        // 图标是主人预制体摆的，代码不猜节点不动它；要连图标一起换说一声。
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.IsArena)
+        {
+            draftCoinText.text = $"剩余{SlotMachineSystem.FreeDrawsLeft()}次";
+            return;
+        }
         draftCoinText.text = coins.ToString();
     }
 

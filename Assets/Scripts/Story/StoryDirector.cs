@@ -255,7 +255,14 @@ public class StoryDirector : Singleton<StoryDirector>
                 }
                 else
                 {
-                    string loc = StoryBackgrounds.DisplayName(b.backgroundId);
+                    // 【2026-10-31】调用方传了 introCaption 就优先用它（支线岛要「岛名 · 副标」，
+                    // 而背景 DisplayName 只有岛名）；没传仍走背景地名，主线行为不变。
+                    // 用完即清，同一段剧情后面再换背景不会重复挂同一句字幕。
+                    string loc = _introCaption;
+                    if (!string.IsNullOrEmpty(loc))
+                        _introCaption = null;
+                    else
+                        loc = StoryBackgrounds.DisplayName(b.backgroundId);
                     if (!string.IsNullOrEmpty(loc))
                     {
                         // 2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%（缩放真源在 StoryBackgrounds）

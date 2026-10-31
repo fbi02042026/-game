@@ -7,20 +7,22 @@ using UnityEngine.UI;
 ///
 /// 预制体：<c>Resources/Prefabs/Town/佣兵好感</c>（主人手工搭 2026-10-26）：
 /// 佣兵好感(Canvas+ScrollRect+Raycaster) → Panel
-/// → Left/头像/Row_0..Row_0(5)：已拥有佣兵槽（prefab 摆 6 格作初始池，运行时套 ScrollRect 可滑动，
+/// → Left/头像/Row_0..Row_0(5)：已拥有佣兵槽（prefab 摆 6 格作初始池，运行时套 ScrollRect 可滑动；
+///   滚动视口挂 Panel/Left 整列裁剪，首行保持主人手摆位向下排，2026-10-31 校对；
 ///   已拥有超过 6 个时克隆 Row_0 补行；Image+Button+mask/Icon 已摆好；
 ///   Row 本体 = 头像框，随本格佣兵稀有度换三档：普通银/稀有蓝/传奇金，2026-10-26 晚拍板）
 /// → Right/Top/mask/Icon：选中佣兵立绘（半身，GetStand）+【代码建】问题对话框（主人口吻提问，
 ///   2026-10-27 挪出 Mask：挂 Panel/Right/Top（scale=1），mask 只做裁剪不随稀有度换图）
 ///   （Top/mask 与 Top/bg = 半身像框，随稀有度换同款三档，2026-10-26 晚拍板）
-/// → Right/Top/好感进度/爱心1..6（各带「空心」子节点）：全显示空心（2026-10-26 晚拍板）+【代码建】从左到右进度条
-///   （条底用主人好感度素材 Resources/Art/UI/Tavern/好感度/_0001_图层-2，320×77 挂 Panel/Right/Top
-///    沿黑条排开；粉色填充按 sizeDelta 涨宽 —— 2026-10-27 美术裁决：Filled 无 sprite 不生效；
-///    两者都是本脚本运行时新建的图，不碰 prefab 已摆节点 —— 主人点名要进度条，属必要介入）
+/// → Right/Top/好感进度/爱心1..6（各带「空心」子节点）：爱心本体即进度条（2026-10-31 主人拍板：
+///   每颗心内部随好感一点点涨满——实心常驻铺底、空心 Filled 竖向裁剪随进度退去，
+///   粉色从下往上一点点露出；不跳变、不建任何进度条图）
 /// → Right/Top1/佣兵头像(Iconmask/Icon + namebg/Name)：头像 + 名字
 /// → Right/Top1/选中对话/1|2|3（各带 Text (Legacy)）：答案槽（prefab 无 Button，代码补）；
 ///   分值不展示，每天轮换一个特殊答案，每天 3 次、一次选一个
-/// → Right/Middle/panl(Iconbg/Icon + Iconbg/Name)：礼物槽模板（代码按持有礼物横排克隆）
+/// → Right/Middle/panl(Iconbg/Icon + Iconbg/Name)：礼物槽模板（代码按持有礼物横排克隆；
+///   文字行 = 品质(着色)+名字+好感值，数量在右下角爱心角标【代码建 CountBadge】，
+///   空行时行框上显示提示【代码建 GiftEmptyTip】，2026-10-31 主人拍板照设计稿）
 /// → Right/bottom/地名名字 + Info + 战斗按钮(Icon + 羁绊地图 + 地图名字)：羁绊地图入口
 ///
 /// 铁律合规：UICanvasSetup.ApplyPopup 四件套；prefab 已摆节点布局一字不写（铁律 20），新建运行时图
@@ -47,9 +49,8 @@ public class MercFavorUI : MonoBehaviour
     Button[] _talkBtns;        // 同节点上的 Button（prefab 没有，代码补）
     Image[] _talkImgs;         // 槽底 Image（禁用压灰用）
     Color _talkImgOrigColor = Color.white;   // 槽底 prefab 原色（Bind 时缓存）
-    Image[] _heartFills;       // 爱心1..6 本体（实心图；2026-10-26 晚拍板：常隐藏，进度条接力）
-    Image[] _heartEmpties;     // 爱心N/空心（常显示）
-    Image _favorFill;          // 【代码建】好感进度条填充（粉，从左到右）
+    Image[] _heartFills;       // 爱心1..6 本体（实心图铺底；2026-10-31 主人拍板：每颗心内部随进度涨满）
+    Image[] _heartEmpties;     // 爱心N/空心（运行时改 Filled 竖向裁剪，fillAmount=1-进度，随进度退去露出实心）
     Text _questionText;        // 【代码建】立绘对话框文本（佣兵的问题）
     Text _mapNameText;         // bottom/地名名字
     Text _infoText;            // bottom/Info
@@ -76,6 +77,7 @@ public class MercFavorUI : MonoBehaviour
     RectTransform _giftTemplate;       // Middle/panl（模板；第三批起 prefab 内常态隐藏，克隆进 GiftScroll/Content）
     RectTransform _giftContent;        // Middle/GiftScroll/Viewport/Content（第三批礼物横排容器；未构建时为 null 走旧定位）
     GameObject _giftScrollGo;          // Middle/GiftScroll（空列表时整体隐藏用）
+    Text _giftEmptyTip;                // 【代码建】空行提示（挂在 Middle，几何照抄 bg；2026-10-31 主人拍板）
     List<Text> _rowPcts = new List<Text>();   // Row_x/FavorPct（左列每格好感百分比，2026-10-27 主人拍板）
     Image _giftIcon;                   // panl/Iconbg/Icon
     Text _giftName;                    // panl/Iconbg/Name
@@ -86,7 +88,6 @@ public class MercFavorUI : MonoBehaviour
     string _currentHireId => _mercIds != null && _selected >= 0 && _selected < _mercIds.Length
         ? _mercIds[_selected] : null;
 
-    static readonly Color UnselectedColor = new Color(0.62f, 0.62f, 0.62f, 1f);   // 乘在原色上做「未选中变暗」
     static readonly Color DisabledLabelColor = new Color(0.55f, 0.55f, 0.55f, 1f);
 
     /// <summary>打开佣兵好感界面。hireId 传空 = 默认选第一个已拥有佣兵。
@@ -186,7 +187,8 @@ public class MercFavorUI : MonoBehaviour
                 }
             }
 
-            BuildFavorBar(favorRoot);   // 【2026-10-26 晚拍板】空心爱心 + 从左到右进度条（代码建图）
+            // 【2026-10-31 主人拍板】爱心本体就是进度条：实心按好感百分比一颗一颗点亮，
+            // 不再建任何进度条/填充图（旧粉填充已删，主人的 Top/Image 原样不动）
         }
 
         // 选中对话 1..3（prefab 无 Button，代码补；interaction 必需，不算改 prefab）
@@ -293,11 +295,15 @@ public class MercFavorUI : MonoBehaviour
     }
 
     // —— 左列表滑动支持（2026-10-27 主人拍板：可滑动，超出 6 个克隆 Row_0 补行）——
-    // 行几何沿用 prefab 实测（勿按旧常量猜）：行宽 109 / 行高 108 / 步距 110 / 左列横位 x=-195
-    const float RosterRowX = -195f;
-    const float RosterRowH = 108f;
-    const float RosterRowStep = 110f;
-    const float RosterTopPad = 10f;
+    // 行几何一律从 prefab 行实测（2026-10-31 校对：主人手摆 Row_0 y=280、步距 110、x=-195、行高 108），
+    // 不再自造常量。旧实现两处错：①视口（裁剪框）套在 头像 100×100 哑容器上——行手摆位置本来就
+    // 溢出哑容器（Row_0 y=280），结果整列行被裁进 100×100 小框 = 左列表"消失"；②自造顶部留白 10，
+    // 把首行从手摆的 y=280 压到 y=-14。现改为：视口挂 Panel/Left（整列裁剪）+ 首行保持手摆位向下排。
+    float _rowX = -195f;       // 左列横位（SetupRosterScroll 时以 prefab 行实测覆写）
+    float _row0LocalY = 280f;  // 首行中心 y（相对 头像 中心，prefab 手摆值）
+    float _rowStepY = 110f;    // 行步距（prefab 实测）
+    float _rowH = 108f;        // 行高（prefab 实测）
+    float _rosterClipH;        // 左列裁剪区高度（= Panel/Left rect，SetupRosterScroll 时缓存）
 
     /// <summary>把一行（prefab 行或克隆行）注册进平行 List，并绑定「点击 = 选该下标佣兵」。
     /// idx 用闭包捕获当前下标（绑定时即正确；列表与 _mercIds 1:1）。</summary>
@@ -330,14 +336,33 @@ public class MercFavorUI : MonoBehaviour
     {
         if (_rosterRoot == null || _rosterContent != null) return;
 
-        // ScrollRect 容器：盖住 头像 区（与 头像 同尺寸），纯竖向滚动 + 惯性
+        // 先实测 prefab 行几何（此刻行还在 头像 下、保持主人手摆的局部坐标）
+        var row0 = _rowGos.Count > 0 && _rowGos[0] != null ? _rowGos[0].GetComponent<RectTransform>() : null;
+        if (row0 != null)
+        {
+            _rowX = row0.anchoredPosition.x;
+            _row0LocalY = row0.anchoredPosition.y;
+            if (row0.rect.height > 0) _rowH = row0.rect.height;
+            if (_rowGos.Count > 1 && _rowGos[1] != null)
+            {
+                float y1 = ((RectTransform)_rowGos[1].transform).anchoredPosition.y;
+                if (Mathf.Abs(_row0LocalY - y1) > 0.01f) _rowStepY = Mathf.Abs(_row0LocalY - y1);
+            }
+        }
+
+        // ScrollRect 容器：挂 Panel/Left（左列整列裁剪）。头像是 100×100 哑容器，行手摆位置本来就
+        // 溢出它，视口若套在哑容器上会把行全裁没（2026-10-31 校对修复）
+        var clipRt = _rosterRoot.parent as RectTransform;
         var scroll = new GameObject("RowScroll", typeof(RectTransform), typeof(ScrollRect));
-        scroll.transform.SetParent(_rosterRoot, false);
+        scroll.transform.SetParent(clipRt, false);
         var srt = scroll.GetComponent<RectTransform>();
         srt.anchorMin = Vector2.zero;
         srt.anchorMax = Vector2.one;
         srt.offsetMin = Vector2.zero;
         srt.offsetMax = Vector2.zero;
+        _rosterClipH = clipRt != null ? clipRt.rect.height : 0f;
+        // 垫到 头像 之上、装饰1/装饰2 之下：滚动行压不住主人摆的边角装饰
+        scroll.transform.SetSiblingIndex(_rosterRoot.GetSiblingIndex() + 1);
 
         var vp = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
         vp.transform.SetParent(srt, false);
@@ -393,24 +418,35 @@ public class MercFavorUI : MonoBehaviour
         ScrollSelectedIntoView();
     }
 
-    /// <summary>行布位：顶部锚定、左列横位、逐个下移 step（沿用 prefab 步距，不发明布局数值）。</summary>
+    /// <summary>行布位：首行保持主人手摆位（Row_0 y=280 相对 头像 中心），向下按 prefab 步距排；
+    /// content 顶锚在视口顶，故 y = 手摆y − 视口半高（2026-10-31 校对：不再自造顶部留白）。</summary>
     void LayoutRosterRows(int n)
     {
+        float halfVp = RosterClipHalfHeight();
         for (int i = 0; i < n && i < _rowGos.Count; i++)
         {
             if (_rowGos[i] == null) continue;
             var rt = _rowGos[i].GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(RosterRowX, -(RosterTopPad + RosterRowH * 0.5f + i * RosterRowStep));
+            rt.anchoredPosition = new Vector2(_rowX, (_row0LocalY - _rowStepY * i) - halfVp);
         }
     }
 
-    /// <summary>内容高度随行数伸缩：≤一屏不滚，超出可滚。</summary>
+    /// <summary>左列视口半高：优先用缓存的 Panel/Left rect，取不到再读运行时视口（同一尺寸）。</summary>
+    float RosterClipHalfHeight()
+    {
+        float h = _rosterClipH > 0f ? _rosterClipH
+            : _rosterScroll != null && _rosterScroll.viewport != null ? _rosterScroll.viewport.rect.height : 0f;
+        return h * 0.5f;
+    }
+
+    /// <summary>内容高度随行数伸缩：顶留白（视口半高 − 首行手摆y）+ 末行高度；≤一屏不滚，超出可滚。</summary>
     void UpdateRosterContentHeight(int n)
     {
         if (_rosterContent == null) return;
-        float h = RosterTopPad * 2f + (Mathf.Max(1, n) - 1) * RosterRowStep + RosterRowH;
+        float halfVp = RosterClipHalfHeight();
+        float h = (halfVp - _row0LocalY) + _rowH + (Mathf.Max(1, n) - 1) * _rowStepY;
         _rosterContent.sizeDelta = new Vector2(0f, h);
     }
 
@@ -418,71 +454,16 @@ public class MercFavorUI : MonoBehaviour
     void ScrollSelectedIntoView()
     {
         if (_rosterScroll == null || _rosterScroll.viewport == null || _rosterContent == null || _selected < 0) return;
-        float vp = _rosterScroll.viewport.rect.height;
+        float vp = RosterClipHalfHeight() * 2f;
         float contentH = _rosterContent.sizeDelta.y;
         if (contentH <= vp) { _rosterScroll.verticalNormalizedPosition = 1f; return; }
-        float rowCenter = RosterTopPad + RosterRowH * 0.5f + _selected * RosterRowStep;
+        float rowCenter = (vp * 0.5f - _row0LocalY) + _selected * _rowStepY;   // 距 content 顶
         float offset = rowCenter - vp * 0.5f;
         float norm = 1f - Mathf.Clamp(offset, 0f, contentH - vp) / (contentH - vp);
         _rosterScroll.verticalNormalizedPosition = Mathf.Clamp(norm, 0f, 1f);
     }
 
-    // —— 运行时建图（2026-10-26 晚主人点名要的两件：进度条 + 问题对话框；锚点比例摆位，不碰 prefab 节点）——
-
-    /// <summary>进度条素材路径：主人好感度图组里的金边条框（436×105，左端原有心形位）。</summary>
-    const string FavorBarSpritePath = "UI/Art/Tavern/好感度/_0001_图层-2";
-    static readonly Color FavorFillColor = new Color(0.96f, 0.42f, 0.55f, 1f);   // mockup 同款粉
-
-    /// <summary>
-    /// 好感进度条（2026-10-27 美术裁决）：
-    /// 条框底图 320×77（素材 436×105 ≈4.15:1 保比例）挂在 Panel/Right/Top（scale=1）下，
-    /// 世界 center ≈(71,156)，沿黑条 Top/Image(373×50) 排开、覆盖整排爱心；
-    /// SetSiblingIndex 排到「好感进度」之前：track 先画、prefab 爱心后画盖在上面。
-    /// （不再挂「好感进度」48×48 小图标下——那会被图标盖住、track 只剩 ~46×42。）
-    /// 填充不用 Image.Type.Filled（没给 sprite 时 fillAmount 不生效、好感 0 也满条），
-    /// 改 sizeDelta 方案：锚点 (0,0.2)~(0,0.8) 定填充区 y、pivot (0,0.5)、
-    /// 起点右移 0.26 避开底图左端心形位，宽 = trackWidth × 0.71 × 好感比例（SetFavorFill 更新）。
-    /// </summary>
-    void BuildFavorBar(Transform favorRoot)
-    {
-        var topT = favorRoot != null ? favorRoot.parent : null;   // Panel/Right/Top
-        if (topT == null)
-        {
-            Debug.LogError(LogTag + "好感进度缺父节点 Panel/Right/Top，进度条不建（结构被改过？）");
-            return;
-        }
-        var track = NewUiImage(topT, "FavorBarTrack", FavorBarSpritePath,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Color.white, -1);
-        if (track == null) return;   // 素材缺失已 LogError，条不建（不静默也不兜底造图）
-        var trackRt = track.GetComponent<RectTransform>();
-        trackRt.pivot = new Vector2(0.5f, 0.5f);
-        trackRt.sizeDelta = new Vector2(320f, 77f);          // 底图 436×105 保比例
-        trackRt.anchoredPosition = new Vector2(75f, 166f);   // Top 中心 (-4,-10) → 世界 center ≈(71,156)
-        trackRt.SetSiblingIndex(favorRoot.GetSiblingIndex());   // 排到「好感进度」之前，先画在底层
-
-        // 填充条：sizeDelta 方案（不用 Filled —— 无 sprite 时 fillAmount 不生效、恒满）
-        var fillGo = new GameObject("FavorBarFill", typeof(RectTransform), typeof(Image));
-        var fillT = fillGo.GetComponent<RectTransform>();
-        fillT.SetParent(track.transform, false);
-        fillT.anchorMin = new Vector2(0f, 0.20f);   // 填充区 y
-        fillT.anchorMax = new Vector2(0f, 0.80f);
-        fillT.pivot = new Vector2(0f, 0.5f);
-        fillT.anchoredPosition = new Vector2(320f * 0.26f, 0f);   // 填充起点右移到 0.26，避开底图左端心形位
-        var fillImg = fillGo.GetComponent<Image>();
-        fillImg.color = FavorFillColor;
-        fillImg.raycastTarget = false;
-        _favorFill = fillImg;
-    }
-
-    /// <summary>好感比例 → 填充条宽（sizeDelta 方案：0.97-0.26=0.71 为可用宽度）。</summary>
-    void SetFavorFill(float ratio)
-    {
-        if (_favorFill == null) return;
-        const float trackWidth = 320f;
-        const float usable = 0.71f;
-        _favorFill.rectTransform.sizeDelta =
-            new Vector2(trackWidth * usable * Mathf.Clamp01(ratio), 0f);
-    }
+    // —— 运行时建图（2026-10-27 主人点名：问题对话框；锚点比例摆位，不碰 prefab 节点）——
 
     /// <summary>
     /// 问题对话框：盖在立绘框上方的条形泡（底图复用 prefab「选中对话」同款槽底图，风格一致），
@@ -593,6 +574,15 @@ public class MercFavorUI : MonoBehaviour
             _mercIds = owned.ToArray();
         }
 
+        // 【2026-10-31】一个佣兵都没有时：RefreshMercPanel 会因 hireId 为空直接 return，
+        // 右侧就露出 prefab 里预置的立绘/名字（假数据）。这里直接拦掉并给出去处。
+        if (_mercIds.Length == 0)
+        {
+            GlobalToastUI.Show("还没有佣兵。先去酒馆「佣兵招募」招一位，再来聊。", true);
+            Close();
+            return;
+        }
+
         // 默认选中：外部指定 hireId → 找它；否则第一个
         if (_selected < 0)
         {
@@ -622,7 +612,9 @@ public class MercFavorUI : MonoBehaviour
                     _rowBgs[i].sprite = MercHireSession.LoadTavernCardFrame(rowDef.Rarity);
                 else
                     Debug.LogError(LogTag + "花名册里查不到佣兵 " + _mercIds[i] + "，头像框不换（表被改过？）");
-                _rowBgs[i].color = i == _selected ? _rowOrigColor : _rowOrigColor * UnselectedColor;
+                // 【2026-10-31 主人拍板「按我的预制体效果来」】行颜色保持 prefab 原色，不再乘暗
+                //（旧逻辑未选中 ×0.62 变暗 = 运行时改了主人摆好的行色，撤）
+                _rowBgs[i].color = _rowOrigColor;
             }
         }
         // 左列每格好感百分比（2026-10-27 主人拍板：爱心旁显示当前进度；FavorPct 由 Tools/好感界面/第三批构建 生成）
@@ -676,14 +668,32 @@ public class MercFavorUI : MonoBehaviour
             _nameText.text = string.IsNullOrEmpty(nick) ? def.Name : def.Name + "·" + nick;
         }
 
-        // 好感进度（2026-10-26 晚拍板）：6 颗空心爱心常显 + 进度条按 好感/满值 从左到右填充
+        // 好感进度（2026-10-31 主人拍板）：爱心本体就是进度条——每颗心内部随进度一点点涨满，
+        // 不是数值够 10 就整颗一下点亮。实现：实心（爱心N 本体）常驻满图铺底，
+        // 空心（子节点）改 Filled 竖向裁剪、fillAmount = 1 − 该心进度（fillOrigin=Top）：
+        // 空心从上往下缩、底下的粉色实心从下往上一点点露出；满一颗时空心整体隐藏。
+        // （空心图中心不透明、又画在实心之上，直接给实心做 Filled 会被它盖住——裁空心才能露出填充。）
         int favor = MercFavorSystem.GetFavor(d, hireId);
         for (int i = 0; i < MercFavorDefs.HeartCount; i++)
         {
-            _heartFills[i].enabled = false;    // 实心常隐藏（进度交给条）
-            _heartEmpties[i].enabled = true;
+            float frac = Mathf.Clamp01(
+                (favor - i * MercFavorDefs.FavorPerHeart) / (float)MercFavorDefs.FavorPerHeart);
+            var fill = _heartFills != null && i < _heartFills.Length ? _heartFills[i] : null;
+            var empty = _heartEmpties != null && i < _heartEmpties.Length ? _heartEmpties[i] : null;
+            if (fill != null) fill.enabled = true;   // 实心铺底常显，露出多少由空心裁剪决定
+            if (empty == null) continue;
+            empty.enabled = frac < 1f;               // 满一颗 = 空心整体隐藏
+            if (frac < 1f)
+            {
+                if (empty.type != Image.Type.Filled)
+                {
+                    empty.type = Image.Type.Filled;
+                    empty.fillMethod = Image.FillMethod.Vertical;
+                    empty.fillOrigin = (int)Image.OriginVertical.Top;   // 空心从上往下退 → 实心从下往上亮
+                }
+                empty.fillAmount = 1f - frac;
+            }
         }
-        SetFavorFill(Mathf.Clamp01(favor / (float)MercFavorDefs.FavorMax));
 
         // 问题对话框：佣兵先开口提问（答案在下方三选一，分值不展示）
         MercFavorDefs.GetTalk(hireId, out var question, out var options, out var replies);
@@ -769,12 +779,13 @@ public class MercFavorUI : MonoBehaviour
             var nameTx = nameT != null ? nameT.GetComponent<Text>() : null;
             if (nameTx != null)
             {
-                // 【2026-10-27 主人拍板】送礼区显示品质标签 + 品质着色；数量 ×count 原本就有
+                // 【2026-10-31 主人拍板】文字行 = 品质标签(着色) + 名字 + 好感值；数量挪到右下角爱心角标
                 string qTag = MercFavorDefs.QualityName(gifts[i].Quality);
-                nameTx.text = "【" + qTag + "】" + gifts[i].Name + " ×" + count + " +" + gifts[i].Favor;
+                nameTx.text = "【" + qTag + "】" + gifts[i].Name + " +" + gifts[i].Favor;
                 if (ColorUtility.TryParseHtmlString("#" + MercFavorDefs.QualityColorHex(gifts[i].Quality), out var qc))
                     nameTx.color = qc;
             }
+            EnsureCountBadge(slot, count);   // 右下角爱心数量角标（照设计稿）
 
             string giftId = gifts[i].Id;
             var btn = slot.GetComponent<Button>();
@@ -808,6 +819,94 @@ public class MercFavorUI : MonoBehaviour
         {
             _giftTemplate.gameObject.SetActive(false);   // 没有礼物：整排隐藏（来源 = 每日回礼 + 礼物副本掉落，见 SaveData.favorGifts）
         }
+
+        // 空行提示（2026-10-31 主人拍板：行框 Tile/bg 留着，框上写提示文案）
+        var tip = EnsureGiftEmptyTip();
+        if (tip != null) tip.gameObject.SetActive(shown == 0);
+    }
+
+    // —— 礼物行两件套（2026-10-31 主人拍板）：数量角标 + 空行提示（运行时建节点，预制体没摆）——
+
+    /// <summary>角标爱心图路径：好感度图组的粉色实心爱心（22×19，按路径加载，铁律 16）。</summary>
+    const string HeartBadgeSpritePath = "UI/Art/Tavern/好感度/_0002_图层-6";
+
+    /// <summary>
+    /// 数量角标：格子右下角粉爱心 + 数字（照设计稿；数量从文字行挪出）。
+    /// 几何 = 爱心原图 22×19 不拉伸、贴格子右下角——主人点名要角标，属必要介入（铁律 20 例外，同礼物横排先例）。
+    /// </summary>
+    void EnsureCountBadge(RectTransform slot, int count)
+    {
+        var badgeT = slot.Find("CountBadge");
+        GameObject badgeGo;
+        if (badgeT != null)
+        {
+            badgeGo = badgeT.gameObject;   // 模板复用路径：角标已建过，只更新数字
+        }
+        else
+        {
+            var heartSp = Resources.Load<Sprite>(HeartBadgeSpritePath);
+            if (heartSp == null)
+            {
+                Debug.LogError(LogTag + "数量角标爱心图加载失败：" + HeartBadgeSpritePath);
+                return;
+            }
+            badgeGo = new GameObject("CountBadge", typeof(RectTransform), typeof(Image));
+            var rt = (RectTransform)badgeGo.transform;
+            rt.SetParent(slot, false);
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);   // 锚格子右下角
+            rt.pivot = new Vector2(1f, 0f);
+            rt.anchoredPosition = new Vector2(-2f, 4f);
+            rt.sizeDelta = new Vector2(22f, 19f);   // 爱心原图尺寸，整体不拉伸（铁律 5）
+            var img = badgeGo.GetComponent<Image>();
+            img.sprite = heartSp;
+            img.raycastTarget = false;
+
+            var numGo = new GameObject("Num", typeof(RectTransform), typeof(Text));
+            var nrt = (RectTransform)numGo.transform;
+            nrt.SetParent(badgeGo.transform, false);
+            nrt.anchorMin = Vector2.zero;
+            nrt.anchorMax = Vector2.one;
+            nrt.offsetMin = Vector2.zero;
+            nrt.offsetMax = Vector2.zero;
+            var tx = numGo.GetComponent<Text>();
+            tx.font = _nameText != null && _nameText.font != null ? _nameText.font : GameFonts.GetChinese();
+            tx.fontSize = 12;
+            tx.alignment = TextAnchor.MiddleCenter;
+            tx.color = Color.white;
+            tx.raycastTarget = false;
+        }
+        var numTx = badgeGo.transform.Find("Num");
+        if (numTx != null) numTx.GetComponent<Text>().text = count.ToString();
+    }
+
+    /// <summary>空行提示 Text：挂在 Middle 下，几何照抄主人的 bg 行底框（不发明布局数值），文案居中。</summary>
+    Text EnsureGiftEmptyTip()
+    {
+        if (_giftEmptyTip != null) return _giftEmptyTip;
+        var parent = _giftTemplate != null ? _giftTemplate.parent : null;   // Middle
+        if (parent == null) return null;
+        var tipGo = new GameObject("GiftEmptyTip", typeof(RectTransform), typeof(Text));
+        var rt = (RectTransform)tipGo.transform;
+        rt.SetParent(parent, false);
+        var bgT = parent.Find("bg");
+        if (bgT != null)
+        {
+            var brt = (RectTransform)bgT;   // 几何 = 主人行底框原值
+            rt.anchorMin = brt.anchorMin;
+            rt.anchorMax = brt.anchorMax;
+            rt.pivot = brt.pivot;
+            rt.anchoredPosition = brt.anchoredPosition;
+            rt.sizeDelta = brt.sizeDelta;
+        }
+        var tx = tipGo.GetComponent<Text>();
+        tx.font = _nameText != null && _nameText.font != null ? _nameText.font : GameFonts.GetChinese();
+        tx.fontSize = 22;
+        tx.alignment = TextAnchor.MiddleCenter;
+        tx.color = new Color(0.72f, 0.76f, 0.85f, 1f);
+        tx.text = "还没有礼物，快去获取吧～";
+        tx.raycastTarget = false;
+        _giftEmptyTip = tx;
+        return tx;
     }
 
     void ClearGiftClones()

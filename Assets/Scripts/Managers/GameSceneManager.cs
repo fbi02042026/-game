@@ -164,14 +164,25 @@ public class GameSceneManager : Singleton<GameSceneManager>
         AutoGameInitializer.ResetForSceneLoad();
         // 2026-10-11：本次进战斗的章号只算一次（唯一出口）—— loading 背景图与进战斗章节卡共用它。
         // 原来章节卡自己算一份，现在两处同值，别再各算各的。
-        int battleChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        // 【2026-10-31 主人报「怎么竞技场对战还有这个第一章的字」】竞技场没有章节上下文（currentChapter 默认 1），
+        // 章节卡/章节背景都归零：章节卡不演（下面两处跳过）、Loading 背景不套第一章图（传 0 = 保留预制体默认图）。
+        bool arenaChallenge = AdventureUI.PendingArenaRowIdx >= 0;
+        // 【2026-10-31】支线岛同理：currentChapter = 岛的「背景篇」，只是复用该篇的怪池/背景资产，
+        // 跟玩家推到第几章毫无关系。原口径会把「第 N 章」章节卡（标题 + 该章开场旁白）演在进岛之前
+        // → 提前剧透主线 + 和岛名黑幕（「迷雾屿 · 雾有面包味」）连播两套字幕。
+        // 这里在切场景前先取值（PendingSideIsland 会被 BattleManager.Start 读后即清）。
+        bool sideIslandRun = AdventureUI.PendingSideIsland > 0;
+        int battleChapter = (arenaChallenge || sideIslandRun) ? 0
+            : ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
         BattleLoadingOverlay.SetChapterBackdrop(battleChapter);
         // 【2026-10-20 主人拍板】进战斗顺序改为「Loading 装载完 → 章节文字 → 开打」：
         // 章节卡挪到 Loading 关闭之后演（不再盖在 Loading 上面靠层级遮）。
         // 无限裂隙照旧不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
-        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift;
+        // 竞技场挑战同样不演（2026-10-31 主人拍板，上面 arenaChallenge 归零口径）。
+        // 支线岛同样不演（2026-10-31）：章节卡归零口径同上，岛自己的开场由 IslandStoryBeats 负责。
+        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift && !arenaChallenge && !sideIslandRun;
         yield return null;
 
         // 战斗场景先在 Loading 底下静默加载（allowSceneActivation=false 时 progress 停在 0.9，到位即放行）。
@@ -219,7 +230,8 @@ public class GameSceneManager : Singleton<GameSceneManager>
         bool splashTutorial = StoryProgress.ShouldStartTutorialBattle();
         // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
-        var splash = AdventureUI.PendingEndlessRift
+        // 【2026-10-31 主人拍板】竞技场挑战不演章节卡（无限裂隙同口径）；支线岛同（理由见上 battleChapter 归零处）。
+        var splash = AdventureUI.PendingEndlessRift || arenaChallenge || sideIslandRun
             ? null
             : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
 

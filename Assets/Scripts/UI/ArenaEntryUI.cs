@@ -13,6 +13,9 @@ public static class ArenaEntryUI
 {
     public const string NodeName = "ArenaButton";
 
+    /// <summary>主人手摆的入口节点名（GuildHallUI.prefab RightBar 下，与每日登录同父；Label 已写「试炼场」，图标主人自配）。</summary>
+    const string HandPlacedName = "对战";
+
     /// <summary>与每日登录/纳福入口相同的行距（见 MiniGameEntryUI.OffsetY 注释）。</summary>
     const float OffsetY = -140f;
 
@@ -30,6 +33,15 @@ public static class ArenaEntryUI
         if (parent == null)
         {
             Debug.LogError("[ArenaEntry] 每日登录按钮没有父节点，入口未生成");
+            return;
+        }
+
+        // 2026-10-30 主人拍板：主人已在预制体 RightBar 手摆入口（节点名「对战」），运行时【不再克隆第二颗】——
+        // 找到就直接接线（原来那颗 onClick 是空的，所以点了没反应），找不到才走下面的克隆兜底。
+        var hand = parent.Find(HandPlacedName);
+        if (hand != null)
+        {
+            Wire(hand.GetComponent<Button>());
             return;
         }
 
@@ -97,7 +109,7 @@ public static class ArenaEntryUI
             var txt = labelNode.GetComponent<Text>();
             if (txt != null)
             {
-                txt.text = "竞技场";
+                txt.text = "试炼场";   // 2026-10-30 主人拍板：入口名统一「试炼场」（与公会面板手摆的「对战」入口同名）
                 // 每日登录 Label 是按 2~4 字排的，3 个字允许溢出宽度防换行
                 txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             }

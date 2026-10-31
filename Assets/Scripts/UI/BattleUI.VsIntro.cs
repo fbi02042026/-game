@@ -73,6 +73,10 @@ public static class BattleVsIntro
         }
         if (_playing != null) { ui.StopCoroutine(_playing); _playing = null; }
 
+        // 【2026-10-31 修「点继续没看到对战动画」】LiveMode 点「开始战斗/继续」后抽奖面板保持
+        // 常显（展开态，10-29 拍板），「对战」节点若排在背包面板之前会被整块盖住 →
+        // 播放前拉到 BattleUI 同级最后（最上层），0.5 秒播完照旧藏回，不影响面板常显。
+        node.SetAsLastSibling();
         node.gameObject.SetActive(true);
         animator.Play(StateName, 0, 0f);
         animator.Update(0f);

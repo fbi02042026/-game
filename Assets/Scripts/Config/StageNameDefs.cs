@@ -41,7 +41,11 @@ public static class StageNameDefs
     /// <summary>取关名；章/关越界 LogError 不兜底（缺名字要被看见），返回空串由调用方回退纯编号。</summary>
     public static string Get(int chapter, int stage)
     {
-        int c = chapter - 1, s = stage - 1;
+        int c = chapter - 1;
+        // 【2026-10-31 B2 落地】关号变成「篇内小关下标」（1..50/100），关名表仍是 8 章 × 5 关，
+        // 按大关内位置取（%5）——同篇每座大关复用同一组关名，不再越界刷 LogError。
+        int len = (c >= 0 && c < Names.Length) ? Names[c].Length : 0;
+        int s = len > 0 ? ((stage - 1) % len + len) % len : stage - 1;
         if (c < 0 || c >= Names.Length || s < 0 || s >= Names[c].Length)
         {
             Debug.LogError($"[StageNameDefs] 关名越界：chapter={chapter} stage={stage}（表尺寸 8 章 × 5 关）");

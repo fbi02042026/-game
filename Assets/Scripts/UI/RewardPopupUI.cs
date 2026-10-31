@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -219,7 +220,18 @@ public class RewardPopupUI : MonoBehaviour
     public static void Show(List<Entry> items)
     {
         if (items == null || items.Count == 0) return;
-        Ensure().Open(items);
+        Ensure().Open(items, null);
+    }
+
+    /// <summary>
+    /// 【2026-10-31 主人拍板「结算双倍可以加」】带广告加倍按钮的版本：
+    /// onAdDouble 非空时在「确定」上方补一颗「看广告 · 金币×2」按钮（运行时克隆确定钮，不改预制体）。
+    /// 其它调用方走上面那个重载 → 界面与现在完全一致（零行为变化）。
+    /// </summary>
+    public static void Show(List<Entry> items, Action<Action<bool>> onAdDouble)
+    {
+        if (items == null || items.Count == 0) return;
+        Ensure().Open(items, onAdDouble);
     }
 
     static RewardPopupUI Ensure()
@@ -433,24 +445,133 @@ public class RewardPopupUI : MonoBehaviour
     // 打开 / 排版
     // ============================================================
 
-    void Open(List<Entry> items)
+    void Open(List<Entry> items, Action<Action<bool>> onAdDouble)
     {
         if (_panel == null) BuildFallback();
         gameObject.SetActive(true);
         // DDOL 弹窗每次 Show 重新绑一次相机（切场景后旧相机会失效）
         var cv = GetComponent<Canvas>();
         if (cv != null) UICanvasSetup.RefreshPopup(cv, GameConfig.UiSort.RewardPopup);
+        _adButtonWanted = onAdDouble != null && RespectPrefabGeometry;   // 先定好，Layout 按它让位
         Layout(items);                              // 尺寸先自己定好，再交给字体/动画
+        SetupAdDoubleButton(onAdDouble);            // 结算双倍位（null = 隐藏，界面与原来一致）
         transform.SetAsLastSibling();
         GameFonts.ApplyToHierarchy(transform);
         // B12: 入场冲击力放在最后——此时面板尺寸/位置已由 Layout 定好，动画只叠 scale 与 alpha
         PlayImpact();
     }
 
+    // ============================================================
+    // 【2026-10-31 结算双倍】广告按钮（运行时克隆「确定」，不改预制体）
+    // ============================================================
+
+    RectTransform _adBtnRt;
+    Button _adBtn;
+    Text _adBtnText;
+    Action<Action<bool>> _onAdDouble;
+    bool _adPending;
+    /// <summary>本次是否要广告加倍按钮（Layout 先读它决定让位高度）。</summary>
+    bool _adButtonWanted;
+    /// <summary>广告按钮与「确定」的间距（像素）。</summary>
+    const float AdButtonGap = 12f;
+
+    /// <summary>按需显示/隐藏广告加倍按钮。onAdDouble 为空 → 按钮隐藏（其他调用方零影响）。</summary>
+    void SetupAdDoubleButton(Action<Action<bool>> onAdDouble)
+    {
+        _onAdDouble = onAdDouble;
+        _adPending = false;
+
+        if (onAdDouble == null)
+        {
+            if (_adBtnRt != null) _adBtnRt.gameObject.SetActive(false);
+            return;
+        }
+
+        if (_adBtnRt == null) BuildAdDoubleButton();
+        if (_adBtnRt == null) return;   // 确定钮缺失（兜底面板异常）→ 不显示，绝不空引用
+
+        _adBtnRt.gameObject.SetActive(true);
+        _adBtnRt.SetAsLastSibling();
+        // 每次 Show 重摆一次：行数不同时「确定」位置会变，广告钮必须跟着走（不能只在建的时候摆一次）
+        if (_confirmRt != null)
+        {
+            float h = _confirmRt.rect.height > 0f ? _confirmRt.rect.height : 60f;
+            _adBtnRt.anchoredPosition = _confirmRt.anchoredPosition + new Vector2(0f, h + AdButtonGap);
+        }
+        if (_adBtnText != null) _adBtnText.text = "看广告 · 金币×2";
+        if (_adBtn != null)
+        {
+            _adBtn.interactable = true;
+            _adBtn.onClick.RemoveAllListeners();
+            _adBtn.onClick.AddListener(OnAdDoubleClicked);
+        }
+    }
+
+    /// <summary>克隆预制体里的「确定」按钮，摆在它正上方一格（间距 = 按钮高 + 10）。</summary>
+    void BuildAdDoubleButton()
+    {
+        if (_confirmRt == null) return;
+        var parent = _confirmRt.parent;
+        if (parent == null) return;
+
+        var go = Instantiate(_confirmRt.gameObject, parent);
+        go.name = "AdDoubleBtn";
+        _adBtnRt = go.GetComponent<RectTransform>();
+        // 落位：Layout 已把「确定」下移了 (按钮高+间距)，广告钮补回原位 → 正好在确定正上方一格
+        float h = _confirmRt.rect.height > 0f ? _confirmRt.rect.height : 60f;
+        _adBtnRt.anchoredPosition = _confirmRt.anchoredPosition + new Vector2(0f, h + AdButtonGap);
+
+        _adBtn = go.GetComponent<Button>();
+        if (_adBtn == null) _adBtn = go.AddComponent<Button>();
+        _adBtn.transition = Selectable.Transition.None;
+        var own = go.GetComponent<Graphic>();
+        if (own != null) own.raycastTarget = true;
+        SetRaycastOff(go.transform, false);
+
+        _adBtnText = null;
+        var texts = go.GetComponentsInChildren<Text>(true);
+        if (texts != null && texts.Length > 0) _adBtnText = texts[0];
+        if (_adBtnText != null)
+        {
+            _adBtnText.text = "看广告 · 金币×2";
+            _adBtnText.raycastTarget = false;
+        }
+        else
+        {
+            // 不兜底：克隆源没有文字层说明预制体被改过，报出来让人看见
+            Debug.LogError("[RewardPopup] 克隆的确定按钮没有 Text 子节点，广告加倍按钮无文字");
+        }
+    }
+
+    void OnAdDoubleClicked()
+    {
+        if (_adPending || _onAdDouble == null) return;
+        _adPending = true;
+        if (_adBtn != null) _adBtn.interactable = false;
+        if (_adBtnText != null) _adBtnText.text = "广告加载中…";
+
+        var req = _onAdDouble;
+        req(success =>
+        {
+            _adPending = false;
+            if (success)
+            {
+                // 已发奖 → 按钮收起（同一笔奖励不给看第二次）
+                if (_adBtnRt != null) _adBtnRt.gameObject.SetActive(false);
+                return;
+            }
+            // 失败 / 放弃观看 → 恢复可点，让玩家重试
+            if (_adBtnText != null) _adBtnText.text = "看广告 · 金币×2";
+            if (_adBtn != null) _adBtn.interactable = true;
+        });
+    }
+
     public void Hide()
     {
         if (!gameObject.activeSelf) return;         // 幂等：同帧被确定按钮 / 整屏点击多处调用只生效一次
         ResetImpact();          // B12: 关掉前把动画状态清干净，避免下次打开带着旧进度
+        _onAdDouble = null;     // 【2026-10-31】关窗即解绑，防下次打开残留上一次的加倍回调
+        _adPending = false;
         gameObject.SetActive(false);
     }
 
@@ -589,7 +710,12 @@ public class RewardPopupUI : MonoBehaviour
         float cellW = _base.Cell.Has ? _base.Cell.SizeDelta.x : FB_CELL_W;
         float cellH = _base.Cell.Has ? _base.Cell.SizeDelta.y : FB_CELL_H;
         float rowStep = cellH + ROW_GAP;
-        float grow = (rows - 1) * rowStep;   // >4 个才 >0：框体上下拉伸的总量
+        // 【2026-10-31 结算双倍】多一颗广告按钮时，面板上下各让出 extra，
+        // 于是「确定」下移 extra、广告钮正好落在原「确定」的位置，几何完全自洽。
+        float btnH = _base.Confirm.Has ? _base.Confirm.SizeDelta.y : 0f;
+        if (btnH <= 0f && _confirmRt != null) btnH = _confirmRt.rect.height;
+        float adExtra = (_adButtonWanted && RespectPrefabGeometry) ? (btnH + AdButtonGap) : 0f;
+        float grow = (rows - 1) * rowStep + adExtra * 2f;   // >4 个才 >0：框体上下拉伸的总量
         float half = grow * 0.5f;            // 面板是居中对称拉伸的，上下各分一半
 
         // 面板：只改高度（九宫格 m_Type=1，中间被拉伸、边框不变形）；宽度永远是 base 的 720

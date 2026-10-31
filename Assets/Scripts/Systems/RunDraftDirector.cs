@@ -55,11 +55,26 @@ public class RunDraftDirector : MonoBehaviour
             && BattleManager.Instance.Rules != null
             && BattleManager.Instance.Rules.EnableRunDraft;
 
+        // 【2026-10-31 主人拍板「竞技场中途退出不要显示上次战斗中途退出」】竞技场照引导局同一口径
+        // 走**内存模式**：单场挑战的构筑只在内存里，进盘不落 PlayerPrefs —— 中途杀进程什么都不留，
+        // 下次启动既没有中断快照（BattleStateSaver 竞技场同样不写）也没有可续局，
+        // 「继续上一局 / 重新开始」弹窗与「按撤离失败结算金币」提示都无从触发；
+        // 构筑也绝不会串进下一场主线局（此前中途退出后盘上残留竞技场构筑会被主线静默续走）。
+        bool arenaMemory = BattleManager.Instance != null
+            && BattleManager.Instance.Mode != null
+            && BattleManager.Instance.Mode.Id == BattleModeId.Arena;
+
         bool resumed = false;
-        if (tutorial)
+        if (tutorial || arenaMemory)
             RunLoadout.BeginMemoryMode(job);
         else
+        {
+            // 【2026-10-31 收口】上一局若残留内存态（异常退出没走 EndRunLoadout），
+            // 主线进本前先退干净 —— 否则 MemoryMode 会让 ResumeOrBegin 开出的主线局全程不落盘
+            //（中断局/构筑全丢）。非内存态时本调用是无害空转。
+            RunLoadout.EndMemoryMode();
             resumed = RunLoadout.ResumeOrBegin(job);
+        }
 
         // 开局启动金：**每局只补一次**（2026-10-05 主人拍板「开始金币是每局的，不是每关的」）。
         // 续关（resumed=true）不再补。
@@ -116,7 +131,13 @@ public class RunDraftDirector : MonoBehaviour
         // 【2026-10-22 主人原话「中途意外退出没打完 → 让玩家选继续/重新开始」】
         // 从这一刻起本局标记为「战斗中」：现在退出游戏 = 中断，下次进本会弹「继续上一局 / 重新开始」。
         // 干净收尾（打一关回一次回城 / 局结束清档）会把标记清掉或连局一起丢，见 RunLoadout 三个出口。
-        RunLoadout.MarkBattleBegun();
+        // 【2026-10-30 收口】只有主线 Normal 局才打中断标记：竞技场/金币本等独立进本是单场局，
+        // 打了标记会在杀进程后被「继续上一局」弹窗接回主线章（快照 chapter/stage 接回 = 构筑串局）。
+        // 修「技能槽已满」（parked 判定块上移）之前，这些独立本的局在 OnRunStart 后就被 Clear 抹掉、
+        // 天然不留档；现在局活着落盘了，必须在这里维持原「独立本不留中断档」的行为。
+        var markBm = BattleManager.Instance;
+        if (markBm == null || markBm.Mode == null || markBm.Mode.Id == BattleModeId.Normal)
+            RunLoadout.MarkBattleBegun();
 
         if (resumed && RunLoadout.Data != null)
         {

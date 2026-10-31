@@ -124,7 +124,13 @@ public class PausePanel : MonoBehaviour
         Hide();
         // 撤离走正式遗产流程；清掉半残战斗存档，避免回城后脏状态
         BattleStateSaver.Instance?.ClearBattleState();
-        TownHubController.PendingOpenAdventure = true;
+        // 【2026-10-31 主人拍板「从竞技场返回的时候回到竞技场界面 不要一下回到主界面」】
+        // 竞技场中途退出（判负补账在弹窗打开时的 SettlePendingQuitLoss 落）回城后重开竞技场弹窗；
+        // 普通关照旧回冒险页。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
+            ArenaPopupUI.PendingOpenAfterBattle = true;
+        else
+            TownHubController.PendingOpenAdventure = true;
         BattleManager.Instance?.TriggerEvacuation();
         Debug.Log("[PausePanel] 玩家主动撤离 → 冒险页");
     }
@@ -136,7 +142,12 @@ public class PausePanel : MonoBehaviour
     {
         Hide();
         BattleStateSaver.Instance?.ClearBattleState();
-        TownHubController.PendingOpenAdventure = true;
+        // 【2026-10-31 主人拍板「从竞技场返回的时候回到竞技场界面」】竞技场中途退出回城后重开竞技场弹窗；
+        // 普通关照旧回冒险页。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
+            ArenaPopupUI.PendingOpenAfterBattle = true;
+        else
+            TownHubController.PendingOpenAdventure = true;
         // 与撤离同经济（保留本局金），但不强制弹遗产时可走 TriggerEvacuation
         if (BattleManager.Instance != null)
             BattleManager.Instance.TriggerEvacuation();

@@ -147,8 +147,12 @@ public partial class BattleManager
         // 触发章节背景切换
         SwitchBattleBackground(CurrentChapter);
 
-        // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）
-        GameBgm.PlayForStage(stage.type);
+        // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）。
+        // 【2026-10-31 主人拍板】竞技场对战与首领/精英同用 bgm_boss（新曲「boss战」）；普通关维持 bgm_battle。
+        if (IsArena)
+            GameBgm.Play(GameBgm.Track.Boss);
+        else
+            GameBgm.PlayForStage(stage.type);
 
         // 进关即写一次中断存档（后续由 BattleStateSaver 心跳续写退出时刻）
         BattleStateSaver.Instance?.SaveBattleState();

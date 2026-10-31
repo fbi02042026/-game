@@ -20,6 +20,16 @@ public class ChapterManager : Singleton<ChapterManager>
     public int currentStageIndex = 0;
 
     /// <summary>
+    /// 【2026-10-31 B2 落地】当前打的是本篇第几座大关（1 起，1..ActProgressionDefs.GrandCountOf(篇)）。
+    /// currentStageIndex 仍是大关内 0~4 的小关下标；两者合成篇内小关下标 <see cref="CurrentSubIndex0"/>，
+    /// 存档 clearedStages 的 key 用的就是篇内下标（老档 0~4 正好是第一座大关）。
+    /// </summary>
+    public int currentGrand = 1;
+
+    /// <summary>当前大关内小关下标 → 篇内小关下标（0 起）。存档 / 宝箱列 / 首通判定唯一主键。</summary>
+    public int CurrentSubIndex0 => ActProgressionDefs.Sub0Of(currentGrand, currentStageIndex);
+
+    /// <summary>
     /// 当前章的所有关卡节点
     /// </summary>
     public List<StageData> stageMap = new List<StageData>();
@@ -53,6 +63,9 @@ public class ChapterManager : Singleton<ChapterManager>
     {
         currentChapter = chapterNum;
         currentStageIndex = 0;
+        // 【2026-10-31 B2 落地】进本时按存档大关进度落位（打完一座大关回城再进，从这里续上下一座）。
+        var saveData = SaveSystem.Instance?.Data;
+        currentGrand = saveData != null ? saveData.CurrentGrand(chapterNum) : 1;
         stageMap.Clear();
         availableNextStages.Clear();
         RollState.Reset();
@@ -445,6 +458,11 @@ public class ChapterManager : Singleton<ChapterManager>
         // 无限裂隙：不发主线首通石/章通关奖励，进度与奖励全走自己的结算链（SettleEndlessStageClear）
         if (BattleManager.Instance != null && BattleManager.Instance.IsEndlessRift)
             return;
+        // 竞技场（2026-10-31 补拦）：单场挑战不推进主线/首通/章节。此前漏拦 → 打赢走统一门进了这里，
+        // 胜场被 TryDailyClearTaskExp 算进「今日通关 3 关」→ 满 3 场发 50 经验（DAILY_CLEAR_TASK_EXP）
+        // → 升级弹窗（主人报「竞技场是不是也给经验了」，查实就是这条链）。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
+            return;
 
         // 先把刚打完的关卡记进抽取状态，下一关的概率要用到
         StageData cleared = GetCurrentStage();
@@ -458,12 +476,15 @@ public class ChapterManager : Singleton<ChapterManager>
         {
             // C.1 每关首通 +3 钻：必须在 GrantTalentForStageFirstClear 写入 clearedStages 之前判定，否则永远不是首次
             // 【2026-10-20 主人拍板】钻石不再对玩家展示与发放，发钻行注释保留，恢复时解开即可
-            string stageClearKey = currentChapter + "_" + currentStageIndex;
+            // 【2026-10-31 B2 落地】key 从「大关内小关 0~4」改成「篇内小关下标 0..N-1」，
+            // 否则第二座大关的 1-1 会与第一座大关的 1-1 撞 key（宝箱列/首通全乱）。
+            int sub0 = CurrentSubIndex0;
+            string stageClearKey = currentChapter + "_" + sub0;
             bool isStageFirstClear = milestoneData.clearedStages == null || !milestoneData.clearedStages.Contains(stageClearKey);
 
             // 【2026-10-20 主人拍板】每关首通天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
             // GrantTalentForStageFirstClear 只保留首通记录（clearedStages，冒险日志里程碑进度要用），返回的石不再发放。
-            milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
+            milestoneData.GrantTalentForStageFirstClear(currentChapter, sub0);
             // int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
             // if (stageTalent > 0)
             //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
@@ -484,12 +505,34 @@ public class ChapterManager : Singleton<ChapterManager>
 
         // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
         bool bossCleared = cleared != null && cleared.type == StageType.Boss;
+        // 【2026-10-31 B2 落地】一篇 = GrandCountOf(篇) 座大关（10/10/14/16/18/18/20/20）。
+        // 打完一座大关只算「大关通关」，整篇的大关全部打完才走章节解锁/剧情/成就。
         if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_GRAND - 1)
         {
-            // === 章节通关逻辑 ===
+            var gData = SaveSystem.Instance?.Data;
 
-            // 1. 增加通关次数（用于渐进式怪物解锁）
+            // 1. 增加通关次数（用于渐进式怪物解锁）——按「大关」记，与旧「一章=一座大关」口径一致
             IncrementChapterClearCount(currentChapter);
+            if (gData != null) gData.MarkGrandCleared(currentChapter, currentGrand);
+
+            int grandTotal = ActProgressionDefs.GrandCountOf(currentChapter);
+            bool chapterDone = gData == null || gData.GrandClearedCount(currentChapter) >= grandTotal;
+
+            if (!chapterDone)
+            {
+                // 大关通关、整篇没完 → 进度落到下一座大关第 1 小关，回冒险页继续（进本时 StartChapter 会再落位）
+                currentGrand = Mathf.Min(currentGrand + 1, grandTotal);
+                currentStageIndex = 0;
+                availableNextStages.Clear();
+                if (stageMap.Count > 0) availableNextStages.Add(stageMap[0]);
+                SaveSystem.Instance?.Save();
+                Debug.Log($"[ChapterManager] 第{currentChapter}篇 第{currentGrand - 1}/{grandTotal} 座大关通关 → 下一座第{currentGrand}座");
+                OnBranchReady?.Invoke(availableNextStages);
+                AchievementSystem.Instance?.OnReachStage(0);
+                return;
+            }
+
+            // === 章节（整篇）通关逻辑 ===
 
             // 2. 解锁下一章：走 ChapterRouteTable（不再是简单的 +1）
             var data = SaveSystem.Instance?.Data;

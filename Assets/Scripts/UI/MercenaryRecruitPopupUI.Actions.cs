@@ -62,7 +62,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
         if (isCommon)
         {
-            if (!HasEnoughGold(offer))
+            // 【2026-10-31】判定统一走单一出口 MercHireSession.CanAffordOffer（与卡钮变红/弹窗购买钮同源）
+            if (!MercHireSession.CanAffordOffer(offer))
             {
                 UIManager.Instance?.ShowToast("金币不足");
                 return;
@@ -76,12 +77,6 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         // 买得起 → 弹确认（佣兵信息 + 购买/取消，购买钮带货币价格）
         MercObtainPopupUI.ShowForRecruit(offer, () => TryHireOffer(offer, index));
-    }
-
-    static bool HasEnoughGold(MercenaryData offer)
-    {
-        return ResourceWallet.Get(SaveSystem.Instance?.Data, ResourceWallet.ResourceType.Gold)
-            >= MercHireSession.GoldCost(offer);
     }
 
     /// <summary>点招募卡：弹佣兵信息弹窗（MercObtainPopupUI），弹窗内「购买」回调 TryHireOffer。</summary>

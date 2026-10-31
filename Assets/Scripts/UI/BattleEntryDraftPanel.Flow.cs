@@ -111,6 +111,10 @@ public partial class BattleEntryDraftPanel
         var cats = SlotMachineSystem.AvailableCategories();
         Refresh(SlotMachineSystem.DrawPrice(), SlotMachineSystem.DrawFocusPrice(),
                 cats, bm.currentGold, SlotMachineSystem.FreeDrawsLeft());
+        // 【2026-10-31 竞技场额度模式】顶栏「剩余N次」跟着每抽刷新（金币位改次数显示，
+        // 见 BattleUI.UpdateDraftCoin；竞技场金币不动 → 不会走 NotifyPoolGoldChanged 链）。
+        if (bm.IsArena)
+            BattleUI.Instance?.UpdateDraftCoin(bm.currentGold);
     }
 
     /// <summary>

@@ -8,8 +8,8 @@ using UnityEngine;
 /// · Audio/BGM/bgm_login    —— 登录界面
 /// · Audio/BGM/bgm_town     —— 主场景（公会大厅等）
 /// · Audio/BGM/bgm_tavern   —— 酒吧/酒馆
-/// · Audio/BGM/bgm_battle   —— 普通/精英战斗
-/// · Audio/BGM/bgm_boss     —— 首领战
+/// · Audio/BGM/bgm_battle   —— 普通战斗
+/// · Audio/BGM/bgm_boss     —— 首领战/精英战/竞技场对战（2026-10-31 主人换成「boss战.wav」，精英/竞技场并入此曲）
 /// · Audio/BGM/bgm_special  —— 恢复/锻造/附魔关
 /// · Audio/BGM/bgm_intro    —— 开头引导剧情（城镇开场，与战斗内剧情曲分开）
 /// · Audio/BGM/bgm_story    —— 战斗内剧情对话（2026-10-11 主人换成「战后余息.mp3」）
@@ -35,7 +35,8 @@ public static class GameBgm
 
     const string ResRoot = "Audio/BGM/";
     const float DefaultFade = 0.85f;
-    const float DefaultVolume = 0.72f;
+    /// <summary>BGM 目标响度档；GameSting 胜负曲同用此档（2026-10-31 接入胜负曲，同值单一出口）。</summary>
+    public const float DefaultVolume = 0.72f;
 
     static readonly Dictionary<Track, string> Paths = new Dictionary<Track, string>
     {
@@ -68,12 +69,14 @@ public static class GameBgm
     public static bool IsLoadingMuted => _loadingMuted;
     public static bool IsCutsceneMuted => _cutsceneMuted;
 
-    /// <summary>按关卡类型选曲：战斗/首领/功能关。</summary>
+    /// <summary>按关卡类型选曲：战斗/首领/功能关。
+    /// 【2026-10-31 主人拍板】精英关与首领关共用 bgm_boss（新曲「boss战」）；普通关用 bgm_battle。</summary>
     public static Track TrackForStage(StageType type)
     {
         switch (type)
         {
             case StageType.Boss: return Track.Boss;
+            case StageType.Elite: return Track.Boss;
             case StageType.Rest: return Track.Special;
             default: return Track.Battle;
         }

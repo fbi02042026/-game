@@ -36,7 +36,8 @@ public partial class AdventureUI
                 // 关卡槽位牌仍只显示编号——牌面 125px 放不下）
                 // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关），
                 // 整章通关时钳到最后一关显示；不再用「最大通关号 + 1」推断（跳关记录会标错关）。
-                int cur = Mathf.Clamp(FirstUnclearedStage(_selectedChapter, GameConfig.STAGES_PER_GRAND, SaveSystem.Instance?.Data), 1, GameConfig.STAGES_PER_GRAND);
+                int chapterTotal = ChapterSubTotal(_selectedChapter, SaveSystem.Instance?.Data);
+                int cur = Mathf.Clamp(FirstUnclearedStage(_selectedChapter, chapterTotal, SaveSystem.Instance?.Data), 1, chapterTotal);
                 string stageName = StageNameDefs.Get(_selectedChapter, cur);
                 stageNameLabel.text = string.IsNullOrEmpty(stageName)
                     ? $"{_selectedChapter}-{cur}"
@@ -126,8 +127,9 @@ public partial class AdventureUI
         {
             // 面板标题永远指向「当前关 = 第一个未通关」（2026-10-29 修：精确查单关，不再用最大通关号推断）：
             // 标题那关已通关 ⇔ 该章全部通关（第一个未通关超出范围 = 整章通完，标题显示 1-5 且 5 是通关关）
-            int cur = FirstUnclearedStage(_selectedChapter, GameConfig.STAGES_PER_GRAND, SaveSystem.Instance?.Data);
-            return cur > GameConfig.STAGES_PER_GRAND ? "已通关" : "未通关";
+            int chapterTotal = ChapterSubTotal(_selectedChapter, SaveSystem.Instance?.Data);
+            int cur = FirstUnclearedStage(_selectedChapter, chapterTotal, SaveSystem.Instance?.Data);
+            return cur > chapterTotal ? "已通关" : "未通关";
         }
         if (activity)
             return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES}";

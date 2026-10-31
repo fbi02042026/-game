@@ -284,6 +284,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     bool CanShowAscendButton(string hireId, bool owned)
     {
         if (!owned || string.IsNullOrEmpty(hireId)) return false;
+        // 【2026-10-31 主人拍板】佣兵功能分先后开：进阶/升星排第三（抽到重复碎片才用得上），
+        // 门槛 = 通第 2 章（FeatureUnlock.MercAscendOpen 唯一出口，与详情弹窗「进阶」钮同源）。
+        if (!FeatureUnlock.MercAscendOpen(SaveSystem.Instance?.Data)) return false;
         int cur = MercStarSystem.OutStarOf(hireId);
         if (cur < 0) cur = 0;
         return cur < MercStarDefs.MaxOutStar;

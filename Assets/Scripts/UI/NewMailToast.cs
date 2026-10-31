@@ -24,6 +24,8 @@ public class NewMailToast : MonoBehaviour
     const float MarginRight = 0f;       // 主人要求：右缘贴住屏幕右缘（原 24 缝去掉）；框小了，进屏自然不多
     const float YPos = 300f;            // 【基线】参考画布(720×1280)上原中心锚的 y（换算「距顶边」距离用，见 BuildPanel）
     const int SortOrder = 950;
+    /// <summary>整体等比放大倍数（2026-10-31 主人拍板「放大 30%」：字号/底框/内边距一起 ×1.3）。</summary>
+    const float ToastScale = 1.3f;
     /// <summary>底框颜色：深褐色 + 半透明（2026-10-27 主人拍板：替换原纯黑 0.85）。R&gt;G&gt;B 偏暖，alpha 0.6 带点半透，去掉糊屏的厚重黑块。</summary>
     static readonly Color PanelBgColor = new Color(0.20f, 0.13f, 0.07f, 0.6f);
 
@@ -157,8 +159,11 @@ public class NewMailToast : MonoBehaviour
         float w = _label.preferredWidth + PadX * 2f;
         float h = _label.preferredHeight + PadY * 2f;
         _panel.sizeDelta = new Vector2(w, h);
+        // 【2026-10-31 主人拍板「放大 30%」】整体等比 ×ToastScale：pivot 在右上，缩放朝左下长，
+        // 右缘/顶边锚定不变；滑出偏移按放大后的实际宽算（pivot 右缘对齐要出屏就得挪 1.3 倍宽）。
+        _panel.localScale = Vector3.one * ToastScale;
         _xFinal = -MarginRight;
-        _xOff = w;   // pivot 右缘对齐：向右挪自身宽 = 完全出屏
+        _xOff = w * ToastScale;   // pivot 右缘对齐：向右挪自身放大后的宽 = 完全出屏
         // 【2026-10-17 主人要求】提示往上移 2 个自身框高 —— 换算成参考画布(720×1280)上的「距顶边」
         // 距离：top = H/2 − (YPos + 2h + h/2)，恒定不随分辨率漂移。
         _yFinal = -(GameConfig.DESIGN_HEIGHT * 0.5f - YPos - h * 2f - h * 0.5f);

@@ -77,6 +77,13 @@ public partial class BattleManager
             StartCoroutine(CoChapter1EndingThenRewards());
             return;
         }
+        // 【2026-10-31】支线岛：Boss 倒下后先播一句收尾，再走奖励链（岛一次性，不重播）
+        if (IsSideIsland)
+        {
+            _rewardSequenceStarted = true;
+            StartCoroutine(CoIslandStoryThenRewards());
+            return;
+        }
         if (ShouldPlayChapterStory())
         {
             _rewardSequenceStarted = true;
@@ -90,6 +97,10 @@ public partial class BattleManager
     void GrantStageClues()
     {
         if (currentStage == null) return;
+        // 【2026-10-31】支线岛不发主线线索页：岛的 currentChapter 只是「背景篇」，不是玩家进度。
+        // 目前 OnStageCleared 各 case 都带 stageIndex>=1 的门槛（岛恒为 0）才没漏，
+        // 但那是巧合 —— 以后谁加一条不带门槛的 case，打岛就会白送主线线索。这里显式挡住。
+        if (IsSideIsland) return;
         int idx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
         StoryClue.OnStageCleared(CurrentChapter, idx);
         if (currentStage.type == StageType.Elite)
@@ -177,6 +188,9 @@ public partial class BattleManager
     bool ShouldPlayChapter1Ending()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：Boss 记录点层直接发奖励
+        // 【2026-10-31 修】支线岛 1 的 currentChapter 也是 1 + Boss 关，条件里只看「第 1 章选边做完没」——
+        // 一旦哪天派岛早于选边，打岛 1 就会把第 1 章结局整段演出来。支线岛一律不接主线节点。
+        if (IsSideIsland) return false;
         if (Rules.SkipChapter1Ending) return false;
         if (!StoryProgress.TutorialDone || StoryProgress.Chapter1ChoiceDone) return false;
         if (CurrentChapter > 1) return false;
@@ -233,6 +247,10 @@ public partial class BattleManager
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：记录点层只弹「撤离/继续」双选
         if (IsFinale) return false;        // 终章追查关不播战后章节剧情（2026-10-23）：act=8+Boss 型会误触 N8 重播，关后剧情走 FinaleBattleMode 自己的链
+        // 【2026-10-31 修】支线岛的 currentChapter = 岛所属篇（1..8）+ 单 Boss 关，原判据会全部命中：
+        // 岛 6 打完会播 N6（沉座/密令）、岛 8 打完会播 N8 结局演出（还会 MarkAchieved 结局）。
+        // 支线岛一律走 IslandStoryBeats，不许串到主线节点。
+        if (IsSideIsland) return false;
         if (Rules.SkipChapter1Ending) return false;
         if (CurrentChapter < 2) return false;
         if (!StoryProgress.TutorialDone || !StoryProgress.Chapter1ChoiceDone) return false;
@@ -288,6 +306,51 @@ public partial class BattleManager
     }
 
     /// <summary>
+    /// 【2026-10-31】支线岛战后收尾：Boss 倒下 → 你一句 → 奖励链。
+    /// 结构与 CoChapterStoryThenRewards 完全一致（同一套防卡死约定），只是剧情源换成 IslandStoryBeats。
+    /// 岛是一次性关：不记「看过」，也不判断是否重播（打一次就没了）。
+    /// </summary>
+    IEnumerator CoIslandStoryThenRewards()
+    {
+        bool done = false;
+        // 与主线同款：播剧情前先收抽奖面板（幂等），否则展开态会盖住对话窗、点击全被吃
+        BattleEntryDraftPanel.Hide();
+        bool playing = false;
+        try
+        {
+            playing = IslandStoryBeats.TryPlayPostClear(SideIslandId, () => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 支线岛战后剧情播放异常，直接放行奖励流程: " + e.Message);
+            // 异常时剧情可能已开播（timeScale 已压 0、对话窗停在半句）：强制收掉播放态再放行
+            StoryDirector.Ensure().StopPlaying();
+            var dlg = DialogueUI.Instance;
+            if (dlg != null) dlg.Hide();
+            playing = false;
+        }
+        if (!playing)
+        {
+            _rewardSequenceStarted = false;
+            BeginRewardSequence();
+            yield break;
+        }
+        float storyWatchdog = 0f;
+        while (!done)
+        {
+            storyWatchdog += Time.unscaledDeltaTime;
+            if (storyWatchdog >= 300f)
+            {
+                Debug.LogWarning("[BattleManager] 支线岛战后剧情回调 5 分钟未完成，强制放行奖励流程");
+                break;
+            }
+            yield return null;
+        }
+        _rewardSequenceStarted = false;
+        BeginRewardSequence();
+    }
+
+    /// <summary>
     /// 两段式（2026-09-19 定调）：进关后、首波怪物出现前播战前剧情，与战后 TryPlayPostBoss 对称。
     /// 只在每章第一关（currentStageIndex == 0）播；玩家点「跳过」时 StoryDirector 直接走 onDone 放行。
     /// </summary>
@@ -295,6 +358,10 @@ public partial class BattleManager
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
         if (IsFinale) return false;        // 终章追查关不播战前章节剧情（2026-10-23）：act=8+首关会误触第 8 章战前剧情重播
+        // 【2026-10-31 修】支线岛 currentChapter = 岛所属篇 + stageIndex 0，会误命中主线战前剧情
+        // （如刚过第 1 章就派到岛 6，会提前播第 6 章战前「再往下诸神留下的东西就压在底下」→ 剧透）。
+        // 支线岛一律走 IslandStoryBeats.TryPlayPreBattle。
+        if (IsSideIsland) return false;
         if (Rules.SkipChapter1Ending) return false;
         if (Rules.UseTutorialSplash) return false;   // 新手教学关有自己的引导节奏
         if (Rules.SkipFirstWaveAuto) return false;   // 教程关刷怪归 TutorialDirector
@@ -314,14 +381,22 @@ public partial class BattleManager
         bool playing = false;
         // 【2026-10-19 防卡死】进关先把本章剧情立绘/背景同步读进缓存（几张图，毫秒级）：
         // 播到一半才首次加载会卡一下；缺图时 StoryPortraits/StoryBackgrounds 自带占位图降级 + 告警，不会黑屏中断。
-        ChapterStoryBeats.WarmupChapterAssets(CurrentChapter);
+        // 【2026-10-31】支线岛预热的是岛自己的背景（island01..08）+ 玩家立绘，别去预热主线本章资源。
+        if (IsSideIsland) IslandStoryBeats.Warmup(SideIslandId);
+        else ChapterStoryBeats.WarmupChapterAssets(CurrentChapter);
         // 【2026-10-19 防卡死】剧情开播前把抽奖面板强制收起（幂等）：Prewarm 失败时面板会停在
         // 预制体展开态（4 个黑金按钮），剧情一播就被盖住、点击全被吃 → 全场定格（第 2 章事故根因）。
         BattleEntryDraftPanel.Hide();
         // 剧情播放定义在别处，任何异常都不能把战斗卡在“无首波”状态：捕住异常并直接放行。
         try
         {
-            if (ShouldPlayPreBattleStory())
+            if (IsSideIsland)
+            {
+                // 【2026-10-31】支线岛自己的开场：岛名·副标黑幕 + 岛背景 + 独眼字条。
+                // 岛是一次性关，不记「看过」，中途退出重进会重播（文案短，可接受）。
+                playing = IslandStoryBeats.TryPlayPreBattle(SideIslandId, () => done = true);
+            }
+            else if (ShouldPlayPreBattleStory())
             {
                 playing = ChapterStoryBeats.TryPlayPreBattle(CurrentChapter, () => done = true);
                 // 开播即标记「看过」（不是播完）：中途退出也算，之后进关不再重播同一段开场
@@ -917,8 +992,8 @@ public partial class BattleManager
     // 裂隙与引导局保持旧面板流程，不进这里（TryLiveDraw 守卫拦截）。
     // ============================================================
 
-    /// <summary>实时抽 CD 秒数（主人 2026-10-29 定 5 秒防连点；要调只改这一个数）。</summary>
-    public const float LIVE_DRAW_CD_SEC = 5f;
+    /// <summary>实时抽 CD 秒数（主人 2026-10-29 定 5 秒防连点 → 2026-10-31 拍板改 3 秒；要调只改这一个数）。</summary>
+    public const float LIVE_DRAW_CD_SEC = 3f;
 
     /// <summary>实时抽 CD 剩余秒数（面板遮罩每帧读；0 = 可抽）。</summary>
     public float LiveDrawCdRemaining => Mathf.Max(0f, _liveDrawCdUntil - Time.unscaledTime);
@@ -970,6 +1045,26 @@ public partial class BattleManager
             return false;
         }
 
+        // 🔴【2026-10-31 主人拍板】竞技场抽奖经济独立，不走下面的金币定价链：
+        // · 一场 **5 次抽奖额度**（ArenaBattleMode.FreeEntryDraws = GOLD_DUNGEON_FREE_DRAWS，进局清零），
+        //   **四类按钮通用**（普通/佣兵/装备/技能，各扣 1 次），与金币本「免费只惠及随机」口径不同；
+        // · **没有「再来一次」**（reroll 只对随机抽、走金币定价链，竞技场直接整段跳过）；
+        // · 不扣任何币，cost = 0（CoInstantPick 对 cost=0 走 ConsumeFreeDraw，佣兵定向也不会失败）。
+        // · 额度用完 → toast 拦截；按钮置灰与「剩余N次」文案由面板 RefreshLive 同源刷新。
+        if (IsArena)
+        {
+            if (SlotMachineSystem.FreeDrawsLeft() <= 0)
+            {
+                Debug.Log("[BattleManager] 竞技场抽奖拦截：5 次额度已用完");
+                UIManager.Instance?.ShowToast("抽奖次数已用完");
+                BattleEntryDraftPanel.Instance?.RefreshLive();
+                return false;
+            }
+            StartCoroutine(CoLiveDraw(picked, 0, cats));
+            BattleEntryDraftPanel.Instance?.RefreshLive();
+            return true;
+        }
+
         // 价格每点现算（唯一出口）；免费额度只惠及随机抽（2026-10-19 拍板口径不变）
         int price = SlotMachineSystem.DrawPrice();
         int freeLeft = SlotMachineSystem.FreeDrawsLeft();
@@ -995,6 +1090,8 @@ public partial class BattleManager
             StartCoroutine(CoLiveDraw(picked, cost, cats));
         }
 
+        // 【2026-10-30 主人拍板「竞技场抽奖不用有CD」】竞技场在上方分支已提前返回，走不到这里；
+        // 正式关/金币本照旧走 LIVE_DRAW_CD_SEC 防连点。UI 遮罩/置灰真源 = LiveDrawCdRemaining。
         _liveDrawCdUntil = Time.unscaledTime + LIVE_DRAW_CD_SEC;
         BattleEntryDraftPanel.Instance?.RefreshLive();   // 价格/免费额度可能已变
         return true;
@@ -1198,10 +1295,10 @@ public partial class BattleManager
         // 金币安慰奖维持 Toast 先弹（卡的价值低，无所谓剧透）。
         if (card.Kind == DraftCardKind.Gold)
         {
+            // 【2026-10-31 主人拍板「抽奖获取抽奖币用 toast 就行 现在有两个提示」】
+            // 金币安慰奖只弹 Toast，不再叠加开奖卡（原 ShowDrawPrizeCard 调用删除；
+            // 函数内 Gold 特判分支随之成为不可达守卫，按铁律 24 不动它）。
             UIManager.Instance?.ShowToast(_lastDrawRewardMsg, true);
-            // 【2026-10-12 主人拍板】补「开奖」的仪式感：Toast 一闪就没了，玩家对抽奖没概念
-            // （主人原话「现在没有抽中奖的喜悦 玩家对抽奖这个没有概念 怎么优化一下」）。
-            ShowDrawPrizeCard(card, cat, powerDelta);
         }
         else
         {
@@ -2014,7 +2111,11 @@ public partial class BattleManager
     public void SettleNormalStageClear()
     {
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
-        if (isBoss)
+        // 【2026-10-31 B2 落地】B2 后每座大关都以 Boss 收尾，只有「整篇打完」才算章末：
+        // 章末分支（开冒险页 + 好评引导）改为看存档里该篇是否已通关，不再只看这一关是不是 Boss。
+        bool chapterDone = SaveSystem.Instance?.Data != null
+                           && SaveSystem.Instance.Data.HasClearedChapter(CurrentChapter);
+        if (isBoss && chapterDone)
         {
             // 【2026-10-25 主人拍板「做分享和推广（好评引导）」】章末通关 → 回城后弹一次好评引导
             // （每日最多一次，判重/判链接在 TapTapRatePopup 内部；消费点 = TownHubController.Start）。
@@ -2060,14 +2161,17 @@ public partial class BattleManager
         if (Mode == null || Mode.Id != BattleModeId.Normal) return;
         if (currentStage == null || ChapterManager.Instance == null) return;
         var data = SaveSystem.Instance?.Data;
-        string key = ChapterManager.Instance.currentChapter + "_" + currentStage.stageIndex;
+        // 【2026-10-31 B2 落地】key 用「篇内小关下标」（currentGrand × 5 + 大关内小关），
+        // 不能再直接用 stageIndex（0~4）——否则第二座大关的 1-1 会撞第一座大关的 key。
+        int sub0 = ChapterManager.Instance.CurrentSubIndex0;
+        string key = ChapterManager.Instance.currentChapter + "_" + sub0;
         bool firstClear = data?.clearedStages == null || !data.clearedStages.Contains(key);
         if (!firstClear) return;
 
         var notice = new AdventureRewardNotice.StageClear
         {
             chapter = ChapterManager.Instance.currentChapter,
-            stageIndex = currentStage.stageIndex,
+            stageIndex = sub0,
             gold = (RunStats != null ? RunStats.GoldEarned : 0) - _stageGoldEarnedAtStart,
             talent = (RunStats != null ? RunStats.TalentGained : 0) - _stageTalentAtStart,
             enchant = (RunStats != null ? RunStats.EnchantStoneDelta : 0) - _stageEnchantAtStart,

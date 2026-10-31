@@ -35,7 +35,7 @@ public static class ChapterStoryBeats
     /// 章节进关后、首波怪物出现前尝试播放战前剧情（与战后 TryPlayPostBoss 对称的两段式）。
     /// 返回 true 表示有脚本在播（调用方应等回调）；false 表示无脚本，直接刷首波。
     /// 文案方向（2026-09-19 定调）：世界观 + 「玩家 × 艾丽娅」的过往
-    /// （三枚铜板买面包 / 转正仪式 / 她介绍你进公会 / 第七支小队），
+    /// （三枚铜板买面包 / 转正仪式 / 她介绍你进公会 / 第八支小队），
     /// 并讲清「这是什么地方 / 为什么出现怪 / 跟主线什么关系」。
     /// 配置方式与战后一致：静态数组 + StoryDirector；后续若出剧情配置表可一并迁表。
     /// </summary>
@@ -90,7 +90,7 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("艾丽娅", "还记得吗？三年前你揣着三枚铜板买面包，排在我后面。", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("艾丽娅", "现在你是公会第七支小队的队长了。今天只是新人试炼，别紧张。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("艾丽娅", "现在你是公会第八支小队的队长了。今天只是新人试炼，别紧张。", StoryPortraits.Xiaomei),
             StoryDirector.Narration("这里是裂隙第一层的暮影森林。怪物是从缝里渗出来的——清完这波，把样本带回去交差。"),
             StoryDirector.Solo("你", "转正仪式上说好的，债没还清之前我哪都不去。走吧。", StoryPortraits.Player),
         };
@@ -103,7 +103,7 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("幽冥墓园：城外的旧墓园，三年前起埋着的东西开始往外爬。"),
             StoryDirector.Solo("艾丽娅", "这片园里埋着以前的冒险者。公会对外说是地脉波动——你信吗？", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("你", "第七支小队之前的六支，全都进过裂缝。一块碑都没立回来。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "第八支小队之前的七支，全都进过裂缝。一块碑都没立回来。", StoryPortraits.Player),
             StoryDirector.Solo("艾丽娅", "所以我们才要走到最里面，看看他们到底碰上了什么。", StoryPortraits.Xiaomei),
         };
         StoryDirector.Ensure().Play(beats, onDone);
@@ -126,7 +126,7 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("晨曦草原：裂隙第二层的风车草原。叶片一圈三年，替谁数着日子。"),
             StoryDirector.Solo("你", "艾丽娅，当年介绍我进公会的时候，你是不是早就知道会有今天？", StoryPortraits.Player),
-            StoryDirector.Solo("艾丽娅", "我只知道第七支小队不能白组。走吧——今天风停了，这不正常。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("艾丽娅", "我只知道我这支小队不能白组。走吧——今天风停了，这不正常。", StoryPortraits.Xiaomei),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -159,7 +159,7 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("赤焰炼狱：通往最深处前的最后一层。这里的热不是火——是裂缝本身在烧。"),
             StoryDirector.Solo("你", "她把话说完就自己先进来了。炼狱烧不穿她留下的脚印。", StoryPortraits.Player),
-            StoryDirector.Solo("你", "第七支小队走到这儿的，只剩我一个。答案和债，今天一起结。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "第八支小队走到这儿的，只剩我一个。答案和债，今天一起结。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -223,9 +223,9 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("墓园最里侧有一排没有名字的公会墓碑。你数了数，一共七块。").Bg(StoryBackgrounds.GraveSeven),
-            StoryDirector.Narration("碑上的日期是三块一组排着的：十四年前。十一年前。三个月前。"),
+            StoryDirector.Narration("碑上的日期一块挨一块往下排，间隔都是三年：十七年前、十四年前、十一年前……只有最后一块是三个月前。"),
             StoryDirector.Solo("你", "……七块。", StoryPortraits.Player),
-            StoryDirector.Narration("最老那块刻着「M. 灰鸦小队 记录员」。再往旁边挪一步，还有第八块——空的。"),
+            StoryDirector.Narration("十一年前那块刻了名字：「M. 灰鸦小队 记录员」。再往旁边挪一步，还有第八块——空的。"),
             StoryDirector.Narration("名字的位置留着。石头却是新的。有人提前把碑做好了。"),
             StoryDirector.Solo("你", "他们连名字都不打算写。", StoryPortraits.Player),
             // 【2026-10-29 主人拍板「有些剧情可以加些选项，不主导剧情走向，只增加趣味」】
@@ -249,7 +249,7 @@ public static class ChapterStoryBeats
     static void ApplyN2Choice(int idx, Action onDone)
     {
         StoryBeat echo = idx == 0
-            ? StoryDirector.Narration("回去你真的写了。第七支小队的日志第一页：碑比人多一。")
+            ? StoryDirector.Narration("回去你真的写了。第八支小队的日志第一页：碑比人多一。")
             : StoryDirector.Narration("你退开半步。立着的碑，比倒着的诚实。");
         StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
@@ -269,7 +269,7 @@ public static class ChapterStoryBeats
             StoryDirector.Solo("梅莉莎", "他们以为那个 M 是领队的名字。", StoryPortraits.Melissa),
             StoryDirector.Solo("梅莉莎", "其实那只是……装箱的人。", StoryPortraits.Melissa),
             StoryDirector.Narration("她把笔按在纸上，很久没有落下去。"),
-            StoryDirector.Solo("梅莉莎", "十一年了。我装箱的时候就预感的那些事，一件都没错过。", StoryPortraits.Melissa),
+            StoryDirector.Solo("梅莉莎", "十一年了。我装箱的时候就预感到的那些事，一件都没错过。", StoryPortraits.Melissa),
         };
         StoryDirector.Ensure().Play(beats, () =>
         {
@@ -305,7 +305,7 @@ public static class ChapterStoryBeats
             StoryDirector.Solo("你", "这不是用来稳定裂缝的设备。", StoryPortraits.Player),
             StoryDirector.Narration("轴上还有一列没刻完的名字。最后两个是空的。再往下，有一道新的划痕——"),
             StoryDirector.Solo("你", "……这是三个月前刻的。", StoryPortraits.Player),
-            StoryDirector.Narration("你沿着刻度往上数。第七格的位置上，有一个名字你认得：你自己。"),
+            StoryDirector.Narration("你沿着刻度往上数。第八格的位置上，有一个名字你认得：你自己。"),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -377,7 +377,7 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("洞穴正中悬着一枚黑曜结构，有节奏地搏动，像在替什么人喘气。").Bg(StoryBackgrounds.ThroneSeat),
             StoryDirector.Narration("周围散落着更旧的战斗痕迹。十四年前的盾。十一年前那批的箭。"),
             StoryDirector.Solo("你", "沉座。是要有人坐上去的东西。", StoryPortraits.Player),
-            StoryDirector.Narration("你在十一年的那堆残骸里翻到半张烧过的纸。只剩两行字："),
+            StoryDirector.Narration("你在十一年前的那堆残骸里翻到半张烧过的纸。只剩两行字："),
             StoryDirector.Narration("「若目标小队成功削弱核心，派遣第二梯队收尾。若失败，则封锁入口，不再派遣救援。」"),
             StoryDirector.Solo("你", "他们不是没派人救。他们压根就没打算派。", StoryPortraits.Player),
             // 【2026-10-29 主人拍板「选项只加趣味不主导」】
@@ -538,7 +538,9 @@ public static class ChapterStoryBeats
 
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("庆功宴摆了三天。第三天夜里，你在公会大厅的长桌底下，捡到一张没写完的领用单。").Bg(StoryBackgrounds.EndHappy),
+            // 【2026-10-31 修】原来固定用 EndHappy 背景 +「庆功宴摆了三天」，但选 C 的《留下的是她》
+            // 里艾丽娅已经坐进沉座，不可能有庆功宴。改成中性场景（公会大厅、长桌没撤），任何结局都接得住。
+            StoryDirector.Narration("回城后的第三个夜里，公会大厅的长桌还没撤。你弯腰捡东西时，在桌底摸到一张没写完的领用单。").Bg(StoryBackgrounds.GuildHall),
             StoryDirector.Narration("装填人一栏，签着一个花体的 M。日期从十一年前排到三个月前——中间没断过。"),
             StoryDirector.Solo("你", "……十一年。每一支进裂隙的队伍，箱子都是同一个人装的？", StoryPortraits.Player),
             StoryDirector.Solo("你", "这账要是真的，公会大门上那块『英魂长存』的匾，怕是要换个挂法。", StoryPortraits.Player),
@@ -612,7 +614,8 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("箱子堆的最深处，一个头发花白的女人正就着灯装箱。手法快得完全不像这个年纪。"),
             StoryDirector.Solo("梅莉莎", "手别伸过来。箱子很沉，你抱不动。", StoryPortraits.Melissa),
-            StoryDirector.Solo("你", "M。装备科记录员。十一年，两百多支队伍的箱子，全是你装的。", StoryPortraits.Player),
+            // 【2026-10-31 修】原「两百多支队伍」与碑上七支、每三年一次的量级差两个数量级，改成不报数
+            StoryDirector.Solo("你", "M。装备科记录员。十一年，每一支进裂隙的队伍的箱子，全是你装的。", StoryPortraits.Player),
             StoryDirector.Solo("梅莉莎", "装了十一年，就赌一件事——总有一支队伍，能把我预感的那些事，一件不差全应验。", StoryPortraits.Melissa),
             StoryDirector.Solo("梅莉莎", "今天，应验了。", StoryPortraits.Melissa),
             StoryDirector.Narration("她把最后一个箱子推到你面前。箱面写着：给追到这儿的人。"),
@@ -672,7 +675,7 @@ public static class ChapterStoryBeats
     {
         b.Add(StoryDirector.Narration("沉座崩解的最后，你看到一个不属于这里的东西卡在晶格里——一张叠了十一年的纸条。").Bg(StoryBackgrounds.EndTrue));
         b.Add(StoryDirector.Solo("梅莉莎", "那是我塞的。第九支队伍的箱子。", StoryPortraits.Melissa));
-        b.Add(StoryDirector.Narration("她从崩落的裂缝出口走进来，径直走到裂隙的中心，走得比你还稳。"));
+        b.Add(StoryDirector.Narration("她从崩落的那头走过来，径直走到裂隙的中心，走得比你还稳。"));
         b.Add(StoryDirector.Solo("梅莉莎", "我装箱装了十一年。今天开始，我不用装了。", StoryPortraits.Melissa));
         b.Add(StoryDirector.Narration("——《像素冒险：裂隙之刃》 装了十一年箱子的人，今天空着手回家。"));
     }

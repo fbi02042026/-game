@@ -36,7 +36,10 @@ public static class StoryEnding
         if (choice == 3) return EndingId.BadGate;   // C：让她坐上去
 
         // 3) B：判定是否达成真结局
-        bool allBranches = HasCleared(d, 2) && HasCleared(d, 3) && HasCleared(d, 4);
+        // 【2026-10-31 修】原判据「通关过 2/3/4 章」在线性 1→8 合并后必然成立，加上 KeyFive
+        // 全是 Boss 必得线索 → 选 B 必进 True，Happy 永远拿不到。改为与 N3/N4 完整版同一判据：
+        // 8 岛全通（见过梅莉莎）才配拿以她为核心的结局；KeyFive 也已换成真正需要探索的 5 份。
+        bool allBranches = d.HasClearedAllSideIslands();
         bool allKeyLore = StoryClue.HasAll(d, StoryClue.KeyFive);
 
         return (allBranches && allKeyLore) ? EndingId.True : EndingId.Happy;
@@ -93,8 +96,9 @@ public static class StoryEnding
         switch (id)
         {
             case EndingId.BadHome: return "在最深处，先带她走。";
+            case EndingId.Happy: return "在最深处，陪她一起往下走。";
             case EndingId.BadGate: return "在最深处，让她坐下。";
-            case EndingId.True: return "三条岔路都走过的人，才知道箱子是谁装的。";
+            case EndingId.True: return "八座岛都走完、五张字条都捡到的人，才知道箱子是谁装的。";
             default: return "";
         }
     }

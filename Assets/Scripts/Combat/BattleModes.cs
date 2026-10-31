@@ -564,9 +564,12 @@ public static class ActivityDungeonRules
         }
     }
 
-    /// <summary>活动副本入口的章节解锁门槛（2026-10-24 主人拍板：卷轴=通关第 3 章开启；金币/徽记=通关第 1 章）。</summary>
-    public static int GateChapter(ActivityDungeonKind kind)
-        => kind == ActivityDungeonKind.Scroll ? 3 : 1;
+    /// <summary>
+    /// 活动副本入口的章节解锁门槛。
+    /// 【2026-10-31】改为委托 <see cref="FeatureUnlock.DungeonGateChapter"/>（功能开启顺序唯一出口）：
+    /// 金币=第 1 章(D2)、徽记=第 2 章(D3，与金币错开)、卷轴=第 3 章(D4~5)、礼物=第 1 章。
+    /// </summary>
+    public static int GateChapter(ActivityDungeonKind kind) => FeatureUnlock.DungeonGateChapter(kind);
 
     /// <summary>活动副本展示名（toast/详情单一出口，不许各写一份）。</summary>
     public static string DungeonName(ActivityDungeonKind kind)
@@ -757,6 +760,8 @@ public sealed class ArenaBattleMode : BattleMode
     /// <summary>
     /// 竞技场结算：胜负落账（ApplyBattleOutcome）与积分格组装已在统一门（胜利）/死亡链（失败）做完，
     /// 这里只负责回城（照金币本口径，不推进主线）。
+    /// 【2026-10-31 主人拍板「从竞技场返回的时候回到竞技场界面」】回城后自动重开竞技场弹窗
+    ///（消费点 = TownHubController.Start，先例 = TownHubController.PendingOpenAdventure）。
     /// </summary>
     public override void SettleStageClear(BattleManager bm)
     {
@@ -765,6 +770,7 @@ public sealed class ArenaBattleMode : BattleMode
             Debug.LogError("[BattleMode] 竞技场 SettleStageClear 失败：BattleManager 为空");
             return;
         }
+        ArenaPopupUI.PendingOpenAfterBattle = true;
         bm.EndRunAndReturnToTown();
     }
 }

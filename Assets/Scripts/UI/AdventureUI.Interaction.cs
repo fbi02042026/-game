@@ -150,7 +150,8 @@ public partial class AdventureUI
         // 没通就停在当前页 + 提示（标签常显示灰显锁态，方案=主人「或者把无限和活动也常显示」那条）
         if (IsModeTabLocked(idx))
         {
-            Toast($"通关第 1 章后开启{ModeLabel(idx)}");
+            // 【2026-10-31】提示文案跟门槛同源（FeatureUnlock 单一出口），别在这里另写一份
+            Toast(IsActivityMode(idx) ? FeatureUnlock.ActivityTabLockHint() : FeatureUnlock.RiftLockHint());
             return;
         }
         _selectedMode = idx;
@@ -185,12 +186,19 @@ public partial class AdventureUI
     // 门槛不看 TEST_OPEN_ALL 总闸（总闸只旁路开放日/进本，方便进本测试；锁不旁路才能看到锁态）。
     // ────────────────────────────────────────────────────
 
-    /// <summary>该模式标签当前是否锁定（未通关第 1 章）。</summary>
+    /// <summary>
+    /// 该模式标签当前是否锁定。
+    /// 【2026-10-31 重做】B2 落地后「通第 1 章」= 50 小关 ≈ 1.2 天，两个标签必须分开判，
+    /// 否则会出现「标签能点、点进去被 toast 拦」的假开门：
+    /// · 裂隙(2) → 第 1 座大关通关（与进本门槛 FeatureUnlock.RiftOpen 同源）；
+    /// · 活动副本(4) → 任一副本已解锁（金币 D2 先开，徽记 D3）。
+    /// </summary>
     bool IsModeTabLocked(int idx)
     {
         if (idx == 0 || idx == 1 || idx == 3) return false;   // 主线恒开；每日/BOSS 隐藏位无锁概念
         var data = SaveSystem.Instance?.Data;
-        return data == null || !data.HasClearedChapter(1);
+        if (IsActivityMode(idx)) return !FeatureUnlock.AnyDungeonOpen(data);
+        return !FeatureUnlock.RiftOpen(data);
     }
 
     /// <summary>标签锁态视觉：灰显 alpha 0.5（保持可点——点了要弹提示），解锁即回 1。RefreshAll 每次刷。</summary>
@@ -313,7 +321,7 @@ public partial class AdventureUI
     {
         if (!ActivityDungeonRules.IsOpenToday(kind)) return false;
         var data = SaveSystem.Instance?.Data;
-        return data != null && data.HasClearedChapter(ActivityDungeonRules.GateChapter(kind));
+        return FeatureUnlock.DungeonOpen(data, kind);
     }
 
     /// <summary>
@@ -338,7 +346,7 @@ public partial class AdventureUI
             bool gateOk = false;
             {
                 var data = SaveSystem.Instance?.Data;
-                gateOk = data != null && data.HasClearedChapter(ActivityDungeonRules.GateChapter(kinds[i]));
+                gateOk = FeatureUnlock.DungeonOpen(data, kinds[i]);
             }
             row.gameObject.SetActive(gateOk);
             if (!gateOk) continue;
@@ -742,19 +750,18 @@ public partial class AdventureUI
         bool activity = IsActivityMode(_selectedMode) && !tutorialRun;
         ActivityDungeonKind actKind = _selectedActivityKind;
 
-        // 【2026-10-23 主人拍板】解锁门槛：金币/徽记=通关第 1 章；卷轴=通关第 3 章（2026-10-24 拍板），
-        // 打通第 2 章开启无限裂隙（活动门槛受 ActivityDungeonRules.TEST_OPEN_ALL 测试总闸旁路，
-        // 打包前总闸改回 false 即恢复）
+        // 【2026-10-31】门槛全部改走 FeatureUnlock 单一出口（活动门槛受 TEST_OPEN_ALL 测试总闸旁路，
+        // 打包前总闸改回 false 即恢复）。裂隙门槛与左列标签锁同源，杜绝「标签能点、进本被拦」。
         var gateData = SaveSystem.Instance?.Data;
         if (activity && !ActivityDungeonRules.TEST_OPEN_ALL
-            && (gateData == null || !gateData.HasClearedChapter(ActivityDungeonRules.GateChapter(actKind))))
+            && !FeatureUnlock.DungeonOpen(gateData, actKind))
         {
-            Toast($"通关第 {ActivityDungeonRules.GateChapter(actKind)} 章后开启{ActivityDungeonRules.DungeonName(actKind)}");
+            Toast(FeatureUnlock.DungeonLockHint(actKind));
             return;
         }
-        if (endless && (gateData == null || !gateData.HasClearedChapter(2)))
+        if (endless && !FeatureUnlock.RiftOpen(gateData))
         {
-            Toast("通关第 2 章后开启无限裂隙");
+            Toast(FeatureUnlock.RiftLockHint());
             return;
         }
 

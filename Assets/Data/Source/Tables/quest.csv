@@ -1,4 +1,4 @@
-﻿# 任务表（CSV → .bytes）2026-10-26 v2：任务体系单独成模块（主人拍板「任务单独做 不管代码还是数据库」）
+# 任务表（CSV → .bytes）2026-10-26 v2：任务体系单独成模块（主人拍板「任务单独做 不管代码还是数据库」）
 # 数据源：主线全部文案自 MainQuestDefs.cs 静态数组 1:1 迁入（原 id 不变，保旧档 mainQuestDone 进度）；
 #         每章插 clear_stages 密度行（新 id C?_Q5/Q6/Q7），让玩家「打几次就能推进一点主线」。
 # 密度口径（2026-10-26 主人拍板）：前期（1~2 章）密=2 条密度行；中期（3~5 章）中等=1 条；后期（6~8 章）剧情为主=1 条。
@@ -21,6 +21,7 @@
 #                upgrade_talent     点 target_count 次天赋
 #                daily_login        每日登录（进度读 DailyLoginSystem）
 #                daily_clear_stages 今日通关 N 关（发奖真源 = SaveData.DAILY_CLEAR_TASK_NEED，改数量两处同步！）
+#                daily_arena_battle 今日竞技场对战 N 场——【2026-10-31 主人拍板「竞技场不给经验/打了还是升级了」任务行删除（原 daily_arena_1 经验×20 / daily_arena_5 经验×50，10-30 新增）；计数器 dailyArenaBattle 保留，要恢复任务改非经验奖励再说一声
 # target_param  目标参数（无则留空）
 # target_count  目标数量（进度上限）
 # reward_stones 主线完成发天赋石数（0 = 战斗类走现有关卡/章节里程碑，不重复给）
@@ -72,10 +73,10 @@ C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,
 C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,
 C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,
 daily_login,日常,0,每日登录,领取今日登录奖励,daily_login,,1,0,1,经验 ×30,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,30
-daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,天赋石 ×5,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回)
-daily_gold,日常,0,财源广进,今日获取 {0}/{1} 金币,daily_gain_gold,,500,2,2,天赋石 ×2,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖
-daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,20,3,3,天赋石 ×3,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),20
-daily_recruit,日常,0,招贤纳士,今日获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,5,5,天赋石 ×5,计数=SaveData.UnlockMerc 新解锁(任何来源都算)
-daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,5,6,天赋石 ×5,与除害共用计数,50
-daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,8,7,天赋石 ×8,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,80
+daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,经验 ×50,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回)
+daily_gold,日常,0,财源广进,今日获取 {0}/{1} 金币,daily_gain_gold,,500,0,2,经验 ×20,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,20
+daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,20,0,3,经验 ×20,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),20
+daily_recruit,日常,0,招贤纳士,今日获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,0,5,经验 ×30,计数=SaveData.UnlockMerc 新解锁(任何来源都算),30
+daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,0,6,经验 ×50,与除害共用计数,50
+daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,0,7,经验 ×80,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,80
 weekly_starup,周常,0,百战精锐,本周升星 {0}/{1} 个佣兵,weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释

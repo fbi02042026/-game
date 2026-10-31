@@ -295,9 +295,31 @@ public static class SlotMachineDefs
     /// </summary>
     public const int EQUIP_RARE_GUARANTEE_EVERY = 5;
 
+    // 【2026-10-31 主人报「技能和佣兵是不是几率太低了」】竞技场单独一档：
+    // 一场只有 5 次额度，55/20/20 的正式关权重意味着约 1/4 的场次一个技能都抽不到 —— 确实太低。
+    // 竞技场改 **装备 40 / 技能 30 / 佣兵 30**（金币方向在场内本就被 GoldAllowed 挡掉）。
+    // 放在唯一真源里：随机抽取（RollCategory）与概率公示（DraftPool.BuildOddsRows）自动同源。
+    /// <summary>竞技场「装备」类权重（2026-10-31 主人拍板口径，仅竞技场生效）。</summary>
+    public const int ARENA_WEIGHT_EQUIP = 40;
+    /// <summary>竞技场「技能」类权重（2026-10-31 主人拍板口径，仅竞技场生效）。</summary>
+    public const int ARENA_WEIGHT_SKILL = 30;
+    /// <summary>竞技场「佣兵」类权重（2026-10-31 主人拍板口径，仅竞技场生效）。</summary>
+    public const int ARENA_WEIGHT_MERC = 30;
+
     /// <summary>类型的抽中权重 —— 唯一出口，随机与概率公示都问它。</summary>
     public static int CategoryWeight(DraftCategory c)
     {
+        // 【2026-10-31】竞技场单独一档（见上方常量注释）；正式关/金币本/裂隙照旧。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
+        {
+            switch (c)
+            {
+                case DraftCategory.Merc: return ARENA_WEIGHT_MERC;
+                case DraftCategory.Equip: return ARENA_WEIGHT_EQUIP;
+                case DraftCategory.Gold: return 0;
+                default: return ARENA_WEIGHT_SKILL;
+            }
+        }
         switch (c)
         {
             case DraftCategory.Merc: return CATEGORY_WEIGHT_MERC;

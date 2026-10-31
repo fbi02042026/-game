@@ -36,13 +36,16 @@ public partial class BattleEntryDraftPanel
 
         // 2026-10-05：金币本开局送的免费抽 —— 还有额度时「普通」按钮上写「免费」，不看余额也能点。
         // 【2026-10-19 主人拍板】免费次数只惠及普通随机抽；三个定向（佣兵/装备/技能）永远按价扣币。
+        // 🔴【2026-10-31 主人拍板「金币也不用了 改成剩余几次」】竞技场例外：四类按钮统一吃
+        // 5 次额度、不吃金币 —— 价格位显示「剩余N次」，额度用完整排置灰（真源 = FreeDrawsLeft）。
         bool free = freeLeft > 0;
+        bool arenaQuotaMode = BattleManager.Instance != null && BattleManager.Instance.IsArena;
         for (int i = 0; i < _slots.Count; i++)
         {
             var s = _slots[i];
             if (s.Btn == null) continue;
             bool isRandom = !s.Cat.HasValue;
-            bool slotFree = free && isRandom;
+            bool slotFree = free && (arenaQuotaMode || isRandom);
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
             // 价格与余额都按<b>各自币种</b>算：
             // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
@@ -55,17 +58,20 @@ public partial class BattleEntryDraftPanel
             long wallet = coins;
             // 2026-10-06：本拍已抽完（引导局一次一抽）→ 全部置灰，玩家只剩「继续」可点。
             // 【2026-10-29 实时抽 CD】LiveMode 的 CD 进行中同样全部置灰（防连点，主人拍板 5 秒）。
-            bool on = !_drawLocked && !_cdActive && has && (slotFree || wallet >= price);
+            // 【2026-10-31 竞技场】额度模式下只认剩余次数（金币余额无关），用完即置灰。
+            bool on = !_drawLocked && !_cdActive && has
+                      && (arenaQuotaMode ? freeLeft > 0 : (slotFree || wallet >= price));
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
             s.Btn.interactable = on;
             if (s.NameText != null) s.NameText.text = Name(s.Cat);
-            bool insufficient = !slotFree && wallet < price;
+            bool insufficient = !arenaQuotaMode && !slotFree && wallet < price;
             if (s.CostText != null)
             {
                 // 【2026-10-18 主人拍板】免费抽按钮只写「免费」两字：后面不带次数（×N / 一次都不要），
                 // 且「免费」要居中显示（见下方对齐处理）；有价数字仍按原样显示。
                 s.CostText.text = !has ? "-"
+                               : arenaQuotaMode ? $"剩余{freeLeft}次"
                                : slotFree ? "免费"
                                : price.ToString();
                 // 【2026-10-18 主人拍板】「免费」居中；非免费恢复预制体原对齐（懒缓存，不永久覆盖美术）。
@@ -83,9 +89,10 @@ public partial class BattleEntryDraftPanel
                 if (showSf) s.ShortfallText.text = $"还差 {price - wallet}";
             }
             // 免费抽不扣任何币 → 货币图标跟着一起隐（要改成「一直显示」只改这一处）。
+            // 竞技场额度模式全程不显示货币图标（不吃金币，主人 2026-10-31 拍板）。
             if (s.CoinIcon != null)
             {
-                bool showIcon = has && !slotFree && s.CoinIcon.sprite != null;
+                bool showIcon = has && !slotFree && !arenaQuotaMode && s.CoinIcon.sprite != null;
                 if (s.CoinIcon.gameObject.activeSelf != showIcon)
                     s.CoinIcon.gameObject.SetActive(showIcon);
             }

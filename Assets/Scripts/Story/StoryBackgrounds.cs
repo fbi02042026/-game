@@ -82,10 +82,12 @@ public static class StoryBackgrounds
         if (id == GraveSeven) return "无名碑";
         if (id == AbyssChoice) return "深渊边缘";
         // —— 支线岛（岛名真源 SideIslandDefs 草稿；黑幕大字显示这里，四字为主）——
+        // 【2026-10-31 修】岛 3/4 原名「翡翠秘境」「晨曦草原」与主线第 3、4 章完全同名，
+        // 玩家会当成同一地点；改成只描述岛本身样貌的名字（藤蔓屿＝藤蔓温室，伏草原＝草被压平）。
         if (id == Island01) return "迷雾屿";
         if (id == Island02) return "沉船湾";
-        if (id == Island03) return "翡翠秘境";
-        if (id == Island04) return "晨曦草原";
+        if (id == Island03) return "藤蔓屿";
+        if (id == Island04) return "伏草原";
         if (id == Island05) return "搁浅地";
         if (id == Island06) return "王座间";
         if (id == Island07) return "深渊口";

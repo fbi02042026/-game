@@ -82,6 +82,12 @@ public partial class MercObtainPopupUI : MonoBehaviour
             Debug.LogError("[MercObtainPopup] 进阶钮点击但当前佣兵 hireId 为空（Fill 未正常填充？）");
             return;
         }
+        // 【2026-10-31】功能未开放（钮本该已隐藏）—— 再拦一道，不静默
+        if (!FeatureUnlock.MercAscendOpen(SaveSystem.Instance?.Data))
+        {
+            UIManager.Instance?.ShowToast(FeatureUnlock.MercAscendLockHint());
+            return;
+        }
         MercAscendUI.Show(_curHireId);
     }
 
@@ -98,8 +104,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (_ascendBtn == null) return;
         var data = SaveSystem.Instance?.Data;
         bool owned = data != null && data.IsMercUnlocked(_curHireId);
-        _ascendBtn.gameObject.SetActive(owned);
-        bool canStar = MercStarSystem.CanStarUp(_curHireId, out _);
+        // 【2026-10-31 主人拍板】佣兵功能分先后开：进阶/升星门槛 = 通第 2 章
+        // （FeatureUnlock.MercAscendOpen 唯一出口，与列表卡「升阶」钮同源）。
+        bool ascendOpen = FeatureUnlock.MercAscendOpen(data);
+        _ascendBtn.gameObject.SetActive(owned && ascendOpen);
+        bool canStar = owned && ascendOpen && MercStarSystem.CanStarUp(_curHireId, out _);
         ApplyAscendGlow(canStar);
         ApplyGuideNode(canStar);   // 【2026-10-25 主人需求】可升星时显示进阶指引并上下浮动
     }
@@ -247,6 +256,8 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _recruitMode = false;
         _tryBuy = null;
         ApplyRecruitButtons(false, null);
+        // 【2026-10-31】招募模式可能把购买钮标红（买不起），还原快照原色防串味（与 ExitFallenMode 同口径）
+        if (_keepLabel != null) _keepLabel.color = _keepLabelColor0;
     }
 
     /// <summary>退出阵亡复活模式：清回调 + 还原预制体原文案与按钮布局（与招募模式同一套还原）。</summary>
@@ -312,6 +323,12 @@ public partial class MercObtainPopupUI : MonoBehaviour
         FillSkill(skillId);
 
         ApplyRecruitButtons(true, BuildBuyLabel(offer));
+        // 【2026-10-31 主人需求】买不起 → 购买钮文字变红（判定与招募卡同一出口
+        // MercHireSession.CanAffordOffer，红色同一常量 MercHireSession.InsufficientPriceColor）
+        if (_keepLabel != null)
+            _keepLabel.color = MercHireSession.CanAffordOffer(offer)
+                ? _keepLabelColor0
+                : MercHireSession.InsufficientPriceColor;
     }
 
     /// <summary>购买钮文案（【2026-10-19 主人拍板】货币跟稀有度走）：

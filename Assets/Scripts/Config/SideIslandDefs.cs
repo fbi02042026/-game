@@ -39,8 +39,8 @@ public static class SideIslandDefs
     {
         new Island { id = 1, name = "迷雾屿",   act = 1, goldReward = 400,  talentReward = 10 },
         new Island { id = 2, name = "沉船湾",   act = 2, goldReward = 600,  talentReward = 12 },
-        new Island { id = 3, name = "翡翠秘境", act = 3, goldReward = 800,  talentReward = 14 },
-        new Island { id = 4, name = "晨曦草原", act = 4, goldReward = 1000, talentReward = 16 },
+        new Island { id = 3, name = "藤蔓屿",   act = 3, goldReward = 800,  talentReward = 14 },
+        new Island { id = 4, name = "伏草原",   act = 4, goldReward = 1000, talentReward = 16 },
         new Island { id = 5, name = "搁浅地",   act = 5, goldReward = 1200, talentReward = 18 },
         new Island { id = 6, name = "王座间",   act = 6, goldReward = 1400, talentReward = 20 },
         new Island { id = 7, name = "深渊口",   act = 7, goldReward = 1600, talentReward = 22 },

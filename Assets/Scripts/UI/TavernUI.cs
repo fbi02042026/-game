@@ -104,6 +104,7 @@ public class TavernUI : MonoBehaviour, ITownPage
 
         EnsurePortraitMotion();
         RefreshGossipButton();   // 【2026-10-26 信任交流】跨天进酒馆恢复闲话次数（置灰→可点）
+        RefreshMercCardLocks();  // 【2026-10-31】四张佣兵功能卡锁态（跨天推图后自动解锁）
         if (SuppressEggOnce)
         {
             // 预热点亮：只建 UI，问候/欢迎彩蛋全部跳过且不消耗（真实进店才发）
@@ -343,36 +344,79 @@ public class TavernUI : MonoBehaviour, ITownPage
             // 【2026-10-17 主人拍板】开启佣兵招募入口：下排「佣兵招募」卡直接打开三选一招募弹窗。
             // （2026-10-15 的锁卡口径作废；三选一弹窗 = MercenaryRecruitPopupUI，含金币/招募卷双支付、
             //   手动刷新 30 分钟冷却、每日 0 点自动刷新）
+            // 【2026-10-31 主人拍板】佣兵功能分先后开：队列排第一（先决定下场带谁，D1），
+            // 招募排第二（通第 1 章才开，D2）—— 主人原话「招募开了队列也得开，应该先开队列再开招募」。
             recruitButton.onClick.RemoveAllListeners();
             recruitButton.gameObject.SetActive(true);
-            recruitButton.onClick.AddListener(() => MercenaryRecruitPopupUI.Show());
+            recruitButton.onClick.AddListener(() =>
+            {
+                if (!FeatureUnlock.MercRecruitOpen(SaveSystem.Instance?.Data))
+                {
+                    UIManager.Instance?.ShowToast(FeatureUnlock.MercRecruitLockHint());
+                    return;
+                }
+                MercenaryRecruitPopupUI.Show();
+            });
+            CacheCardDesc(recruitButton);
         }
         if (trustButton != null)
         {
             // 【2026-10-26 主人拍板】右下卡改「佣兵羁绊」＝佣兵好感界面入口（MercFavorUI，
             // 预制体 Resources/Prefabs/Town/佣兵好感：对话/送礼攒好感，满值解锁羁绊地图）。
             // 原「信任交流卡复用为酒馆闲话」口径作废——闲话已单独挪到场景「对话」按钮
-            // （本文件下方 gossipBtn 接线，TavernChatPopupUI），本卡只开好感界面。
+            // （本文件下方 gossipBtn 接线），本卡只开好感界面。
+            // 2026-10-31 主人拍板：原聚合弹窗 TavernChatPopupUI 已删除（四个入口各有正式去处，弹窗零调用点）。
+            // 【2026-10-31】佣兵功能分先后开：羁绊排最后（主力固定下来感情才有意义），门槛 = 通第 3 章。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
-            trustButton.onClick.AddListener(() => MercFavorUI.Open());
+            trustButton.onClick.AddListener(() =>
+            {
+                if (!FeatureUnlock.MercBondOpen(SaveSystem.Instance?.Data))
+                {
+                    UIManager.Instance?.ShowToast(FeatureUnlock.MercBondLockHint());
+                    return;
+                }
+                MercFavorUI.Open();
+            });
             RetitleCard(trustButton.transform, "佣兵羁绊", "对话送礼攒好感，解锁羁绊地图");
+            CacheCardDesc(trustButton);
         }
         if (questButton != null)
         {
             // 【2026-10-13 主人拍板】原隐藏的「酒馆任务」卡位复用为「佣兵抽奖池」入口：
             // 勾选下场想抽到的佣兵，局内招募只从勾选的里面出（空池 = 不筛选）。
             // 【2026-10-17 主人拍板】改名「佣兵雇佣队列」，与酒馆「佣兵招募」（三选一抽全池）错开叫法。
+            // 【2026-10-31】佣兵功能分先后开：队列排第一（先决定下场带谁），门槛 = 第 1 座大关通关（D1），
+            // 比招募（D2）先开 —— 主人要求「招募开了队列也得开，应该先开队列再开招募」。
             questButton.gameObject.SetActive(true);
             questButton.onClick.RemoveAllListeners();
-            questButton.onClick.AddListener(() => MercDrawPoolUI.Show());
+            questButton.onClick.AddListener(() =>
+            {
+                if (!FeatureUnlock.MercQueueOpen(SaveSystem.Instance?.Data))
+                {
+                    UIManager.Instance?.ShowToast(FeatureUnlock.MercQueueLockHint());
+                    return;
+                }
+                MercDrawPoolUI.Show();
+            });
             RetitleCard(questButton.transform, "佣兵队列", "配置下场战斗可雇佣的佣兵");   // 2026-10-18 主人拍板改名
+            CacheCardDesc(questButton);
         }
         if (intelButton != null)
         {
+            // 【2026-10-31】佣兵功能分先后开：情报排第三（每日调味，给个每天来酒馆的理由），门槛 = 通第 2 章。
             intelButton.gameObject.SetActive(true);
             intelButton.onClick.RemoveAllListeners();
-            intelButton.onClick.AddListener(() => InformantIntelDirector.StartDaily());
+            intelButton.onClick.AddListener(() =>
+            {
+                if (!FeatureUnlock.MercIntelOpen(SaveSystem.Instance?.Data))
+                {
+                    UIManager.Instance?.ShowToast(FeatureUnlock.MercIntelLockHint());
+                    return;
+                }
+                InformantIntelDirector.StartDaily();
+            });
+            CacheCardDesc(intelButton);
         }
 
         // 【2026-10-26 主人拍板「信任交流」】主人手摆的「对话」按钮（TavernUI.prefab 右上角）＝酒馆闲话图标
@@ -385,6 +429,9 @@ public class TavernUI : MonoBehaviour, ITownPage
             gossipBtn.onClick.AddListener(OnGossipClicked);
             RefreshGossipButton();
         }
+
+        // 四张功能卡锁态首刷（之后每次 ShowPage 再刷，跨天推图后自动解锁）
+        RefreshMercCardLocks();
     }
 
     /// <summary>
@@ -449,6 +496,62 @@ public class TavernUI : MonoBehaviour, ITownPage
         btn.onClick.AddListener(() => UIManager.Instance?.ShowToast(toast));
     }
 
+    // ———— 佣兵功能卡锁态（2026-10-31 主人拍板「佣兵的那些功能也要区分一下，不要一下都开」）————
+    // 口径同左列模式标签锁：卡片常显示、压灰 alpha 0.5、**保持可点**（点了弹「通关第 N 章后开启」），
+    // Desc 副标题换成解锁条件 → 玩家一眼知道目标是推图。位置/排版/图片一概不动（主人手摆的四格）。
+
+    /// <summary>功能卡原始副标题缓存：锁态只换 Desc 文案，解锁要能原样还回去（不改主人写的文案）。</summary>
+    readonly Dictionary<Button, string> _cardDescOriginal = new Dictionary<Button, string>();
+
+    void CacheCardDesc(Button btn)
+    {
+        if (btn == null || _cardDescOriginal.ContainsKey(btn)) return;
+        var desc = btn.transform.Find("Desc");
+        var t = desc != null ? desc.GetComponent<Text>() : null;
+        if (t != null) _cardDescOriginal[btn] = t.text;
+    }
+
+    void ApplyCardLock(Button btn, bool locked, string lockDesc)
+    {
+        if (btn == null) return;
+
+        var cg = btn.GetComponent<CanvasGroup>();
+        if (cg == null) cg = btn.gameObject.AddComponent<CanvasGroup>();
+        float target = locked ? 0.5f : 1f;
+        if (!Mathf.Approximately(cg.alpha, target)) cg.alpha = target;
+        cg.blocksRaycasts = true;   // 锁态也要接点击（弹提示），只降透明度不关射线
+
+        var desc = btn.transform.Find("Desc");
+        var t = desc != null ? desc.GetComponent<Text>() : null;
+        if (t == null) return;
+        // 没缓存到原文就别动 Desc —— 否则会把锁文案当原文写死，解锁后永远还回去
+        if (!_cardDescOriginal.TryGetValue(btn, out string original)) return;
+        string want = locked ? lockDesc : original;
+        if (t.text != want) t.text = want;
+    }
+
+    /// <summary>按存档刷四张功能卡的锁态（ShowPage 每次进店刷一次，跨天推图后自动解锁）。</summary>
+    void RefreshMercCardLocks()
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        ApplyCardLock(recruitButton, !FeatureUnlock.MercRecruitOpen(data), FeatureUnlock.MercRecruitLockDesc());
+        ApplyCardLock(questButton, !FeatureUnlock.MercQueueOpen(data), FeatureUnlock.MercQueueLockDesc());
+        ApplyCardLock(intelButton, !FeatureUnlock.MercIntelOpen(data), FeatureUnlock.MercIntelLockDesc());
+        ApplyCardLock(trustButton, !FeatureUnlock.MercBondOpen(data), FeatureUnlock.MercBondLockDesc());
+    }
+
+    /// <summary>
+    /// 外部触发：立即重刷功能卡锁态 + 闲话图标。
+    /// 【2026-10-31】用途 = 新手引导结束时（<see cref="StoryProgress.MarkTutorialDone"/>）佣兵队列刚开放，
+    /// 而引导最后一站就是酒馆 —— 玩家此刻正站在这页上，不立刻刷就要退出再进来才亮，看着像 bug。
+    /// 页面没建/按钮没绑时全部 null-safe（<c>ApplyCardLock</c> 会提前返回）。
+    /// </summary>
+    public void RefreshFeatureLocksNow()
+    {
+        RefreshMercCardLocks();
+        RefreshGossipButton();
+    }
+
     // ———— 酒馆闲话（2026-10-26 主人拍板「信任交流」）————
     // 点「对话」按钮 → 播一段酒馆闲话剧情（复用 StoryDirector，与主线/战后同一套弹窗表现），
     // 末拍三选一话题（选项原生支持，见 StoryBeat.choices），选完 = 随机已拥有佣兵 +1 信任 + 剧情补充。每日 3 次。
@@ -456,10 +559,17 @@ public class TavernUI : MonoBehaviour, ITownPage
     /// <summary>点「对话」按钮：起闲话剧情。</summary>
     void OnGossipClicked()
     {
-        // 剧情正在播不重入（与 TavernChatPopupUI 同款拦截，防叠窗）
+        // 剧情正在播不重入（防叠窗）
         if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying) return;
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null) return;
+
+        // 【2026-10-31】与佣兵羁绊同批开放（图标已藏，这里再拦一道防误触/引导强开）
+        if (!FeatureUnlock.MercBondOpen(data))
+        {
+            UIManager.Instance?.ShowToast(FeatureUnlock.MercBondLockHint());
+            return;
+        }
 
         if (string.IsNullOrEmpty(PickRandomOwnedMerc(data)))
         {
@@ -477,17 +587,18 @@ public class TavernUI : MonoBehaviour, ITownPage
         {
             // 【2026-10-29 主人报修】首拍挂酒馆背景（StoryBackgrounds.Tavern，走主线同款地点揭示黑场）；
             // 老板娘单人句立绘居中（soloCentered，与主线 StoryDirector.Solo / 独眼情报商先例同口径）。
+            // 【2026-10-31 主人拍板「文案按情节/次数变」】招呼与正句都按累计闲聊次数轮换（SaveData.tavernGossipCount）。
             new StoryBeat
             {
                 rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
                 soloCentered = true,
-                text = "哟，坐下聊！今天想听点什么？",
+                text = TavernLore.InnkeeperGreeting(data.tavernGossipCount),
             }.Bg(StoryBackgrounds.Tavern),
             new StoryBeat
             {
                 rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
                 soloCentered = true,
-                text = TavernLore.InnkeeperLine(),
+                text = TavernLore.InnkeeperLine(data.tavernGossipCount),
             },
             new StoryBeat
             {
@@ -550,13 +661,17 @@ public class TavernUI : MonoBehaviour, ITownPage
         RefreshGossipButton();
 
         // 继续在剧情窗播：老板娘说话题内容（单人居中），旁白句收好感变化（系统信息不进角色嘴里）。
-        // 第二段首拍不设 Bg —— StoryDirector 会按已登记的酒馆背景补装画面 + 播开播短黑幕（与主线选项回响同款）。
+        // 【2026-10-31 主人拍板「选完选项不要再黑屏，直接对话」】第二段首拍挂 skipLocationReveal ——
+        // 背景还是刚聊着的酒馆（_introducedBg 未变，上面既有补装分支会把画面补回来），
+        // StoryDirector 只在首拍无 SkipReveal 时才播开播短黑幕，挂上即直接续话，不再闪黑。
+        // 主线/战后同景续播的黑幕口径不动（那里没挂 SkipReveal）。
         StoryDirector.Ensure().Play(new List<StoryBeat>
         {
             new StoryBeat
             {
                 rightName = "老板娘", rightPortraitId = StoryPortraits.Innkeeper, speaker = 1,
                 soloCentered = true,
+                skipLocationReveal = true,
                 text = extra,
             },
             StoryDirector.Narration($"（{name} 的好感 +1，当前 {after}）"),
@@ -572,11 +687,21 @@ public class TavernUI : MonoBehaviour, ITownPage
         return pool[Random.Range(0, pool.Length)];
     }
 
-    /// <summary>今日次数用完置灰（只动 interactable，不改颜色不动视觉）；跨天 ShowPage 时恢复。</summary>
+    /// <summary>
+    /// 今日次数用完置灰（只动 interactable，不改颜色不动视觉）；跨天 ShowPage 时恢复。
+    /// 【2026-10-31】闲话与佣兵羁绊**同批开放**（闲话是输入、羁绊是出口）：未解锁直接藏图标——
+    /// 图标位没有卡面可以写解锁条件，藏起来比让玩家点了才挨一句 toast 干净。
+    /// </summary>
     void RefreshGossipButton()
     {
         if (_gossipButton == null) return;
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+
+        bool unlocked = FeatureUnlock.MercBondOpen(data);
+        if (_gossipButton.gameObject.activeSelf != unlocked)
+            _gossipButton.gameObject.SetActive(unlocked);
+        if (!unlocked) return;
+
         bool hasLeft = data != null && data.TavernGossipLeft() > 0;
         if (_gossipButton.interactable != hasLeft)
             _gossipButton.interactable = hasLeft;
