@@ -191,6 +191,10 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     const string ActivityGiftRowName = "礼物";
     /// <summary>没轮到（今天不开放）横条 bg 的压灰系数（2026-10-24 主人拍板「灰显」；选中效果改走 prefab「选中」节点）。</summary>
     const float ActivityRowGrayFactor = 0.45f;
+    /// <summary>左侧模式标签锁态灰显 alpha（2026-10-24 主人拍板 0.5）。
+    /// 【2026-10-31 修「进页标签不灰、点一次才灰」】滑入动效结尾 alpha 必须与本值同源（AdventureUI.Anim.TabFinalAlpha），
+    /// 否则动效把 0.5 盖回 1，锁态灰要等下一次 RefreshAll 才出现。</summary>
+    const float ModeTabLockAlpha = 0.5f;
 
     int _selectedMode = 0;
     int _selectedDiff = 0;

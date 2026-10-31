@@ -309,8 +309,8 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     }
 
     /// <summary>
-    /// 使用一份道具。具体效果等道具内容定稿后按 def.useEffect 派发（见 ItemDef.useEffect 注释），
-    /// 这里只负责判定可用性与扣数量。
+    /// 使用一份道具。【2026-10-31】效果派发收口到 <see cref="ItemUseService"/>（useEffect 的唯一执行出口）。
+    /// 失败一律不扣数量 —— 宁可"点了没反应 + 报错"，也不能"道具没了但什么都没发生"。
     /// </summary>
     public bool UseItem(BackpackItem bi)
     {
@@ -318,11 +318,17 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         var def = bi.item.Def;
         if (def == null || !def.IsUsable) return false;
 
-        // TODO(道具内容定稿后)：按 def.useEffect 派发，如
-        //   heal_hp:30     -> Hero.Instance 回血 30
-        //   buff_atk:20:15 -> 攻击 +20，持续 15 秒
-        Debug.Log($"[背包] 使用道具 {def.name}（{def.useEffect}）——效果尚未实现，先扣数量");
+        if (!ItemUseService.TryApply(def, out string msg))
+        {
+            Debug.LogWarning($"[背包] 道具 {def.name}({def.id}) 使用失败：{msg}");
+            if (!string.IsNullOrEmpty(msg))
+                UIManager.Instance?.ShowToast(msg);
+            return false;
+        }
+
         ConsumeItem(bi, 1);
+        if (!string.IsNullOrEmpty(msg))
+            UIManager.Instance?.ShowToast($"使用 {def.name}：{msg}");
         return true;
     }
 
@@ -448,8 +454,8 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     // 背包已满时自动让位：与「替换/丢掉直接分解」是同一套，统一走 ScrapEquip
     void ScrapBagEquip(EquipInstance equip) => ScrapEquip(equip);
 
-    /// <summary>同部位替换折金（【2026-10-18 主人拍板】拆分旧武器改发局内币，不再发分解材料）：按当前职业给一点口吻。
-    /// 【2026-10-18 双钱包拆分】折金走 GrantRunGold →「本局获得金币」那本账，文案叫金币。</summary>
+    /// <summary>同部位替换折币（【2026-10-18 主人拍板】拆分旧武器改发局内币，不再发分解材料）：按当前职业给一点口吻。
+    /// 【2026-10-31 主人拍板】文案统一叫「抽奖币」（折的是局内抽奖币池，与 10-18 战斗内货币命名口径一致）。</summary>
     static string BuildScrapToast(EquipInstance equip, int gold)
     {
         string name = equip != null && !string.IsNullOrEmpty(equip.equipName) ? equip.equipName : "旧装备";
@@ -457,19 +463,19 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         switch (PlayerJobDefs.GetSelected())
         {
             case PlayerJobId.SwordShield:
-                return $"盾墙换防！{name} 折合金币{goldTxt}";
+                return $"盾墙换防！{name} 折成抽奖币{goldTxt}";
             case PlayerJobId.Heavy:
-                return $"沉甸甸的不要了——{name} 折合金币{goldTxt}";
+                return $"沉甸甸的不要了——{name} 折成抽奖币{goldTxt}";
             case PlayerJobId.Berserker:
-                return $"旧货碍手！{name} 折合金币{goldTxt}";
+                return $"旧货碍手！{name} 折成抽奖币{goldTxt}";
             case PlayerJobId.Ranger:
-                return $"换新的更好射——{name} 折合金币{goldTxt}";
+                return $"换新的更好射——{name} 折成抽奖币{goldTxt}";
             case PlayerJobId.Mage:
-                return $"魔力重组：{name} → 金币{goldTxt}";
+                return $"魔力重组：{name} → 抽奖币{goldTxt}";
             case PlayerJobId.Priest:
-                return $"旧物归尘，化为金币{goldTxt}（原：{name}）";
+                return $"旧物归尘，化为抽奖币{goldTxt}（原：{name}）";
             default:
-                return $"{name} 折合金币{goldTxt}";
+                return $"{name} 折成抽奖币{goldTxt}";
         }
     }
 

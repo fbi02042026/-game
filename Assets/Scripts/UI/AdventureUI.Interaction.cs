@@ -206,7 +206,7 @@ public partial class AdventureUI
     {
         var cg = btn.GetComponent<CanvasGroup>();
         if (cg == null) cg = btn.gameObject.AddComponent<CanvasGroup>();
-        float target = IsModeTabLocked(idx) ? 0.5f : 1f;
+        float target = IsModeTabLocked(idx) ? ModeTabLockAlpha : 1f;
         if (!Mathf.Approximately(cg.alpha, target)) cg.alpha = target;
         cg.blocksRaycasts = true;   // 锁态也要接点击（弹提示），只降透明度不关射线
     }

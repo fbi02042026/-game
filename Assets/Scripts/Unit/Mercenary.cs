@@ -236,6 +236,18 @@ public partial class Mercenary : UnitBase
     public void SetHireId(string id)
     {
         hireId = id;
+        // 【2026-10-31 T5 方案 B】Init 时 hireId 还没到，基底按 asset 首行取的（共用 asset 的佣兵
+        // 可能不是自己那行，如艾拉 H015 vs 米娅 H005 共用 gongshou101）。hireId 到手后发现
+        // 自己的花名册行 ≠ asset 首行 → 重建一次基底：SetupAttributes 现已优先按 hireId 取行，
+        // 临时buff/升星/养成/羁绊在 rebuild 内幂等重挂，非共用 asset 的佣兵零开销不走这里。
+        if (!string.IsNullOrEmpty(id)
+            && !string.IsNullOrEmpty(mercId)
+            && MercRosterDefs.TryGetByHireId(id, out var hireDef)
+            && MercRosterDefs.TryGetByAssetId(mercId, out var assetDef)
+            && hireDef.HireId != assetDef.HireId)
+        {
+            SetupAttributes(mercId, Mathf.Max(1, mercLevel));
+        }
         // 【2026-10-22 施工单 T8】局外星加成的装配时机：所有出场链路（RunDraftDirector.SpawnRunMerc /
         // RefreshMercUnit / PromoteMerc、BattleManager 出战队伍、引导替身）都是 Init → SetHireId 顺序，
         // 在这里统一补挂加成最稳 —— 幂等（_outStarApplied 挡重复），0 星是无操作。

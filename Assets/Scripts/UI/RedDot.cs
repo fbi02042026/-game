@@ -41,6 +41,9 @@ public static class RedDot
     public const string Talent = "nav.talent";
     /// <summary>2026-10-16：每日登录入口红点 —— 有可领的登录奖励时亮起。</summary>
     public const string DailyLogin = "dailylogin";
+    /// <summary>2026-10-31：看广告送佣兵活动入口红点（艾拉）—— 有可领里程碑时亮起；
+    /// 各礼盒的红点键见 AdMercEventSystem.MilestoneRedDotKey(i)（admerc.m0..m3）。</summary>
+    public const string AdMercEvent = "admerc";
 
     public static Sprite Sprite
     {
@@ -169,6 +172,8 @@ public static class RedDot
         var data = SaveSystem.Instance?.Data;
         Set(Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
         Set(DailyLogin, DailyLoginSystem.HasClaimable());
+        // 2026-10-31：看广告送佣兵活动（艾拉）——入口键 + 4 个礼盒键一起刷（内部已判存档未就绪）。
+        AdMercEventSystem.RefreshRedDots();
         AdventureCodex.RefreshRedDots();
     }
 }

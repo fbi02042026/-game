@@ -412,8 +412,15 @@ public class MercAscendUI : MonoBehaviour
         }
 
         // ---- 属性数值：基底走 ApplyCombatStats（与「获得佣兵」弹窗同源），等级取存档 ----
-        MercRosterDefs.ApplyCombatStats(def.AssetId, ResolveSavedLevel(_hireId, def),
-            out float hp, out float atk, out float defV, out float atkSpd, out float move, out float range);
+        // 【2026-10-31 T5 方案 B】优先按 hireId 取行（共用 asset 的佣兵各吃各的行，如艾拉 H015）。
+        // out 变量预初始化（C# 明确赋值分析要求，见 MercObtainPopupUI.Fill 同款注释）。
+        float hp = 0f, atk = 0f, defV = 0f, atkSpd = 0f, move = 0f, range = 0f;
+        bool statsByHire = !string.IsNullOrEmpty(_hireId)
+            && MercRosterDefs.TryApplyCombatStatsByHire(_hireId, ResolveSavedLevel(_hireId, def),
+                out hp, out atk, out defV, out atkSpd, out move, out range);
+        if (!statsByHire)
+            MercRosterDefs.ApplyCombatStats(def.AssetId, ResolveSavedLevel(_hireId, def),
+                out hp, out atk, out defV, out atkSpd, out move, out range);
         bool magic = Mercenary.UsesMagicAttack(def.AssetId);
 
         // ---- 攻/魔攻行二选一（2026-10-22 主人拍板「物攻佣兵只显示物攻 魔攻只显示魔攻」）----

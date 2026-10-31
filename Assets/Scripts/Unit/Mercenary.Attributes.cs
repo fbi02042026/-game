@@ -52,10 +52,23 @@ public partial class Mercenary : UnitBase
         _bondApplied = false;      // 【2026-10-27 羁绊】基底重建后羁绊乘区要重挂
         level = Mathf.Max(1, level);
 
-        if (MercRosterDefs.TryGetByAssetId(id, out _))
+        // 【2026-10-31 T5 方案 B】优先按 hireId 取行：共用 asset 的佣兵各吃各的花名册行
+        // （艾拉 H015 vs 米娅 H005 共用 gongshou101，asset 首行是米娅）。hireId 在 Init 阶段
+        // 还没设（出场链路都是 Init → SetHireId），此时退回 asset 首行；SetHireId 发现
+        // hire 行 ≠ asset 首行会重建一次基底（见 SetHireId），整条加成链幂等重挂。
+        // out 变量预初始化（C# 明确赋值分析要求，见 MercObtainPopupUI.Fill 同款注释）。
+        float hp = 0f, atk = 0f, def = 0f, atkSpd = 0f, move = 0f, range = 0f;
+        bool byHire = !string.IsNullOrEmpty(hireId)
+            && MercRosterDefs.TryApplyCombatStatsByHire(hireId, level,
+                out hp, out atk, out def, out atkSpd, out move, out range);
+        bool hasAssetRow = byHire || MercRosterDefs.TryGetByAssetId(id, out _);
+        if (!byHire && hasAssetRow)
         {
             MercRosterDefs.ApplyCombatStats(id, level,
-                out float hp, out float atk, out float def, out float atkSpd, out float move, out float range);
+                out hp, out atk, out def, out atkSpd, out move, out range);
+        }
+        if (hasAssetRow)
+        {
             attr.SetBaseAndCurrent(AttrType.MaxHp, hp);
             attr.SetBaseAndCurrent(AttrType.Attack, atk);
             attr.SetBaseAndCurrent(AttrType.Defense, def);

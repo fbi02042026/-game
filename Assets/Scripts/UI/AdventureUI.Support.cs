@@ -312,6 +312,9 @@ public partial class AdventureUI
         }
     }
 
+    /// <summary>【2026-10-31】关卡名右移 10 的一次性守卫（见 ApplyDetailTextStyle）。</summary>
+    bool _stageNameShiftedRight10;
+
     /// <summary>
     /// 关卡详情文字样式（字号 / 溢出）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
     /// 【2026-10-11 主人拍板】章节名 27 / 介绍 21 / 小标题 25；介绍框溢出改为可见，长句不再被吃掉后半截。
@@ -321,7 +324,17 @@ public partial class AdventureUI
     void ApplyDetailTextStyle()
     {
         if (stageNameLabel != null)
+        {
             stageNameLabel.fontSize = DetailNameFontSize;
+            // 【2026-10-31 主人拍板「关卡名字超出左边了 整体往右移动10」】
+            // 只挪这一次：Build / AutoBind 两条路都会进本方法，用守卫防重复叠加。
+            if (!_stageNameShiftedRight10)
+            {
+                _stageNameShiftedRight10 = true;
+                var rt = stageNameLabel.rectTransform;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x + 10f, rt.anchoredPosition.y);
+            }
+        }
         if (stageDescLabel != null)
         {
             stageDescLabel.fontSize = DetailDescFontSize;

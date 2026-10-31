@@ -62,12 +62,15 @@ public static class ArenaEnemySpawner
         // 会落在开战镜头右缘之外 → 双方互相看不见 → 全员站桩（Editor.log 实锤：
         // heroX 恒 -2.69 / velX=0，活怪=2、最近怪 6.5，整场对峙）。这里按开战镜头右缘
         // 收生成点，保证队尾也进镜头；玩家照常能看到对面站在右半场。
+        // 【2026-10-31 主人拍板「敌人从屏幕外走进来，不能突然出现」】交战位照旧按上面口径收进镜头，
+        // 但出生点改放右屏外，靠 Mercenary.BeginMapEnter 走到各自交战位（开打前定住、解冻才走）。
         float startOffset = 6.5f;
         var cam = Camera.main;
+        float limit = float.MaxValue;
         if (cam != null && cam.orthographic)
         {
             float halfW = cam.orthographicSize * cam.aspect;
-            float limit = cam.transform.position.x + halfW + GameConfig.COMBAT_VIEWPORT_MARGIN - 0.8f;
+            limit = cam.transform.position.x + halfW + GameConfig.COMBAT_VIEWPORT_MARGIN - 0.8f;
             float maxStart = limit - (squad.Count - 1) * 1.4f;
             if (baseX + startOffset > maxStart)
                 startOffset = Mathf.Max(1.5f, maxStart - baseX);
@@ -79,6 +82,9 @@ public static class ArenaEnemySpawner
             var e = squad[i];
             // 玩家半场右侧列队：横向铺开（间隔 1.4 世界单位），朝向由生成后 Face(-1) 定
             var pos = new Vector3(baseX + startOffset + i * 1.4f, UnitBase.GROUND_Y, z);
+            // 屏外出生点：镜头右缘（limit）再往外扩 1.2，纵向按序号再排开，保证整只都在屏外
+            if (limit != float.MaxValue)
+                pos.x = limit + 1.2f + i * 0.45f;
             // 【2026-10-31 主人拍板「机器人一定要有玩家的形象」】isHeroFigure 条目 = 玩家形象单位
             //（视觉 Units/wanjia，属性/技能按模板职业佣兵查表）；其余照旧敌方佣兵。
             var merc = MercenaryManager.Instance == null ? null
@@ -89,6 +95,8 @@ public static class ArenaEnemySpawner
             merc.SetDisplayName(ctx.BotName);   // 名字牌 = 机器人名（主人拍板）
             merc.SetPartyIndex(i);              // 车道偏移按队内序错开
             merc.Face(-1);                      // 面向玩家半场（左）
+            // 【2026-10-31 主人拍板】屏外走入：目标 = 各自的交战位（镜头内列队点），到位后交还普通 AI
+            merc.BeginMapEnter(baseX + startOffset + i * 1.4f, -1);
             // 花名册默认技能（主动+被动）——敌方队伍照常放技能（牧师奶队友等）
             MercRosterDefs.GetSkillIds(e.mercId, out string activeId, out string passiveId);
             if (!string.IsNullOrEmpty(activeId) || !string.IsNullOrEmpty(passiveId))

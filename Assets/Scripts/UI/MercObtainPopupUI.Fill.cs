@@ -216,8 +216,16 @@ public partial class MercObtainPopupUI : MonoBehaviour
         }
 
         // 4) 数值：生命/攻击/防御走 ApplyCombatStats（只随等级）
-        MercRosterDefs.ApplyCombatStats(def.AssetId, Mathf.Max(1, card.MercLevel),
-            out float hp, out float atk, out float defVal, out float atkSpd, out float move, out float range);
+        // 【2026-10-31 T5 方案 B】优先按 hireId 取行（共用 asset 的佣兵各吃各的行，如艾拉 H015）；
+        // hireId 取不到再退回 asset 首行（旧口径）。out 变量预初始化（C# 明确赋值分析要求，
+        // 「条件 && F(out x)」后即使有互补赋值分支，编译器也判不了已赋值）。
+        float hp = 0f, atk = 0f, defVal = 0f, atkSpd = 0f, move = 0f, range = 0f;
+        bool statsByHire = !string.IsNullOrEmpty(card.HireId)
+            && MercRosterDefs.TryApplyCombatStatsByHire(card.HireId, Mathf.Max(1, card.MercLevel),
+                out hp, out atk, out defVal, out atkSpd, out move, out range);
+        if (!statsByHire)
+            MercRosterDefs.ApplyCombatStats(def.AssetId, Mathf.Max(1, card.MercLevel),
+                out hp, out atk, out defVal, out atkSpd, out move, out range);
         SetText(_attrHp, "Panel/you/AttrPanel/AttrHpRoot/AttrHp", Mathf.RoundToInt(hp).ToString());
         // 法术型佣兵：攻击/防御两行换成「法术攻击/法术防御」（数值同源，只换标签）
         bool magic = Mercenary.UsesMagicAttack(def.AssetId);

@@ -666,6 +666,9 @@ public class GuildHallUI : MonoBehaviour
         ArenaEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 右列黑底还原+按两按钮拉长（2026-10-30 主人指令，图 meta 56 字符断链走路径加载）
         RestoreRightBarBg();
+        // 看广告送佣兵入口（2026-10-31 主人拍板 + 主人手摆）：预制体 RightBar 下主人手摆的
+        // 「广告佣兵」节点（位置/图标/文案/黑底主人已手调），运行时只接线 + 挂红点，不克隆不动排版。
+        AdMercEventEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架

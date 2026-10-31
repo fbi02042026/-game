@@ -51,33 +51,31 @@ public static class ArenaShopGoods
             }
         }
 
-        /// <summary>确认弹窗正文：价格 / 效果 / 已拥有说明（标题 = 商品名，走 StaminaConfirmPopup 通用弹窗）。</summary>
+        /// <summary>确认弹窗正文：效果 / 规则 / 已拥有说明（价格由弹窗独立价格行显示，2026-10-31 起正文不再重复写价）。</summary>
         public string BuildConfirmBody(SaveData data)
         {
-            int p = ArenaShopGoods.PriceOf(data, this);
             bool owned = ArenaShopGoods.IsOwned(data, this);
             var sb = new System.Text.StringBuilder();
             switch (kind)
             {
                 case GoodKind.Bow:
-                    sb.AppendLine("游侠限定主手 · 稀有");
-                    sb.AppendLine($"价格 {p} 积分 · 买断制");
+                    sb.AppendLine("游侠限定主手 · 稀有 · 买断制");
                     sb.AppendLine("获得时随机附 1 条词条，出战游侠自动替换初始主手。");
                     sb.Append(owned ? "已拥有 · 买断制，不能再买第二把。" : "风一样的箭，一次买断终身保箭。");
                     break;
                 case GoodKind.Merc:
                     sb.AppendLine(owned ? "已拥有 · 再次购买转本命碎片" : "首购获得佣兵本体");
-                    sb.AppendLine($"价格 {p} 积分"
-                        + (repurchasePrice > 0 ? $"（复购 {repurchasePrice}/次 → 本命碎片 ×{MercStarDefs.DupFragCount(frameRarity)}）" : ""));
+                    if (repurchasePrice > 0)
+                        sb.AppendLine($"复购 {repurchasePrice}/次 → 本命碎片 ×{MercStarDefs.DupFragCount(frameRarity)}");
                     sb.Append(desc);
                     break;
                 case GoodKind.Gold:
                     sb.AppendLine($"金币 ×{grantGold}，直接到账。");
-                    sb.Append($"价格 {p} 积分 · 每周限 {weeklyLimit} 次。小钱钱到手，安全感拉满。");
+                    sb.Append($"每周限 {weeklyLimit} 次。小钱钱到手，安全感拉满。");
                     break;
                 case GoodKind.Badge:
                     sb.AppendLine($"{badgeJobKey}徽记（{badgeTier}档）×{badgeCount}。");
-                    sb.Append($"价格 {p} 积分 · 每周限 {weeklyLimit} 次。职业固定不迷路，买来就给限定佣兵升星。");
+                    sb.Append($"每周限 {weeklyLimit} 次。职业固定不迷路，买来就给限定佣兵升星。");
                     break;
             }
             return sb.ToString();

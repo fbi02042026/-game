@@ -86,18 +86,24 @@ public class ArenaPopupUI : MonoBehaviour
     // ── 排行奖励面板（2026-10-29 深夜主人拍板：节点已搭进主预制体，自带 Dim 黑底；代码只管开关）──
     GameObject _rewardRoot;
 
-    // ── 竞技商店（2026-10-30 积分版：主人手摆 Top/竞技商店Btn 开关「竞技商店」页；
-    // 页内 RecordsBox（689×739）+ 底框/积分icon(余额)/RTitle/RCloseBtn/商品（示例单元）。
-    // 商品单元按需求收敛为「图标+积分价格」：克隆排格 4×2，横条/商品名(1)/购买 三件多余节点克隆里隐藏，
-    // 示例单元本体恒隐藏（同 RowTemplate 口径）。排版不改 prefab，全部运行时摆（铁律 3）。──
+    // ── 竞技商店（2026-10-30 积分版；2026-10-31 主人拍板改版：「把所有商品按这个模式加上 做成上下滑动列表
+    // 注意商品图框按稀有度换 点击图标弹出信息框」）──
+    // 页内 RecordsBox(689×739) + 人/底框/RTitle/积分icon(余额)/RCloseBtn + 商品（主人手摆的行卡模板）。
+    // 商品单元 = 行卡版式（横条行底 + 商品图框>icon + 商品名 + 商品名 (1)价格 + 购买钮），排版全以预制体为准，
+    // 代码只设图/填字/接线，不摆位（铁律 3）。货架 = 运行时搭的纵向 ScrollRect（ShopList>ShopViewport>ShopContent），
+    // 8 件 = ArenaShopGoods.AllGoods 单列往下排，首行位置/行高以模板实测几何为准；模板恒隐藏（同 RowTemplate 口径）。
+    // 图框一律按稀有度设（MercHireSession.LoadRarityFrame）；点图标（图框）或点「购买」钮
+    // → ArenaShopInfoPopupUI 商品信息弹窗（按「获得技能」弹窗同款皮，带价格+现有积分）。──
     const string ShopBtnName = "竞技商店Btn";
     const string ShopPageName = "竞技商店";
     GameObject _shopRoot;
     RectTransform _shopBox;          // 页内 RecordsBox（货架格子容器）
+    ScrollRect _shopScroll;          // 货架纵向滚动（每次打开回顶部）
     GameObject _shopUnitTemplate;    // 「商品」示例单元（克隆源，恒隐藏）
     Text _shopBalanceText;           // 积分icon 下的余额数字
     Text _shopBannerText;            // 赛季末清零横幅（运行时建，最后 3 天显示）
-    readonly List<GameObject> _shopUnits = new List<GameObject>();   // 8 个克隆单元（下标对齐 ArenaShopGoods.AllGoods）
+    readonly List<GameObject> _shopUnits = new List<GameObject>();   // 克隆单元（显示顺序，与 _shopGoods 同下标）
+    readonly List<ArenaShopGoods.Good> _shopGoods = new List<ArenaShopGoods.Good>();   // 显示顺序的商品（=AllGoods 顺序，2026-10-31 起纵向列表）
 
     // 行底色（运行时在克隆与换位时写；预制体里摆的同款色只是初始观感）
     readonly Color _rowColorA = new Color(0.21f, 0.20f, 0.28f, 0.95f);
@@ -193,6 +199,7 @@ public class ArenaPopupUI : MonoBehaviour
         if (_recordsRoot != null) _recordsRoot.SetActive(false);
         if (_rewardRoot != null) _rewardRoot.SetActive(false);
         if (_shopRoot != null) _shopRoot.SetActive(false);   // 商店页一并收起（关弹窗不留残页）
+        ArenaShopInfoPopupUI.CloseIfOpen();   // 商品信息弹窗是 DDOL 独立实例，主弹窗关了顺带收掉
         _pendingRowIdx = -1;
         gameObject.SetActive(false);
     }
@@ -924,15 +931,14 @@ public class ArenaPopupUI : MonoBehaviour
 
     // ───────────────────────── 竞技商店（2026-10-30 积分版） ─────────────────────────
     // 页面结构（主人手摆，名字/层级可改、美术排版保持原样）：
-    // 竞技商店(全屏页) > RecordsBox(689×739) > 底框 / RTitle / 积分icon>Text(余额) / RCloseBtn / 商品(示例单元)
-    // 商品单元收敛为「图标+积分价格」：克隆时隐藏 横条 / 商品名 (1) / 购买 三件多余节点（需求①）。
-    // 货架 8 件 = ArenaShopGoods.AllGoods（1 弓 + 3 佣兵 + 1 金币包 + 3 徽记包），4 列 × 2 行克隆排格。
+    // 竞技商店(全屏页) > RecordsBox(689×739) > 人 / 底框 / RTitle / 积分icon>Text(余额) / RCloseBtn / 商品(示例单元)
+    // 货架 8 件 = ArenaShopGoods.AllGoods（1 弓 + 3 佣兵 + 1 金币包 + 3 徽记包），运行时纵向滚动列表单列排。
 
-    /// <summary>格子布局：4 列 × 2 行（RecordsBox 689 宽内 165 步进不溢出，行位避开顶部标题区/余额行）。</summary>
-    const int ShopCols = 4;
-    const float ShopStepX = 165f;
-    const float ShopStepY = 140f;
-    const float ShopGridY0 = 40f;    // 首行中心 y（RecordsBox 中心锚；第二行 -100）
+    // 货架滚动区（RecordsBox 中心锚坐标）：顶部让开余额行（积分icon 底 ≈ y137），底部到框底 y-345。
+    const float ShopShelfTopY = 137f;
+    const float ShopShelfBottomY = -345f;
+    /// <summary>行间距 = 行高 + 12（沿用榜单 8px 行距的呼吸感，行卡更高取 12）。</summary>
+    const float ShopRowGap = 12f;
 
     void BuildShop()
     {
@@ -998,7 +1004,7 @@ public class ArenaPopupUI : MonoBehaviour
     void BuildShopUnits()
     {
         if (_shopUnitTemplate != null || _shopBox == null) return;
-        var unitT = UiFind.Deep(_shopBox, "商品");
+        var unitT = UiFind.Deep(_shopBox, "商品") as RectTransform;
         if (unitT == null)
         {
             Debug.LogError("[Arena] 商店页缺节点：商品（示例单元，克隆源）");
@@ -1008,40 +1014,58 @@ public class ArenaPopupUI : MonoBehaviour
         _shopUnitTemplate = unitT.gameObject;
         _shopUnitTemplate.SetActive(false);   // 模板恒隐藏（防手滑；同 RowTemplate 口径）
 
-        for (int i = 0; i < ArenaShopGoods.AllGoods.Length; i++)
+        // ── 运行时搭纵向滚动列表（预制体里只有模板单元，滚动结构代码建；同 BuildRecords 口径）──
+        // ShopList(ScrollRect) > ShopViewport(RectMask2D + 透明 Image 接收拖拽) > ShopContent(顶中锚)
+        float shelfH = ShopShelfTopY - ShopShelfBottomY;
+        var listRt = NewUINode(_shopBox, "ShopList", typeof(ScrollRect));
+        listRt.anchorMin = listRt.anchorMax = new Vector2(0.5f, 0.5f);
+        listRt.pivot = new Vector2(0.5f, 0.5f);
+        listRt.sizeDelta = new Vector2(_shopBox.sizeDelta.x, shelfH);
+        listRt.anchoredPosition = new Vector2(0f, (ShopShelfTopY + ShopShelfBottomY) * 0.5f);
+
+        var viewportRt = NewUINode(listRt, "ShopViewport", typeof(RectMask2D), typeof(Image));
+        Stretch(viewportRt);
+        viewportRt.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0f);   // 透明，只做拖拽 raycast（ScrollRect 标准摆法）
+        var contentRt = NewUINode(viewportRt, "ShopContent");
+
+        var scroll = listRt.GetComponent<ScrollRect>();
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 15f;
+        scroll.viewport = viewportRt;
+        scroll.content = contentRt;
+        _shopScroll = scroll;
+
+        // 行几何以预制体模板实测为准（榜单 RowTemplate 同口径）：行高取横条高（缺则取单元高），步进 = 行高 + 间隙
+        var stripT = UiFind.Deep(_shopUnitTemplate.transform, "横条") as RectTransform;
+        float rowH = stripT != null ? stripT.sizeDelta.y : unitT.sizeDelta.y;
+        float rowStep = rowH + ShopRowGap;
+        float firstOffset = ShopShelfTopY - unitT.anchoredPosition.y;   // 模板摆在哪，首行就在哪（距视口顶）
+
+        var goods = new List<ArenaShopGoods.Good>(ArenaShopGoods.AllGoods);
+        contentRt.anchorMin = contentRt.anchorMax = contentRt.pivot = new Vector2(0.5f, 1f);
+        contentRt.anchoredPosition = Vector2.zero;
+        contentRt.sizeDelta = new Vector2(listRt.sizeDelta.x, firstOffset + (goods.Count - 1) * rowStep + rowH * 0.5f + 20f);
+
+        for (int i = 0; i < goods.Count; i++)
         {
-            var good = ArenaShopGoods.AllGoods[i];
-            var row = Object.Instantiate(_shopUnitTemplate, _shopBox);
+            var good = goods[i];
+            var row = Object.Instantiate(_shopUnitTemplate, contentRt);
             row.name = "ShopUnit_" + good.id;
             row.SetActive(true);
             var rt = (RectTransform)row.transform;
-            int col = i % ShopCols;
-            int r = i / ShopCols;
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(
-                ((col - (ShopCols - 1) * 0.5f) * ShopStepX),
-                ShopGridY0 - r * ShopStepY);
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);   // 保持模板中心锚语义：anchoredPosition 即行中心
+            rt.anchoredPosition = new Vector2(unitT.anchoredPosition.x, -(firstOffset + i * rowStep));
             rt.localScale = Vector3.one;
             _shopUnits.Add(row);
+            _shopGoods.Add(good);
 
-            // 需求①：货架只放「图标 + 积分价格」——示例单元里多余的 横条/商品名 (1)/购买 隐藏
-            HideChild(row.transform, "横条");
-            HideChild(row.transform, "商品名 (1)");
-            HideChild(row.transform, "购买");
-
-            // 2026-10-31 主人报「商店排版不对」：模板子节点是宽横卡版式（商品图框 x≈-78.9 / 商品名 x≈+26.8，
-            // 都戳出 100×100 格）→ 克隆实例按格子中心重排：图框居中偏上、价格居图框正下方。
-            // 只动克隆实例（模板恒隐藏不动，铁律 23/24）；格子内排版是商店网格必要介入（同上阵列口径）。
-            var frameT = UiFind.Deep(row.transform, "商品图框") as RectTransform;
-            if (frameT != null) frameT.anchoredPosition = new Vector2(0f, 10f);
-            var priceRt = UiFind.Deep(row.transform, "商品名") as RectTransform;
-            if (priceRt != null) priceRt.anchoredPosition = new Vector2(0f, -38f);
-
-            // 需求②（2026-10-30 16:55 主人拍板「已经有的就按有的效果来」）：prefab 已给图 → 原样用不覆盖；
-            // 现状未给（空 Image）→ 按说明来：佣兵用 MercHireSession.LoadRarityFrame（头像框档），
-            // 其余（弓/金币/徽记）按稀有度选同套底框。上一轮用的 LoadTavernCardFrame（204×248 卡框）弃用。
-            var frameImg = UiFind.Deep(row.transform, "商品图框")?.GetComponent<Image>();
-            if (frameImg != null && frameImg.sprite == null)   // 有图不覆盖（prefab 摆的优先）
+            // 图框按稀有度设图（2026-10-31 主人拍板「商品图框按稀有度换」）——只设图，不动主人摆的位置尺寸
+            var frameT = UiFind.Deep(row.transform, "商品图框");
+            var frameImg = frameT != null ? frameT.GetComponent<Image>() : null;
+            if (frameImg != null)
             {
                 var frameSp = MercHireSession.LoadRarityFrame(good.frameRarity);
                 if (frameSp == null)
@@ -1052,8 +1076,19 @@ public class ArenaPopupUI : MonoBehaviour
                     frameImg.preserveAspect = true;
                 }
             }
+            else
+                Debug.LogError("[Arena] 商品单元缺节点/组件：商品图框（无 Image，稀有度底框挂不上）");
 
-            // 图标内容：弓=模板图标 / 佣兵=头像 / 金币=icon_gold / 徽记=职业徽记（缺图 LogError 不兜底）
+            // 点图标（图框）弹信息框（2026-10-31 主人拍板「点击图标弹出信息框」；点 icon 子节点会冒泡到图框按钮）
+            if (frameT != null)
+            {
+                var iconBtn = frameT.GetComponent<Button>();
+                if (iconBtn == null) iconBtn = frameT.gameObject.AddComponent<Button>();
+                var capturedIcon = good;
+                iconBtn.onClick.AddListener(() => OnShopUnitClicked(capturedIcon));
+            }
+
+            // 图标（按货架类型取图，缺图不兜底）
             var iconImg = UiFind.Deep(row.transform, "icon")?.GetComponent<Image>();
             if (iconImg != null)
             {
@@ -1067,18 +1102,35 @@ public class ArenaPopupUI : MonoBehaviour
                 }
             }
 
-            // 点单元 → 购买/取消确认框（走 StaminaConfirmPopup 通用弹窗，禁手搓第二套）
-            var btn = row.GetComponent<Button>();
-            if (btn == null) btn = row.AddComponent<Button>();
-            var captured = good;
-            btn.onClick.AddListener(() => OnShopUnitClicked(captured));
+            // 名字：建格写一次（DisplayName；价格随 RefreshShop 动态刷「商品名 (1)」）
+            var nameText = UiFind.Deep(row.transform, "商品名")?.GetComponent<Text>();
+            if (nameText != null) nameText.text = good.DisplayName;
+            else Debug.LogError("[Arena] 商品单元缺文本节点：商品名（名字不显示）");
+
+            // 购买钮（prefab 无 Button，运行时补；点它 → 商品信息弹窗，与点图标同一条出口）
+            var buyT = UiFind.Deep(row.transform, "购买");
+            if (buyT != null)
+            {
+                var buyBtn = buyT.GetComponent<Button>();
+                if (buyBtn == null) buyBtn = buyT.gameObject.AddComponent<Button>();
+                var captured = good;
+                buyBtn.onClick.AddListener(() => OnShopUnitClicked(captured));
+            }
+            else
+                Debug.LogError("[Arena] 商品单元缺节点：购买（购买钮不显示）");
         }
     }
 
-    static void HideChild(Transform root, string name)
+    /// <summary>运行时建 UI 节点（带 RectTransform；extra 组件随建，SetParent(false) 保持本地值）。</summary>
+    static RectTransform NewUINode(Transform parent, string name, params System.Type[] extra)
     {
-        var t = UiFind.Deep(root, name);
-        if (t != null) t.gameObject.SetActive(false);
+        var types = new System.Type[extra.Length + 1];
+        types[0] = typeof(RectTransform);
+        for (int i = 0; i < extra.Length; i++) types[i + 1] = extra[i];
+        var go = new GameObject(name, types);
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(parent, false);
+        return rt;
     }
 
     /// <summary>商品图标按货架类型取图（缺图返回 null 由调用方 LogError）。</summary>
@@ -1111,24 +1163,26 @@ public class ArenaPopupUI : MonoBehaviour
         }
     }
 
-    /// <summary>点商品 → 确认弹窗（标题=商品名；正文=价格/效果/已拥有说明）。置灰两档（键仍可点，点击 toast 不入账）：
-    /// ① 积分不足 → toast「积分不足」；② 佣兵满星（2026-10-30 16:45 拍板「佣兵满星购买按钮变灰」）
-    /// → toast「已满星，先拿碎片去升星吧」（TryBuy 既有拦截，不扣分）。</summary>
+    /// <summary>点「购买」→ 商品信息弹窗（2026-10-31 主人拍板「按照技能那个信息弹窗来」：
+    /// 走 ArenaShopInfoPopupUI（同「获得技能」弹窗皮），弹窗带 价格行 + 现有积分（主人要求
+    /// 「弹窗上要加个价格」「也要玩家的积分总量」）。置灰两档（键仍可点，点击 toast 不入账）：
+    /// ① 积分不足；② 佣兵满星（判定与 TryBuy 拦截同源）。确认回调里做购买（判定/扣账仍在这边）。</summary>
     void OnShopUnitClicked(ArenaShopGoods.Good good)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null) return;
         int price = ArenaShopGoods.PriceOf(data, good);
         bool afford = data.arenaPoints >= price;
-        // 需求⑥：佣兵满星 → 购买键同积分不足样式置灰（判定口径与 TryBuy 拦截同源：OutStarOf ≥ MaxOutStar）
         bool fullStar = good.kind == ArenaShopGoods.GoodKind.Merc
             && ArenaShopGoods.IsOwned(data, good)
             && MercStarSystem.OutStarOf(good.hireId) >= MercStarDefs.MaxOutStar;
-        // 弹窗正文追加周限进度（周限商品），让玩家知道还剩几次
+        // 弹窗正文：效果/规则 + 周限进度（价格已独立成价格行，正文不再重复写价）
         string body = good.BuildConfirmBody(data);
         if (good.weeklyLimit > 0)
             body += $"\n本周已购 {ArenaShopGoods.WeekBuyCount(data, good.id)}/{good.weeklyLimit} 次";
-        StaminaConfirmPopup.Show(good.DisplayName, body, "购买", () =>
+        ArenaShopInfoPopupUI.Show("商品信息", good.DisplayName,
+            $"价格 {price} 积分 · 现有 {data.arenaPoints}", body,
+            ShopIconFor(good), !afford || fullStar, () =>
         {
             var d2 = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
             if (d2 == null) return;
@@ -1141,7 +1195,6 @@ public class ArenaPopupUI : MonoBehaviour
             if (!string.IsNullOrEmpty(msg)) GlobalToastUI.Show(msg, true);
             RefreshShop();
         });
-        if (!afford || fullStar) StaminaConfirmPopup.SetOkGray(true);
     }
 
     void ShowShop()
@@ -1151,6 +1204,7 @@ public class ArenaPopupUI : MonoBehaviour
         ArenaRules.EnsurePeriods(data);   // 幂等：跨天/跨月对齐（顺带注册逐风长弓模板）
         _shopRoot.SetActive(true);
         _shopRoot.transform.SetAsLastSibling();
+        if (_shopScroll != null) _shopScroll.verticalNormalizedPosition = 1f;   // 每次打开回顶部
         RefreshShop();
     }
 
@@ -1182,11 +1236,11 @@ public class ArenaPopupUI : MonoBehaviour
                     : $"本赛季积分 {left} 日后清零，速花！";
         }
 
-        for (int i = 0; i < _shopUnits.Count && i < ArenaShopGoods.AllGoods.Length; i++)
+        for (int i = 0; i < _shopUnits.Count && i < _shopGoods.Count; i++)
         {
-            var good = ArenaShopGoods.AllGoods[i];
+            var good = _shopGoods[i];
             var unit = _shopUnits[i];
-            var priceT = UiFind.Deep(unit.transform, "商品名")?.GetComponent<Text>();
+            var priceT = UiFind.Deep(unit.transform, "商品名 (1)")?.GetComponent<Text>();
             if (priceT == null) continue;
             bool owned = ArenaShopGoods.IsOwned(data, good);
             bool soldOut = owned && good.repurchasePrice <= 0;   // 买断（弓）→ 变灰「已拥有」

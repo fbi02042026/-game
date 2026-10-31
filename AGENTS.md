@@ -158,6 +158,22 @@
 - 参考：`Docs/TapTap上架信息填写表_2026-10-04.md` §5（铁律 23）；历史版本流水见 `VERSION.md`。
 - 签名 keystore 必须与上一包一致，否则覆盖安装失败。
 
+## 4.6 UI 一律走摄像机模式 + 自动适配（2026-10-31 主人拍板）
+
+**以后所有界面/弹窗的 Canvas 全部是 Screen Space - Camera 模式，适配自动做，不许再用 Overlay / 写死 Match 参数。**
+
+1. 新建界面（弹窗、浮层、全屏页）：实例化后**一律调 `UICanvasSetup.ApplyPopup(canvas, sortOrder)`** 接管
+   （ScreenSpaceCamera + 绑 `ResolveUiCamera()` + 720×1280 参考分辨率 + match 走
+   `DesignAspectLetterbox.ResolveUiMatch()` 瘦屏自动按宽匹配 + 根铺满）；全屏页走 `UICanvasSetup.Apply`。
+2. DDOL 常驻弹窗：每次 `Show/Open` 先调 `UICanvasSetup.RefreshPopup(canvas, sortOrder)` 重绑相机 + 重算适配（幂等）。
+3. 预制体里 Canvas 自带的 Overlay / Match Width Or Height 只是初始值，运行时会被统一出口覆盖——
+   **不要在预制体里手调这些参数来"做适配"**，也不要新写一套缩放/裁边逻辑。
+4. 刘海/底部手势条避让走 `SafeAreaFitter`（顶/底栏 Offset 模式，统一入口 `EnsureTopOffset/EnsureBottomOffset/AddConfigured`，
+   **禁止直接 AddComponent\<SafeAreaFitter\>**）；瘦屏布局重锚定/垫黑底由 `UiLayoutStretch` 统一管，
+   已单独适配的界面登记在 `UiLayoutStretch.IndividuallyFitted`，通用规则整块跳过。
+5. 前车之鉴（2026-10-31）：广告送佣兵面板预制体 Overlay + 写死 Match Height，瘦屏上逻辑宽 < 720、
+   680 宽面板被左右裁掉——凡新界面不接统一出口，一律视为 bug 当场修。
+
 ## 5. 常用工具
 
 | 工具 | 用途 |

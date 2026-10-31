@@ -26,6 +26,21 @@ public static class RewardedAdBridge
     public static bool HasRealSdk { get; set; } = true;
 
     /// <summary>
+    /// 【2026-10-31】任意广告位成功核验后的全局广播（placement 参数 = 哪个点位）。
+    /// 看广告送佣兵活动「看任意地方的广告都可累计」的收口点：金币加号/体力/复活……
+    /// 任何 placement 成功都广播，AdMercEventSystem 订阅落账（本类不关心谁在听）。
+    /// 只在核验通过（ok=true）时发；先于各点位自己的 onComplete 回调——保证订阅方计数
+    /// 先落账，业务回调里刷 UI 能读到最新值。监听者异常被吞掉（LogError），绝不影响发奖主链路。
+    /// </summary>
+    public static event Action<string> RewardedSuccess;
+
+    static void NotifySuccess(string placement)
+    {
+        try { RewardedSuccess?.Invoke(placement); }
+        catch (Exception e) { Debug.LogError($"[RewardedAdBridge] RewardedSuccess 订阅者异常（不影响发奖）placement={placement}\n{e}"); }
+    }
+
+    /// <summary>
     /// 广告受理中（拉起 → 回调结束）。busy 期间新请求直接忽略（不回调、不排队）——
     /// 正在受理的那次广告回调归来会自然复位；连点被当作「没点」。
     /// </summary>
@@ -106,6 +121,7 @@ public static class RewardedAdBridge
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
         Debug.Log($"[RewardedAdBridge] 模拟激励视频成功: {placement}");
+        NotifySuccess(placement);   // 【2026-10-31】模拟成功同样广播（编辑器里活动累计链路才能验）
         onComplete?.Invoke(true);
 #else
         // 【2026-10-28 商业化加固】正式包且非 Android（如未来的微信小游戏包）没有真广告实现：
@@ -125,6 +141,7 @@ public static class RewardedAdBridge
             if (!_busy) return;              // 已被超时兜底收尾 → 迟到的真回调丢弃，绝不双发奖
             _busy = false;
             Debug.Log($"[RewardedAdBridge] 广告收尾 placement={placement} ok={ok}");
+            if (ok) NotifySuccess(placement);   // 【2026-10-31】成功先广播（活动累计等），再走点位发奖
             onComplete?.Invoke(ok);
         };
     }

@@ -133,8 +133,23 @@ public partial class AdventureUI
         foreach (var kv in _popGroups)
         {
             if (kv.Value == null) continue;
-            kv.Value.alpha = 1f;
+            kv.Value.alpha = TabFinalAlpha(kv.Key);   // 【2026-10-31 修】锁态标签还原到灰显 0.5，别盖回全亮
         }
+    }
+
+    /// <summary>左侧标签动画的最终 alpha（2026-10-31 修「进页锁态标签不灰、点一次才灰」）：
+    /// 锁态 = ModeTabLockAlpha（与 ApplyModeTabLock 同源），未锁 = 1。
+    /// 根因：CoPopOnce 结尾硬编码 alpha=1，把 ApplyModeTabLock 刚设好的 0.5 盖掉，
+    /// 要等下一次 RefreshAll 才灰回来 → 看起来「点一次才变灰」。非模式按钮（不在 modeButtons 里）按 1 处理。</summary>
+    float TabFinalAlpha(Transform t)
+    {
+        if (modeButtons != null)
+        {
+            for (int i = 0; i < modeButtons.Length; i++)
+                if (modeButtons[i] != null && modeButtons[i].transform == t)
+                    return IsModeTabLocked(i) ? ModeTabLockAlpha : 1f;
+        }
+        return 1f;
     }
 
     // ────────────────────────────────────────────────────
@@ -148,6 +163,8 @@ public partial class AdventureUI
         var rt = (RectTransform)t;
         Vector2 basePos = GetPopBasePos(t);
         var cg = GetPopGroup(t);
+        // 【2026-10-31 修「锁态标签进页不灰」】淡入目标 = 锁态灰显值（0.5），别冲到 1 盖掉 ApplyModeTabLock
+        float targetAlpha = TabFinalAlpha(t);
         // 标签是父级横向拉伸（sizeDelta.x = 0），屏外偏移按实际宽度现算；宽度拿不到时回落常量 LEFT_W
         float tabW = rt.rect.width > 0f ? rt.rect.width : LEFT_W;
         Vector2 fromPos = basePos + new Vector2(-(tabW + TabSlideOutMargin), 0f);
@@ -164,11 +181,11 @@ public partial class AdventureUI
             float u = Mathf.Clamp01(time / TabSlideDur);
             float ease = 1f - (1f - u) * (1f - u) * (1f - u);   // ease-out-cubic
             rt.anchoredPosition = new Vector2(Mathf.Lerp(fromPos.x, basePos.x, ease), basePos.y);
-            cg.alpha = Mathf.Clamp01(u / 0.4f);   // 前 40% 淡入，「从无到有」
+            cg.alpha = targetAlpha * Mathf.Clamp01(u / 0.4f);   // 前 40% 淡入，「从无到有」（终值=锁态灰显）
             yield return null;
         }
         rt.anchoredPosition = basePos;
-        cg.alpha = 1f;
+        cg.alpha = targetAlpha;
     }
 
     /// <summary>右侧页面弹出：缩放 0.92→1（轻回弹）+ 透明度 0→1，快速不拖节奏。</summary>

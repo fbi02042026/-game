@@ -60,6 +60,9 @@ public class GameSceneManager : Singleton<GameSceneManager>
 
     void LoadTownSceneAsync()
     {
+        // 【2026-10-31】全局 timeScale 兜底：结算面板 / 剧情 / 打击停顿任一路径异常中断时，
+        // 会把 timeScale 留在 0，回城后全场定格（只能杀进程）。切场景一律先恢复。
+        Time.timeScale = 1f;
         if (_loadingTown) return;
         _loadingBattle = false;
         // 【2026-10-10 主人拍板】回城后角色界面默认回到主角立绘（看板残留上次选的佣兵会顶掉主角）
@@ -133,6 +136,9 @@ public class GameSceneManager : Singleton<GameSceneManager>
     /// <summary>仅 Town → Battle 切场景；Town 内底栏切页不走这里</summary>
     public void LoadBattleScene()
     {
+        // 【2026-10-31】同 LoadTownSceneAsync：进战斗前把 timeScale 拉回 1，
+        // 防止上一场结算/剧情没复位就带进新场景。
+        Time.timeScale = 1f;
         if (_loadingBattle) return;
         // 【2026-10-20 主人拍板】进战斗必须先见 Loading：单例组件若未激活（异常场景兜底）就
         // 就地拉起，保证所有入口都走同一条异步链路（Loading → 场景+初始化就绪 → Loading 收 → 章节卡 → 开打），

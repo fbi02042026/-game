@@ -997,6 +997,25 @@ public static partial class GameConfig
         return v < 1 ? 1 : v;
     }
 
+    // —— 替换装备折抽奖币（【2026-10-31 主人拍板「替换掉的道具转换成抽奖币 要整十数根据稀有度和部位来」】）——
+    /// <summary>稀有度基础折币（整十）：白10 / 绿20 / 蓝40 / 紫60 / 橙100。下标 = (int)Rarity（1~5）。</summary>
+    static readonly int[] ScrapDraftCoinByRarity = { 0, 10, 20, 40, 60, 100 };
+
+    /// <summary>
+    /// 替换/分解装备折成<b>抽奖币</b>的金额（战斗内替换链路专用出口，唯一调用方 =
+    /// <see cref="WeaponLoadoutRules.GrantScrapGold"/>；城镇主动分解/结算折金仍走 <see cref="EquipScrapGold"/>）。
+    /// 金额 = 稀有度基础值（整十）× 部位系数（整数）→ 结果<b>恒为整十数</b>：白10 起、武器组 ×2、
+    /// 满档（橙·武器）200。数值要调只改 ScrapDraftCoinByRarity 与部位系数，出口不动。
+    /// </summary>
+    public static int EquipScrapDraftCoin(Rarity rarity, EquipSlotType slot)
+    {
+        int r = (int)rarity;
+        int v = (r >= 1 && r < ScrapDraftCoinByRarity.Length) ? ScrapDraftCoinByRarity[r] : 10;
+        if (slot == EquipSlotType.MainHand || slot == EquipSlotType.OffHand)
+            v *= 2;   // 武器组部位系数 ×2（双手武器经 ResolveLogicalSlot 归 MainHand，同样吃到）
+        return v < 10 ? 10 : v;   // 整十保底，绝不出现零头
+    }
+
     [Header("怪物章节文件夹映射")]
     /// <summary>
     /// 章节对应的怪物文件夹名（在 Icons/default size/no shadow/ 下）

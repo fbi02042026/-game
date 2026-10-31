@@ -19,6 +19,8 @@ public static class AdventureLogAchievements
         public int Mats;
         public int Talent;
         public int BackpackSlots;
+        /// <summary>体力上限加成。【2026-10-31 主人拍板「不要体力上限+1」后已无成就使用此字段】
+        /// 发放分支保留（走 SaveData.staminaBonusMax），将来若真要开，记得 StaminaSystem.Max 会认这个加成。</summary>
         public int StaminaMax;
         public string TitleId;
         public string FrameId;
@@ -41,7 +43,9 @@ public static class AdventureLogAchievements
             case "A007": return new AchReward { BackpackSlots = 1, Label = "背包扩容+1" };
             case "A008": return new AchReward { Talent = 5, Label = "天赋石×5" };
             case "A009": return new AchReward { Gold = 15, Label = "金币×15" };
-            case "A010": return new AchReward { StaminaMax = 1, Label = "体力上限+1" };
+            // 【2026-10-31 主人拍板「不要体力上限+1」】A010（进裂隙 10 次）原发体力上限 +1，
+            // 现改发天赋石 ×5（与 A008/A013 同档；若后续要换别的奖励，只改这一行 + Label）。
+            case "A010": return new AchReward { Talent = 5, Label = "天赋石×5" };
             case "A011": return new AchReward { Gold = 50, Label = "金币×50" };
             case "A012": return new AchReward { TitleId = "forest_untouched", Label = "称号「森林无伤者」" };
             case "A013": return new AchReward { Talent = 5, Label = "天赋石×5" };

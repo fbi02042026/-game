@@ -7,6 +7,40 @@ using UnityEngine;
 /// </summary>
 public partial class Mercenary : UnitBase
 {
+    // —— 屏外走入（2026-10-31 主人拍板「竞技场敌人从屏幕外走进来，不能突然出现」）——
+    // 仅敌方佣兵（isAlly=false，竞技场机器人小队）使用；己方抽卡入场走 SpawnRunMerc 的拴绳回队，不经过这里。
+    bool _mapEnterActive;
+    float _mapEnterTargetX;
+
+    /// <summary>从屏外缓步走到 targetX（到达后交还普通 AI）。速度 = 自身移速，朝向 faceDir。</summary>
+    public void BeginMapEnter(float targetX, int faceDir)
+    {
+        _mapEnterTargetX = targetX;
+        _mapEnterActive = true;
+        facingDir = faceDir > 0 ? 1 : -1;
+        ApplyFacing(facingDir);
+        if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+    }
+
+    /// <summary>走入段：UnitsCanAct=false（开打前）与怪物同口径定住不走进，解冻才走；到点收队交还普通 AI。</summary>
+    bool StepMapEnter()
+    {
+        float dx = _mapEnterTargetX - GetCombatX(this);
+        if (Mathf.Abs(dx) <= 0.08f)
+        {
+            _mapEnterActive = false;
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return false;
+        }
+        int dir = dx > 0f ? 1 : -1;
+        facingDir = dir;
+        ApplyFacing(facingDir);
+        if (rb != null) rb.velocity = new Vector2(dir * GetCombatMoveSpeed(), rb.velocity.y);
+        if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+        return true;
+    }
+
     protected override void AIUpdate()
     {
         if (TutorialStunned)
@@ -22,6 +56,21 @@ public partial class Mercenary : UnitBase
                 }
             }
             return;
+        }
+
+        // 屏外走入段（在冻场闸之前分流：解冻才走，开打前原地定住 —— 与 Monster 入场同口径）
+        if (_mapEnterActive)
+        {
+            if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+                ApplyLaneY(Time.deltaTime);
+                return;
+            }
+            bool entering = StepMapEnter();
+            ApplyLaneY(Time.deltaTime);
+            if (entering) return;   // 到点后落入下方正常 AI（索敌/交战）
         }
 
         if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)

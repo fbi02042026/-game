@@ -110,6 +110,9 @@ public class BattleSettlementUI : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        // 【2026-10-31】面板被异常销毁（没走 OnConfirm / 场景直接切走）时，
+        // 别把全场留在 Open() 压下的 timeScale=0 里 —— 否则回城后画面定格只能杀进程。
+        if (Time.timeScale <= 0.01f) Time.timeScale = 1f;
     }
 
     void BindRefs()

@@ -11,6 +11,7 @@ public class TutorialHintUI : MonoBehaviour
     CanvasGroup _group;
     Text _label;
     RectTransform _bannerRt;
+    Image _bannerImage;   // 【2026-10-31】横幅底框 Image（自定义底框切换 / 还原都要动它）
     RectTransform _follow;
     RectTransform _holeRt;
     Button _holeButton;
@@ -63,6 +64,39 @@ public class TutorialHintUI : MonoBehaviour
     /// Unity 默认 1.0；要再松/再紧改这一个常量。Build() 与 TryBindFromHierarchy() 两条路径都必须设。
     /// </summary>
     const float HintLineSpacing = 1.3f;
+
+    // ── 一次性自定义底框（【2026-10-31 主人拍板】抽奖引导用「像素风空白对话框指针」当底框）──
+    /// <summary>下一次 Show 用的自定义底框；null = 用默认引导底框。Hide 时自动清空，其余引导不受影响。</summary>
+    Sprite _bannerSpriteOverride;
+    /// <summary>横幅 Image 当前挂的是不是 override（还原默认底框用）。</summary>
+    bool _bannerSpriteApplied;
+
+    /// <summary>设置一次性自定义底框：下一次 Show 生效，Hide 后还原默认引导底框。</summary>
+    public void SetBannerSpriteOnce(Sprite sp)
+    {
+        _bannerSpriteOverride = sp;
+    }
+
+    /// <summary>Show 时按 override 换底框；没有 override 但上次挂过 override → 还原默认底框。</summary>
+    void ApplyBannerSpriteForShow()
+    {
+        if (_bannerImage == null) return;
+        if (_bannerSpriteOverride != null)
+        {
+            _bannerImage.sprite = _bannerSpriteOverride;
+            var bd = _bannerSpriteOverride.border;
+            _bannerImage.type = (bd.x + bd.y + bd.z + bd.w) > 0.01f
+                ? Image.Type.Sliced
+                : Image.Type.Simple;
+            _bannerImage.color = Color.white;
+            _bannerSpriteApplied = true;
+        }
+        else if (_bannerSpriteApplied)
+        {
+            _bannerSpriteApplied = false;
+            TryApplyBannerPlate(_bannerImage);
+        }
+    }
 
     public static TutorialHintUI Ensure()
     {
@@ -150,6 +184,7 @@ public class TutorialHintUI : MonoBehaviour
 
         var banner = transform.Find("Banner") as RectTransform;
         _bannerRt = banner;
+        _bannerImage = banner != null ? banner.GetComponent<Image>() : null;
         if (banner != null)
         {
             var hint = banner.Find("HintText");
@@ -227,6 +262,7 @@ public class TutorialHintUI : MonoBehaviour
 
         var banner = CreateImage(transform, "Banner", Color.white);
         TryApplyBannerPlate(banner);
+        _bannerImage = banner;   // 【2026-10-31】留引用：自定义底框切换 / 还原用
         _bannerRt = banner.rectTransform;
         _bannerRt.anchorMin = new Vector2(0.02f, 0.58f);
         _bannerRt.anchorMax = new Vector2(0.98f, 0.58f);
@@ -347,6 +383,7 @@ public class TutorialHintUI : MonoBehaviour
             return;
 
         EnsureBuilt();
+        ApplyBannerSpriteForShow();   // 【2026-10-31】有 override 换自定义底框，没有且上次换过 → 还原默认
         bool targetChanged = highlight != _follow;
         string prevHint = _label != null ? _label.text : "";
         if (_label != null) _label.text = text ?? "";
@@ -422,6 +459,7 @@ public class TutorialHintUI : MonoBehaviour
     public void Hide()
     {
         _hard = false;
+        _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         if (_group != null)
         {
             _group.alpha = 0f;

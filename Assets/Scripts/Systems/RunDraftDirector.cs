@@ -467,7 +467,7 @@ public class RunDraftDirector : MonoBehaviour
         // 玩家选择留着旧的：新件折成局内币（【2026-10-18 主人拍板】拆分改币，ScrapEquip → GrantScrapGold
         // 自带提示与发币；不再发 DecomposeMat）
         bag.ScrapEquip(eq);
-        done?.Invoke(true, $"{NameOf(card, eq)} 已折合金币");   // 【2026-10-18 双钱包拆分】折金进「本局获得金币」
+        done?.Invoke(true, $"{NameOf(card, eq)} 已折成抽奖币");   // 【2026-10-31 主人拍板】统一叫抽奖币
     }
 
     static string NameOf(DraftCard card, EquipInstance eq)
@@ -824,10 +824,14 @@ public class RunDraftDirector : MonoBehaviour
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : 0f;
         int slot = mm.GetActiveMercs().Count;
         float baseX;
-        if (walkInFromLeft && hero != null && TryGetMercWalkInX(hero, out float enterX))
-            baseX = enterX;                                  // 屏外左走入（仅抽奖入队路径）
+        // 【2026-10-31 主人报修「抽到佣兵后没有立即上阵」】屏外走入只在战斗已开打后生效：
+        // 进关阶段（首波未刷，UnitsCanAct=false）佣兵 AI 被冻住，屏外生成 = 定在屏外，
+        // 玩家看不到也不在编队位 —— 改回旧口径直接生成在编队位，立即上阵。
+        // 战斗中抽到（首波已刷）仍走 10-29 拍板的「左边屏外走入」。
+        if (walkInFromLeft && bm._firstWaveSpawned && hero != null && TryGetMercWalkInX(hero, out float enterX))
+            baseX = enterX;                                  // 屏外左走入（战斗中抽奖入队路径）
         else if (hero != null)
-            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);   // 原口径：编队位直接生成
+            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);   // 编队位直接生成（开打前抽奖/还原/羁绊共用）
         else
             baseX = MercSpawnOffsetX;                        // 无英雄参照时的兜底（同旧口径）
 

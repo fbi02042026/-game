@@ -16,7 +16,7 @@ using UnityEngine.UI;
 ///
 /// <para>全程 unscaled 时间（抽奖阶段战斗冻住，timeScale 可能为 0）。</para>
 ///
-/// <para>立绘：<c>Resources/UI/Icons/佣兵立绘/佣兵立绘_{hireId}.png</c>（Art 同名图复制入 Resources）。
+/// <para>立绘：<c>Resources/UI/Icons/MercStand/{hireId}.png</c>（2026-10-31 起与全项目立绘同一目录）。
 /// 名字颜色按稀有度走 <see cref="RarityPalette"/>（主人：名字要和稀有度对齐）。</para>
 ///
 /// <para>取不到图 / 找不到节点 → LogError 后不播（fail closed，不静默当成功，不兜底造节点）。</para>
@@ -30,9 +30,12 @@ public class MercJoinBannerUI : MonoBehaviour
     const float FadeOutSec = 1.60f;    // 过中间后：向右极慢缓行，总时长（前半段不透明=稍作停留）
     const float CreepDistance = 50f;   // 过中间后继续向右缓行的总距离（px，慢到肉眼近似停留）
 
-    /// <summary>立绘资源目录：按路径加载，不依赖 guid。</summary>
-    const string PortraitFolder = "UI/Icons/佣兵立绘/";
-    const string PortraitPrefix = "佣兵立绘_";
+    /// <summary>立绘资源目录：按路径加载，不依赖 guid。
+    /// 【2026-10-31 瘦身】原读 <c>UI/Icons/佣兵立绘/佣兵立绘_{id}.png</c>，与 <c>UI/Icons/MercStand/{id}.png</c>
+    /// 是**同一批图的第二份**（MD5 全同，Resources 里白占 22MB，且重复内容会触发团结签发 56 字符 guid）。
+    /// 全项目立绘唯一出口是 MercStand，这里跟着改过去；改完 佣兵立绘 目录就没有运行时加载点了。</summary>
+    const string PortraitFolder = "UI/Icons/MercStand/";
+    const string PortraitPrefix = "";
 
     /// <summary>BattleUI 下主人摆好的节点名（2026-10-18 由「佣兵入队」改英文：中文节点名在预制体 YAML 里被转义，排查易误判）。</summary>
     const string NodeName = "MercJoinBanner";

@@ -195,7 +195,8 @@ public class BattleSideHud : MonoBehaviour
         _waveBtn.targetGraphic = img;
         _waveBtn.onClick.AddListener(OnWaveClicked);
 
-        _waveTitle = CreateText(waveGo.transform, "WaveLine", "下一波 8", 44, TextAnchor.MiddleCenter,
+        // 【2026-10-31 主人拍板「下一波的字缩小20%」】字号 44 → 35（44 × 0.8 ≈ 35，四舍五入取整）。
+        _waveTitle = CreateText(waveGo.transform, "WaveLine", "下一波 8", 35, TextAnchor.MiddleCenter,
             Vector2.zero, new Vector2(222f, 60f));
         _waveTitle.color = new Color(1f, 0.28f, 0.22f, 0.98f);
         _waveTitle.fontStyle = FontStyle.Bold;

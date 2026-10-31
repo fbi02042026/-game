@@ -119,8 +119,11 @@ public static class ArenaRules
     public const int WinCapMax = 5;
 
     // ── 阀门战力系数（2026-10-30 晚拍板「真战斗版阀门」：不掷骰判胜负，改对手战力压制/放水）──
-    /// <summary>必赢/保底放水系数：新手必赢 / 连输保底 / 低分保底时敌方战力 × 此值（校准到 ≈95% 赢，可调）。</summary>
-    public const float ValveEasePowerMul = 0.6f;
+    /// <summary>必赢/保底放水系数：新手必赢 / 连输保底 / 低分保底时敌方战力 × 此值（校准到 ≈95% 赢，可调）。
+    /// 【2026-10-31 重校准】0.6 是旧换算公式（敌人只有标称 3 折）时代校准的；DeriveUnitLevelStar 修正 +
+    /// 低分段人数 1→2 后，0.6 的「放水」实测是势均力敌（Editor.log 三连败实锤），按新公式重校到 0.35：
+    /// 玩家战力 1150 锚 → 2 单位各 ≈200 预算 = 2×Lv1★1（星级 1 不触发等效等级加成），真放水。</summary>
+    public const float ValveEasePowerMul = 0.35f;
     /// <summary>熔断加压系数：连赢到熔断目标时敌方战力 × 此值（校准到 ≈95% 输，防升太快，可调）。</summary>
     public const float ValveHardPowerMul = 1.9f;
     /// <summary>赢一场的金币（2026-10-30 16:45 主人拍板恢复照发；走 ResourceWallet 入账，胜局结算面板有金币格）。</summary>
@@ -1099,7 +1102,9 @@ public static class ArenaRules
         int newPos = 0;
         for (int i = 0; i < data.arenaBots.Count; i++)
         {
-            if (data.arenaBots[i].points > data.arenaPoints) newPos++;
+            // 【2026-10-31】同分判定用 >=：与上面注释「同分玩家排同分机器人之后」一致。
+            // 原来是 >（玩家排在同分机器人之前），同分场景名次会比设计口径高 1 位。
+            if (data.arenaBots[i].points >= data.arenaPoints) newPos++;
             else break;
         }
         newPos = Mathf.Clamp(newPos, 0, data.arenaBots.Count);

@@ -35,8 +35,10 @@ public class ItemDef
     /// <summary>是否允许丢弃（任务道具应为 false）。</summary>
     public bool canDrop = true;
     /// <summary>
-    /// 使用效果串，如 <c>heal_hp:30</c> / <c>buff_atk:20:15</c>。
-    /// 目前只定义格式、不实现效果——等具体道具定下来再在 ItemUseService 里接。
+    /// 使用效果串，格式 <c>key:参数1:参数2</c>，执行出口 = <see cref="ItemUseService"/>。
+    /// 已实装：<c>heal_hp:30</c> / <c>heal_pct:25</c> / <c>buff_atk:20:15</c> / <c>buff_def:20:15</c> /
+    /// <c>buff_crit:10:15</c> / <c>buff_magic:20:15</c>（buff 数值是<b>百分比</b>，末位是持续秒数）。
+    /// 未实装的 key 会 LogError 并拒绝使用（不扣数量），不会静默生效。
     /// </summary>
     public string useEffect = "";
     public ItemTarget target = ItemTarget.Self;

@@ -134,6 +134,16 @@ public class SaveData
     /// <summary>当日已看结算双倍次数（每日 3 次，见 Systems/SettleDoubleAd.cs）</summary>
     public int settleDoubleCount = 0;
 
+    // === 看广告送佣兵活动（2026-10-31 立项，艾拉 H015，Systems/AdMercEventSystem.cs）===
+    /// <summary>活动「今日计数」日键 yyyyMMdd（本地日口径与其它广告位一致；跨天自动失效重计）</summary>
+    public string adMercEventDayKey = "";
+    /// <summary>今日已看成功的活动广告次数（0..AdsPerDay=3；2026-10-31 主人拍板：每天看满 3 个广告计 1 天，跨天随 dayKey 失效归零）</summary>
+    public int adMercEventTodayAds = 0;
+    /// <summary>活动累计看广告成功天数（只增不减、断签不清零——2026-10-31 主人拍板；达到 10 天后停止累计）</summary>
+    public int adMercEventDays = 0;
+    /// <summary>里程碑领取位标记 bit0..bit3（0=未领 1=已发邮件；领取入口 AdMercEventSystem.Claim）</summary>
+    public int adMercEventClaimedMask = 0;
+
     // === 无限裂隙（2026-10-17 主人拍板）===
     /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 ShopDefs.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
     public string endlessRiftDayKey = "";

@@ -185,8 +185,14 @@ public class BattleResultScreenUI : MonoBehaviour
     const float SkipOutDur = 0.12f;
     /// <summary>【2026-10-25 主人拍板】胜利节点从弹出到上移到位的时长（秒）。</summary>
     const float MoveUpDur = 0.35f;
-    /// <summary>【2026-10-29 主人拍板「先出来胜利图片有个停顿再上移」】胜利图弹出后的停顿（秒）。</summary>
-    const float VictoryHoldDur = 0.7f;
+    /// <summary>【2026-10-29 主人拍板「先出来胜利图片有个停顿再上移」】胜利图弹出后的停顿（秒）。
+    /// 【2026-10-31 主人拍板「1秒后再出现奖励框」】0.7 → 1.0。</summary>
+    const float VictoryHoldDur = 1.0f;
+    /// <summary>【2026-10-31 主人拍板「从小放大再回原来大小的动效 可以快点」】段一弹出曲线参数：
+    /// 缩放 0.5 → 峰值 → 回 1，两段线性各占一段时长，全程仍在 InDur(0.28s) 内跑完 —— 节奏快、过冲明显。</summary>
+    const float VictoryPopPeak = 1.15f;
+    /// <summary>放大段占整段的比例（前 60% 从 0.5 冲到峰值，后 40% 缩回 1）。</summary>
+    const float VictoryPopUpFrac = 0.6f;
     /// <summary>【2026-10-25 主人拍板】奖励 Panel 淡入时长（秒）。</summary>
     const float RewardInDur = 0.3f;
     /// <summary>奖励格横向间距（运行时克隆格用，先例 = BattleSettlementUI 网格 spacing 10）。</summary>
@@ -198,6 +204,17 @@ public class BattleResultScreenUI : MonoBehaviour
     /// <summary>奖励面板加宽后的宽（预制体 500 → 620，与外层 Panel 同宽；只放宽高度不动）。
     /// 面板子节点全是中心锚，加宽以中心对称、不改主人摆的双钮相对位（10-29 v4 分享钮版仍保留）。</summary>
     const float RewardPanelWidth = 620f;
+
+    /// <summary>【2026-10-31 主人拍板「返回/确定/分享按钮再放大30%」】结果界面四颗按钮（确定/分享/失败确定/失败返回）
+    /// 统一 localScale ×1.3（只动缩放不碰 sizeDelta/摆位，铁律 32；与进阶钮呼吸动效同通道）。</summary>
+    const float ResultBtnScaleMul = 1.3f;
+
+    /// <summary>把一颗结果按钮放大 <see cref="ResultBtnScaleMul"/>（在 authored localScale 基础上乘，不写死 1）。</summary>
+    static void EnlargeResultButton(Transform btnT)
+    {
+        if (btnT == null) return;
+        btnT.localScale = btnT.localScale * ResultBtnScaleMul;
+    }
 
     RectTransform _panel;
     CanvasGroup _cg;
@@ -273,7 +290,7 @@ public class BattleResultScreenUI : MonoBehaviour
         hideNode.gameObject.SetActive(false);   // 另一个节点的粒子随失活停止（预制体两节点默认全 active）
 
         // 【2026-10-31 主人拍板】胜负曲接入：结果界面弹出即播对应 jingle（胜利/失败统一门，含竞技场）
-        GameSting.PlayBattleResult(victory);
+        GameSting.PlayBattleResult(victory, this);
 
         // 点击任意处跳过：Dim 全屏钮 + 胜负图上的钮，同一个出口（2026-10-24 主人拍板）
         WireSkip(rootT.Find("Dim"));
@@ -294,6 +311,9 @@ public class BattleResultScreenUI : MonoBehaviour
         else
         {
             ShiftFailNodeUp(showNode as RectTransform);   // 【2026-10-31 主人拍板「战斗失败节点往上挪100」】
+            // 【2026-10-31 主人拍板】失败界面的 确定/返回 钮放大 30%
+            EnlargeResultButton(showNode.Find("确定"));
+            EnlargeResultButton(showNode.Find("取消"));
             StartCoroutine(CoPlay());   // 失败非选择模式照旧：停留后自动收
         }
     }
@@ -354,6 +374,9 @@ public class BattleResultScreenUI : MonoBehaviour
         _confirmRt = confirmT as RectTransform;
         _confirmBaseX = _confirmRt != null ? _confirmRt.anchoredPosition.x : 0f;   // 读预制体值不写死
         BindShareNodes(victoryNode, rewardPanel);
+        // 【2026-10-31 主人拍板】确定/分享钮放大 30%（BindShareNodes 之后才拿得到分享钮节点）
+        EnlargeResultButton(confirmT);
+        EnlargeResultButton(_shareBtnT);
         bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
         RefreshShareLayout(isTutorial);
     }
@@ -530,14 +553,18 @@ public class BattleResultScreenUI : MonoBehaviour
         Vector2 targetPos = _victoryRt.anchoredPosition;  // 拍板位读预制体（≈上移到250），代码不写死
         _victoryRt.anchoredPosition = new Vector2(targetPos.x, 0f);   // 从中部弹出（只动 y，纵向必要介入；x 不碰）
 
-        // 段一：淡入 + 胜利节点缩放弹出（EaseOutBack 过冲，「砸出来」的手感）
+        // 段一：淡入 + 胜利图弹出（【2026-10-31 主人拍板】从小(0.5)放大到峰值 1.15 再回原大小(1)，
+        // 两段线性、全程 InDur=0.28s 跑完 —— 快节奏，过冲比原 EaseOutBack 更看得出来）
         float t = 0f;
         while (t < InDur && !_skipped)
         {
             t += Dt();
             float k = Mathf.Clamp01(t / InDur);
             _cg.alpha = k;
-            _victoryNode.localScale = baseScale * Mathf.Lerp(0.5f, 1f, BackOut(k));
+            float s = k < VictoryPopUpFrac
+                ? Mathf.Lerp(0.5f, VictoryPopPeak, k / VictoryPopUpFrac)
+                : Mathf.Lerp(VictoryPopPeak, 1f, (k - VictoryPopUpFrac) / (1f - VictoryPopUpFrac));
+            _victoryNode.localScale = baseScale * s;
             yield return null;
         }
         _cg.alpha = 1f;
@@ -655,6 +682,9 @@ public class BattleResultScreenUI : MonoBehaviour
         }
         WireChoiceButton(confirmT.gameObject, OnReviveClicked);
         WireChoiceButton(cancelT.gameObject, OnGiveUpClicked);
+        // 【2026-10-31 主人拍板】复活选择窗的 确定/返回 钮放大 30%（与失败直出同一口径）
+        EnlargeResultButton(confirmT);
+        EnlargeResultButton(cancelT);
         // 价格文本同步真源（主人手摆格式「20复活」→ 用传入的 revivePrice，防预制体占位价过期）；
         // 广告档（2026-10-25 主人拍板）传 reviveLabel=「看广告复活」直接替换整段文案；
         // 【2026-10-29 主人拍板】广告档把确认钮上主人摆的钻石 icon **换成广告图**（AdIconUI：
@@ -670,7 +700,7 @@ public class BattleResultScreenUI : MonoBehaviour
         _cg.alpha = 0f;
         // 【2026-10-31 主人拍板】失败选择窗（复活/返回）同样先播失败曲（战斗 BGM 由 GameSting 淡出，
         // 复活成功回战斗时 OnDestroy 里恢复战斗曲）
-        GameSting.PlayBattleResult(false);
+        GameSting.PlayBattleResult(false, this);
         StartCoroutine(CoPlayChoice());
     }
 
@@ -733,6 +763,7 @@ public class BattleResultScreenUI : MonoBehaviour
         else
         {
             WireChoiceButton(cancelT.gameObject, OnArenaReturnClicked);
+            EnlargeResultButton(cancelT);   // 【2026-10-31 主人拍板】竞技场失败【返回】钮放大 30%
             // Dim 不接跳过：失败只有「返回」一个出口（拍板口径）
             var dimBtn = rootT.Find("Dim") != null ? rootT.Find("Dim").GetComponent<Button>() : null;
             if (dimBtn != null) dimBtn.onClick.RemoveAllListeners();
@@ -742,7 +773,7 @@ public class BattleResultScreenUI : MonoBehaviour
 
         _cg = gameObject.AddComponent<CanvasGroup>();
         _cg.alpha = 0f;
-        GameSting.PlayBattleResult(false);
+        GameSting.PlayBattleResult(false, this);
         StartCoroutine(CoPlayArenaFailure());
     }
 
@@ -821,6 +852,9 @@ public class BattleResultScreenUI : MonoBehaviour
     void OnDestroy()
     {
         ShareService.ShareRewardGranted -= OnShareRewardGranted;   // 实例销毁必退订（防悬空事件）
+        // 【2026-10-31 主人报修「失败音乐 2 秒后就没了」】失败曲循环开着，界面一关就停
+        //（胜利曲一次性，StopDefeat 不动它；场景切换的既有 Stop 依旧兜底）
+        GameSting.StopDefeat(this);
         if (BattleResultScreen._activeChoice == this)
             BattleResultScreen._activeChoice = null;
         // 【2026-10-31 主人拍板】复活成功回战斗：失败曲停掉 + 恢复战斗曲

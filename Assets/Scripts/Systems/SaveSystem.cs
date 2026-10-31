@@ -88,6 +88,7 @@ public class SaveSystem : Singleton<SaveSystem>
     public void Load()
     {
         string json = ReadSaveJson(savePath);
+        bool primaryUnreadable = string.IsNullOrEmpty(json) && File.Exists(savePath);
         if (string.IsNullOrEmpty(json))
             json = ReadSaveJson(backupPath);
         if (string.IsNullOrEmpty(json))
@@ -101,12 +102,21 @@ public class SaveSystem : Singleton<SaveSystem>
 
         if (string.IsNullOrEmpty(json))
         {
+            // 【2026-10-31】文件在但读不出来（截断 / 非 JSON / 解密失败）≠ 首次安装：
+            // 先把坏档留证，再建新档。首次安装（文件不存在）不会走到留证分支。
+            if (File.Exists(savePath) || File.Exists(backupPath))
+                PreserveCorruptSaves("主档与备份都无法解析");
             _data = CreateFreshSave();
             RunLoadout.Clear();   // 【2026-10-29 堵「清档后中断快照残留」】同 DeleteLocalSaveAndReset
             MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
             return;
         }
+
+        // 【2026-10-31】主档读不出来、靠备份救回来的情况：必须把坏主档挪走。
+        // 否则下一次 Save() 的 File.Copy(savePath → backupPath) 会把坏主档复制成"备份"，好备份当场没了。
+        if (primaryUnreadable)
+            PreserveCorruptSaves("主档不可读，已用备份恢复", onlyPrimary: true);
 
         try
         {
@@ -119,10 +129,41 @@ public class SaveSystem : Singleton<SaveSystem>
         catch (Exception e)
         {
             Debug.LogWarning("[SaveSystem] 存档损坏：" + e.Message);
+            // 【2026-10-31】留证后再建新档：原实现直接覆盖，坏档与备份当场消失，客服无法定位、玩家无法申诉。
+            PreserveCorruptSaves("反序列化失败：" + e.Message);
             _data = CreateFreshSave();
             RunLoadout.Clear();   // 【2026-10-29 堵「清档后中断快照残留」】存档损坏重建 = 新档，旧局快照一并作废
             MercSkillMigrate.ApplyAutoCastPrefsToSave();
             Save();
+        }
+    }
+
+    /// <summary>
+    /// 【2026-10-31】坏档留证：把读不出来的存档改名成 <c>player.dat.corrupt_yyyyMMdd_HHmmss</c>，
+    /// 再让上层建新档。只改名、不删除，出问题能拿原始文件复现；改名失败也只报错不阻断启动。
+    /// </summary>
+    void PreserveCorruptSaves(string reason, bool onlyPrimary = false)
+    {
+        try
+        {
+            string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            int moved = 0;
+            if (File.Exists(savePath))
+            {
+                File.Move(savePath, savePath + ".corrupt_" + stamp);
+                moved++;
+            }
+            if (!onlyPrimary && File.Exists(backupPath))
+            {
+                File.Move(backupPath, backupPath + ".corrupt_" + stamp);
+                moved++;
+            }
+            if (moved > 0)
+                Debug.LogError($"[SaveSystem] 存档损坏（{reason}），已保留 {moved} 个原始文件为 *.corrupt_{stamp}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[SaveSystem] 坏档留证失败（继续建新档，原始文件可能被覆盖）：" + e.Message);
         }
     }
 
@@ -136,7 +177,7 @@ public class SaveSystem : Singleton<SaveSystem>
         {
             _data.SyncListsFromRuntime();
             string json = JsonUtility.ToJson(_data, false);
-            byte[] blob = ContentProtection.Enabled
+            byte[] blob = ContentProtection.SaveEncryption
                 ? SecureCodec.EncryptUtf8(json)
                 : System.Text.Encoding.UTF8.GetBytes(json);
             if (File.Exists(savePath))
@@ -177,7 +218,10 @@ public class SaveSystem : Singleton<SaveSystem>
         if (data.stamina < 0) data.stamina = 0;
         if (data.totalGold > ResourceWallet.DEFAULT_MAX) data.totalGold = ResourceWallet.DEFAULT_MAX;
         if (data.diamond > ResourceWallet.DEFAULT_MAX) data.diamond = (int)ResourceWallet.DEFAULT_MAX;
-        if (data.stamina > GameConfig.STAMINA_MAX) data.stamina = GameConfig.STAMINA_MAX;
+        // 【2026-10-31】上限口径与 StaminaSystem.Max / ResourceWallet.GetMax 对齐（基础 + 成就加成），
+        // 原来只按 STAMINA_MAX 截断，会把带加成的体力静默削掉。
+        long staminaCap = GameConfig.STAMINA_MAX + Mathf.Max(0, data.staminaBonusMax);
+        if (data.stamina > staminaCap) data.stamina = (int)staminaCap;
         if (data.lastStaminaUtc <= 0)
             data.lastStaminaUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         ResourceAdRewards.EnsureDay(data);
@@ -215,7 +259,7 @@ public class SaveSystem : Singleton<SaveSystem>
         }
         _data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(_data);
-        string payload = ContentProtection.Enabled
+        string payload = ContentProtection.SaveEncryption
             ? Convert.ToBase64String(SecureCodec.EncryptUtf8(json))
             : Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
         CloudSaveBridge.UploadPayload(payload, ok =>

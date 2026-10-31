@@ -80,7 +80,11 @@ public static class MercRosterDefs
         D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK013", null, 2000, false, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
-        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.60f, 4.2f, null, "SK002", 500, false, true),
+        // 【2026-10-31 主人拍板·看广告送佣兵活动】H015 艾拉改稀有档（原普通档）：
+        // 攻 = 传奇最弱的凯恩 BaseAtk 58.2、血 = 普通档 244.8 不动、防补到稀有标准 34.6、攻速 1.60 不动。
+        // 与 merc_roster.csv / merc_roster.bytes 三处同值；改完跑「Tools → 佣兵 → 花名册三处同值校验」。
+        // 获得口 = 看广告活动专属（MercSkillMapping.TavernExcludedHireIds 已摘池，见 2026-10-31 拍板）。
+        D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Rare, 1.15f, 244.8f,58.2f,34.6f, 1.60f, 4.2f, null, "SK002", 500, false, true),
         D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
         D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 382.6f,49.8f,37.3f, 1.20f, 3.5f, "SK004", null, 1700, false),
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, false, true),
@@ -447,6 +451,8 @@ public static class MercRosterDefs
 
     /// <summary>
     /// 按等级套用成长系数：先乘稀有度成长，再按等级抬血/攻击
+    /// （内部实现 = <see cref="ApplyCombatStatsCore"/>；按 assetId 取首行，共用 asset 的佣兵请走
+    /// <see cref="TryApplyCombatStatsByHire"/>）。
     /// </summary>
     public static void ApplyCombatStats(string assetId, int level, out float hp, out float atk, out float def, out float atkSpeed, out float moveSpeed, out float atkRange)
     {
@@ -457,7 +463,35 @@ public static class MercRosterDefs
             atkSpeed = moveSpeed = atkRange = 0f;
             return;
         }
+        ApplyCombatStatsCore(d, level, out hp, out atk, out def, out atkSpeed, out moveSpeed, out atkRange);
+    }
 
+    /// <summary>
+    /// 【2026-10-31 T5 方案 B】按 <b>hireId</b> 取行套用成长系数（公式与 <see cref="ApplyCombatStats"/>
+    /// 完全同源 = 同一个 Core，只换取行方式——施工红线「不改 ApplyCombatStats 内部公式」不触）。
+    /// <para>动机：H015 艾拉与 H005 米娅共用 gongshou101，<see cref="TryGetByAssetId"/> 取首行（米娅）；
+    /// 艾拉改稀有档后必须按自己的花名册行取数，否则面板/战斗都吃不到她的数值。</para>
+    /// hireId 查不到返回 false（调用方回退 assetId 路径并报错可见，不静默吞）。
+    /// </summary>
+    public static bool TryApplyCombatStatsByHire(string hireId, int level, out float hp, out float atk, out float def, out float atkSpeed, out float moveSpeed, out float atkRange)
+    {
+        level = Mathf.Max(1, level);
+        if (string.IsNullOrEmpty(hireId) || !TryGetByHireId(hireId, out var d))
+        {
+            hp = atk = def = 0f;
+            atkSpeed = moveSpeed = atkRange = 0f;
+            return false;
+        }
+        ApplyCombatStatsCore(d, level, out hp, out atk, out def, out atkSpeed, out moveSpeed, out atkRange);
+        return true;
+    }
+
+    /// <summary>
+    /// 数值公式唯一实现（2026-10-31 自 ApplyCombatStats 原样搬入，<b>一字未改</b>）：
+    /// 先乘稀有度成长，再按等级抬血/攻击。改公式仍只动这里。
+    /// </summary>
+    static void ApplyCombatStatsCore(Def d, int level, out float hp, out float atk, out float def, out float atkSpeed, out float moveSpeed, out float atkRange)
+    {
         float g = Mathf.Max(0.5f, d.Growth);
         float baseHp = d.BaseHp * g;
         float baseAtk = d.BaseAtk * g;
@@ -474,7 +508,7 @@ public static class MercRosterDefs
         moveSpeed = d.MoveSpeed > 0.1f
             ? GameConfig.BASE_MOVE_SPEED * (d.MoveSpeed / designMoveRef)
             : GameConfig.BASE_MOVE_SPEED;
-        atkRange = ResolveRange(assetId);
+        atkRange = ResolveRange(d.AssetId);
     }
 
     public static float ResolveRange(string assetId)

@@ -154,15 +154,22 @@ public static class MercSkillMapping
     // 酒馆三选一按稀有度选人时排除（只关新抽，老档已拥有不回收——解锁集 unlockedMercIds 不动）。
     // 塔克 H003（引导剧情角色）不摘池、不进店，保持原样。公示概率 66.5/33/0.5 不动（只动选人集合）。
     // 摘池后各档池仍非空：传奇剩 H004/H010，稀有剩 9 人。
-    public static readonly System.Collections.Generic.HashSet<string> ArenaExclusiveHireIds =
-        new System.Collections.Generic.HashSet<string> { "H014", "H017", "H022" };
+    // 【2026-10-31 看广告送佣兵活动】艾拉 H015 摘池（主人拍板「肯定不能从其他地方获取」）：
+    // 活动独占产出（看广告满 3 天送本体）；映射表 merc_skill_map.csv 的 H015 行保留
+    // （技能/稀有度兜底解析还要用它），只是不再进三选一选人集合。
+    public static readonly System.Collections.Generic.HashSet<string> TavernExcludedHireIds =
+        new System.Collections.Generic.HashSet<string> { "H014", "H017", "H022", "H015" };
+
+    /// <summary>旧名（2026-10-30~31 期间叫过 ArenaExclusiveHireIds），别名兼容防外部引用断。</summary>
+    public static readonly System.Collections.Generic.HashSet<string> ArenaExclusiveHireIds = TavernExcludedHireIds;
 
     /// <summary>
     /// 按稀有度从花名册抽一个 hireId。
     /// 【2026-10-22 主人拍板 T9】满星降权：背包碎片攒够满星总消耗（普通90/稀有70/传奇10，
     /// MercStarDefs.FullStarFragTotal）的佣兵在本稀有度池内权重 ×0.2（5→1）—— 不退池、重掷照旧；
     /// 稀有度概率口径（酒馆 66.5/33/0.5）在调用方 RollRarityByBattleWeight，这里不碰。
-    /// 【2026-10-30】选人集合排除竞技场限定三佣兵（见 <see cref="ArenaExclusiveHireIds"/>）。
+    /// 【2026-10-30】选人集合排除竞技场限定三佣兵；【2026-10-31】再排除活动独占的艾拉 H015
+    /// （见 <see cref="TavernExcludedHireIds"/>）。
     /// </summary>
     public static bool TryPickHireId(MercRosterDefs.MercRarity rarity, out MapRow row)
     {
@@ -170,7 +177,7 @@ public static class MercSkillMapping
         var pool = new List<MapRow>();
         for (int i = 0; i < _all.Count; i++)
         {
-            if (_all[i].Rarity == rarity && !ArenaExclusiveHireIds.Contains(_all[i].HireId))
+            if (_all[i].Rarity == rarity && !TavernExcludedHireIds.Contains(_all[i].HireId))
                 pool.Add(_all[i]);
         }
         if (pool.Count == 0)

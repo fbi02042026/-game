@@ -35,9 +35,25 @@ public static class ShopSystem
     {
         if (item == null || item.dailyLimit <= 0) return -1;
         if (data == null) return item.dailyLimit;
+        // 【2026-10-31】跨天判定收在这里：原来只在读档（SyncRuntimeFromLists）里清限购，
+        // 挂机跨 0 点后继续买不刷新，必须重进游戏才恢复。
+        EnsurePurchaseDay(data);
         data.shopPurchases.TryGetValue(item.id, out int used);
         int left = item.dailyLimit - used;
         return left < 0 ? 0 : left;
+    }
+
+    /// <summary>
+    /// 【2026-10-31】跨天清零（幂等）：读限购 / 买完记限购前都必须先过这里。
+    /// 只把日期改掉不清字典，会出现「昨天的 3 次 + 今天的 1 次」叠在一起少卖的情况。
+    /// </summary>
+    static void EnsurePurchaseDay(SaveData data)
+    {
+        if (data == null) return;
+        string today = ShopDefs.TodayKey();
+        if (data.shopPurchaseDay == today) return;
+        data.shopPurchaseDay = today;
+        data.shopPurchases?.Clear();
     }
 
     public static bool CanBuy(ShopDefs.Item item, SaveData data, out string reason)
@@ -182,7 +198,8 @@ public static class ShopSystem
             }
         }
 
-        // 记限购
+        // 记限购（先过跨天：否则昨天的计数会带进今天）
+        EnsurePurchaseDay(data);
         if (item.dailyLimit > 0)
         {
             data.shopPurchases.TryGetValue(item.id, out int used);

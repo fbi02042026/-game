@@ -709,8 +709,36 @@ public partial class BattleManager
         return eq.icon;
     }
 
+    /// <summary>抽奖引导底框（主人给的「像素风空白对话框指针」，Resources/UI/Art/Common/）。
+    /// 静态缓存一次，重复 Show 不重复 Load。导入类型不是 Sprite 时回退 Texture2D 建 Sprite
+    /// （同 BattleWaveAnnounceUI.SpriteFromTexture 先例），真机不至于空底框。</summary>
+    static Sprite _draftHintBubble;
+
+    static Sprite DraftHintBubble
+    {
+        get
+        {
+            if (_draftHintBubble != null) return _draftHintBubble;
+            _draftHintBubble = Resources.Load<Sprite>("UI/Art/Common/像素风空白对话框指针");
+            if (_draftHintBubble == null)
+            {
+                var tex = Resources.Load<Texture2D>("UI/Art/Common/像素风空白对话框指针");
+                if (tex != null)
+                    _draftHintBubble = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+                        new Vector2(0.5f, 0.5f), 100f);
+            }
+            return _draftHintBubble;
+        }
+    }
+
     IEnumerator CoStageEntryDraft()
     {
+        // 【2026-10-31 主人拍板「一场战斗只出现一次」】引导是否已弹过的标记走**本协程局部变量**：
+        // CoStageEntryDraft 每场战斗只跑一次（裂隙每层各跑一次但免费抽不弹引导），
+        // 局部变量天然每场从 false 开始 —— BattleManager 是 DontDestroyOnLoad 常驻单例，
+        // 实例字段不会随战斗重置，static 又会跨战斗残留，都不如局部变量干净。
+        bool drawHintShown = false;
+
         // 【2026-10-21 主人拍板：关卡商店暂时注释，等想好再开。】
         // 重新开启时口径已改：**不是每关都弹，是随机出现**（掷概率，概率主人定）——
         // 实现（CoStageShop / BuildStageShopItems / RollStageShopEquips / StageShopPopupUI）都在，取消下面注释即可接入。
@@ -820,6 +848,26 @@ public partial class BattleManager
                 TutorialHintUI.Ensure().ShowHard("先抽一次奖，看看能开出什么。", rect);
             }
 
+            // 【2026-10-31 主人拍板「抽奖币够了但是没有抽的话 给一个引导框告诉玩家可以抽」】
+            // 触发条件（四个都满足才弹，宁缺勿滥）：
+            // ① 非引导局（引导有自己那份 ShowHard 硬引导）；
+            // ② 没有免费额度（裂隙每层免费抽已有 toast 提示，不叠加）；
+            // ③ 本场战斗一次都没抽过（SlotMachineSystem.DrawIndex == 0）；
+            // ④ 余额够随机抽一抽（currentGold >= price）。
+            // → 圈住「随机抽奖」按钮弹引导框（Show 非 hard：不遮罩不挡点，玩家照常可直接点「继续」开打）。
+            // 【2026-10-31 二次拍板】出现 5 秒后自动消失；点抽奖按钮立刻消失；
+            // 一场战斗只出现一次（drawHintShown 局部标记）；底框用主人给的「像素风空白对话框指针」。
+            if (!onceOnly && freeLeft <= 0 && SlotMachineSystem.DrawIndex == 0
+                && currentGold >= price && !drawHintShown)
+            {
+                drawHintShown = true;
+                var coinHintRect = BattleEntryDraftPanel.Instance != null
+                    ? BattleEntryDraftPanel.Instance.NormalButtonRect : null;
+                var hint = TutorialHintUI.Ensure();
+                hint.SetBannerSpriteOnce(DraftHintBubble);   // 一次性：Hide 后还原默认底框
+                hint.Show("抽奖币够了，先抽一次再开打吧！", coinHintRect, 5f);
+            }
+
             // 面板常驻，给足看构筑的时间；不点就一直不开战（上限 5 分钟防卡死）
             // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】面板常驻期间玩家可从暂停菜单撤离，
             // isInBattle 此时还是 false（首波没刷，不能当退场判据）—— 用 _runClosed 当场退场：
@@ -831,6 +879,10 @@ public partial class BattleManager
             yield return null;
         }
         if (choice != 1) break;
+
+        // 【2026-10-31 主人拍板「玩家点击抽奖按钮后也消失」】点了抽奖按钮引导框立刻收掉（不等出货结果；
+        // 就算这一抽没生效回面板重来，本场也不再出现 —— drawHintShown 已置位）
+        TutorialHintUI.Instance?.Hide();
 
         // 【2026-10-06 主人二次拍板】玩家一按抽奖就<b>冻结</b>倒计时：接下来是扣币 / 老虎机 /
         // 三选一 / 换装备弹窗这一串结算，这段时间不该催玩家点「继续」。

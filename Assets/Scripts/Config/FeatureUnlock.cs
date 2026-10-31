@@ -100,9 +100,9 @@ public static class FeatureUnlock
         }
     }
 
-    /// <summary>某类活动副本是否已解锁（只判门槛，不管开放日）。</summary>
+    /// <summary>某类活动副本是否已解锁（只判门槛，不管开放日）。【2026-10-31 测试开关】测试模式直通。</summary>
     public static bool DungeonOpen(SaveData data, ActivityDungeonKind kind)
-        => data != null && data.HasClearedChapter(DungeonGateChapter(kind));
+        => TestMode.Enabled || (data != null && data.HasClearedChapter(DungeonGateChapter(kind)));
 
     /// <summary>活动副本标签页是否可切：任一副本已解锁即可（否则切进去是一片空白横条）。</summary>
     public static bool AnyDungeonOpen(SaveData data)
@@ -116,8 +116,9 @@ public static class FeatureUnlock
     /// <summary>
     /// 佣兵队列是否开放：**新手引导结束即开**（比招募早）。
     /// 依据：D1 每日登录直接送「塔克·重盾」本体，玩家过完引导手里就有佣兵，需要马上去配置下场带谁。
+    /// 【2026-10-31 测试开关】测试模式直通。
     /// </summary>
-    public static bool MercQueueOpen(SaveData data) => data != null && data.tutorialDone;
+    public static bool MercQueueOpen(SaveData data) => TestMode.Enabled || (data != null && data.tutorialDone);
 
     /// <summary>佣兵招募是否开放（D2，必然晚于队列 —— 主人要求「招募开了队列也得开」）。</summary>
     public static bool MercRecruitOpen(SaveData data) => ChapterCleared(data, MERC_RECRUIT_CHAPTER_GATE);
@@ -173,11 +174,11 @@ public static class FeatureUnlock
     // 内部
     // ────────────────────────────────────────────────────────────────
 
-    /// <summary>第 1 篇已通关大关数是否 ≥ 门槛。</summary>
+    /// <summary>第 1 篇已通关大关数是否 ≥ 门槛。【2026-10-31 测试开关】测试模式直通（裂隙 / 世界地图 / 支线岛共用）。</summary>
     static bool GrandCleared(SaveData data, int grandGate)
-        => data != null && data.GrandClearedCount(1) >= grandGate;
+        => TestMode.Enabled || (data != null && data.GrandClearedCount(1) >= grandGate);
 
-    /// <summary>第 chapter 章是否已通关。</summary>
+    /// <summary>第 chapter 章是否已通关。【2026-10-31 测试开关】测试模式直通（招募 / 情报 / 进阶 / 羁绊共用）。</summary>
     static bool ChapterCleared(SaveData data, int chapter)
-        => data != null && data.HasClearedChapter(chapter);
+        => TestMode.Enabled || (data != null && data.HasClearedChapter(chapter));
 }

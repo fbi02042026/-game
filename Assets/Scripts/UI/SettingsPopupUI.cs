@@ -25,6 +25,7 @@ public enum SettingsToggleId
     Sfx = 2,
     WeatherFx = 3,
     MercSkillAuto = 4,
+    TestMode = 5,
 }
 
 /// <summary>
@@ -301,6 +302,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Sfx: return true;
             case SettingsToggleId.WeatherFx: return false;
             case SettingsToggleId.MercSkillAuto: return false; // 佣兵技能强制自动，不再出设置项
+            case SettingsToggleId.TestMode: return TestMode.Visible; // 【2026-10-31 测试开关】上线改 ALLOW_TEST_MODE=false 整行消失
             default: return false;
         }
     }
@@ -396,6 +398,9 @@ public class SettingsPopupUI : MonoBehaviour
                 PlayerPrefs.SetInt("fx.weather.on", PlayerPrefs.GetInt("fx.weather.on", 1) != 0 ? 0 : 1);
                 PlayerPrefs.Save();
                 break;
+            case SettingsToggleId.TestMode:
+                TestMode.Enabled = !TestMode.Enabled; // 【2026-10-31 测试开关】PlayerPrefs 持久
+                break;
         }
         RefreshToggles();
     }
@@ -420,6 +425,7 @@ public class SettingsPopupUI : MonoBehaviour
             case SettingsToggleId.Music: return GameAudio.MusicEnabled;
             case SettingsToggleId.Sfx: return GameAudio.SfxEnabled;
             case SettingsToggleId.WeatherFx: return PlayerPrefs.GetInt("fx.weather.on", 1) != 0;
+            case SettingsToggleId.TestMode: return TestMode.Enabled;
             case SettingsToggleId.MercSkillAuto: return true;
             default: return true;
         }
@@ -578,6 +584,35 @@ public class SettingsPopupUI : MonoBehaviour
                 stateLabel = state
             });
         }
+
+        EnsureTestModeRow();
+    }
+
+    /// <summary>
+    /// 【2026-10-31 测试开关】预制体没有「测试模式」行，运行时补在 ToggleList 最后一行下方（幂等，不改预制体）。
+    /// 只在 TestMode.Visible（ALLOW_TEST_MODE=true）时生成；上线改 false 后这行不再出现，
+    /// 且 ApplyExtraToggleVisibility 会把残留行隐藏。
+    /// </summary>
+    void EnsureTestModeRow()
+    {
+        if (!TestMode.Visible) return;
+        if (toggleList == null) return;
+        if (FindDeep(toggleList, "TestModeRow") != null) return; // 已生成（或预制体自带），幂等跳过
+
+        // 找现有「可见」行里最靠下的，把新行放在其下方 72（与 CreateSettingsRow 行距一致）。
+        // 注意必须排除隐藏的保留行（如 WeatherRow 在 y=-900），否则新行会被排到面板外。
+        float min = 0f;
+        bool found = false;
+        for (int i = 0; i < toggleList.childCount; i++)
+        {
+            var child = toggleList.GetChild(i);
+            if (child == null || !child.gameObject.activeSelf) continue;
+            if (!(child is RectTransform rt)) continue;
+            if (!found || rt.anchoredPosition.y < min) min = rt.anchoredPosition.y;
+            found = true;
+        }
+        float y = min - 72f;
+        CreateSettingsRow(toggleList, "TestModeRow", "测试模式", "条", SettingsToggleId.TestMode, ref y);
     }
 
     static bool IsToggleRowName(string name)
@@ -594,6 +629,7 @@ public class SettingsPopupUI : MonoBehaviour
         if (n.Contains("music")) return SettingsToggleId.Music;
         if (n.Contains("sfx") || n.Contains("sound")) return SettingsToggleId.Sfx;
         if (n.Contains("weather")) return SettingsToggleId.WeatherFx;
+        if (n.Contains("testmode") || n.Contains("测试")) return SettingsToggleId.TestMode;
         if (n.Contains("merc") || n.Contains("skillauto") || n.Contains("佣兵") || n.Contains("自动"))
             return SettingsToggleId.MercSkillAuto;
         return SettingsToggleId.MasterAudio;

@@ -1,4 +1,4 @@
-# 道具定义表
+﻿# 道具定义表
 # 2026-09-15：背包 12 格已改为**只装道具**。装备不再入包——掉落即穿，替换下来的自动分解。
 # 本轮先把接口与表结构备好，具体道具等内容定稿后再往下面加行。
 #
@@ -43,7 +43,8 @@ item_forget_potion,遗忘药水,UI/Art/Icons/Common/yiwangyaoshui,Consumable,99,
 item_revive_charm,重生护符,UI/Art/Icons/Common/chongshenghufu,Material,99,0,0,,Self,佣兵阵亡时点击其变灰头像，消耗 1 枚原地复活（80% 血）。战斗内关卡商店有售。,2
 # 2026-10-22 主人拍板：本命碎片改为**按佣兵分行**的背包道具（一格最多 99、超了分格，2026-10-24 主人拍板与随身仓库统一）。
 # icon 先用稀有度碎片底版占位（UI/Icons/MercFragmentBase/普通|稀有|传奇碎片）；背包格渲染会按佣兵换头像（复用 MercFragmentCardUI 口径，T2）。
-# 稀有度对齐 merc_roster.csv：传奇=H004/H010/H014，稀有=H002/H003/H006/H008/H009/H012/H013/H016/H017/H020/H022，其余普通。
+# 稀有度对齐 merc_roster.csv：传奇=H004/H010/H014，稀有=H002/H003/H006/H008/H009/H012/H013/H015/H016/H017/H020/H022，其余普通。
+# 【2026-10-31】H015 艾拉随看广告活动改稀有档（merc_roster.csv 三处同值同拍），碎片底版/rarity 列跟着走。
 # 🔴 升星消耗/重复转化数在 MercStarDefs 按稀有度算，本表只管道具本体；stackMax=99（2026-10-24 主人拍板：与随身仓库统一，一格最多 99、超了分格；原「10 个一组」作废）。
 item_frag_H001,马库斯碎片,UI/Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「马库斯」的本命碎片。攒够可在升星界面为其升星。,0
 item_frag_H002,洛恩碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「洛恩」的本命碎片。攒够可在升星界面为其升星。,1
@@ -59,7 +60,7 @@ item_frag_H011,路加碎片,UI/Icons/MercFragmentBase/普通碎片,Material,99,0
 item_frag_H012,塞拉碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「塞拉」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H013,莫娜碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「莫娜」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H014,伊芙碎片,UI/Icons/MercFragmentBase/传奇碎片,Material,99,0,0,,Self,「伊芙」的本命碎片。攒够可在升星界面为其升星。,2
-item_frag_H015,艾拉碎片,UI/Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「艾拉」的本命碎片。攒够可在升星界面为其升星。,0
+item_frag_H015,艾拉碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「艾拉」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H016,杜娅碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「杜娅」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H017,莉娜碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「莉娜」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H018,布朗碎片,UI/Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「布朗」的本命碎片。攒够可在升星界面为其升星。,0

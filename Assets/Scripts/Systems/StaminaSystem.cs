@@ -27,7 +27,13 @@ public static class StaminaSystem
         }
     }
 
-    public static int Max => GameConfig.STAMINA_MAX;
+    /// <summary>
+    /// 体力上限（唯一口径）。【2026-10-31】原来直接返回 GameConfig.STAMINA_MAX，
+    /// 与 ResourceWallet.GetMax(Stamina)（= 基础 + staminaBonusMax）是两套上限：
+    /// 药水/邮件按带加成的上限能顶到 101，Tick 这里按 100 截断 → 静默吞 1 点。
+    /// 现在统一走 ResourceWallet.GetMax，两处永远是同一个数。
+    /// </summary>
+    public static int Max => (int)ResourceWallet.GetMax(ResourceWallet.ResourceType.Stamina);
 
     public static bool IsFull
     {
@@ -180,9 +186,11 @@ public static class StaminaSystem
         return TrySpend(ENDLESS_RIFT_COST);
     }
 
-    /// <summary>按指定数额扣体力（主线 10 / 无限裂隙 20 共用一条链路）</summary>
+    /// <summary>按指定数额扣体力（主线 10 / 无限裂隙 20 共用一条链路）。
+    /// 【2026-10-31 测试开关】测试模式直接放行不扣，保证新号全功能可测。</summary>
     static bool TrySpend(int cost)
     {
+        if (TestMode.Enabled) return true;
         Tick(save: true);
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Stamina, cost, save: true, notify: true))
             return false;
