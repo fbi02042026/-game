@@ -47,8 +47,8 @@ public class QuestBarBinder : MonoBehaviour
     float _foldEdgeX;               // 收起态贴屏左 x（收起那一刻 SnapFoldEdgeX 用世界坐标实测反推）
     /// <summary>折叠按钮收起后贴屏左的留白（按钮视觉左缘离屏幕左缘的设计像素）。</summary>
     const float FoldEdgeLeftInset = 8f;
-    /// <summary>折叠按钮整体缩放（2026-10-30 主人拍板「现在的大减20%」→ 0.8，覆盖 10-29 的 0.4 口径；预制体不动）。</summary>
-    const float FoldButtonScale = 0.8f;
+    /// <summary>折叠按钮整体缩放（2026-10-31 主人拍板「缩小10%」→ 0.8×0.9=0.72；预制体不动）。</summary>
+    const float FoldButtonScale = 0.72f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
     bool _collapsed;                 // 折叠态（会话内，不写存档）
     bool _appliedCollapsed, _appliedSideVisible = true;   // 上次实际套到 UI 的状态（变了才动 UI）
@@ -223,12 +223,12 @@ public class QuestBarBinder : MonoBehaviour
             _foldRt = t as RectTransform;   // 收起贴边/展开还原用（panl 空间）
             if (_foldRt != null)
             {
-                // 【2026-10-30 主人拍板「现在的大减20%」→ 0.8，覆盖 10-29「缩小50%再缩20%=0.4」】运行时整体等比缩小（预制体不动，铁律 20）。
+                // 【2026-10-31 主人拍板「缩小10%」→ 0.72（0.8×0.9）；预制体不动，铁律 20。】
                 var sc = _foldRt.localScale;
                 _foldRt.localScale = new Vector3(sc.x * FoldButtonScale, sc.y * FoldButtonScale, sc.z);
                 // 【2026-10-30 修「点一次变大一直大」】按压反馈组件在 GuildHallUI.Awake 的 AttachUnder 时
                 // 已按 prefab 原值 1.0 捕获基准，晚于此处的缩放改不到它——首按跳 0.94、松手 Restore
-                // 冲回 1.0（＝主人报的变大）。缩放定稿后同步它的基准，按下/松手都回到 0.8。
+                // 冲回 1.0（＝主人报的变大）。缩放定稿后同步它的基准，按下/松手都回到 0.72。
                 var fb = _foldRt.gameObject.GetComponent<UiButtonPressFeedback>();
                 if (fb != null) fb.SyncBaseScale(_foldRt.localScale);
 

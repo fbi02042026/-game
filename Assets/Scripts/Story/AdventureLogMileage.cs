@@ -137,7 +137,14 @@ public static class AdventureLogMileage
         if (reward.TalentPoint > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, reward.TalentPoint, save: false, notify: true);
         if (!string.IsNullOrEmpty(reward.TitleId))
-            data.logMileageTitleId = reward.TitleId;
+        {
+            data.logMileageTitleId = reward.TitleId;          // 老字段保留（旧档/文案引用）
+            // 2026-10-31 称号系统：走唯一出口解锁 + 按稀有度自动切换战斗头顶展示（Lv6 是传说档，
+            // 拿到就会顶掉之前的稀有称号）。
+            // notify:true —— 里程领取本身没有「领到了什么」的汇总 Toast，静默发放玩家会完全不知道
+            // 自己拿到了称号（Lv2 那把杖有专属弹窗，Lv6 没有）。
+            TitleSystem.Unlock(reward.TitleId, notify: true);
+        }
 
         // 设计：里程 Lv2「森林行者」可领暮火之杖（与教程发放共用防重 key）。
         // 领取即写入存档（防弹窗期间杀进程丢杖，杖已在上方发放成功），随后弹告知窗

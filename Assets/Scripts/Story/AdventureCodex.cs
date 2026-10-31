@@ -253,20 +253,24 @@ public static class AdventureCodex
         if (!StoryProgress.TutorialDone)
         {
             RedDot.Set(RedDot.Achievement, false);
+            RedDot.Set(RedDot.LogWorld, false);
             RedDot.Set(RedDot.LogMonster, false);
             RedDot.Set(RedDot.LogMerc, false);
             RedDot.Set(RedDot.Log, false);
             return;
         }
 
-        bool reward = AdventureLogMileage.HasUnclaimedLevel()
-                      || AdventureLogAchievements.HasUnclaimed()
-                      || AdventureLogFragments.HasAnyCraftable();
+        // 2026-10-31 主人报「成就领完标签红点还在」：口径拆开 ——
+        // 成就 Tab 只看成就可领；里程等级 / 碎片合成挂世界页 Tab；日志入口键保持宽口径。
+        bool achReward = AdventureLogAchievements.HasUnclaimed();
+        bool worldReward = AdventureLogMileage.HasUnclaimedLevel()
+                           || AdventureLogFragments.HasAnyCraftable();
         bool codex = HasUnviewedCodex();
-        RedDot.Set(RedDot.Achievement, reward);
+        RedDot.Set(RedDot.Achievement, achReward);
+        RedDot.Set(RedDot.LogWorld, worldReward);
         RedDot.Set(RedDot.LogMonster, HasUnviewedMonsters());
         RedDot.Set(RedDot.LogMerc, HasUnviewedMercs());
-        RedDot.Set(RedDot.Log, reward || codex);
+        RedDot.Set(RedDot.Log, achReward || worldReward || codex);
     }
 
     public static MercRosterDefs.MercRarity GetMercRarity(AdventureLogCatalog.MercEntry e)

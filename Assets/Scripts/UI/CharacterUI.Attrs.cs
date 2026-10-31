@@ -274,16 +274,28 @@ public partial class CharacterUI
     {
         backpackGrid?.Refresh();
         int unlocked = backpackGrid != null ? backpackGrid.UnlockedSlotCount() : GameConfig.BACKPACK_DEFAULT_ROWS * GameConfig.BACKPACK_WIDTH;
-        int used = 0;
-        if (backpackGrid != null)
-        {
-            for (int i = 0; i < backpackGrid.cells.Count; i++)
-                if (backpackGrid.cells[i]?.equippedItem != null) used++;
-        }
+        int used = CountOccupiedBagCells();
         if (bagCapacityText != null)
             bagCapacityText.text = used + "/" + unlocked;
+        // 2026-10-31：格子快满 → 播一次「可以左右滑」的引导箭头（纯装饰，不拦点击）
+        TryPlayBagSwipeHint(used, unlocked);
         // 2026-10-24 主人拍板：角色页背包标题「随身仓库」每刷一次都兜底重写，防止被别处重置。
         if (bagTitleText != null) bagTitleText.text = "随身仓库";
         RefreshStaminaPotionRow();
+    }
+
+    /// <summary>
+    /// 已占用格数。角色页取 <see cref="HeroVaultSystem.LastOccupiedCells"/>（装备按占格 + 天赋石/碎片/道具等
+    /// 展示位各 1 格），其他网格退回「有装备的格子数」。
+    /// 【2026-10-31】原来只数装备 → 背包被展示位占满时容量文案还是 0/16，「格子快满」判定也永远不触发。
+    /// </summary>
+    int CountOccupiedBagCells()
+    {
+        if (backpackGrid == null) return 0;
+        if (backpackGrid is HeroVaultGrid) return HeroVaultSystem.LastOccupiedCells;
+        int n = 0;
+        for (int i = 0; i < backpackGrid.cells.Count; i++)
+            if (backpackGrid.cells[i]?.equippedItem != null) n++;
+        return n;
     }
 }

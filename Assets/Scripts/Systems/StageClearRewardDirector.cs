@@ -19,8 +19,10 @@ public class StageClearRewardDirector : MonoBehaviour
     const float JinScaleMul = 1.2f * 1.2f; // 相对木箱
 
     /// <summary>Boss 宝箱额外钻石（2026-10-23 主人拍板：每个 Boss 宝箱 +10 钻）。
-    /// 主线正式关已去宝箱（2026-10-22 拍板），本奖励只作用于仍走宝箱演出的 Boss 关（金币本/无限裂隙/活动副本）。</summary>
-    const int BossChestDiamond = 10;
+    /// 【2026-10-31】除无限裂隙外全部去宝箱后，Boss 钻由
+    /// <see cref="BattleManager"/> 的「跳过宝箱」分支直接入账，本常量即那笔的唯一数值出口
+    ///（public 供 BattleManager 读，不另写魔数）。</summary>
+    public const int BossChestDiamond = 10;
 
     Transform _boxRoot;
     Transform _boxAnimHost;

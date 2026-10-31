@@ -239,16 +239,8 @@ public static class EconomyDefs
             sb.AppendLine($"  打完第{ch}章：累计 {stones} 石");
         }
 
-        sb.AppendLine("[Economy] 商店金币定价自检（基准：通关第1章累计 " + ChapterGold(1) + " 金）");
-        for (int i = 0; i < ShopDefs.All.Length; i++)
-        {
-            var it = ShopDefs.All[i];
-            if (it.currency != ResourceWallet.ResourceType.Gold) continue;
-            float n = it.price / (float)ChapterGold(1);
-            sb.AppendLine($"  {it.name}：{DescribePrice(it.price)}　限购 {it.dailyLimit}");
-            if (n > 3f) sb.AppendLine("    ⚠ 超过 3 倍章节收入，玩家可能攒到弃游");
-            if (n < 0.05f) sb.AppendLine("    ⚠ 不到 5% 章节收入，太便宜会被秒空");
-        }
+        // 【2026-10-31 主人拍板「商店功能删掉」】原「商店金币定价自检」整段随 ShopDefs 一起下线：
+        // 商品表已不存在，没有可自检的定价。将来若重开商店，定价自检请跟新商品表一起重建。
         Debug.Log(sb.ToString());
     }
 }

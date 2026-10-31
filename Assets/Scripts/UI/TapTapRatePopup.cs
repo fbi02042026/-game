@@ -7,7 +7,7 @@ using UnityEngine;
 /// 触发：章末 Boss 通关（BattleManager.SettleNormalStageClear 置 <see cref="PendingPrompt"/>）
 /// → 回城后 TownHubController.Start 消费（先例 = PendingOpenAdventure）。
 /// 每日最多弹一次（SaveData.taptapRateDayKey，本地日 yyyyMMdd，模式同 ResourceAdRewards.EnsureDay；
-/// 2026-10-28 由 UTC 切本地 0 点刷新，升级兼容平移见 ShopDefs.LegacyUtcDayKeyStillToday；
+/// 2026-10-28 由 UTC 切本地 0 点刷新，升级兼容平移见 DayKeyUtil.LegacyUtcDayKeyStillToday；
 /// 弹过即记，玩家点取消也占当日名额，防骚扰）。
 ///
 /// 弹窗复用默认确认弹窗（StaminaConfirmPopup，Ensure/DDOL/重绑都在那边），本类零 UI 新建。
@@ -54,7 +54,7 @@ public static class TapTapRatePopup
         // → 平移记为已弹，防止升级当天多弹一次（主人拍板「好评也是，不能清零加次数」）。
         string today = DateTime.Now.ToString("yyyyMMdd");
         if (data.taptapRateDayKey == today) return;
-        if (ShopDefs.LegacyUtcDayKeyStillToday(data.taptapRateDayKey))
+        if (DayKeyUtil.LegacyUtcDayKeyStillToday(data.taptapRateDayKey))
         {
             data.taptapRateDayKey = today;
             SaveSystem.Instance?.Save();   // 平移立即落盘，防丢失后多弹（理由同 ResourceAdRewards.EnsureDay）

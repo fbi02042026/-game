@@ -132,6 +132,18 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     bool _hasDrawnThisPanel;    // 本次抽奖环节玩家有没有抽过（决定手指指抽奖按钮还是指「继续」）
     bool _idleGuideShown;       // 引导手指当前是否已亮出
 
+    // ── 【2026-10-31 主人拍板】战斗内实时抽「币够了没抽」引导 ──────────────────
+    // 关卡战斗中（LiveMode 常显按钮）开打后连续 5 秒「可抽但一场没抽过」→ 用主人给的
+    // 「像素风空白对话框指针」指随机抽奖按钮；5 秒自动消失、点抽奖立刻消失、一场只一次。
+    // 与旧面板的 5 秒软引导（CoIdleGuide）互不干扰：那条只认 _draftActive（裂隙/引导局）。
+    const float LiveDrawHintDelaySec = 5f;
+    /// <summary>本场战斗玩家点过抽奖按钮（点过就不再提示，与进关那条 drawHintShown 同口径）。</summary>
+    bool _liveDrawnThisStage;
+    /// <summary>本场这条引导是否已经弹过（一场一次）。</summary>
+    bool _liveDrawHintShown;
+    /// <summary>「可抽但没抽」的连续计时（unscaled，战斗暂停也照走）。</summary>
+    float _liveDrawHintTimer;
+
     // 按钮底色与文字颜色一律不动：icon 的图、name/金额 的字体和颜色都是主人在预制体里调好的，
     // 代码只负责改 text 和 interactable（置灰由 Button 的 disabledColor 作用在 icon 上）。
 

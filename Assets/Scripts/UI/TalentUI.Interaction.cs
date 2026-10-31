@@ -131,7 +131,9 @@ public partial class TalentUI
         if (!TalentSystem.HasForgetPotion(out string potionReason))
         {
             Debug.Log("[TalentUI] " + potionReason);
-            GlobalToastUI.Show(potionReason, true);
+            // 【2026-10-31 主人拍板】没药水的拦截不再念干巴巴的数值——这些 toast 全是「前台小姐」说的话，
+            // 统一傲娇口吻（以后同类 toast 都按这个人设设计）；获取途径信息保留在句尾不丢。
+            GlobalToastUI.Show(ReceptionistNoPotionToast(), true);
             return;
         }
         // 二次确认：先弹确认框，确认后才真正洗点（洗点逻辑本身不动）
@@ -154,7 +156,8 @@ public partial class TalentUI
         onLeftUnlockRequested?.Invoke(index0 + 1);
         RefreshAll();
         // 同上：买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
-        GlobalToastUI.Show("已激活：" + LeftNodeName(index0), true);
+        // 【2026-10-31 主人拍板】toast 不再念「已激活：节点名」，直接报实际属性增益 + 一句情绪价值
+        GlobalToastUI.Show(LeftUnlockToast(index0), true);
         if (after > before) PlayRightUnlockFx(before, after);
     }
 
@@ -283,6 +286,49 @@ public partial class TalentUI
         var arr = TalentDefs.Left;
         if (arr == null || index0 < 0 || index0 >= arr.Length) return "天赋";
         return string.IsNullOrEmpty(arr[index0].name) ? "天赋" : arr[index0].name;
+    }
+
+    /// <summary>
+    /// 【2026-10-31 主人拍板】左列激活 toast 唯一出口：不念「已激活：XX I」这类节点名，
+    /// 直接报实际属性增益（真源 = TalentDefs.Left[i].effect.display，如「生命 +15」「双防 +2」），
+    /// 再随机接一句情绪价值短语。display 缺失时回落节点名，绝不给空串。
+    /// </summary>
+    static string LeftUnlockToast(int index0)
+    {
+        string gain = null;
+        var arr = TalentDefs.Left;
+        if (arr != null && index0 >= 0 && index0 < arr.Length)
+        {
+            var fx = arr[index0].effect;
+            if (fx != null && !string.IsNullOrEmpty(fx.display)) gain = fx.display;
+            else gain = LeftNodeName(index0);
+        }
+        if (string.IsNullOrEmpty(gain)) gain = "天赋";
+        // 带口吻字（啦/哦/呢）—— 已是人设文案，GlobalToastUI.Persona 不会再叠尾巴
+        string[] cheers = { "实力大增啦！", "太棒了哦！", "战力飙升啦！", "越来越强了呢！", "无人能挡啦！" };
+        return gain + "，" + cheers[UnityEngine.Random.Range(0, cheers.Length)];
+    }
+
+    /// <summary>
+    /// 【2026-10-31 主人拍板】洗点没遗忘药水的 toast：本界面 toast 统一是「前台小姐」的台词，
+    /// 口吻＝傲娇（以后同类 toast 都按这个人设设计）。区分「没有/不够」，药水获取途径（里程商店）
+    /// 保留在句尾不丢信息；真源数值仍以 TalentSystem.HasForgetPotion 为准，这里只管说话。
+    /// </summary>
+    static string ReceptionistNoPotionToast()
+    {
+        var data = SaveSystem.Instance?.Data;
+        int have = data != null ? data.TownBagCount(TalentSystem.ItemForgetPotion) : 0;
+        int cost = data != null ? TalentSystem.NextRespecPotionCost(data.respecCount) : 1;
+        string lead = have <= 0
+            ? "遗忘药水没有啦～要不要去买一个呀？"
+            : "遗忘药水不够啦～这次要 " + cost + " 个呢，再去补点嘛！";
+        string[] tails =
+        {
+            "里程商店 500 点就能换，每周限购 1 个哦。哼、才不是催你呢！",
+            "去里程商店看看嘛～500 点换一个，每周限购 1。别、别误会，人家才不是关心你！",
+            "真是的，连药水都不看好～里程商店 500 点换一个，每周限购 1 哦！",
+        };
+        return lead + tails[UnityEngine.Random.Range(0, tails.Length)];
     }
 
     /// <summary>右列节点显示名（同上：拿不到就给占位，不让 toast 变成空字符串）。</summary>

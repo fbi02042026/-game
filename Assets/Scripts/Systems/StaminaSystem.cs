@@ -186,11 +186,9 @@ public static class StaminaSystem
         return TrySpend(ENDLESS_RIFT_COST);
     }
 
-    /// <summary>按指定数额扣体力（主线 10 / 无限裂隙 20 共用一条链路）。
-    /// 【2026-10-31 测试开关】测试模式直接放行不扣，保证新号全功能可测。</summary>
+    /// <summary>按指定数额扣体力（主线 10 / 无限裂隙 20 共用一条链路）。</summary>
     static bool TrySpend(int cost)
     {
-        if (TestMode.Enabled) return true;
         Tick(save: true);
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Stamina, cost, save: true, notify: true))
             return false;

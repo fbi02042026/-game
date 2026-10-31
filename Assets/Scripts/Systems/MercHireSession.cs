@@ -117,13 +117,57 @@ public static class MercHireSession
         return !string.IsNullOrEmpty(hid) && data.IsMercUnlocked(hid);
     }
 
+    // ==========================================================================
+    // 【2026-10-31 主人拍板】普通佣兵招募价 = 1000 金币，同一个佣兵每招募一次 +500
+    //   主人原话：「把三选一普通佣兵金币抽奖改成1000 同样的佣兵每次抽加500」。
+    //   · 「三选一」= 酒馆招募的三张候选卡（不是战斗里的抽奖面板）；
+    //   · 计数 = 该 hireId 累计被招募次数（SaveData.mercRecruitCountEntries），
+    //     首次购买与「重复购买转本命碎片」都算一次 → 1000 / 1500 / 2000 …；
+    //   · 稀有 / 传奇仍走卷轴（价格不参与扣费），GoldCost 保留原口径给卡面文案用。
+    //   想调价只改这两个常量。
+    // ==========================================================================
+
+    /// <summary>普通佣兵招募基础价（金币）。</summary>
+    public const int CommonRecruitBaseGold = 1000;
+
+    /// <summary>同一个佣兵每被招募一次，下次贵多少（金币）。</summary>
+    public const int CommonRecruitRepeatStep = 500;
+
+    /// <summary>候选/名册条目对应的 hireId（offer.hireId 优先，缺了用 mercId 反查花名册）。</summary>
+    public static string HireIdOf(MercenaryData offer)
+    {
+        if (offer == null) return null;
+        if (!string.IsNullOrEmpty(offer.hireId)) return offer.hireId;
+        return MercRosterDefs.TryGetByAssetId(offer.mercId, out var def) ? def.HireId : null;
+    }
+
+    /// <summary>该候选佣兵已累计被招募几次（价格公式的唯一计数源）。</summary>
+    public static int RecruitTimesOf(MercenaryData offer)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return 0;
+        return data.GetMercRecruitCount(HireIdOf(offer));
+    }
+
+    /// <summary>记一次招募成功（首次购买 / 重复购买转碎片都算）→ 该佣兵下次价格 +500。
+    /// 调用点只有两个：<c>MercenaryRecruitPopupUI.TryHireOffer</c> 与 <c>TryBuyDuplicateOffer</c>。</summary>
+    public static void NoteRecruit(MercenaryData offer)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        data.NoteMercRecruit(HireIdOf(offer));
+    }
+
     public static int GoldCost(MercenaryData offer)
     {
-        if (offer == null) return 500;
+        if (offer == null) return CommonRecruitBaseGold;
+        // 【2026-10-31 主人拍板】普通档（金币招募那一档）改独立定价：1000 起，同一佣兵每招一次 +500。
+        // 这一档不再读花名册 RecruitGold（主人明确「改成 1000」）。
+        var rarity = OfferRarity(offer);
+        if (rarity == MercRosterDefs.MercRarity.Common)
+            return CommonRecruitBaseGold + CommonRecruitRepeatStep * RecruitTimesOf(offer);
         if (MercRosterDefs.TryGetByAssetId(offer.mercId, out var def) && def.RecruitGold > 0)
             return def.RecruitGold;
-        // 【2026-10-22 主人拍板 T13】招募零星后 offer.star 恒 0，稀有度改走 OfferRarity（花名册优先）
-        var rarity = OfferRarity(offer);
         if (rarity == MercRosterDefs.MercRarity.Legendary) return 5000;
         if (rarity == MercRosterDefs.MercRarity.Rare) return 1500;
         return 500;

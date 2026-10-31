@@ -42,9 +42,16 @@ public static class QuestJumpRouter
                     () => MainQuestSystem.NotifyStory(def.param));
 
             case MainQuestType.RecruitMerc:
-                // 雇人：酒馆里的「佣兵名册」就是雇佣入口
+                // 雇人：酒馆的三选一招募是**唯一**雇佣入口
+                // （2026-10-31 主人拍板「酒馆没有名册解锁功能」→ TavernUnlockUI 已删，这里改开招募弹窗；
+                //   开启门槛与酒馆招募按钮同源 FeatureUnlock.MercRecruitOpen，别各判各的）
                 if (!GoTavern()) return false;
-                TavernUnlockUI.Show();
+                if (!FeatureUnlock.MercRecruitOpen(SaveSystem.Instance?.Data))
+                {
+                    UIManager.Instance?.ShowToast(FeatureUnlock.MercRecruitLockHint());
+                    return true;   // 已切到酒馆并告知原因，不算跳转失败
+                }
+                MercenaryRecruitPopupUI.Show();
                 return true;
 
             case MainQuestType.UpgradeTalent:

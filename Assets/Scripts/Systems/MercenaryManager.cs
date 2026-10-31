@@ -423,7 +423,8 @@ public class MercenaryManager : Singleton<MercenaryManager>
     /// 缩放用 GameConfig.UNIT_SCALE（玩家本体的同一基准，AutoGameInitializer 同源）。
     /// 唯一调用方 = ArenaEnemySpawner（机器人阵容第 0 位）。
     /// </summary>
-    public Mercenary SpawnEnemyHeroFigure(string statMercId, Vector3 position, int level, int star)
+    public Mercenary SpawnEnemyHeroFigure(string statMercId, Vector3 position, int level, int star,
+        System.Collections.Generic.IList<EnemyFigureOutfit.Piece> outfit = null)
     {
         if (string.IsNullOrEmpty(statMercId)) return null;
 
@@ -470,6 +471,10 @@ public class MercenaryManager : Singleton<MercenaryManager>
         if (merc == null) merc = go.AddComponent<Mercenary>();
         merc.Init(statMercId, level, star);   // 属性真源 = 模板职业佣兵（lv+★ 两维进属性）
         merc.isAlly = false;                  // 🔴 敌方阵营（索敌/AI/治疗全按 isAlly 分流）
+
+        // 【2026-10-31 主人报「敌人一个什么都没穿」】玩家白模的护甲槽在预制体里是空的（玩家本体靠
+        // HeroCostumeManager 读存档换装，副本没人装配）→ 先按战力清单穿护甲，再挂职业武器。
+        EnemyFigureOutfit.Apply(go, outfit);
 
         // 【2026-10-31 主人拍板「为啥敌方没有武器装备什么」】玩家形象武器外观 = 同职业 101 佣兵手上武器
         //（铁律 11 口径；纯外观，数值走战力阀门，见 EnemyFigureWeapon 类头注释）

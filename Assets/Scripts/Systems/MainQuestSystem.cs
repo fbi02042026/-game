@@ -368,7 +368,7 @@ public static class MainQuestSystem
     {
         var d = Data;
         if (d == null) return 0;
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (d.dailyStageClearDayKey != today) return 0;
         return d.dailyStageClearCount;
     }
@@ -405,7 +405,7 @@ public static class MainQuestSystem
                 sawClear = true;
                 int need = SaveData.DAILY_CLEAR_TASK_NEED;
                 int cur = Math.Min(need, TodayClearCount());
-                bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == ShopDefs.TodayKey();
+                bool clearClaimed = d != null && d.dailyClearTaskClaimDayKey == DayKeyUtil.TodayKey();
                 list.Add(new DailyQuestView
                 {
                     id = row.id,
@@ -423,7 +423,7 @@ public static class MainQuestSystem
             // ③ 其余日常（每日登录/财源广进/除害/招贤纳士/清剿/讨伐首领）：通用计数视图
             int cntNeed = row.targetCount > 0 ? row.targetCount : 1;
             int cnt = Math.Min(cntNeed, d != null ? d.GetTaskCounter(row.targetType) : 0);
-            bool cntClaimed = d != null && d.IsTaskRewardClaimed(row.id, int.Parse(ShopDefs.TodayKey()));
+            bool cntClaimed = d != null && d.IsTaskRewardClaimed(row.id, int.Parse(DayKeyUtil.TodayKey()));
             list.Add(new DailyQuestView
             {
                 id = row.id,

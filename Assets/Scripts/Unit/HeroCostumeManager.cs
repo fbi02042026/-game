@@ -875,7 +875,11 @@ public class HeroCostumeManager : MonoBehaviour
         return found != null ? found : sprites[0];
     }
 
-    static Sprite PickSlice(Sprite[] all, string fileName, string partType, string structure, string dir)
+    /// <summary>
+    /// 多切片贴图按 Structure/Dir 选片（Armor/Cloth 有 Body/Left/Right 三片）。
+    /// 【2026-10-31】改 public：敌方玩家形象护甲装配（EnemyFigureOutfit）复用同一套选片规则，不写第二份。
+    /// </summary>
+    public static Sprite PickSlice(Sprite[] all, string fileName, string partType, string structure, string dir)
     {
         if (all == null || all.Length == 0) return null;
 
@@ -917,7 +921,8 @@ public class HeroCostumeManager : MonoBehaviour
         return FindSlice(all, name) != null;
     }
 
-    static Sprite FindSlice(Sprite[] all, string name)
+    /// <summary>按切片名找 Sprite（PickSlice 的配套工具，敌方玩家形象护甲装配同样复用）。</summary>
+    public static Sprite FindSlice(Sprite[] all, string name)
     {
         if (all == null || string.IsNullOrEmpty(name)) return null;
         for (int i = 0; i < all.Length; i++)

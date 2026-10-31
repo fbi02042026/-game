@@ -47,7 +47,7 @@ public static class ShareService
     /// 【2026-10-28 升级兼容】旧 UTC 日键在本地 0~8 点 == 本地今天 → 视同已领，防止升级当天多领 100 钻。</summary>
     public static bool IsRewardClaimedToday(SaveData data)
         => data != null && (data.shareRewardDayKey == DateTime.Now.ToString("yyyyMMdd")
-                            || ShopDefs.LegacyUtcDayKeyStillToday(data.shareRewardDayKey));
+                            || DayKeyUtil.LegacyUtcDayKeyStillToday(data.shareRewardDayKey));
 
     /// <summary>分享入口唯一出口：埋点 → 唤起系统分享面板 → 当日首次发奖。sceneTag = 埋点 #scene。</summary>
     public static void TryShareAndReward(string sceneTag)

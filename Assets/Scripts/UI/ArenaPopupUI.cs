@@ -92,8 +92,12 @@ public class ArenaPopupUI : MonoBehaviour
     // 商品单元 = 行卡版式（横条行底 + 商品图框>icon + 商品名 + 商品名 (1)价格 + 购买钮），排版全以预制体为准，
     // 代码只设图/填字/接线，不摆位（铁律 3）。货架 = 运行时搭的纵向 ScrollRect（ShopList>ShopViewport>ShopContent），
     // 8 件 = ArenaShopGoods.AllGoods 单列往下排，首行位置/行高以模板实测几何为准；模板恒隐藏（同 RowTemplate 口径）。
-    // 图框一律按稀有度设（MercHireSession.LoadRarityFrame）；点图标（图框）或点「购买」钮
-    // → ArenaShopInfoPopupUI 商品信息弹窗（按「获得技能」弹窗同款皮，带价格+现有积分）。──
+    // 图框一律按稀有度设（MercHireSession.LoadTavernCardFrame 酒馆池格三档框，Sliced；
+    // ⚠️ 首版误用 LoadRarityFrame——那是三选一高卡插画底 219×789，preserveAspect 塞进 70×70 方框
+    // 被压成 19×70 细条（2026-10-31 主人报「图标框不对 比例也不对」，照佣兵池列表卡同款修法换框））；
+    // 点图标（图框）或点「购买」钮
+    // → ArenaShopInfoPopupUI 商品信息弹窗（按「获得技能」弹窗同款皮，带价格+现有积分）。
+    // （2026-10-31 主人拍板：赛季末清零横幅撤掉，不再挂「速花」文案。）──
     const string ShopBtnName = "竞技商店Btn";
     const string ShopPageName = "竞技商店";
     GameObject _shopRoot;
@@ -101,7 +105,6 @@ public class ArenaPopupUI : MonoBehaviour
     ScrollRect _shopScroll;          // 货架纵向滚动（每次打开回顶部）
     GameObject _shopUnitTemplate;    // 「商品」示例单元（克隆源，恒隐藏）
     Text _shopBalanceText;           // 积分icon 下的余额数字
-    Text _shopBannerText;            // 赛季末清零横幅（运行时建，最后 3 天显示）
     readonly List<GameObject> _shopUnits = new List<GameObject>();   // 克隆单元（显示顺序，与 _shopGoods 同下标）
     readonly List<ArenaShopGoods.Good> _shopGoods = new List<ArenaShopGoods.Good>();   // 显示顺序的商品（=AllGoods 顺序，2026-10-31 起纵向列表）
 
@@ -808,7 +811,7 @@ public class ArenaPopupUI : MonoBehaviour
             if (_rowDash[i] != null) _rowDash[i].SetActive(!canFight);
         }
 
-        RefreshShop();   // 商店页余额/价格/清零横幅随 Changed 同步（积分变化/购买后即时刷新）
+        RefreshShop();   // 商店页余额/价格随 Changed 同步（积分变化/购买后即时刷新）
     }
 
     /// <summary>把玩家行滚到视口中间。</summary>
@@ -983,22 +986,8 @@ public class ArenaPopupUI : MonoBehaviour
             _bindFailed = true;
         }
 
-        BuildShopBanner();
         BuildShopUnits();
         _shopRoot.SetActive(false);   // 运行时接线建树完成即藏（红线：Build 末尾 SetActive(false)）
-    }
-
-    /// <summary>赛季末清零横幅（§四.5：最后 3 天挂一句文案；运行时建树，不动 prefab）。</summary>
-    void BuildShopBanner()
-    {
-        var t = UiFactory.NewTextColored(_shopBox, "SeasonClearBanner", "", 24, TextAnchor.MiddleCenter, _txtGold);
-        var rt = t.rectTransform;
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
-        rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, -196f);
-        rt.sizeDelta = new Vector2(560f, 34f);
-        t.gameObject.SetActive(false);
-        _shopBannerText = t;
     }
 
     void BuildShopUnits()
@@ -1062,18 +1051,23 @@ public class ArenaPopupUI : MonoBehaviour
             _shopUnits.Add(row);
             _shopGoods.Add(good);
 
-            // 图框按稀有度设图（2026-10-31 主人拍板「商品图框按稀有度换」）——只设图，不动主人摆的位置尺寸
+            // 图框按稀有度设图（2026-10-31 主人拍板「商品图框按稀有度换」）——只设图，不动主人摆的位置尺寸。
+            // 【2026-10-31 修「图标框不对 比例也不对」】首版误用 LoadRarityFrame（三选一高卡插画底
+            // 219×789），preserveAspect 塞进 70×70 方框被压成 19×70 细条。照佣兵池列表卡/获得佣兵弹窗
+            // 同款修法：换 LoadTavernCardFrame 酒馆池格三档框（传奇金/稀有蓝/普通银）+ Sliced，
+            // 九宫边框厚度不随格子尺寸变形，正好包住 60×60 图标。
             var frameT = UiFind.Deep(row.transform, "商品图框");
             var frameImg = frameT != null ? frameT.GetComponent<Image>() : null;
             if (frameImg != null)
             {
-                var frameSp = MercHireSession.LoadRarityFrame(good.frameRarity);
+                var frameSp = MercHireSession.LoadTavernCardFrame(good.frameRarity);
                 if (frameSp == null)
-                    Debug.LogError($"[Arena] 稀有度底框缺失：UI/Recruit/frame_*（{good.frameRarity}，商品 {good.id}，底框留空可见）");
+                    Debug.LogError($"[Arena] 稀有度底框缺失：酒馆头像框（{good.frameRarity}，商品 {good.id}，底框留空可见）");
                 else
                 {
                     frameImg.sprite = frameSp;
-                    frameImg.preserveAspect = true;
+                    frameImg.type = Image.Type.Sliced;
+                    frameImg.preserveAspect = false;
                 }
             }
             else
@@ -1184,14 +1178,19 @@ public class ArenaPopupUI : MonoBehaviour
             $"价格 {price} 积分 · 现有 {data.arenaPoints}", body,
             ShopIconFor(good), !afford || fullStar, () =>
         {
+            // 复验日志（照 2026-10-31「点关闭无反应」落日志先例）：确认回调有没有进来、走了哪条分支
             var d2 = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-            if (d2 == null) return;
-            if (d2.arenaPoints < ArenaShopGoods.PriceOf(d2, good))
+            if (d2 == null) { Debug.LogWarning("[Arena] 确认购买回调：存档未就绪，忽略"); return; }
+            int pay = ArenaShopGoods.PriceOf(d2, good);
+            if (d2.arenaPoints < pay)
             {
-                GlobalToastUI.Show("积分不足");   // 置灰键被点：只提示不入账（余额没动）
+                Debug.Log($"[Arena] 确认购买 {good.id}：积分不足（现有 {d2.arenaPoints} < 应付 {pay}）");
+                // force=true：购买反馈必须让玩家看到，不被对话/气泡压制吞掉（同 GlobalToastUI 物品变动口径）
+                GlobalToastUI.Show("积分不足", true);
                 return;
             }
             ArenaShopGoods.TryBuy(good.id, out string msg);   // 满星拦截在 TryBuy 内（toast 已有，不扣分）
+            Debug.Log($"[Arena] 确认购买 {good.id}：TryBuy={(!string.IsNullOrEmpty(msg) ? msg : "成功")}");
             if (!string.IsNullOrEmpty(msg)) GlobalToastUI.Show(msg, true);
             RefreshShop();
         });
@@ -1202,6 +1201,11 @@ public class ArenaPopupUI : MonoBehaviour
         if (_shopRoot == null) return;
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         ArenaRules.EnsurePeriods(data);   // 幂等：跨天/跨月对齐（顺带注册逐风长弓模板）
+        // 【2026-10-31 修「滑动列表时整个弹窗缩小一下」】页根自带 Button（点空白关页），
+        // UICanvasSetup 会给它自动挂按压反馈（缩到 0.94）：在货架列表上按下/拖动时，
+        // 按下事件沿层级冒泡到页根 Selectable → 整页缩一下再弹回。页根只当点空白关页用，
+        // 不该有视觉反馈 → 关掉（Open→RefreshPopup 已先挂好组件，此处必定 suppress 得上）。
+        UiButtonPressFeedback.Suppress(_shopRoot);
         _shopRoot.SetActive(true);
         _shopRoot.transform.SetAsLastSibling();
         if (_shopScroll != null) _shopScroll.verticalNormalizedPosition = 1f;   // 每次打开回顶部
@@ -1214,7 +1218,8 @@ public class ArenaPopupUI : MonoBehaviour
         if (_shopRoot != null) _shopRoot.SetActive(false);
     }
 
-    /// <summary>商店页刷新：余额（订阅 Changed 即时刷新）+ 清零横幅 + 各格价格/买断变灰。</summary>
+    /// <summary>商店页刷新：余额（订阅 Changed 即时刷新）+ 各格价格/买断变灰。
+    /// （2026-10-31 主人拍板：赛季末清零横幅撤掉，这里不再刷横幅。）</summary>
     void RefreshShop()
     {
         if (_shopRoot == null) return;
@@ -1223,18 +1228,6 @@ public class ArenaPopupUI : MonoBehaviour
         ArenaShopGoods.EnsureWeek(data);
 
         if (_shopBalanceText != null) _shopBalanceText.text = data.arenaPoints.ToString();
-
-        // 赛季末清零横幅：最后 3 天挂「本赛季积分 X 日后清零」（§四.5）
-        if (_shopBannerText != null)
-        {
-            int left = ArenaShopGoods.DaysBeforeSeasonClear();
-            bool show = left <= 3;
-            _shopBannerText.gameObject.SetActive(show);
-            if (show)
-                _shopBannerText.text = left <= 0
-                    ? "赛季最后一天！积分明天清零，速花！"
-                    : $"本赛季积分 {left} 日后清零，速花！";
-        }
 
         for (int i = 0; i < _shopUnits.Count && i < _shopGoods.Count; i++)
         {
@@ -1396,6 +1389,8 @@ public class ArenaPopupUI : MonoBehaviour
     void ShowRecords()
     {
         if (_recordsRoot == null || _recordContent == null) return;
+        // 同 ShowShop：页根「点空白关页」Button 不做按压反馈，防在记录列表上按下/拖动时整页缩一下
+        UiButtonPressFeedback.Suppress(_recordsRoot);
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         var list = data?.arenaBattleRecords;
 

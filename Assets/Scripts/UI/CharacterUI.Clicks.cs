@@ -134,12 +134,16 @@ public partial class CharacterUI
         }
 
         if (!bagPanelRoot.gameObject.activeSelf)
+        {
             bagPanelRoot.gameObject.SetActive(true);
+            // 只在「这次真的打开」时重置：每次进页允许再播一次「格子快满 → 可左右滑」的引导
+            ResetBagSwipeHint();
+        }
         if (_bagTapLayer != null)
             SetBagTapLayerActive(false);   // 常显口径下点击层永远不亮（残留即关）
         // 互斥：仓库摊开时不留技能面板
         HideSkillSelect();
-        RefreshBag();
+        RefreshBag();                // 里面会按 used/unlocked 判定是否播「格子快满」引导箭头
         ApplyBackpackPanelFit();     // 瘦屏防溢出 / 防裁切
     }
 

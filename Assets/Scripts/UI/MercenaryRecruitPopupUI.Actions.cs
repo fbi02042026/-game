@@ -176,6 +176,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             return false;
         }
         AdventureCodex.MarkMercSeen(hid);
+        // 【2026-10-31 主人拍板「同样的佣兵每次抽加500」】招募成功记一次：该佣兵下次价格 +500
+        // （首次购买与重复购买同一本账，落在 SaveSystem 存档里，跨天/跨局不清零）。
+        MercHireSession.NoteRecruit(offer);
         SaveSystem.Instance.Save();
 
         // 【2026-10-20 主人拍板】酒馆三选一购买完成 = 已拥有 → 弹「获得佣兵」全屏演出（同战斗三选一口径）。
@@ -250,6 +253,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             return false;
         }
         Debug.Log($"[MercRecruit] 重复购买 {hid} {def.Name} → 本命碎片 入包{frag.bagCount}/邮件{frag.mailCount}");
+        // 【2026-10-31 主人拍板「同样的佣兵每次抽加500」】重复购买也算一次招募 → 该佣兵下次价格 +500
+        MercHireSession.NoteRecruit(offer);
+        SaveSystem.Instance.Save();
 
         // 【2026-10-25 主人拍板】重复购买要明确提示「该佣兵已拥有，已转换成碎片+X进到背包里」——
         // 文案口径对齐名册解锁 TavernUnlockUI.TryUnlock 的 2026-10-22 拍板（走邮件补「已放入邮箱」）。

@@ -47,7 +47,13 @@ public static class ArenaEnemySpawner
         // 无阀门 → 机器人榜位战力原样。🔴 只在组队路径生效（判定不进 IsChallengeable/CanEnter 等查询函数）；
         // 胜负仍由真实战斗产出，代码里无 Random 判胜负路径。
         int battlePower = ArenaRules.GetBotBattlePower(data, bot);
-        var squad = ArenaRules.BuildBotBattleSquad(bot, battlePower);
+        // 阀门状态（放水=必赢门 / 加压=熔断门 / 1=势均力敌）：必赢门要连等级星级一起压，
+        // 否则「玩家战力 × 0.35」算出来的 Lv1★2 照样打不过（2026-10-31 主人报「测试的时候总是输」）。
+        float valve = ArenaRules.GetValvePowerMultiplier(data);
+        // 玩家形象护甲外观清单（每部位一件，品质随战斗战力）：白模 wanjia 的护甲槽是空的，
+        // 不装配就是「什么都没穿」（2026-10-31 主人报）。清单与详情弹窗的装备档同一次掷点。
+        var figureOutfit = new System.Collections.Generic.List<EnemyFigureOutfit.Piece>();
+        var squad = ArenaRules.BuildBotBattleSquad(bot, battlePower, figureOutfit, valve < 1f);
         if (squad.Count == 0)
         {
             Debug.LogError("[Arena] 敌方小队生成失败：阵容倒推为空（模板 AssetId 映射全失败，见上方逐条 LogError）");
@@ -89,10 +95,12 @@ public static class ArenaEnemySpawner
             //（视觉 Units/wanjia，属性/技能按模板职业佣兵查表）；其余照旧敌方佣兵。
             var merc = MercenaryManager.Instance == null ? null
                 : e.isHeroFigure
-                    ? MercenaryManager.Instance.SpawnEnemyHeroFigure(e.mercId, pos, e.level, e.star)
+                    ? MercenaryManager.Instance.SpawnEnemyHeroFigure(e.mercId, pos, e.level, e.star, figureOutfit)
                     : MercenaryManager.Instance.SpawnEnemyMercenary(e.mercId, pos, e.level, e.star);
             if (merc == null) continue;   // 单个生成失败已在内部 LogError，其余照常
-            merc.SetDisplayName(ctx.BotName);   // 名字牌 = 机器人名（主人拍板）
+            // 【2026-10-31 主人拍板「只给玩家形象挂机器人名」】名字牌只挂形象位：佣兵也挂同名牌子
+            // 会让场上出现「两个一样的玩家名」—— 这正是「敌人出现两个玩家形象」的观感来源。
+            if (e.isHeroFigure) merc.SetDisplayName(ctx.BotName);
             merc.SetPartyIndex(i);              // 车道偏移按队内序错开
             merc.Face(-1);                      // 面向玩家半场（左）
             // 【2026-10-31 主人拍板】屏外走入：目标 = 各自的交战位（镜头内列队点），到位后交还普通 AI
@@ -113,7 +121,10 @@ public static class ArenaEnemySpawner
             return false;
         }
         _spawnedThisStage = true;
-        Debug.Log($"[Arena] 敌方小队生成完成：{bot.name}（战力 {ArenaRules.GetBotPower(data, ctx.LadderIdx)} → 战斗战力 {battlePower}）× {spawned} 名");
+        // 诊断日志（2026-10-31 主人报「总是输」）：一行看全 榜位战力 / 玩家抽奖战力 / 阀门 / 战斗战力，
+        // 下次贴日志就能判断是敌人太强还是玩家侧太弱。
+        Debug.Log($"[Arena] 敌方小队生成完成：{bot.name}（榜位战力 {ArenaRules.GetBotPower(data, ctx.LadderIdx)}" +
+                  $" / 玩家抽奖战力 {RunLoadout.TotalPower()} / 阀门 ×{valve:F2} → 战斗战力 {battlePower}）× {spawned} 名");
         return true;
     }
 }

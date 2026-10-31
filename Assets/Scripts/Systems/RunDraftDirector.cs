@@ -824,19 +824,29 @@ public class RunDraftDirector : MonoBehaviour
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : 0f;
         int slot = mm.GetActiveMercs().Count;
         float baseX;
-        // 【2026-10-31 主人报修「抽到佣兵后没有立即上阵」】屏外走入只在战斗已开打后生效：
-        // 进关阶段（首波未刷，UnitsCanAct=false）佣兵 AI 被冻住，屏外生成 = 定在屏外，
-        // 玩家看不到也不在编队位 —— 改回旧口径直接生成在编队位，立即上阵。
-        // 战斗中抽到（首波已刷）仍走 10-29 拍板的「左边屏外走入」。
-        if (walkInFromLeft && bm._firstWaveSpawned && hero != null && TryGetMercWalkInX(hero, out float enterX))
-            baseX = enterX;                                  // 屏外左走入（战斗中抽奖入队路径）
+        // 【2026-10-31 主人拍板「抽到佣兵要从左侧入场，不许瞬现」】两条路都屏外生成、走入到编队位：
+        // · 开打前抽到（首波未刷，LiveStart 抽奖阶段）：屏外生成 + BeginMapEnter(walkWhileFrozen:true)，
+        //   冻场期间由代码驱动走回编队位 —— 早上报修「没有立即上阵」的真因是屏外生成后被冻住看不见，
+        //   正确修法是让它走出来，不是瞬现（瞬现口径废弃）。
+        // · 战斗中抽到（首波已刷）：屏外生成 + 拴绳回队（10-29 拍板口径不变，AI 自行走回来）。
+        float enterX = 0f;   // CS0165：短路时 TryGetMercWalkInX 可能不执行，显式初始化
+        bool walkInOffscreen = walkInFromLeft && hero != null && TryGetMercWalkInX(hero, out enterX);
+        if (walkInOffscreen)
+            baseX = enterX;                                  // 屏外左走入（开打前/战斗中抽奖入队共用起点）
         else if (hero != null)
-            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);   // 编队位直接生成（开打前抽奖/还原/羁绊共用）
+            baseX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);   // 编队位直接生成（还原/羁绊等非走入路径共用）
         else
             baseX = MercSpawnOffsetX;                        // 无英雄参照时的兜底（同旧口径）
 
         var merc = mm.SpawnMercenary(e.mercId, new Vector3(baseX, UnitBase.GROUND_Y, z), Mathf.Max(1, e.level));
         if (merc == null) return;
+
+        // 开打前抽到：冻场也照走，走到编队位收队（战斗中抽到走拴绳回队，不进走入段）
+        if (walkInOffscreen && !bm._firstWaveSpawned)
+        {
+            float slotX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);
+            merc.BeginMapEnter(slotX, 1, walkWhileFrozen: true);
+        }
 
         merc.mercStar = Mathf.Clamp(e.star, 1, 5);       // 2026-10-06：MP 池/回复的星级真源
 

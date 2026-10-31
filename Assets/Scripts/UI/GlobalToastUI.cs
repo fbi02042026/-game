@@ -46,9 +46,33 @@ public class GlobalToastUI : MonoBehaviour
     public static void Show(string msg, bool force)
     {
         if (string.IsNullOrEmpty(msg)) return;
+        msg = Persona(msg);   // 【2026-10-31 主人拍板】全局 toast 人设统一在这里套，调用方不用各改一遍
         // 直接调 GlobalToastUI 的路径也要挡气泡 —— 除非 force（物品变动）
         if (!force && AnyBubbleShowing) return;
         Ensure().Play(msg);
+    }
+
+    /// <summary>
+    /// 【2026-10-31 主人拍板】全局 toast 人设＝前台小姐（口吻傲娇）：屏幕浮字一律当作她在说话，
+    /// 在这一个出口统一包装 —— 信息原文一字不动，句尾随机接一句傲娇短语；
+    /// 文案里已带口吻字（啦/～/哦/嘛/哼/呢/呀）的视为已按人设写好，不再叠尾巴防重复。
+    /// 战斗飞字（<see cref="ShowFlythrough"/>）不走本包装。
+    /// </summary>
+    static string Persona(string msg)
+    {
+        const string marks = "啦～哦嘛哼呢呀";
+        for (int i = 0; i < marks.Length; i++)
+            if (msg.IndexOf(marks[i]) >= 0) return msg;
+        string[] tails =
+        {
+            "哼、才不是特意提醒你呢！",
+            "记住了哦？",
+            "别让人家说第二遍！",
+            "……才、才不是关心你呢！",
+            "有我在就放心吧～",
+            "别大意哦～",
+        };
+        return msg + tails[Random.Range(0, tails.Length)];
     }
 
     /// <summary>从左淡入到中央 → 慢右移 1.5s → 快速右出（精英击破等战斗播报）。</summary>

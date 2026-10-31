@@ -94,14 +94,30 @@ public static class HeroVaultSystem
             // 城镇道具（局内道具结算时转入 SaveData.townBagItems）+ 日志碎片（存档总持有）+ 天赋石（钱包总持有）。
             // 全为纯展示位：图标 + 数量角标，点击弹告知框，不可使用/丢弃/拖拽。
             AppendTownDisplays(result, occupied, rows);
+
+            // 2026-10-31：把「真实占用的格子数」记下来（装备按占格算，展示位按 1 格算）。
+            // 角色页容量文案与「格子快满」引导都用它 —— 原来只数"有装备的格子"，
+            // 背包被天赋石/碎片/道具占满时显示 0/16，判定也不准。
+            int occupiedCells = 0;
+            for (int y = 0; y < occupied.GetLength(1); y++)
+                for (int x = 0; x < occupied.GetLength(0); x++)
+                    if (occupied[x, y]) occupiedCells++;
+            LastOccupiedCells = occupiedCells;
         }
         catch (Exception e)
         {
             Debug.LogWarning("[HeroVaultSystem] 收集角色页背包失败：" + e.Message);
+            LastOccupiedCells = 0;
             return new List<BackpackGridVisual.ItemPlacement>();
         }
         return result;
     }
+
+    /// <summary>
+    /// 最近一次 <see cref="Collect"/> 铺完后真实占用的格子数（含装备占格 + 各展示位各 1 格）。
+    /// 只给 UI 读（容量文案 / 快满引导），不写存档。
+    /// </summary>
+    public static int LastOccupiedCells { get; private set; }
 
     /// <summary>展示位收集条目：先按获得顺序收集，再按需排序，最后统一铺格。</summary>
     struct DisplayEntry

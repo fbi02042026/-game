@@ -589,7 +589,8 @@ public class GuildHallUI : MonoBehaviour
         SetBtnHidden(noticeBoardButton); // 公告栏
         SetBtnHidden(armoryButton);      // 武器库（遗产浏览）
         SetBtnHidden(licenseHallButton); // 执照厅
-        // 2026-10-15 主人拍板：商城按钮隐藏（ShopUI 代码与 wiring 保留，入口先藏；要恢复删这行即可）
+        // 2026-10-15 主人拍板：商城按钮隐藏。
+        // 2026-10-31 主人拍板「商店功能删掉」→ ShopUI/ShopSystem 已删，这里只留藏按钮（预制体节点仍在，不手改预制体）
         SetBtnHidden(shopButton);
         // 按节点名再兜底（引用丢失时仍能藏）
         HideNamed("NoticeButton", "RankButton", "ActivityButton",
@@ -671,26 +672,8 @@ public class GuildHallUI : MonoBehaviour
         AdMercEventEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
-        // 商店：2026-09-15 接通，技能解锁 / 抽卡券 / 资源补给 / 材料 四个货架
-        if (shopButton != null)
-        {
-            shopButton.onClick.RemoveAllListeners();
-            shopButton.onClick.AddListener(() => ShopUI.Show());
-        }
-        else
-        {
-            // 预制体引用丢失时按节点名兜底，避免入口点不动
-            var shopNode = FindDeepChild(transform, "ShopButton");
-            if (shopNode != null)
-            {
-                shopButton = shopNode.GetComponent<Button>();
-                if (shopButton != null)
-                {
-                    shopButton.onClick.RemoveAllListeners();
-                    shopButton.onClick.AddListener(() => ShopUI.Show());
-                }
-            }
-        }
+        // 商店入口：2026-10-31 主人拍板「商店功能删掉」→ ShopUI / ShopSystem 已整体删除，
+        // 这里不再接点击（按钮本身由 HideUnfinishedHallButtons 藏掉）。要复活商店需重建这两个类。
         // 2026-09-19：这两个加号原是「看广告」入口，现已改成钻石开启，不属于广告内容，
         // 所以聚光灯版本也要显示（原先 SpotlightBuild.Enabled 时会整个隐藏）。
         if (goldPlusButton != null)

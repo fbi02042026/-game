@@ -572,6 +572,15 @@ public static class TalentDefs
             2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
             12, 13, 14, 15, 16, 17, 18, 19, 20, 21
         };
+        // 【2026-10-31 主人拍板·轮流版】里程碑加码：每跨 10 个天赋的十年区间里，按 生命→攻击→双防
+        // 轮流挑「该区间内最后一个该类型节点」翻倍（整十节点按四槽循环恰好全落攻击槽，主人拍板改三类轮流），
+        // 其余节点数值不动。milestoneNode[k] = 第 k 个十年里被翻倍的节点序号（1-based）。
+        int[] milestoneNode = new int[9];
+        for (int k = 1; k <= 8; k++)
+        {
+            int s = k % 3 == 1 ? 0 : k % 3 == 2 ? 3 : 2;   // 槽位：0体质 3攻击 2防御 → 生命/攻击/双防轮流
+            milestoneNode[k] = 10 * k - ((10 * k - 1 - s) % 4);
+        }
         var list = new LeftNode[80];
         for (int i = 0; i < 80; i++)
         {
@@ -599,6 +608,16 @@ public static class TalentDefs
                         ? Fx(AttrKind.Attack, AtkFlat, $"攻击 +{AtkFlat:0}")
                         : Fx(AttrKind.AttackPercent, atkPct[group - 5], $"攻击 +{atkPct[group - 5]:0}%");
                     break;
+            }
+            // 【2026-10-31 主人拍板·轮流版】里程碑节点属性翻倍：落在 milestoneNode 表指的节点上
+            // （生命→攻击→双防 轮流，见上方表构建注释），让玩家每跨 10 个天赋拿到一次明显的实力跳变。
+            // display 在这里同步重写，保证节点描述与实际加的值一致（老档已点节点按新值生效）。
+            if (milestoneNode[i / 10 + 1] == i + 1)
+            {
+                float boosted = fx.value * 2f;
+                string unit = (slot == 1 || slot == 3) && group >= 5 ? "%" : "";
+                string label = slot == 0 ? "生命" : slot == 2 ? "双防" : "攻击";
+                fx = Fx(fx.kind, boosted, $"{label} +{boosted:0}{unit}");
             }
             // 【2026-10-26 主人拍板涨价·温和档】原曲线太便宜——ch1 一小关 ≈132 金（满章 ≈1,056÷8），
             // 旧 L1=50 起步一小关能连开 2~3 个。新曲线：L1~20 = 100+25i（L1=100，一小关开 1 个，

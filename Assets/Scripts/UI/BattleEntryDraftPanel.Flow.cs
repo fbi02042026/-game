@@ -88,6 +88,10 @@ public partial class BattleEntryDraftPanel
         _cdActive = false;
         _onPick = null;
         _onFight = onFight;
+        // 【2026-10-31】每场战斗进关重置「币够了没抽」引导：本场没抽过、还没弹过、计时归零
+        _liveDrawnThisStage = false;
+        _liveDrawHintShown = false;
+        _liveDrawHintTimer = 0f;
         // ⚠ 不走动画：主人原话「不会出现抽奖时那个界面动画了」—— 直接按展开态真值表一步落位
         //（面板 750 / zhuangshi +80 / DraftRoot -250 / map 350），与旧面板 Begin 的 SetExpanded(true) 同一套数值，
         // 只是跳过 CoAnimState 插值。世界层跟随抬升（ApplyWorldLift）也一并到位。
@@ -142,6 +146,62 @@ public partial class BattleEntryDraftPanel
             s.CdMask.fillAmount = Mathf.Clamp01(cd / BattleManager.LIVE_DRAW_CD_SEC);
             if (s.CdText != null) s.CdText.text = Mathf.CeilToInt(cd).ToString();
         }
+    }
+
+    /// <summary>
+    /// 🔴【2026-10-31 主人拍板「关卡战斗中如果玩家抽奖币够了 玩家没抽的时候要加上引导」】
+    /// LiveMode（正式关 / 金币本）战斗内：<b>开打后</b>连续 <see cref="LiveDrawHintDelaySec"/> 秒
+    /// 「抽奖按钮可点但本场一次都没抽」→ 用主人给的「像素风空白对话框指针」指随机抽奖按钮
+    /// （底框一次性替换，Hide 后自动还原默认引导底框）。
+    /// <para>触发口径（全部满足才弹，宁缺勿滥）：<br/>
+    /// ① LiveMode 且 <c>UnitsCanAct</c> = true（真的开打了；进关「开始战斗」阶段不弹）；<br/>
+    /// ② 不在实时抽 CD 中；<br/>
+    /// ③ 至少一个抽奖按钮 <c>interactable</c>（币够 / 有免费额度 / 竞技场还有次数，真源同 Refresh）；<br/>
+    /// ④ 本场没点过抽奖按钮；⑤ 本场还没弹过（一场一次）。</para>
+    /// <para>消失：引导自己 5 秒后自动收（<see cref="TutorialHintUI.Show"/> 的 autoHide），
+    /// 玩家点抽奖按钮立刻收（见 <c>OnDraftClicked</c>），面板收起时一并收（见 <c>Finish</c>）。</para>
+    /// </summary>
+    void TickLiveDrawHint()
+    {
+        if (_liveDrawHintShown || _liveDrawnThisStage)
+        {
+            _liveDrawHintTimer = 0f;
+            return;
+        }
+
+        var bm = BattleManager.InstanceQuiet;
+        // 首波没刷 / 剧情 / 结算链期间 UnitsCanAct 恒 false —— 天然把进关阶段排除在外
+        if (bm == null || !bm.UnitsCanAct || _cdActive)
+        {
+            _liveDrawHintTimer = 0f;
+            return;
+        }
+
+        // 可抽与否的唯一真源 = Refresh 刷出来的 Btn.interactable（币不够 / 额度用完都置灰）
+        bool anyClickable = false;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            if (_slots[i].Btn != null && _slots[i].Btn.interactable) { anyClickable = true; break; }
+        }
+        if (!anyClickable)
+        {
+            _liveDrawHintTimer = 0f;
+            return;
+        }
+
+        _liveDrawHintTimer += Time.unscaledDeltaTime;
+        if (_liveDrawHintTimer < LiveDrawHintDelaySec) return;
+
+        _liveDrawHintTimer = 0f;
+        _liveDrawHintShown = true;   // 先置位：取不到按钮也不再反复尝试
+        var drawRt = NormalButtonRect;
+        if (drawRt == null) return;
+
+        var hint = TutorialHintUI.Ensure();
+        hint.SetBannerSpriteOnce(BattleManager.DraftHintBubble);   // 一次性：Hide 后还原默认底框
+        // 竞技场不吃金币（四类按钮共用 5 次额度），文案不能写「抽奖币够了」，否则玩家会去找币
+        string hintText = bm.IsArena ? "还有抽奖次数，点这里抽一次！" : "抽奖币够了，点这里抽一次！";
+        hint.Show(hintText, drawRt, 5f);
     }
 
     static BattleEntryDraftPanel Ensure()
@@ -385,7 +445,12 @@ public partial class BattleEntryDraftPanel
         TickContinueCountdown();
 
         // 【2026-10-29 实时抽 CD】LiveMode 下每帧同步 CD 遮罩与秒数（含起止沿的按钮刷新）。
-        if (_liveMode) TickLiveCooldown();
+        if (_liveMode)
+        {
+            TickLiveCooldown();
+            // 【2026-10-31】战斗内「抽奖币够了但没抽」引导（一场一次，开打后才计时）
+            TickLiveDrawHint();
+        }
 
         // 【2026-10-09 主人拍板】开打那一刻自动收起背包：只认 UnitsCanAct 的 false→true 跳变，
         // 且必须是玩家手动点开的（抽屉开着、不在抽奖阶段 _draftActive）。
@@ -467,6 +532,13 @@ public partial class BattleEntryDraftPanel
         // 面板收了，倒计时也得停 —— 不然协程还挂在已经隐藏的面板上，归零会再触发一次「继续」
         StopContinueCountdown();
         StopIdleGuide();   // 5 秒无操作引导一并收掉（面板都没了不该留手指）
+        // 【2026-10-31】战斗内「币够了没抽」引导：面板收起（开战/通关/撤离）时一并收掉，
+        // 不让它跟着飘进结算或城镇（它是 DDOL 常驻组件，只能在这里收）。
+        if (_liveDrawHintShown)
+        {
+            _liveDrawHintShown = false;
+            TutorialHintUI.Instance?.Hide();
+        }
         _onPick = null;
         _onFight = null;
         _draftActive = false;

@@ -315,36 +315,47 @@ public partial class AdventureUI
     /// <summary>【2026-10-31】关卡名右移 10 的一次性守卫（见 ApplyDetailTextStyle）。</summary>
     bool _stageNameShiftedRight10;
 
+    /// <summary>【2026-10-31】「可能掉落」小标题右移 20 的一次性守卫（见 ApplyDetailTextStyle）。</summary>
+    bool _dropTitleShiftedRight20;
+
     /// <summary>
-    /// 关卡详情文字样式（字号 / 溢出）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
-    /// 【2026-10-11 主人拍板】章节名 27 / 介绍 21 / 小标题 25；介绍框溢出改为可见，长句不再被吃掉后半截。
-    /// 【2026-10-19 主人改排版】介绍框宽度**跟随预制体**（主人已把信息框边界拉大），
-    /// 不再在运行时把宽度压回 340 —— 代码只管字号和溢出，排版以预制体为准。
+    /// 关卡详情文字样式（溢出 / 位置）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
+    /// 【2026-10-31 主人拍板「信息面板上的字用我预制体里设置的大小，别再改小」】
+    /// 🔴 本方法**不再写 fontSize**：字号一律以预制体为准（StageName 25 / StageDesc 20 / DropTitle 18）。
+    /// 曾经的 27/21/25 是 2026-10-11 的旧口径，运行时覆盖会盖掉主人自己调的号，已全部删除。
+    /// Build（预制体缺失时代码建树）的字号仍在 CreateTextGO 建节点时用 Detail*FontSize 常量给定，互不影响。
+    /// 【2026-10-19 主人改排版】介绍框宽度跟随预制体，不在运行时压宽。
     /// </summary>
     void ApplyDetailTextStyle()
     {
         if (stageNameLabel != null)
         {
-            stageNameLabel.fontSize = DetailNameFontSize;
-            // 【2026-10-31 主人拍板「关卡名字超出左边了 整体往右移动10」】
+            // 【2026-10-31 主人拍板「关卡名字超出左边了 整体往右移动10」+「1-1 枯井小道 小标题再往右20」两次累计 +30】
             // 只挪这一次：Build / AutoBind 两条路都会进本方法，用守卫防重复叠加。
             if (!_stageNameShiftedRight10)
             {
                 _stageNameShiftedRight10 = true;
                 var rt = stageNameLabel.rectTransform;
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x + 10f, rt.anchoredPosition.y);
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x + 30f, rt.anchoredPosition.y);
             }
         }
         if (stageDescLabel != null)
         {
-            stageDescLabel.fontSize = DetailDescFontSize;
+            // 溢出改为可见（2026-10-11 主人拍板）：长介绍不再被吃掉后半截。字号不动。
             stageDescLabel.verticalOverflow = VerticalWrapMode.Overflow;
         }
-        // 「可能掉落」字号对齐「敌人信息」；关掉换行避免折成两行
+        // 「可能掉落」关掉换行避免折成两行（字号不动，以预制体为准）
         if (dropTitleLabel != null)
         {
-            dropTitleLabel.fontSize = DetailSubTitleFontSize;
             dropTitleLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+            // 【2026-10-31 主人拍板「下面的信息小标题再往右移20」】
+            // 只挪这一次：Build / AutoBind 两条路都会进本方法，用守卫防重复叠加。
+            if (!_dropTitleShiftedRight20)
+            {
+                _dropTitleShiftedRight20 = true;
+                var rt = dropTitleLabel.rectTransform;
+                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x + 20f, rt.anchoredPosition.y);
+            }
         }
     }
 

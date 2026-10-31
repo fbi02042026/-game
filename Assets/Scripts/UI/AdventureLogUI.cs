@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -35,6 +36,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         public string Title;
         public string Progress;
         public string Detail;
+        // 2026-10-31 主人报「点任务条后当前目标只显示进行中，没写怎么做什么的」：
+        // 行新增「点击后当前目标槽该显示什么」，点击卡片时不再拿进度字凑数。
+        public string Objective;
         public bool Locked;
         public string AchId;
     }
@@ -51,8 +55,6 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     Text _activeProg;
     // 2026-10-22 主人拍板：Paper 顶部的「进行中」小标头改为显示当前页签名（主线/支线/成就…）
     Text _ongoingHeader;
-    // 标题/描述改挂 mask（字随图走）只做一次
-    bool _captionFollowsArt;
     Transform _listContent;
     GameObject _claim;
     // 领取按钮置灰（2026-10-20 主人要求）：无可领成就时按钮变灰不可点。
@@ -195,11 +197,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             _listContent = _scroll.content;
 
         _paper = transform.Find("Root/Frame/Paper")?.gameObject;
+        // 2026-10-31 实锤：OngoingHeader 实际挂在 Paper/bg 下，旧路径 Paper/OngoingHeader
+        // 一直 Find 落空，顶部木牌永远显示预制体默认「进行中」、不随页签变。先查 bg/ 再兜旧路径。
         _ongoingHeader = _paper != null
-            ? _paper.transform.Find("OngoingHeader")?.GetComponent<Text>()
+            ? (_paper.transform.Find("bg/OngoingHeader")?.GetComponent<Text>()
+               ?? _paper.transform.Find("OngoingHeader")?.GetComponent<Text>())
             : null;
-        EnsureCaptionFollowsArt();
-        EnsurePaperTopLayout();
         BindAchievementClaimButton();
         _activeCard = FindTransform("ActiveCard")?.gameObject;
         var frame = transform.Find("Root/Frame");
@@ -207,6 +210,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             _codex = new AdventureLogCodexPanel(frame);
         HidePaper1Template();
         PrepareDoneTemplate();
+        ApplyReadableFontSizes();
         EnsureLogChromeUsable();
         WireTabs();
         BindSidebarTabIcons();
@@ -267,89 +271,28 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         {
             _tabIllustration.enabled = true;
             _tabIllustration.color = Color.white;
-            _tabIllustration.preserveAspect = true;
-            _tabIllustration.SetNativeSize();
+            // 2026-10-31 晚 主人重摆预制体并拍板「一切以预制体为准」：这里只负责按页签换图，
+            // 不再动插图 RectTransform（旧版按 mask 等比缩放/拉满卡宽的适配已删），
+            // 尺寸、锚点、preserveAspect 全按主人在预制体里摆的来。
         }
         else
             Debug.LogWarning($"[AdventureLogUI] 缺少标签插图 {key}");
     }
 
+    // 2026-10-31 晚：插图宽度适配整套（LayoutTabIllustration/LayoutIllustCaption/补算协程/
+    // OnRectTransformDimensionsChange）已删 —— 主人重摆预制体后拍板「以预制体为准」，
+    // 运行时不再重算插图与字幕几何，见 ApplyTabIllustration 内注释。
+
     bool IsCodexTab(LogTab tab) => tab == LogTab.Monster || tab == LogTab.Merc;
 
-    /// <summary>
-    /// 2026-10-22 主人拍板「字随图走」：ActiveTitle/ActiveDesc 原本挂在 ActiveCard 的
-    /// 比例锚点上，而 ActiveCard/mask 是定尺寸 440.6×274.7、插图 SetNativeSize 后也不随
-    /// 屏幕伸缩 —— 瘦长屏上比例锚点的字整体上漂，与图错位。这里把两条字幕改挂到 mask 下、
-    /// 按 mask 比例锚定（标题占上带 0.64~0.96，描述占中带 0.26~0.62），图走字跟着走。
-    /// 仅运行时改挂，不动预制体文件；只处理正式 Paper，Paper1 模板整页隐藏不碰。
-    /// </summary>
-    void EnsureCaptionFollowsArt()
-    {
-        if (_captionFollowsArt) return;
-        var card = transform.Find("Root/Frame/Paper/ActiveCard");
-        var mask = card != null ? card.Find("mask") : null;
-        if (mask == null)
-        {
-            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/ActiveCard/mask，标题/描述无法跟图走");
-            return;
-        }
-        if (ReparentCaptionUnderMask(card.Find("ActiveTitle"), mask, 0.64f, 0.96f) |
-            ReparentCaptionUnderMask(card.Find("ActiveDesc"), mask, 0.26f, 0.62f))
-            _captionFollowsArt = true;
-    }
-
-    static bool ReparentCaptionUnderMask(Transform node, Transform mask, float yMin, float yMax)
-    {
-        if (node == null)
-        {
-            Debug.LogError("[AdventureLogUI] ActiveCard 下缺少 ActiveTitle/ActiveDesc，字幕跟图走失败");
-            return false;
-        }
-        node.SetParent(mask, false);
-        var rt = (RectTransform)node;
-        rt.anchorMin = new Vector2(0.05f, yMin);
-        rt.anchorMax = new Vector2(0.97f, yMax);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-        return true;
-    }
-
-    /// <summary>
-    /// 2026-10-24 主人报「每个标签的页面上面都空了一截」：Paper 顶部的灰页签(Paper/bg，
-    /// 内含 OngoingHeader 页签名)与插图(Paper/ActiveCard/mask)在预制体里按 1280 设计稿的
-    /// 绝对偏移 + 中心锚点摆位（bg +408 / mask +72）。运行时 Frame 拉高后（逻辑高 1600、
-    /// Paper 高约 1296）纸顶到纸中心距离变大，这两块整体从纸顶下坠 100~160px：插图顶距
-    /// 纸顶约 210（设计稿约 120），页签坠进插图背后被盖住。这里把两块改挂纸顶锚点，恢复
-    /// 设计稿的贴顶节奏：页签 bg 距纸顶 58，插图 mask 顶高出卡片顶 20（与设计稿一致）。
-    /// 只动 y 锚点与偏移，不动尺寸/字号/图；字幕(ActiveTitle/ActiveDesc)已挂 mask 下按比例
-    /// 锚定，图走字跟着走，不受影响。
-    /// </summary>
-    void EnsurePaperTopLayout()
-    {
-        var labelBg = transform.Find("Root/Frame/Paper/bg") as RectTransform;
-        if (labelBg != null)
-        {
-            labelBg.anchorMin = new Vector2(0.5f, 1f);
-            labelBg.anchorMax = new Vector2(0.5f, 1f);
-            labelBg.pivot = new Vector2(0.5f, 1f);
-            labelBg.anchoredPosition = new Vector2(labelBg.anchoredPosition.x, -58f);
-        }
-        else
-            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/bg，页签贴顶修复跳过");
-
-        var card = transform.Find("Root/Frame/Paper/ActiveCard") as RectTransform;
-        var mask = card != null ? card.Find("mask") as RectTransform : null;
-        if (mask == null)
-        {
-            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/Paper/ActiveCard/mask，插图贴顶修复跳过");
-            return;
-        }
-        mask.anchorMin = new Vector2(0.5f, 1f);
-        mask.anchorMax = new Vector2(0.5f, 1f);
-        mask.pivot = new Vector2(0.5f, 1f);
-        mask.anchoredPosition = new Vector2(mask.anchoredPosition.x, 20f);
-    }
+    // 2026-10-31 晚：以下两套运行时几何修正已删（主人在预制体里重摆了版面并拍板
+    // 「一切以预制体为准」，运行时不得再覆盖）：
+    // ① EnsureCaptionFollowsArt/ReparentCaptionUnderMask（10-22 字随图走的改挂）——
+    //    ActiveTitle/ActiveDesc 留在预制体原挂点，主人已按比例锚好；
+    // ② EnsurePaperTopLayout（10-24 页签/插图贴顶）——bg、mask 位置全按预制体。
+    // ✅ 同晚主人授权已把预制体里 Paper/bg 与 ActiveCard/mask 的 y 锚点改成 1（锚纸顶，
+    // 位置按 1280 高画布视觉等价换算：bg y=-49.876、mask y=+27.947），瘦屏机不再下坠，
+    // 本文件运行时不再做任何几何补偿。
 
     void ApplyModeVisibility()
     {
@@ -358,7 +301,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         {
             // 任务形态：Paper 列表；图鉴形态：隐藏列表区，保留 Paper 也可整隐
             var scroll = _paper.transform.Find("Scroll");
-            var ongoing = _paper.transform.Find("OngoingHeader");
+            // 同一实锤：隐藏也要走 bg/ 路径，否则图鉴页顶牌藏不掉。
+            var ongoing = _paper.transform.Find("bg/OngoingHeader")
+                          ?? _paper.transform.Find("OngoingHeader");
             if (scroll != null) scroll.gameObject.SetActive(!codex);
             if (ongoing != null) ongoing.gameObject.SetActive(!codex);
             if (_activeCard != null) _activeCard.SetActive(!codex);
@@ -699,9 +644,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             claim.onClick.RemoveAllListeners();
             claim.onClick.AddListener(() =>
             {
-                int n = AdventureLogAchievements.ClaimAll();
+                int n = AdventureLogAchievements.ClaimAll(out string got);
                 if (n > 0)
-                    UIManager.Instance?.ShowToast($"领取 {n} 个成就奖励");
+                    // 2026-10-31 主人报「只说了领取了4个成就奖励，没说是什么」：改成汇报领到了什么
+                    UIManager.Instance?.ShowToast(string.IsNullOrEmpty(got) ? $"领取 {n} 个成就奖励" : got);
                 else if (AdventureLogMileage.HasUnclaimedLevel())
                     UIManager.Instance?.ShowToast("成就已领完，日志里程奖励请在世界/成就页查看");
                 else
@@ -781,6 +727,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var mercTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab3");
         if (mercTab != null)
             RedDot.Bind(mercTab, RedDot.LogMerc);
+        // 2026-10-31：里程等级 / 碎片合成挂世界页 Tab，成就 Tab 只留「成就可领」
+        var worldTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab5");
+        if (worldTab != null)
+            RedDot.Bind(worldTab, RedDot.LogWorld);
         if (_claim != null)
             RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-8f, -8f));
     }
@@ -875,14 +825,20 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string extra = e.Id == "C1" && StoryProgress.Chapter1ChoiceDone
                 ? "石碑选择：" + (StoryProgress.GetChoice(1) ?? "")
                 : e.Extra;
+            // 2026-10-31 主人报「点任务条信息不对」：点击卡片 = 标题/描述(摘要)/目标(下一步)/进度，
+            // 描述与目标不再重复同一段文字；未解锁行目标槽统一「尚未解锁」。
             AddRow(rows, on ? e.Title : "？？？",
                 on ? "已记录" : e.Unlock,
-                on ? e.Summary + "\n" + extra : "解锁条件：" + e.Unlock,
-                !on);
+                on ? e.Summary : "解锁条件：" + e.Unlock,
+                !on,
+                on ? extra : "尚未解锁");
         }
         title = hasCurrent ? current.Title : "主线故事";
         desc = hasCurrent ? current.Summary : "完成引导后将在此记录章节摘要。";
-        objective = hasCurrent ? current.Extra : "完成见习委托";
+        // 2026-10-31 主人报「任务信息不合适」：「当前目标」原先是最新一段的剧情独白（Extra），
+        // 玩家看不出下一步要干什么。改为第一个未解锁条目的达成条件（如「通关 1-3」）。
+        objective = NextGoal(list, AdventureLogCatalog.MainUnlocked, e => e.Unlock)
+                    ?? "主线记录已集齐";
         progress = unlocked + "/" + list.Length;
     }
 
@@ -904,12 +860,14 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             }
             AddRow(rows, on ? e.Title : "？？？",
                 on ? "已完成" : e.Unlock,
-                on ? e.Summary + "\n" + e.Extra : "解锁条件：" + e.Unlock,
-                !on);
+                on ? e.Summary : "解锁条件：" + e.Unlock,
+                !on,
+                on ? e.Extra : "尚未解锁");
         }
         title = hasCurrent ? current.Title : "支线故事";
         desc = hasCurrent ? current.Summary : "支线通过佣兵参战、NPC 对话或关卡掉落触发。";
-        objective = hasCurrent ? current.Extra : "继续冒险以解锁支线";
+        objective = NextGoal(list, AdventureLogCatalog.SideUnlocked, e => e.Unlock)
+                    ?? "支线记录已集齐";
         progress = unlocked + "/" + list.Length;
     }
 
@@ -935,7 +893,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             AddRow(rows, on ? e.Name : "？？？",
                 status,
                 on ? e.Desc + "\n" + e.Lore : (e.LaterChapter ? "在后续裂隙层中可解锁。" : "解锁条件：" + e.Unlock),
-                !on);
+                !on,
+                on ? e.Place : "尚未解锁");
         }
         title = hasCurrent ? current.Name : "怪物图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Lore : "本版描述偏趣闻与冒险者口耳相传，不代表公会官方立场。";
@@ -964,7 +923,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             AddRow(rows, on ? label : "？？？",
                 on ? e.Role : e.Unlock,
                 on ? e.Desc + "\n" + e.Lore : "解锁条件：" + e.Unlock,
-                !on);
+                !on,
+                on ? e.Place : "尚未解锁");
         }
         string curTitle = "佣兵与角色";
         if (hasCurrent)
@@ -1004,16 +964,25 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             else if (done) prog = "已完成";
             else prog = AdventureLogAchievements.FormatProgress(e.Id);
 
+            // 2026-10-31 主人报「成就没写是什么、怎么做什么的」：行标题不再用？？？遮蔽，
+            // 未完成成就直接显示名字；点击卡片 = 描述(分类+描述) / 目标(达成条件) / 进度(含计数)。
             string detail = done
                 ? e.Desc + "\n奖励：" + AdventureLogAchievements.GetReward(e.Id).Label
-                : e.Category + "　解锁条件：" + e.Unlock;
-            AddRow(rows, done ? e.Name : "？？？", prog, detail, !done, e.Id);
+                : e.Category + "　" + e.Desc;
+            AddRow(rows, e.Name, prog, detail, !done, e.Unlock, e.Id);
         }
         title = hasCurrent ? current.Name : "成就";
         desc = hasCurrent
             ? current.Desc
             : "成长、战斗、收集、养成、探索。达成后请在此领取奖励。";
-        objective = AdventureLogMileage.FormatStatusLine();
+        // 2026-10-31 校对：原先这里显示 AdventureLogMileage.FormatStatusLine()（里程状态，
+        // 属世界页口径，放成就页错位）。改为可领提示 / 下一个成就的达成条件。
+        objective = claimable > 0
+            ? "有 " + claimable + " 个成就奖励可领取"
+            : NextGoal(list,
+                  e => AdventureLogAchievements.IsCompleted(e.Id) || AdventureLogCatalog.AchUnlocked(e),
+                  e => e.Unlock)
+              ?? "成就已全部达成";
         progress = unlocked + "/" + list.Length
                    + (claimable > 0 ? $"  可领×{claimable}" : "");
     }
@@ -1036,7 +1005,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             AddRow(rows, on ? e.Name : "？？？",
                 on ? e.Category : e.Unlock,
                 on ? e.Desc + "\n" + e.Flavor : "解锁条件：" + e.Unlock,
-                !on);
+                !on,
+                on ? e.Category : "尚未解锁");
         }
         title = hasCurrent ? current.Name : "世界图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Flavor : "世界观、地点、组织、物品与传说。";
@@ -1044,9 +1014,58 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         progress = unlocked + "/" + list.Length + "\n" + AdventureLogFragments.FormatInventory();
     }
 
-    static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked, string achId = null)
+    static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked,
+        string objective, string achId = null)
     {
-        rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail, Locked = locked, AchId = achId });
+        rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail,
+            Objective = objective, Locked = locked, AchId = achId });
+    }
+
+    /// <summary>第一个未达成条目的目标文案；全部达成返回 null。</summary>
+    static string NextGoal<T>(T[] list, Func<T, bool> reached, Func<T, string> goal)
+    {
+        for (int i = 0; i < list.Length; i++)
+            if (!reached(list[i]))
+                return goal(list[i]);
+        return null;
+    }
+
+    // 2026-10-31 主人报「这些字有点小」：只调字号不动框（字号属允许项）。
+    // 章节描述 16→20、当前目标正文 20→22、当前目标小标 14→16、行任务名 20→22。
+    // 行右侧状态字保持 18 不动：要装「首次击败森之守护者」这类长条件，再大会加重折行。
+    void ApplyReadableFontSizes()
+    {
+        var paperT = transform.Find("Root/Frame/Paper");
+        if (paperT == null) return;
+        SetFontSize(paperT.Find("ActiveCard/ActiveDesc"), 20);
+        SetFontSize(paperT.Find("ActiveCard/Art/Objective"), 22);
+
+        // 「当前目标」小节标：节点名是 Text (Legacy) 且预制体文案写死，按文案找更稳。
+        var card = paperT.Find("ActiveCard");
+        if (card != null)
+        {
+            var texts = card.GetComponentsInChildren<Text>(true);
+            for (int i = 0; i < texts.Length; i++)
+                if (texts[i] != null && texts[i].text == "当前目标")
+                    texts[i].fontSize = 16;
+        }
+
+        // 行模板（已完成）：任务名。从列表 Content 下找，避免撞上
+        // Paper1 里隐藏的同名模板（PrepareDoneTemplate 已把可见那份挂到 Content）。
+        var done = _listContent != null ? _listContent.Find("已完成") : null;
+        if (done != null)
+        {
+            SetFontSize(done.Find("Objective"), 22);
+        }
+    }
+
+    static void SetFontSize(Transform t, int size)
+    {
+        if (t == null) return;
+        var txt = t.GetComponent<Text>() ?? t.GetComponentInChildren<Text>(true);
+        if (txt != null) txt.fontSize = size;
+        else
+            Debug.LogError("[AdventureLogUI] 调字号找不到 Text 节点：" + t.name);
     }
 
     void RebuildRows(List<LogRow> rows)
@@ -1062,7 +1081,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 var exist = _spawnedRows[i];
                 if (exist == null) continue;
                 if (!exist.activeSelf) exist.SetActive(true);
-                ApplyRow(exist.transform, rows[i], showHeader: i == 0);
+                ApplyRow(exist.transform, rows[i]);
                 WireRowClick(exist, rows[i]);
             }
             return;
@@ -1080,7 +1099,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             var go = Instantiate(_rowTemplate, _listContent, false);
             go.name = "DoneRow" + i;
             go.SetActive(true);
-            ApplyRow(go.transform, rows[i], showHeader: i == 0);
+            ApplyRow(go.transform, rows[i]);
             WireRowClick(go, rows[i]);
             _spawnedRows.Add(go);
         }
@@ -1095,7 +1114,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() =>
         {
-            ApplyActiveCard(copy.Title, copy.Detail, copy.Progress, copy.Progress);
+            // 2026-10-31 主人报「点任务条后当前目标只显示进行中」：旧写法把进度字同时塞进
+            // 目标槽和进度槽。改为行自带 Objective（是什么/怎么做的条件），进度槽照常显状态。
+            // 【同日晚补充】主人报「长条件折行第二行只有一个字」：卡片进度槽是窄框（约 160px），
+            // 未解锁行不能再把长解锁条件塞进去 —— 进度槽只放短状态，解锁条件留在描述字幕里。
+            ApplyActiveCard(copy.Title, copy.Detail, copy.Objective,
+                copy.Locked ? "" : copy.Progress);
             if (!string.IsNullOrEmpty(copy.AchId) && AdventureLogAchievements.CanClaim(copy.AchId))
             {
                 if (AdventureLogAchievements.Claim(copy.AchId))
@@ -1112,10 +1136,13 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_activeProg != null) _activeProg.text = progress ?? "";
     }
 
-    static void ApplyRow(Transform row, LogRow data, bool showHeader)
+    static void ApplyRow(Transform row, LogRow data)
     {
         var header = row.Find("di");
-        if (header != null) header.gameObject.SetActive(showHeader);
+        // 2026-10-31 校对：Paper/bg/OngoingHeader 顶部木牌修好绑定后会正确显示页签名，
+        // 行头这块小牌（预制体写死「已完成」残留）再显示页签名就重复出现两块「主线」；
+        // 主人上午也报过它标错 —— 直接隐藏，页签名由顶部木牌统一承担。
+        if (header != null) header.gameObject.SetActive(false);
         var obj = row.Find("Objective")?.GetComponent<Text>();
         if (obj != null)
             obj.text = data.Title;

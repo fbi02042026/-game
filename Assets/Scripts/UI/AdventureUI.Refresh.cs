@@ -120,17 +120,10 @@ public partial class AdventureUI
         if (chapterTitle != null)
         {
             // 玩家看不到「第X章」：只显示地图名
-            // 【2026-10-31 B2 落地】篇内改成多座大关后，标题补一个「第 N/M 座」进度，否则玩家看不出还有多远。
+            // 【2026-10-31 主人拍板「只要章节名字 不要后面的」】B2 曾在大关进度后拼「第 N/M 座」，
+            // 标题栏宽 238（ChapterTitle 锚 0.1~0.9 × 298.42）、30 号字一行只放 ~7.9 汉字 → 断行后
+            // 只剩「暮影森林　第」半截。主人明确只要名字，进度整段删除（要进度改挂别处，别再往标题塞）。
             string name = GameConfig.GetChapterMapName(_selectedChapter);
-            var saveD = SaveSystem.Instance?.Data;
-            if (saveD != null)
-            {
-                int grandTotal = ActProgressionDefs.GrandCountOf(_selectedChapter);
-                int grandNow = saveD.CurrentGrand(_selectedChapter);
-                bool chapterCleared = saveD.HasClearedChapter(_selectedChapter);
-                if (!chapterCleared && grandTotal > 1)
-                    name = name + "　第 " + grandNow + "/" + grandTotal + " 座";
-            }
             string branchHint = BuildBranchHint();
             chapterTitle.text = string.IsNullOrEmpty(branchHint) ? name : name + "\n" + branchHint;
         }

@@ -199,9 +199,9 @@ public class TownSceneBootstrap : MonoBehaviour
         // 【2026-10-16 主人拍板】「已经领过每日登录的就不要每次再弹」：
         // 一天最多自动弹一次——今天弹过（或领过）就不再自动弹，避免回主界面反复弹；
         // 手动入口（主界面每日登录按钮）仍可随时打开。
-        if (DailyLoginSystem.HasClaimable() && data.loginPopupShownDay != ShopDefs.TodayKey())
+        if (DailyLoginSystem.HasClaimable() && data.loginPopupShownDay != DayKeyUtil.TodayKey())
         {
-            data.loginPopupShownDay = ShopDefs.TodayKey();
+            data.loginPopupShownDay = DayKeyUtil.TodayKey();
             SaveSystem.Instance.Save();
             DailyLoginUI.RequestShowOnMainUi();
         }

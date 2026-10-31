@@ -12,7 +12,7 @@ using UnityEngine;
 /// · 佣兵首购走现有招募链（UnlockMerc 入三选一池 + 图鉴 + 获得演出）；已拥有复购 = 转本命碎片
 ///   （MercGrowInventory.ConvertDuplicateMerc，稀有×5 / 传奇×1），满星拦截（照酒馆口径，不扣分）；
 /// · 发放失败不入账可重试（照里程商店口径）：先扣积分、再发放，发放失败当场退回积分并 LogError；
-/// · 周限计数挂 SaveData（arenaShopWeekKey + arenaShopWeekBuyEntries），周 key 照 ShopDefs.TodayKey
+/// · 周限计数挂 SaveData（arenaShopWeekKey + arenaShopWeekBuyEntries），周 key 照 DayKeyUtil.TodayKey
 ///   口径记「周 key」（ISO 周、周一为起点），跨周自动清零恢复次数。
 /// </summary>
 public static class ArenaShopGoods
@@ -228,7 +228,7 @@ public static class ArenaShopGoods
     public static int PriceOf(SaveData data, Good good)
         => good != null && IsOwned(data, good) && good.repurchasePrice > 0 ? good.repurchasePrice : good?.price ?? 0;
 
-    /// <summary>周 key（照 ShopDefs.TodayKey 口径记「周 key」：ISO 周、周一为一周起点，跨周自动恢复次数）。</summary>
+    /// <summary>周 key（照 DayKeyUtil.TodayKey 口径记「周 key」：ISO 周、周一为一周起点，跨周自动恢复次数）。</summary>
     public static string CurrentWeekKey()
     {
         var now = System.DateTime.Now;

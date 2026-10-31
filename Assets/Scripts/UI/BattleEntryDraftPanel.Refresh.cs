@@ -107,6 +107,15 @@ public partial class BattleEntryDraftPanel
         if (_liveMode)
         {
             if (idx < 0 || idx >= _slots.Count) return;
+            // 【2026-10-31 主人拍板】点了抽奖 → 「币够了没抽」引导立刻收掉、本场不再弹
+            //（不等出货结果；就算这一抽没生效，也不再追着提示）
+            _liveDrawnThisStage = true;
+            _liveDrawHintTimer = 0f;
+            if (_liveDrawHintShown)
+            {
+                _liveDrawHintShown = false;
+                TutorialHintUI.Instance?.Hide();
+            }
             BattleManager.Instance?.TryLiveDraw(_slots[idx].Cat);
             return;
         }

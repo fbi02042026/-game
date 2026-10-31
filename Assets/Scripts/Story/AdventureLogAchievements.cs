@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 /// <summary>
@@ -28,6 +29,18 @@ public static class AdventureLogAchievements
         public string Label;
     }
 
+    /// <summary>
+    /// 【2026-10-31 主人拍板「先改文案不承诺」】成就页对玩家的奖励文案：系统没做出来的奖励一律显示这个，
+    /// 不再承诺「背包扩容+1 / 限定头像框 / 皮肤」。发放分支保留（写存档字段），
+    /// 等真做出系统再把对应 Label 换回真奖励名即可。
+    /// <para>称号（A012）已在 2026-10-31 做完并恢复真文案，见 <see cref="TitleSystem"/>。</para>
+    /// </summary>
+    public const string NoRewardLabel = "（暂无奖励）";
+
+    /// <summary>背包扩容奖励开关：系统还没做（backpackExtraSlots 只写不读）→ false，汇总 Toast 不提它。
+    /// 系统做出来后置 true，并把 A007 的 Label 从 NoRewardLabel 换回「背包扩容+1」。</summary>
+    const bool BackpackSlotRewardLive = false;
+
     public static AchReward GetReward(string id)
     {
         switch (id)
@@ -37,10 +50,17 @@ public static class AdventureLogAchievements
             // 【2026-10-17 主人拍板】强化石暂无用途：A003/A008 原本实际发的是分解材料、文案却写强化石，
             // 现统一改成天赋石（发与文案一致，走下方 r.Talent 发放分支）。
             case "A003": return new AchReward { Talent = 3, Label = "天赋石×3" };
-            case "A004": return new AchReward { Gold = 20, Label = "金币×20" };
-            case "A005": return new AchReward { Gold = 10, Label = "金币×10" };
+            // 【2026-10-31 主人拍板「改发放对齐文案」】A004/A005 当年产出去零只改了代码没改目录文案
+            // （目录写 200/100、实发 20/10），现按目录文案把发放改回 200/100。
+            case "A004": return new AchReward { Gold = 200, Label = "金币×200" };
+            case "A005": return new AchReward { Gold = 100, Label = "金币×100" };
             case "A006": return new AchReward { Talent = 3, Label = "天赋石×3" };
-            case "A007": return new AchReward { BackpackSlots = 1, Label = "背包扩容+1" };
+            // 【2026-10-31 主人拍板「先改文案不承诺」】A007 背包扩容+1 / A014 限定头像框 / A015 老盾皮肤：
+            // 这三套系统都还没做 —— 存档字段 backpackExtraSlots / unlockedFrameIds / unlockedSkinIds
+            // 全工程**只写不读**（背包真实容量走 GameConfig.GetUnlockedBackpackRows + HeroVaultSystem；
+            // 玩家头像框走 MercHireSession.PlayerFrameRarity），发出去玩家什么也看不到。
+            // 文案先不承诺，发放分支原样保留。（A012 称号已做完，文案已恢复真奖励名。）
+            case "A007": return new AchReward { BackpackSlots = 1, Label = NoRewardLabel };
             case "A008": return new AchReward { Talent = 5, Label = "天赋石×5" };
             case "A009": return new AchReward { Gold = 15, Label = "金币×15" };
             // 【2026-10-31 主人拍板「不要体力上限+1」】A010（进裂隙 10 次）原发体力上限 +1，
@@ -49,8 +69,8 @@ public static class AdventureLogAchievements
             case "A011": return new AchReward { Gold = 50, Label = "金币×50" };
             case "A012": return new AchReward { TitleId = "forest_untouched", Label = "称号「森林无伤者」" };
             case "A013": return new AchReward { Talent = 5, Label = "天赋石×5" };
-            case "A014": return new AchReward { FrameId = "frame_nightmare", Label = "限定头像框" };
-            case "A015": return new AchReward { SkinId = "skin_laodun_rust", Label = "老盾皮肤「锈迹盾卫」" };
+            case "A014": return new AchReward { FrameId = "frame_nightmare", Label = NoRewardLabel };
+            case "A015": return new AchReward { SkinId = "skin_laodun_rust", Label = NoRewardLabel };
             default: return new AchReward { Label = "" };
         }
     }
@@ -208,7 +228,13 @@ public static class AdventureLogAchievements
         return 10;
     }
 
-    public static bool Claim(string id)
+    public static bool Claim(string id) => Claim(id, notify: true);
+
+    /// <summary>
+    /// 单个领取。<paramref name="notify"/> = false 时不弹单条 Toast —— 批量领取用，
+    /// 避免 N 条 Toast 被最后一条汇总覆盖（2026-10-31 主人报「只说了领取了4个成就奖励，没说是什么」）。
+    /// </summary>
+    public static bool Claim(string id, bool notify)
     {
         if (!CanClaim(id)) return false;
         var data = SaveSystem.Instance?.Data;
@@ -227,11 +253,10 @@ public static class AdventureLogAchievements
             data.backpackExtraSlots += r.BackpackSlots;
         if (r.StaminaMax > 0)
             data.staminaBonusMax += r.StaminaMax;
+        // 称号：走 TitleSystem 唯一出口（解锁 + 按稀有度自动切换头顶展示，规则在那边）。
+        // 这里 notify:false —— 单条 / 汇总 Toast 由本类统一弹，别重复刷屏。
         if (!string.IsNullOrEmpty(r.TitleId))
-        {
-            data.unlockedTitleIds ??= new HashSet<string>();
-            data.unlockedTitleIds.Add(r.TitleId);
-        }
+            TitleSystem.Unlock(r.TitleId, notify: false);
         if (!string.IsNullOrEmpty(r.FrameId))
         {
             data.unlockedFrameIds ??= new HashSet<string>();
@@ -245,25 +270,79 @@ public static class AdventureLogAchievements
 
         SaveSystem.Instance.Save();
         RefreshRedDots();
-        UIManager.Instance?.ShowToast($"领取成就奖励：{r.Label}");
+        if (notify)
+            UIManager.Instance?.ShowToast($"领取成就奖励：{r.Label}");
         return true;
     }
 
-    public static int ClaimAll()
+    /// <summary>
+    /// 一键领取。2026-10-31 主人报「只说了领取 4 个成就奖励，没说是什么」：
+    /// 旧版逐条 Claim 各弹一条（瞬时被下一条顶掉），最后只剩个数量。现在改成
+    /// 逐条静默入账 → 汇总成一条「领到了什么」，同类数量合并（金币/天赋石…），
+    /// 称号/头像框/皮肤这类唯一奖励按名字列出。
+    /// </summary>
+    public static int ClaimAll(out string summary)
     {
+        summary = "";
         int n = 0;
+        int gold = 0, mats = 0, talent = 0, slots = 0, stamina = 0;
+        int none = 0;                 // 领了但系统没做、实际发不出东西的条数（Label = NoRewardLabel）
+        var special = new List<string>();
+
         var list = AdventureLogCatalog.Achievements;
         for (int i = 0; i < list.Length; i++)
         {
-            if (Claim(list[i].Id)) n++;
+            string id = list[i].Id;
+            if (!Claim(id, notify: false)) continue;
+            n++;
+            var r = GetReward(id);
+            gold += r.Gold;
+            mats += r.Mats;
+            talent += r.Talent;
+            slots += r.BackpackSlots;
+            stamina += r.StaminaMax;
+            if (r.Label == NoRewardLabel) { none++; continue; }
+            if (!string.IsNullOrEmpty(r.TitleId) || !string.IsNullOrEmpty(r.FrameId)
+                || !string.IsNullOrEmpty(r.SkinId))
+            {
+                string label = string.IsNullOrEmpty(r.Label) ? "限定奖励" : r.Label;
+                if (!special.Contains(label)) special.Add(label);
+            }
         }
+        if (n <= 0) return 0;
+
+        var sb = new StringBuilder();
+        sb.Append("领取 ").Append(n).Append(" 个成就奖励：");
+        bool first = true;
+        void Append(string part)
+        {
+            if (!first) sb.Append('、');
+            sb.Append(part);
+            first = false;
+        }
+        if (gold > 0) Append("金币×" + gold);
+        if (mats > 0) Append("分解材料×" + mats);
+        if (talent > 0) Append("天赋石×" + talent);
+        // 2026-10-31：背包扩容系统未做（backpackExtraSlots 只写不读），先不写进汇总免得骗人；
+        // 系统真做出来后把 BackpackSlotRewardLive 置 true，同时把 A007 的 Label 改回真奖励名。
+        if (BackpackSlotRewardLive && slots > 0) Append("背包扩容+" + slots);
+        if (stamina > 0) Append("体力上限+" + stamina);
+        for (int i = 0; i < special.Count; i++) Append(special[i]);
+        if (first)
+            sb.Append(NoRewardLabel);                       // 一条真东西都没有
+        else if (none > 0)
+            sb.Append("、另 ").Append(none).Append(" 项暂无奖励");
+        summary = sb.ToString();
         return n;
     }
 
+    public static int ClaimAll() => ClaimAll(out _);
+
     public static void RefreshRedDots()
     {
-        bool ach = HasUnclaimed() || AdventureLogMileage.HasUnclaimedLevel();
-        RedDot.Set(RedDot.Achievement, ach);
+        // 单一出口：成就页红点只看「成就可领」，里程等级 / 碎片合成走世界页红点。
+        // 2026-10-31 主人报「领取后标签上的提示还在」—— 旧版这里用宽口径
+        // （成就可领 || 里程可领），成就是领完了但里程等级还能领，标签红点就一直不灭。
         AdventureCodex.RefreshRedDots();
     }
 

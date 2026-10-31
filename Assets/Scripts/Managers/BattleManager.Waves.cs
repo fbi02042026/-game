@@ -197,7 +197,14 @@ public partial class BattleManager
             BattleUI.Instance?.UpdateWaveProgress(0, _waves?.Count ?? 0);
         int monsterGoal = GetStageMonsterGoal();
         var stageQuest = BattleQuestConfig.GetStageQuest(CurrentChapter, stage.type, IsGoldDungeon, BattleDifficulty);
-        StageQuestClearGold = stageQuest.clearGold;
+        // 【2026-10-31 主人拍板「没有任务通关金这个」】任务不再承诺金币：StageQuestClearGold 恒 0。
+        // 连带效果（都是想要的）：TryGrantStageQuestGold 因 grant<=0 自然早退（:85 / 撤离 / 引导三条路都不发）、
+        // BeginRewardSequence 的 bonusGold 回落到 GetClearGold 只给无限裂隙宝箱用、HUD 任务奖励区
+        // 由 BattleUI.RefreshQuestReward 按 0 隐藏（不再显示「×N」）。
+        // 任务文案（stageQuest.objective）照旧，只有奖励金没了。
+        StageQuestClearGold = 0;
+        // 下面三行（徽记/卷轴/礼物、支线岛、竞技场 清零）在上面恒 0 后已成冗余，
+        // 按「下线≠删除」保留，将来要恢复任务通关金时它们仍是各自模式的豁免口径。
         // 徽记副本（2026-10-23 主人拍板「徽记副本不给金币」）：通关金清零，产出只有徽记
         // （BattleManager.Settlement → MercGrowInventory.GrantBadgeDungeonDrops）。
         // 不清会走普通 Elite 分支拿几十块通关金，HUD 也会显示 +N 金。

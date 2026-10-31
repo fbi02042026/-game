@@ -13,14 +13,26 @@ public partial class BattleUI : MonoBehaviour
 
     // 2026-10-18 任务奖励金真实值来自 battle_quest.csv（普通关 40+5×章节，Boss 关 60~400，主人拍板提额），
     // 默认值同步同档，避免首帧显示一个过期的量级。
-    int _questRewardGold = 45;
+    // 【2026-10-31 主人拍板「没有任务通关金这个」】任务不再发金币 → 默认 0（0 = 整块奖励区隐藏，
+    // 不再出现「×45」这种过期数字）。
+    int _questRewardGold = 0;
 
     /// <summary>任务奖励区：金币图标 + 数量（预制体默认是宝箱图）。</summary>
     public void RefreshQuestReward(int goldAmount = -1)
     {
         if (goldAmount >= 0) _questRewardGold = goldAmount;
-        else if (BattleManager.Instance != null && BattleManager.Instance.StageQuestClearGold > 0)
-            _questRewardGold = BattleManager.Instance.StageQuestClearGold;
+        else _questRewardGold = BattleManager.Instance != null
+            ? Mathf.Max(0, BattleManager.Instance.StageQuestClearGold)
+            : 0;
+
+        // 【2026-10-31 主人拍板「没有任务通关金这个」】没有奖励金就整块奖励区（图标 + 数字）藏起来 ——
+        // 留着会显示「×0」，比不显示更像 bug。有金额的模式（将来恢复）自动显示回来。
+        bool showReward = _questRewardGold > 0;
+        if (questRewardIcon != null && questRewardIcon.gameObject.activeSelf != showReward)
+            questRewardIcon.gameObject.SetActive(showReward);
+        if (questRewardAmount != null && questRewardAmount.gameObject.activeSelf != showReward)
+            questRewardAmount.gameObject.SetActive(showReward);
+        if (!showReward) return;
 
         if (questRewardIcon != null)
         {

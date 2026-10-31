@@ -37,6 +37,17 @@ public class CodexInfoPopupUI : MonoBehaviour
     Sprite _zoomSprite;
     RectTransform _zoomRoot;
     Image _zoomImg;
+    /// <summary>放大层背景（梦幻天空圣殿舞台，2026-10-31）。</summary>
+    Image _zoomBgImg;
+
+    /// <summary>放大层背景图（2026-10-31 主人拍板）：走 Resources 路径加载，不进预制体引用。</summary>
+    const string ZoomBackdropArt = "UI/Art/对战/梦幻天空圣殿舞台";
+    /// <summary>立绘放大倍数（主人要求「立绘放大 50%」）。</summary>
+    const float ZoomPicScale = 1.5f;
+    /// <summary>背景亮度系数（1=原图，压一点让立绘更突出）。</summary>
+    const float ZoomBackdropBrightness = 0.85f;
+    /// <summary>放大前的四周留边（沿用原 ZoomPic 的 offset，放大以它为基准）。</summary>
+    static readonly Vector2 ZoomPicMargin = new Vector2(60f, 80f);
 
     public bool IsOpen => root != null && root.activeSelf;
 
@@ -101,6 +112,13 @@ public class CodexInfoPopupUI : MonoBehaviour
         Instance = this;
         BindRefs();
         Wire();
+        // 2026-10-31 主人报「怪物信息排版优化」时发现：本弹窗此前从未走 UICanvasSetup
+        // （预制体 Canvas 是 Screen Space Camera 但相机为空、Match 写死按高），
+        // 按 AGENTS 4.6 拍板统一接管：绑场景 UI 相机 + 720×1280 参考分辨率 +
+        // 瘦屏自动按宽匹配，瘦屏上不再偏移/裁边。
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownConfirm);
         ApplyProjectArt();
         if (root != null) root.SetActive(false);
     }
@@ -230,6 +248,10 @@ public class CodexInfoPopupUI : MonoBehaviour
     {
         BindRefs();
         Wire();
+        // DDOL 弹窗每次 Show 先重绑相机 + 重算适配（AGENTS 4.6 拍板，幂等）
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownConfirm);
 
         _onUnlock = onUnlock;
         bool showUnlock = !string.IsNullOrEmpty(unlockText) && onUnlock != null;
@@ -326,10 +348,11 @@ public class CodexInfoPopupUI : MonoBehaviour
             _zoomRoot.gameObject.SetActive(true);
             _zoomRoot.SetAsLastSibling();
         }
+        FitZoomLayer();
     }
 
     /// <summary>
-    /// 大图层：深色遮罩铺满 + 居中立绘（保持比例）。运行时按需补建一次，不动预制体；
+    /// 大图层：舞台背景 + 居中立绘（保持比例）。运行时按需补建一次，不动预制体；
     /// 立绘自身 raycastTarget 关掉，点哪里都算点遮罩 → 任意处关闭。
     /// </summary>
     void EnsureZoomLayer()
@@ -344,12 +367,67 @@ public class CodexInfoPopupUI : MonoBehaviour
         btn.transition = Selectable.Transition.None;
         btn.onClick.AddListener(HideZoom);
 
+        // 背景层（2026-10-31 主人拍板：立绘后面放「梦幻天空圣殿舞台」）：
+        // 铺在黑色遮罩之上、立绘之下；等比 cover 铺满由 FitZoomLayer 每次打开时算。
+        var bgRt = CreateUi(_zoomRoot, "ZoomBg", true);
+        Stretch(bgRt);
+        _zoomBgImg = bgRt.gameObject.AddComponent<Image>();
+        _zoomBgImg.raycastTarget = false;   // 点背景算点遮罩 → 关闭
+        var bg = Resources.Load<Sprite>(ZoomBackdropArt);
+        if (bg != null)
+        {
+            _zoomBgImg.sprite = bg;
+            _zoomBgImg.color = new Color(ZoomBackdropBrightness, ZoomBackdropBrightness, ZoomBackdropBrightness, 1f);
+        }
+        else
+        {
+            // 缺图不兜底：报出来让人看见，背景保持原黑色遮罩
+            Debug.LogError($"[CodexInfoPopup] 放大层背景缺失：Resources/{ZoomBackdropArt}（确认 jpg 与 .meta 都在）");
+            bgRt.gameObject.SetActive(false);
+        }
+
         var picRt = CreateUi(_zoomRoot, "ZoomPic", true);
-        Stretch(picRt);
-        picRt.offsetMin = new Vector2(60f, 80f);    // 四周留边，preserveAspect 自动居中适配
-        picRt.offsetMax = new Vector2(-60f, -80f);
+        // 居中锚点：尺寸由 FitZoomLayer 按「可用区 × 1.5」算，preserveAspect 保证不变形
+        picRt.anchorMin = picRt.anchorMax = new Vector2(0.5f, 0.5f);
+        picRt.pivot = new Vector2(0.5f, 0.5f);
+        picRt.anchoredPosition = Vector2.zero;
         _zoomImg = picRt.gameObject.AddComponent<Image>();
         _zoomImg.raycastTarget = false;
+    }
+
+    /// <summary>
+    /// 放大层适配（2026-10-31 主人拍板「注意要适配」）：
+    /// 背景等比 cover 铺满（只等比、绝不拉伸变形，多出屏幕的部分溢出裁掉）；
+    /// 立绘按「原可用区 × 1.5」居中放大，preserveAspect 不变形，超出屏幕部分自然出血。
+    /// 每次点开都重算 —— 不同机型 / 瘦屏的长宽比此时才是实际值。
+    /// </summary>
+    void FitZoomLayer()
+    {
+        if (_zoomRoot == null) return;
+        Canvas.ForceUpdateCanvases();   // 先让布局算好，父级 rect 才是实际值
+        float w = _zoomRoot.rect.width, h = _zoomRoot.rect.height;
+        if (w <= 0f || h <= 0f) return;
+
+        if (_zoomBgImg != null && _zoomBgImg.sprite != null)
+        {
+            var src = _zoomBgImg.sprite.rect;
+            if (src.width > 0f && src.height > 0f)
+            {
+                float k = Mathf.Max(w / src.width, h / src.height);
+                var bgRt = _zoomBgImg.rectTransform;
+                bgRt.anchorMin = bgRt.anchorMax = new Vector2(0.5f, 0.5f);
+                bgRt.pivot = new Vector2(0.5f, 0.5f);
+                bgRt.anchoredPosition = Vector2.zero;
+                bgRt.sizeDelta = new Vector2(src.width * k, src.height * k);
+            }
+        }
+
+        if (_zoomImg != null)
+        {
+            float availW = Mathf.Max(0f, w - ZoomPicMargin.x * 2f);
+            float availH = Mathf.Max(0f, h - ZoomPicMargin.y * 2f);
+            _zoomImg.rectTransform.sizeDelta = new Vector2(availW * ZoomPicScale, availH * ZoomPicScale);
+        }
     }
 
     /// <summary>
@@ -368,8 +446,10 @@ public class CodexInfoPopupUI : MonoBehaviour
         var loreRt = loreText.rectTransform;
         if (panelRt == null || descRt == null || loreRt == null) return;
 
-        float loreGap = 16f;            // Desc 与 Lore 的间距（超长时自动压缩）
-        const float metaGap = 6f;       // Meta 与 Desc 的间距
+        // 2026-10-31 主人报「怪物信息排版优化」：Meta 与正文、描述与趣闻两段间距拉开
+        // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
+        float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
+        const float metaGap = 12f;      // Meta 与 Desc 的间距
 
         // 顶部起点 = Meta 框底 + 间距（预制体原值 -360 与 Meta 框底 -366 有 6px 重叠）
         float top = -372f;
@@ -382,17 +462,18 @@ public class CodexInfoPopupUI : MonoBehaviour
         if (unlockButton != null && unlockButton.gameObject.activeSelf)
             bottomLimit = -panelRt.rect.height + 164f;
 
-        // 首次记录基准字号；之后每次先恢复，避免上一次降档残留
+        // 首次记录基准字号；之后每次先恢复，避免上一次降档残留。
+        // 【2026-10-31 主人报「这个字可以再大点」】基准在预制体字号上各 +4（22→26 / 20→24）。
         if (_baseDescSize <= 0)
         {
-            _baseDescSize = descText.fontSize;
-            _baseLoreSize = loreText.fontSize;
+            _baseDescSize = descText.fontSize + 4;
+            _baseLoreSize = loreText.fontSize + 4;
         }
-        else
-        {
-            descText.fontSize = _baseDescSize;
-            loreText.fontSize = _baseLoreSize;
-        }
+        descText.fontSize = _baseDescSize;
+        loreText.fontSize = _baseLoreSize;
+        // 2026-10-31 排版优化：正文行距放宽（每次打开重设，无需恢复基准）
+        descText.lineSpacing = 1.12f;
+        loreText.lineSpacing = 1.12f;
 
         // 文本高度按预制体给的宽度算（preferredHeight 自动取 rect 宽，代码不写宽度）
         float descH = descText.preferredHeight;
@@ -401,8 +482,9 @@ public class CodexInfoPopupUI : MonoBehaviour
         float avail = top - bottomLimit;
         if (descH + loreGap + loreH > avail)
         {
-            int[] ds = { 19, 17, 16 };
-            int[] ls = { 18, 16, 15 };
+            // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）
+            int[] ds = { 23, 21, 19 };
+            int[] ls = { 21, 19, 17 };
             for (int i = 0; i < ds.Length; i++)
             {
                 descText.fontSize = ds[i];

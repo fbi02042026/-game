@@ -11,12 +11,21 @@ public partial class Mercenary : UnitBase
     // 仅敌方佣兵（isAlly=false，竞技场机器人小队）使用；己方抽卡入场走 SpawnRunMerc 的拴绳回队，不经过这里。
     bool _mapEnterActive;
     float _mapEnterTargetX;
+    // 【2026-10-31 晚】开打前抽到己方佣兵：AI 闸（UnitsCanAct=false）不解冻，走入段会被定在屏外
+    // （这正是早上「抽到佣兵没有立即上阵」的根因，当时误改成编队位瞬现）。
+    // 抽卡入场这条线改传 walkWhileFrozen=true，让佣兵在冻场期间也由代码驱动走回编队位。
+    // 默认 false：竞技场敌方小队 / 怪物入场等现有调用方「开打前定住、解冻才走」的口径不变。
+    bool _mapEnterWalkWhileFrozen;
 
-    /// <summary>从屏外缓步走到 targetX（到达后交还普通 AI）。速度 = 自身移速，朝向 faceDir。</summary>
-    public void BeginMapEnter(float targetX, int faceDir)
+    /// <summary>
+    /// 从屏外缓步走到 targetX（到达后交还普通 AI）。速度 = 自身移速，朝向 faceDir。
+    /// walkWhileFrozen=true = UnitsCanAct=false（开打前）也照走（抽卡入场专用）。
+    /// </summary>
+    public void BeginMapEnter(float targetX, int faceDir, bool walkWhileFrozen = false)
     {
         _mapEnterTargetX = targetX;
         _mapEnterActive = true;
+        _mapEnterWalkWhileFrozen = walkWhileFrozen;
         facingDir = faceDir > 0 ? 1 : -1;
         ApplyFacing(facingDir);
         if (unitAnim != null) unitAnim.SetMove(true, facingDir);
@@ -58,10 +67,12 @@ public partial class Mercenary : UnitBase
             return;
         }
 
-        // 屏外走入段（在冻场闸之前分流：解冻才走，开打前原地定住 —— 与 Monster 入场同口径）
+        // 屏外走入段（在冻场闸之前分流）：默认解冻才走（怪物/竞技场敌方同口径）；
+        // _mapEnterWalkWhileFrozen=true（开打前抽到己方佣兵）冻场期间照走。
         if (_mapEnterActive)
         {
-            if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+            if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct
+                && !_mapEnterWalkWhileFrozen)
             {
                 if (rb != null) rb.velocity = Vector2.zero;
                 if (unitAnim != null) unitAnim.SetMove(false, facingDir);

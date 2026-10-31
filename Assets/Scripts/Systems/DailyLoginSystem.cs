@@ -64,7 +64,7 @@ public static class DailyLoginSystem
         var id = DailyLoginDefs.STARTER_MERC_ID;
         return d != null && !string.IsNullOrEmpty(id) && d.IsMercUnlocked(id);
     }
-    public static bool CycleClaimedToday => Data != null && Data.loginCycleDay == ShopDefs.TodayKey();
+    public static bool CycleClaimedToday => Data != null && Data.loginCycleDay == DayKeyUtil.TodayKey();
 
     /// <summary>
     /// 今天领过「每天登录领的签到格」吗（2026-10-29 新增；同日二次收窄 + 补自愈）。
@@ -82,12 +82,12 @@ public static class DailyLoginSystem
     {
         get
         {
-            int today = int.Parse(ShopDefs.TodayKey());
+            int today = int.Parse(DayKeyUtil.TodayKey());
             if (Flag(KEY_CLAIM_DAY) == today) return true;
 
             // 自愈分支：只对「claim_day 没记上、但今天确实领过」的老存档生效（纯读，不写存档）
             var d = Data;
-            if (d == null || d.loginLastDay != ShopDefs.TodayKey()) return false;
+            if (d == null || d.loginLastDay != DayKeyUtil.TodayKey()) return false;
             if (LoginDays < 1) return false;
             return !HasUnclaimedStarterCell();
         }
@@ -108,7 +108,7 @@ public static class DailyLoginSystem
     }
 
     /// <summary>签到格领取成功后记当天日期（见 ClaimedToday；调用方随后自行 Save）。</summary>
-    static void MarkClaimedToday() => SetFlag(KEY_CLAIM_DAY, int.Parse(ShopDefs.TodayKey()));
+    static void MarkClaimedToday() => SetFlag(KEY_CLAIM_DAY, int.Parse(DayKeyUtil.TodayKey()));
 
     /// <summary>
     /// 连续登录天数（断签清零）。这是唯一制造"今天必须来"压力的机制——
@@ -158,7 +158,7 @@ public static class DailyLoginSystem
         var d = Data;
         if (d == null) return;
 
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (d.loginLastDay == today)
         {
             // 【2026-10-27 修·主人报「每日登录不能领取」】自愈死锁：
@@ -184,7 +184,7 @@ public static class DailyLoginSystem
         SaveSystem.Instance.Save();
     }
 
-    /// <summary>传入的 yyyyMMdd 是不是昨天（本地时间口径，与 ShopDefs.TodayKey 一致）。</summary>
+    /// <summary>传入的 yyyyMMdd 是不是昨天（本地时间口径，与 DayKeyUtil.TodayKey 一致）。</summary>
     static bool IsYesterday(string yyyyMMdd)
     {
         if (string.IsNullOrEmpty(yyyyMMdd)) return false;
@@ -257,7 +257,7 @@ public static class DailyLoginSystem
         var r = DailyLoginDefs.Cycle[idx];
         Grant(r);
 
-        d.loginCycleDay = ShopDefs.TodayKey();
+        d.loginCycleDay = DayKeyUtil.TodayKey();
         SetFlag(KEY_CYCLE, (idx + 1) % DailyLoginDefs.CycleLength);
         SaveSystem.Instance.Save();
         msg = GrantedMercHireId != null ? CongratsMsg(GrantedMercHireId)

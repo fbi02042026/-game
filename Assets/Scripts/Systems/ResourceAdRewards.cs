@@ -80,7 +80,7 @@ public static class ResourceAdRewards
         => GameConfig.ADS_ENABLED ? freePerDay + AdTiersPerDay * 2 : freePerDay + 2;
 
     /// <summary>日键（本地日历日 yyyyMMdd，0 点刷新）。【2026-10-28 改】原 UTC 键在国内=早 8 点才刷新，
-    /// 与每日登录/商店（ShopDefs.TodayKey 本地日）口径不一致 → 统一本地日。</summary>
+    /// 与每日登录/商店（DayKeyUtil.TodayKey 本地日）口径不一致 → 统一本地日。</summary>
     static string TodayKey() => DateTime.Now.ToString("yyyyMMdd");
 
     /// <summary>
@@ -95,7 +95,7 @@ public static class ResourceAdRewards
         // 【2026-10-28 升级兼容】旧 UTC 日键在本地 0~8 点 == 本地今天：平移保留计数，不清零加次数。
         // 平移必须立即落盘：Load() 正常路径不写盘，若玩家平移后不触发任何存档动作就退出、
         // 下次打开已过 8 点（迁移条件失效）→ 平移丢失 → 计数被清零多领一轮（主人拍板不留隐患）。
-        if (ShopDefs.LegacyUtcDayKeyStillToday(data.adRewardDayKey))
+        if (DayKeyUtil.LegacyUtcDayKeyStillToday(data.adRewardDayKey))
         {
             data.adRewardDayKey = today;
             SaveSystem.Instance?.Save();

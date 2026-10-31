@@ -84,16 +84,18 @@ public class TutorialHintUI : MonoBehaviour
         if (_bannerSpriteOverride != null)
         {
             _bannerImage.sprite = _bannerSpriteOverride;
-            var bd = _bannerSpriteOverride.border;
-            _bannerImage.type = (bd.x + bd.y + bd.z + bd.w) > 0.01f
-                ? Image.Type.Sliced
-                : Image.Type.Simple;
+            // 【2026-10-31】自定义底框（「像素风空白对话框指针」这类**带尖角的气泡**）一律 Simple：
+            // 九宫格拉宽会把底部尖角横向拉成宽扁三角，「指向按钮」就废了 —— 气泡按原图比例等比放大，
+            // 尺寸由 PlaceBanner 的气泡分支给（宽=原宽×2，高按原比例）。
+            _bannerImage.type = Image.Type.Simple;
+            _bannerImage.preserveAspect = true;
             _bannerImage.color = Color.white;
             _bannerSpriteApplied = true;
         }
         else if (_bannerSpriteApplied)
         {
             _bannerSpriteApplied = false;
+            if (_bannerImage != null) _bannerImage.preserveAspect = false;
             TryApplyBannerPlate(_bannerImage);
         }
     }
@@ -412,7 +414,10 @@ public class TutorialHintUI : MonoBehaviour
         if (!hard)
             ForceClearBlockers();
         RefreshLayout();
-        if (highlight != null && (targetChanged || !_pointerActive))
+        // 【2026-10-31】气泡底框自带尖角指向目标，再叠一只手就是两个指针 → 气泡模式不显示手指。
+        if (_bannerSpriteOverride != null)
+            HidePointer();
+        else if (highlight != null && (targetChanged || !_pointerActive))
             BeginSwipeToTarget();
         else if (highlight == null)
             HidePointer();
@@ -662,7 +667,9 @@ public class TutorialHintUI : MonoBehaviour
         if (_pointerRt != null)
             _pointerRt.localRotation = Quaternion.Euler(0f, 0f, _pointerAbove ? 180f : 0f);
 
-        PlaceBanner(new Vector2(centerX, minY), maxY, top, bot, _pointerAbove ? handH + gap : 0f);
+        // 气泡模式没有手，横幅不需要给手让位（让位会把气泡推离按钮，尖角就指不上了）
+        PlaceBanner(new Vector2(centerX, minY), maxY, top, bot,
+            _bannerSpriteOverride != null ? 0f : (_pointerAbove ? handH + gap : 0f));
     }
 
     /// <summary>目标失效时的横幅落位：贴着上一次目标的下沿，不再用「无目标」的屏幕偏上默认值。</summary>
@@ -686,6 +693,21 @@ public class TutorialHintUI : MonoBehaviour
         float width = Mathf.Max(280f, root.rect.width - 16f);
         // 2026-09-28 主人反馈：字多时溢出底框 —— 高度改为按文字实测行高自适应（原写死 100）。
         float bannerH = MeasureBannerHeight(width);
+        // 【2026-10-31】气泡模式（自定义底框 = 带尖角的气泡）：按原图比例等比放大到 2 倍宽
+        //（正常 720 宽屏 → 400×192），高度跟着比例走、不按文字自适应 —— 像素气泡拉伸会变形；
+        // 水平对准目标中心，让底部尖角正好指在目标上（原来 x 恒为 0，只能指屏幕中线）。
+        float x = 0f;
+        if (_bannerSpriteOverride != null)
+        {
+            float bw = Mathf.Max(1f, _bannerSpriteOverride.rect.width);
+            float bh = Mathf.Max(1f, _bannerSpriteOverride.rect.height);
+            width = Mathf.Min(bw * 2f, root.rect.width - 16f);
+            bannerH = width * (bh / bw);
+            if (target.HasValue)
+                x = Mathf.Clamp(target.Value.x,
+                                root.rect.xMin + width * 0.5f + 8f,
+                                root.rect.xMax - width * 0.5f - 8f);
+        }
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
         _bannerRt.sizeDelta = new Vector2(width, bannerH);
@@ -695,7 +717,7 @@ public class TutorialHintUI : MonoBehaviour
 
         if (!target.HasValue)
         {
-            _bannerRt.anchoredPosition = new Vector2(0f, root.rect.height * 0.32f);
+            _bannerRt.anchoredPosition = new Vector2(x, root.rect.height * 0.32f);
             return;
         }
 
@@ -705,7 +727,7 @@ public class TutorialHintUI : MonoBehaviour
         if (y + half > top - 12f)
             y = target.Value.y - 24f - half;
         y = Mathf.Clamp(y, bot + half + 12f, top - half - 12f);
-        _bannerRt.anchoredPosition = new Vector2(0f, y);
+        _bannerRt.anchoredPosition = new Vector2(x, y);
     }
 
     /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（与 HintText 的 BannerPadY 一致）。</summary>

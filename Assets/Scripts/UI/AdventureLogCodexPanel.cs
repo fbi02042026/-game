@@ -15,7 +15,10 @@ public class AdventureLogCodexPanel
     const float CellGapY = 14f;
     // 2026-10-23 主人拍板：图鉴运行时元素放大一档，预制体节点不碰（以下均为代码 new 出来的元素）
     const float HeaderH = 64f;              // 章节头横条高（原 36）
-    const int SectionHeaderFontSize = 32;   // 章节头字号（原 20）
+    // 2026-10-31 主人报「怪物图鉴/暮影森林两个标题大小反了」：章节头（暮影森林等章节名）
+    // 从 32 收小到 24；页签（怪物图鉴/佣兵图鉴）在 Ensure 里从预制体 25 提到 40，
+    // 恢复「页面名 > 章节名」的层级（覆盖 2026-10-23 的 20→32 放大一档拍板）。
+    const int SectionHeaderFontSize = 24;   // 章节头字号（原 20 → 32 → 24）
     static readonly Vector2 PageLabelSize = new Vector2(130f, 44f); // 页码标签框（原 90×32）
     const int PageLabelFontSize = 28;       // 页码标签字号（原 20）
     static readonly Vector2 TinyBtnSize = new Vector2(56f, 44f);    // 翻页小按钮（原 40×32）
@@ -117,6 +120,16 @@ public class AdventureLogCodexPanel
         var header = paper1.Find("bg/OngoingHeader") ?? FindDeep(paper1, "OngoingHeader");
         if (header != null)
             _pageTitle = header.GetComponent<Text>() ?? header.GetComponentInChildren<Text>(true);
+
+        // 2026-10-31 主人报「两个标题大小反了」：页签（怪物图鉴/佣兵图鉴）预制体字号 25，
+        // 且节点 scale 0.667（视觉仅约 17），比章节头还小 —— 提到 40（视觉约 26），
+        // 并放开横向 Overflow 防 4 字换行；只动字号与溢出模式，不动框/颜色/位置。
+        if (_pageTitle != null)
+        {
+            _pageTitle.fontSize = 40;
+            _pageTitle.horizontalOverflow = HorizontalWrapMode.Overflow;
+            _pageTitle.verticalOverflow = VerticalWrapMode.Overflow;
+        }
 
         EnsurePageButtons(paper1);
         BindDetail(paper1);

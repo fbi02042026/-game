@@ -29,7 +29,7 @@ public static class DailyTaskSystem
         if (!QuestTable.HasData) return;
 
         data.EnsureDailyTaskKeys();
-        SettleRows(data, "日常", int.Parse(ShopDefs.TodayKey()), daily: true);
+        SettleRows(data, "日常", int.Parse(DayKeyUtil.TodayKey()), daily: true);
         SettleRows(data, "周常", SaveData.WeekMondayKey(), daily: false);
     }
 

@@ -46,6 +46,7 @@ public class ArenaShopInfoPopupUI : MonoBehaviour
 
     System.Action _onBuy;
     Coroutine _autoCo;
+    bool _okGray;   // 本次填充是否置灰（OpenRoot 里据此关掉确认钮按压反馈，防反馈把置灰色洗回白）
 
     // ============================================================
     // 对外入口
@@ -144,6 +145,10 @@ public class ArenaShopInfoPopupUI : MonoBehaviour
         _okBtn = panel?.Find("KeepButton")?.GetComponent<Button>();
         _okImg = panel?.Find("KeepButton")?.GetComponent<Image>();
         _okLabel = panel?.Find("KeepButton/Label")?.GetComponent<Text>();
+        // 缺了报错不静默（本类头注释承诺的口径；Bind 静默失败 = 确认钮没接回调 = 点了无反应且无迹可查）
+        if (panel == null) Debug.LogError("[ArenaShopInfo] 预制体缺少节点 Root/Panel（信息弹窗内容区）");
+        if (_okBtn == null) Debug.LogError("[ArenaShopInfo] 缺少节点 Panel/KeepButton（确认钮没接回调，点了无反应）");
+        if (_okLabel == null) Debug.LogError("[ArenaShopInfo] 缺少节点 Panel/KeepButton/Label（确认钮文案不显示）");
     }
 
     void Wire()
@@ -175,6 +180,13 @@ public class ArenaShopInfoPopupUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(transform);
         var c = GetComponent<Canvas>();
         if (c != null) UICanvasSetup.RefreshPopup(c, SortOrder);
+        // 置灰键（积分不足/满星）：关掉按压反馈。反馈组件是 RefreshPopup→AttachUnder 这一步才挂上的
+        //（晚于 Fill），其 Restore 会把 targetGraphic 色洗回捕获时的白——置灰一按就变白。关掉后再补一次灰。
+        if (_okGray && _okImg != null)
+        {
+            UiButtonPressFeedback.Suppress(_okImg.gameObject);
+            _okImg.color = OkGray;
+        }
     }
 
     void StopAutoClose()
@@ -225,7 +237,10 @@ public class ArenaShopInfoPopupUI : MonoBehaviour
         if (_okImg == null)
             Debug.LogError("[ArenaShopInfo] 缺少节点 Panel/KeepButton（或无 Image，置灰无效）");
         else
+        {
+            _okGray = okGray;
             _okImg.color = okGray ? OkGray : Color.white;
+        }
 
         return true;
     }

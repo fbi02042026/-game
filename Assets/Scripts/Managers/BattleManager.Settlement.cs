@@ -64,6 +64,20 @@ public partial class BattleManager
     {
         if (_rewardSequenceStarted || _stageCleared) return;
         if (CountAliveMonsters() > 0) return;
+        // 【2026-10-31 主人报「竞技场打完怎么出现宝箱和传送门，这个不是都取消了吗，直接出战斗结果」】
+        // 竞技场（单场挑战）没有通关奖励链：不走宝箱/三选一/传送门/剧情，清场即直接进统一结算门
+        // （与正式关 v4.1 同一口径，见 BeginRewardSequence 的 IsFormalMainRun 分支）。
+        // 顺带把这条链上的关卡掉落（GrantStageGrowDrops）/主线线索页（GrantStageClues）/抽奖币
+        // （BeginRewardSequence）一并挡在门外——竞技场产出只有积分 + 金币 WinGold，全在
+        // SettleArenaVictoryCells / ApplyBattleOutcome 里发。
+        if (IsArena)
+        {
+            _rewardSequenceStarted = true;
+            BattleEntryDraftPanel.Hide();   // 清场即收常显抽卡面板（幂等），别压在战斗结果界面上
+            Debug.Log("[BattleManager] 竞技场清场：跳过宝箱/传送门，直接进战斗结果");
+            FinishStageAfterPortalReached();
+            return;
+        }
         // 🔴【2026-10-29 实时抽改版】通关链开始 → 收常显抽卡按钮（Hide 幂等；普通关无剧情路径
         // 原来没有任何 Hide 调用，按钮会一直亮到宝箱/三选一阶段误导玩家；TryLiveDraw 侧守卫同帧拦截）。
         BattleEntryDraftPanel.Hide();
@@ -714,7 +728,10 @@ public partial class BattleManager
     /// （同 BattleWaveAnnounceUI.SpriteFromTexture 先例），真机不至于空底框。</summary>
     static Sprite _draftHintBubble;
 
-    static Sprite DraftHintBubble
+    /// <summary>抽奖引导底框（「像素风空白对话框指针」）。<c>public</c>：LiveMode 战斗内那条
+    /// 「币够了没抽」引导（<c>BattleEntryDraftPanel.TickLiveDrawHint</c>）也要用同一张图，
+    /// 图片加载仍只在这里一份，不另开第二条加载路径。</summary>
+    public static Sprite DraftHintBubble
     {
         get
         {
@@ -1899,14 +1916,44 @@ public partial class BattleManager
         //   无「走入门」演出前置可卡：进门行走检测 TickPortalWalkIn 只在 _portalActive=true 时跑，
         //   不开门 → _portalActive=false → 不触发、不卡、不空指针。
         // OpenClearPortalDirect / 宝箱链 / 传送门行走链全部保留退役不删（下线≠删除）。
-        if (IsFormalMainRun)
+        //
+        // 【2026-10-31 主人拍板「只有无限裂隙是宝箱，其他战斗都是直接出战斗结果」】口径从「正式关」放宽到
+        // **所有模式**：金币本/徽记本/卷轴本/礼物本/羁绊本/支线岛/终章/竞技场/正式关一律不走宝箱链，
+        // 清场直接进统一结算门（宝箱 → 传送门 → 进门 的演出全部跳过）。只有无限裂隙保留宝箱
+        //（它每层都有宝箱三选一 + 层间续战，是玩法的一部分）。
+        if (!IsEndlessRift)
         {
-            Debug.Log("[BattleManager] 正式关去宝箱去传送门（v4.1）：直接进通关结算");
+            Debug.Log($"[BattleManager] 去宝箱去传送门（2026-10-31 全模式口径）：直接进通关结算 mode={Mode?.Id}");
+            // 【2026-10-31 主人报「战斗胜利后没有获得奖励」】宝箱链是 Boss 钻的唯一发放点，跳过它就得在这里补。
+            // 通关金（bonusGold）按主人拍板「没有任务通关金这个」不再补；装备「不给装备，奖励按数据走」也不发。
+            GrantStageClearDiamondWithoutChest();
             FinishStageAfterPortalReached();
             return;
         }
         StageClearRewardDirector.Instance.Begin(rewards, bonusGold, currentStage.type);
         Debug.Log($"[BattleManager] 开始宝箱结算 type={currentStage.type} bonusGold={bonusGold} equips={rewards?.Count ?? 0}");
+    }
+
+    /// <summary>
+    /// 【2026-10-31 主人报「战斗胜利后没有获得奖励」】非无限裂隙模式跳过宝箱链后，
+    /// 把原来<b>只有宝箱才发</b>的 Boss 关钻石补上（宝箱链 <see cref="StageClearRewardDirector"/> 的
+    /// CoReward 被整条跳过，不补这一手就是「算完即扔」）：
+    /// Boss 关钻石 <see cref="StageClearRewardDirector.BossChestDiamond"/> → ResourceWallet（跨局货币）。
+    /// <para>【2026-10-31 主人拍板「没有任务通关金这个」】原来宝箱里的 bonusGold 不再补 ——
+    /// 通关的金币产出只有 <see cref="StageGoldDefs"/> 那条关卡金（BeginRewardSequence 累进
+    /// <c>_runStageGoldPending</c> → <see cref="GrantPendingStageGold"/> 发放）。
+    /// 装备同样不发（「不给装备，奖励按数据走」）：调用方抽出来的 rewards 不折金、不进背包。</para>
+    /// 入账时机必须早于 <see cref="FinishStageAfterPortalReached"/> 里的 PersistBattleGold —— 那一步才落盘。
+    /// </summary>
+    void GrantStageClearDiamondWithoutChest()
+    {
+        if (currentStage != null && currentStage.type == StageType.Boss
+            && StageClearRewardDirector.BossChestDiamond > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond,
+                StageClearRewardDirector.BossChestDiamond, save: false, notify: false);
+            GlobalToastUI.Show($"Boss 关 钻石 +{StageClearRewardDirector.BossChestDiamond}", true);
+        }
     }
 
     /// <summary>
@@ -2096,7 +2143,8 @@ public partial class BattleManager
         Analytics.StageEnd(ch, currentStage != null ? currentStage.stageIndex : 0, true,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡通关（胜利）
         bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
-        AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
+        // 竞技场不接主线冒险日志碎片（2026-10-31：它的章号是 1~8 随机场景，白掉碎片会污染主线收集进度）
+        if (!IsArena) AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
 
         // 通关结算交给模式：核心不需要知道一共有几种玩法、各自发什么、之后去哪。
         if (Mode == null)

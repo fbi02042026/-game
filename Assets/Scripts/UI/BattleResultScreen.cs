@@ -209,12 +209,32 @@ public class BattleResultScreenUI : MonoBehaviour
     /// 统一 localScale ×1.3（只动缩放不碰 sizeDelta/摆位，铁律 32；与进阶钮呼吸动效同通道）。</summary>
     const float ResultBtnScaleMul = 1.3f;
 
-    /// <summary>把一颗结果按钮放大 <see cref="ResultBtnScaleMul"/>（在 authored localScale 基础上乘，不写死 1）。</summary>
-    static void EnlargeResultButton(Transform btnT)
+    /// <summary>【2026-10-31 主人拍板「战斗结果界面的确定和分享按钮缩小30%，战斗失败的按钮先不动」】
+    /// 胜利区两颗（ConfirmBtn 确定 / 分享按钮）在 ×1.3 基础上再 ×0.7 = 0.91；失败区（确定/取消）仍按
+    /// <see cref="ResultBtnScaleMul"/> 不动。注：胜利钮基数 363×123@0.6=217.8 宽，失败钮 100×33@1.4=140 宽，
+    /// 两组来源图不同、本就不等大（预制体口径），这里只按拍板量缩，不擅自统一尺寸。</summary>
+    const float VictoryBtnScaleMul = ResultBtnScaleMul * 0.7f;
+
+    /// <summary>把一颗结果按钮按倍率缩放（在 authored localScale 基础上乘，不写死 1）。
+    /// 默认倍率 = 失败区口径 <see cref="ResultBtnScaleMul"/>；胜利区两颗传 <see cref="VictoryBtnScaleMul"/>。</summary>
+    static void EnlargeResultButton(Transform btnT, float mul = ResultBtnScaleMul)
     {
         if (btnT == null) return;
-        btnT.localScale = btnT.localScale * ResultBtnScaleMul;
+        btnT.localScale = btnT.localScale * mul;
     }
+
+    // —— 分享奖励行（2026-10-31 主人拍板「在分享按钮下面加上一行字 +100钻石的图标」）——
+    // 尺寸是行内排版口径（不是预制体摆位）：行宽/行高/与按钮的纵向间隙/图标边长。
+    // 【2026-10-31 晚 主人拍板「不要字 钻石要图标 字号和图标放大20%」】文字只留「+100」，
+    // 钻石含义由图标表达；行宽/行高/图标/字号整体 ×1.2。
+    const float ShareRewardRowW = 204f;
+    const float ShareRewardRowH = 41f;
+    const float ShareRewardRowGap = 6f;      // 行顶边离分享按钮底边的空隙
+    const float ShareRewardIconSize = 31f;
+    const float ShareRewardIconGap = 4f;     // 图标与文字的横向间隙
+    const int ShareRewardFontSize = 26;      // 原 22 × 1.2
+    /// <summary>钻石图标走 CommonIconSprites 统一出口（与每日登录/资源条同一张图）。</summary>
+    const string ShareRewardIconName = "icon_diamond_blue";
 
     RectTransform _panel;
     CanvasGroup _cg;
@@ -231,6 +251,7 @@ public class BattleResultScreenUI : MonoBehaviour
     // —— 分享钮 v4（2026-10-29 主人拍板，预制体手摆版）专用状态 ——
     Transform _shareBtnT;      // 奖励 Panel 下「分享按钮」（主人手摆：Image+Button+子Text，图已拖好）
     Transform _shareTipT;      // 胜利节点下「分享」说明文字（主人手摆，跟随分享钮显隐）
+    Transform _shareRewardRow; // 奖励 Panel 下动态建的「钻石图标 +100钻石」行（分享钮正下方，跟随显隐）
     RectTransform _confirmRt;  // 确定钮（分享过后切 x 居中用；y/scale/尺寸一律不动）
     float _confirmBaseX;       // 确定钮预制体原 x（= 主人摆的可分享位；打开时读值，不写死）
     bool _shareEntryReported;  // 分享入口曝光埋点只报一次（可分享态才算曝光）
@@ -375,8 +396,12 @@ public class BattleResultScreenUI : MonoBehaviour
         _confirmBaseX = _confirmRt != null ? _confirmRt.anchoredPosition.x : 0f;   // 读预制体值不写死
         BindShareNodes(victoryNode, rewardPanel);
         // 【2026-10-31 主人拍板】确定/分享钮放大 30%（BindShareNodes 之后才拿得到分享钮节点）
-        EnlargeResultButton(confirmT);
-        EnlargeResultButton(_shareBtnT);
+        // 【2026-10-31 二次拍板】胜利这两颗再缩小 30%（×1.3×0.7=0.91）；失败钮先不动
+        EnlargeResultButton(confirmT, VictoryBtnScaleMul);
+        EnlargeResultButton(_shareBtnT, VictoryBtnScaleMul);
+        // 【2026-10-31 主人拍板「在分享按钮下面加上一行字 +100钻石的图标」】
+        // 必须在 EnlargeResultButton 之后建：行 y 按按钮缩放后的实际底边算
+        BuildShareRewardRow(rewardPanel);
         bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
         RefreshShareLayout(isTutorial);
     }
@@ -423,6 +448,76 @@ public class BattleResultScreenUI : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-10-31 主人拍板「在分享按钮下面加上一行字 +100钻石的图标」】
+    /// 在奖励 Panel 下、分享按钮<b>正下方</b>动态建一行「钻石图标 + 『+100钻石』」。
+    /// · 摆位：以分享按钮为锚算 —— x 跟按钮一致，y = 按钮<b>实际</b>底边（rect.height × localScale，缩放改过也算得准）
+    ///   − <see cref="ShareRewardRowGap"/> − 半行高；不写死绝对坐标（铁律 32 口径的延伸）。
+    /// · 图标：<see cref="CommonIconSprites"/> 的 <c>icon_diamond_blue</c>（唯一出口，缺图由它报缺，不自造兜底）。
+    /// · 文字：钻数直引 <see cref="GameConfig.SHARE_REWARD_DIAMOND"/>（改常量文案自动跟）；
+    ///   字号/颜色对齐上方手摆的「分享获得100钻石，每日一次」说明（22 号、暖白；晚拍板 ×1.2 后为 26 号）。
+    /// · 显隐不在这里管 —— 由 <see cref="RefreshShareLayout"/> 跟分享钮一起切（已领/引导局一并隐藏）。
+    /// 上面那行说明保留不动（主人 2026-10-31 明确「保留，下面另加一行」）。
+    /// </summary>
+    void BuildShareRewardRow(Transform rewardPanel)
+    {
+        if (rewardPanel == null || _shareBtnT == null) return;
+        var btnRt = _shareBtnT as RectTransform;
+        if (btnRt == null) return;
+
+        var rowGo = new GameObject("分享奖励", typeof(RectTransform));
+        rowGo.transform.SetParent(rewardPanel, false);
+        var rowRt = (RectTransform)rowGo.transform;
+        rowRt.anchorMin = rowRt.anchorMax = new Vector2(0.5f, 0.5f);
+        rowRt.pivot = new Vector2(0.5f, 0.5f);
+        rowRt.sizeDelta = new Vector2(ShareRewardRowW, ShareRewardRowH);
+        // 按钮实际半高 = sizeDelta.y × |localScale.y| / 2（按钮已被 EnlargeResultButton 缩放过，按实际算）
+        float btnHalfH = btnRt.rect.height * Mathf.Abs(btnRt.localScale.y) * 0.5f;
+        float btnBottomY = btnRt.anchoredPosition.y - btnHalfH;
+        rowRt.anchoredPosition = new Vector2(btnRt.anchoredPosition.x,
+                                             btnBottomY - ShareRewardRowGap - ShareRewardRowH * 0.5f);
+
+        // 钻石图标（左）+ 文字（右）
+        var iconGo = new GameObject("DiamondIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        iconGo.transform.SetParent(rowGo.transform, false);
+        var iconRt = (RectTransform)iconGo.transform;
+        iconRt.anchorMin = iconRt.anchorMax = new Vector2(0.5f, 0.5f);
+        iconRt.pivot = new Vector2(0.5f, 0.5f);
+        iconRt.sizeDelta = new Vector2(ShareRewardIconSize, ShareRewardIconSize);
+        var iconImg = iconGo.GetComponent<Image>();
+        iconImg.raycastTarget = false;    // 别挡点击
+        iconImg.preserveAspect = true;    // 图标不拉伸
+        iconImg.sprite = CommonIconSprites.Load(ShareRewardIconName);
+
+        var txtGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        txtGo.transform.SetParent(rowGo.transform, false);
+        var txtRt = (RectTransform)txtGo.transform;
+        txtRt.anchorMin = txtRt.anchorMax = new Vector2(0.5f, 0.5f);
+        txtRt.pivot = new Vector2(0.5f, 0.5f);
+        txtRt.sizeDelta = new Vector2(ShareRewardRowW, ShareRewardRowH);
+        var txt = txtGo.GetComponent<Text>();
+        txt.font = GameFonts.GetChinese();
+        txt.fontSize = ShareRewardFontSize;   // 【2026-10-31 晚 拍板】原 22 ×1.2
+        txt.fontStyle = FontStyle.Normal;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = new Color(0.95f, 0.93f, 0.88f, 1f);   // 与上方手摆说明同色
+        txt.raycastTarget = false;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.text = $"+{GameConfig.SHARE_REWARD_DIAMOND}";   // 【2026-10-31 晚 拍板】不要「钻石」二字，钻石含义由图标表达
+
+        // 按文字实际渲染宽度把「图标 + 文字」整体水平居中（不靠估宽：换字号/改文案自动对齐）
+        // 下限 60：字体首帧未就绪时 preferredWidth 可能给 0，防止图标和文字叠在一起
+        float textW = Mathf.Max(txt.preferredWidth, 60f);
+        float totalW = ShareRewardIconSize + ShareRewardIconGap + textW;
+        txtRt.sizeDelta = new Vector2(textW, ShareRewardRowH);
+        iconRt.anchoredPosition = new Vector2(-totalW * 0.5f + ShareRewardIconSize * 0.5f, 0f);
+        txtRt.anchoredPosition = new Vector2(
+            -totalW * 0.5f + ShareRewardIconSize + ShareRewardIconGap + textW * 0.5f, 0f);
+
+        _shareRewardRow = rowGo.transform;
+    }
+
+    /// <summary>
     /// 【2026-10-29 主人拍板 v4】按「可分享 / 分享过后」切排版：
     /// · 可分享（非引导局 且 今日未领）＝主人摆的排版原样：分享按钮 + 说明显示，确定钮在预制体位（分享右）；
     /// · 分享过后（今日已领）或引导局＝隐藏分享按钮与说明，确定钮 x 归 0 居中（y/scale/尺寸不动）。
@@ -437,6 +532,8 @@ public class BattleResultScreenUI : MonoBehaviour
 
         if (_shareBtnT != null) _shareBtnT.gameObject.SetActive(shareable);
         if (_shareTipT != null) _shareTipT.gameObject.SetActive(shareable);
+        // 【2026-10-31】分享钮下面的「钻石图标 +100钻石」行跟分享入口同生共死
+        if (_shareRewardRow != null) _shareRewardRow.gameObject.SetActive(shareable);
         if (_confirmRt != null)
             _confirmRt.anchoredPosition = new Vector2(shareable ? _confirmBaseX : 0f, _confirmRt.anchoredPosition.y);
 
@@ -528,7 +625,11 @@ public class BattleResultScreenUI : MonoBehaviour
             var labelTf = cell.transform.Find("Label");
             var label = labelTf != null ? labelTf.GetComponent<Text>() : null;
             if (label != null)
+            {
                 label.text = data.count > 1 ? $"{data.label}×{data.count}" : data.label;
+                // 【2026-10-31 晚 主人拍板「战斗胜利获得的道具下面的字放大30%」】在预制体字号基础上 ×1.3，不写死
+                label.fontSize = Mathf.RoundToInt(label.fontSize * 1.3f);
+            }
 
             GameFonts.ApplyToHierarchy(cell.transform);
         }

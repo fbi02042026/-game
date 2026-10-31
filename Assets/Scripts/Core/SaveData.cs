@@ -145,7 +145,7 @@ public class SaveData
     public int adMercEventClaimedMask = 0;
 
     // === 无限裂隙（2026-10-17 主人拍板）===
-    /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 ShopDefs.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
+    /// <summary>无限裂隙每日次数日键 yyyyMMdd（本地日，2026-10-28 由 UTC 切本地 0 点刷新；升级兼容见 DayKeyUtil.LegacyUtcDayKeyStillToday），跨天清零 triesToday</summary>
     public string endlessRiftDayKey = "";
     /// <summary>今日已用进入次数（每天 3 次，2026-10-29 主人拍板）</summary>
     public int endlessRiftTriesToday = 0;
@@ -283,6 +283,8 @@ public class SaveData
     public string loginCycleDay = "";
     /// <summary>上次自动弹出每日登录面板的 yyyyMMdd；用于「一天最多自动弹一次」，避免回主界面反复弹。</summary>
     public string loginPopupShownDay = "";
+    /// <summary>上次自动弹出「看广告领艾拉」面板的 yyyyMMdd；用于「关闭每日登录后当天首次弹一次」，避免反复弹。</summary>
+    public string ellaPanelShownDay = "";
 
     // === 遗产装备 ===
     public List<EquipmentData> legacyEquipPool = new List<EquipmentData>();
@@ -314,6 +316,13 @@ public class SaveData
     /// 首掷/重掷后写回，冷启动弹窗先读这里恢复同一批。
     /// </summary>
     public List<MercenaryData> mercOffers = new List<MercenaryData>();
+    // === 酒馆三选一「同一佣兵每次招募 +500」（2026-10-31 主人拍板）===
+    /// <summary>
+    /// 每个佣兵累计被招募（购买）的次数：hireId → 次数。
+    /// 普通佣兵招募价 = 1000 + 500 × 此值（<see cref="MercHireSession.GoldCost"/>）。
+    /// 旧存档没有该列表 = 全员 0 次，天然兼容；跨天/跨局都不清零（涨价是长期的）。
+    /// </summary>
+    public List<StringIntEntry> mercRecruitCountEntries = new List<StringIntEntry>();
     // === 酒馆三选一「钻石刷新」（2026-10-23 主人拍板：冷却中可花钻立即刷，每天 2 次，第 1 次 50 钻、第 2 次 100 钻）===
     /// <summary>当日钻石刷新次数（跨天清零，日键见 mercDiamondRefreshDayKey）</summary>
     public int mercDiamondRefreshUsed = 0;
@@ -585,6 +594,14 @@ public class SaveData
     /// <summary>里程称号等占位（Lv6）</summary>
     public string logMileageTitleId = "";
 
+    /// <summary>
+    /// 【2026-10-31 主人拍板「称号自动上头顶」】当前展示的称号 id（空 = 没称号）。
+    /// <para>唯一写入方 = <see cref="TitleSystem"/>：规则「稀有度最高优先，同级取最新」，
+    /// 战斗形象头顶由 <see cref="PlayerTitleHud"/> 按稀有度上色显示这一个。
+    /// 解锁集合仍是 <see cref="unlockedTitleIds"/>（含老档里 A012 已发过的称号）。</para>
+    /// </summary>
+    public string activeTitleId = "";
+
     /// <summary>【2026-10-26 主人拍板「记忆上次替换的人物」】主界面看板当前人物：
     /// "player" 或佣兵 HireId；空 = 默认前台小姐。进主界面时按它恢复看板与气泡台词池。</summary>
     public string lastBoardCharacterId = "";
@@ -840,6 +857,7 @@ public class SaveData
         mercGrowItemEntries ??= new List<StringIntEntry>();
         mercOutStarEntries ??= new List<StringIntEntry>();
         mercTrustEntries ??= new List<StringIntEntry>();   // 【2026-10-26 信任交流】旧存档无列表 → 空，全员 0 信任，兼容
+        mercRecruitCountEntries ??= new List<StringIntEntry>();   // 【2026-10-31】旧档无列表 → 空，全员 0 次招募（价格 1000 起）
         mercGrowEntries ??= new List<MercGrowEntry>();   // 【2026-10-23 施工单 T3】旧存档没有该列表 → 空，全员 Lv1 无加成
         clearedStageEntries ??= new List<StringIdEntry>();
         mainQuestDoneEntries ??= new List<StringIdEntry>();
@@ -875,7 +893,7 @@ public class SaveData
         }
 
         shopPurchases = new Dictionary<string, int>();
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (!string.IsNullOrEmpty(shopPurchaseDay) && shopPurchaseDay != today)
         {
             // 跨天：限购清零（不写回 List，下次 SyncListsFromRuntime 会同步）
@@ -1313,6 +1331,36 @@ public class SaveData
     /// </summary>
     public static readonly string[] DefaultUnlockedMercIds = { "H011", "H001", "H005" };
 
+    // === 佣兵招募次数（2026-10-31 主人拍板「同样的佣兵每次抽加500」）===
+
+    /// <summary>该佣兵累计被招募（购买）过几次；旧档 / 没买过 = 0。
+    /// 普通佣兵招募价 = 1000 + 500 × 本值（唯一消费方 <see cref="MercHireSession.GoldCost"/>）。</summary>
+    public int GetMercRecruitCount(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        mercRecruitCountEntries ??= new List<StringIntEntry>();
+        for (int i = 0; i < mercRecruitCountEntries.Count; i++)
+        {
+            var e = mercRecruitCountEntries[i];
+            if (e != null && e.id == hireId) return e.value;
+        }
+        return 0;
+    }
+
+    /// <summary>记一次招募：首次购买与「重复购买转本命碎片」都算一次 → 该佣兵下次价格 +500。
+    /// 由 <see cref="MercHireSession.NoteRecruit"/> 统一调用（别在 UI 里直接改列表）。</summary>
+    public void NoteMercRecruit(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        mercRecruitCountEntries ??= new List<StringIntEntry>();
+        for (int i = 0; i < mercRecruitCountEntries.Count; i++)
+        {
+            var e = mercRecruitCountEntries[i];
+            if (e != null && e.id == hireId) { e.value++; return; }
+        }
+        mercRecruitCountEntries.Add(new StringIntEntry { id = hireId, value = 1 });
+    }
+
     /// <summary>该佣兵是否已在酒馆解锁（进战斗三选一池的必要条件）。</summary>
     public bool IsMercUnlocked(string hireId)
     {
@@ -1322,8 +1370,7 @@ public class SaveData
     }
 
     /// <summary>解锁佣兵；返回是否本次新解锁。</summary>
-    public bool UnlockMerc(string hireId)
-    {
+    public bool UnlockMerc(string hireId)    {
         if (string.IsNullOrEmpty(hireId)) return false;
         if (unlockedMercIds == null) unlockedMercIds = new HashSet<string>();
         if (!unlockedMercIds.Add(hireId)) return false;
@@ -1708,7 +1755,7 @@ public class SaveData
     /// <summary>每日任务「通关 3 关」：当日累计通关达阈值且未领过则发经验（不再发天赋石，天赋石只随关卡出）。返回发放经验数。</summary>
     public int TryDailyClearTaskExp()
     {
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (string.IsNullOrEmpty(today)) return 0;
         if (dailyStageClearDayKey != today)
         {
@@ -1739,7 +1786,7 @@ public class SaveData
     /// <summary>跨天/跨周归零（幂等；所有计数入口与读进度前都先调）。</summary>
     public void EnsureDailyTaskKeys()
     {
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (dailyTaskDayKey != today)
         {
             dailyTaskDayKey = today;
@@ -1806,7 +1853,7 @@ public class SaveData
             case "daily_recruit_merc": return dailyRecruitMerc;
             case "daily_arena_battle": return dailyArenaBattle;
             case "weekly_merc_starup": return weeklyMercStarUp;
-            case "daily_login": return loginLastDay == ShopDefs.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
+            case "daily_login": return loginLastDay == DayKeyUtil.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
             default: return 0;
         }
     }

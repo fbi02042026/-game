@@ -100,6 +100,9 @@ public class PlayerPowerHud : MonoBehaviour
             hud.BuildGainCanvas();
         }
         Instance.Bind(hero);
+        // 【2026-10-31 主人拍板】称号也挂在这套头顶画布下（同一套跟随逻辑，不另建 Canvas）。
+        // 只在这里接一次：Ensure 是进战斗 / 重进战斗的唯一入口。
+        PlayerTitleHud.Ensure(Instance._root);
         return Instance;
     }
 
@@ -318,5 +321,7 @@ public class PlayerPowerHud : MonoBehaviour
         if (Instance == null) return;
         Instance._follow = null;
         if (Instance._canvas != null) Instance._canvas.gameObject.SetActive(false);
+        // 称号跟画布一起收（画布灭了本来也看不见，这里显式关掉，免得下次进战斗先闪一帧旧称号）
+        PlayerTitleHud.Hide();
     }
 }

@@ -208,7 +208,7 @@ public static class ArenaRules
     public static void EnsureDay(SaveData data)
     {
         if (data == null) return;
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (data.arenaDayKey == today) return;
         data.arenaDayKey = today;
         data.arenaTriesToday = 0;
@@ -519,12 +519,15 @@ public static class ArenaRules
     // 模板 = 1 个「玩家形象」单位（视觉 = Units/wanjia，属性按职业 101 佣兵表）+ 模板池里的佣兵组合；
     // 阵容由 seed 确定性选模板，强度由战斗战力（GetBotBattlePower，可赢=锚玩家战力放水 / 可输=加压）反推。
 
-    /// <summary>一个「玩家队伍模板」：玩家形象的职业属性来源 + 佣兵池（按序取）。</summary>
+    /// <summary>一个「玩家队伍模板」：玩家形象的职业属性来源（三职业之一）。</summary>
     public struct BotTeamTemplate
     {
         public string name;          // 模板名（日志/可读性）
         public string heroAssetId;   // 玩家形象单位的属性真源 mercId（职业 101 佣兵，与玩家同职业属性口径）
-        public string[] mercAssetIds; // 模板佣兵池（按序取 unitCount-1 个；AssetId 必须在 MercRosterDefs 花名册内）
+        /// <summary>【2026-10-31 停用】原「模板佣兵池按序取」—— 现由
+        /// <see cref="PickMercAssetIds"/> 按战力稀有度档从花名册挑（前期普通 / 中期稀有+普通 / 后期传奇+稀有）。
+        /// 字段保留不删（下线≠删除），无消费点。</summary>
+        public string[] mercAssetIds;
     }
 
     /// <summary>玩家形象单位的视觉预制体（与玩家本体同一份 SPUM 资源；属性走 mercId 查表，形象与数值解耦）。</summary>
@@ -545,6 +548,100 @@ public static class ArenaRules
         new BotTeamTemplate { name = "法师续航", heroAssetId = "fashi101",    mercAssetIds = new[] { "naima102",    "dunbing201" } },
         new BotTeamTemplate { name = "游侠游击", heroAssetId = "gongshou101", mercAssetIds = new[] { "dunbing202",  "naima101" } },
     };
+
+    // ───────────────────────── 敌方佣兵稀有度档（2026-10-31 主人拍板） ─────────────────────────
+
+    /// <summary>
+    /// 战力档 → 第 index 个条目（佣兵/技能/装备通用）的稀有度层级：0 = 普通，1 = 稀有，2 = 传奇。
+    /// 2026-10-31 主人拍板「前期就用普通佣兵中挑选 1-2 个然后加上三个职业中的一个，中期佣兵选稀有和普通的，
+    /// 后期选传奇的和稀有的」+「装备和技能也按稀有度来」：
+    ///   前期（&lt;3000）  → 全部普通
+    ///   中期（&lt;12000） → 偶数位稀有、奇数位普通
+    ///   后期（≥12000）  → 偶数位传奇、奇数位稀有
+    /// 用<b>展示战力</b>分档（详情弹窗与实战同一口径，保证「详情看到的=打起来遇到的」）。
+    /// </summary>
+    static int TierIndexFor(int power, int index)
+    {
+        if (power < 3000) return 0;
+        int high = power < 12000 ? 1 : 2;
+        return (index % 2 == 0) ? high : high - 1;
+    }
+
+    /// <summary>技能稀有度按档（不产 Epic，2026-10-05 主人拍板）。</summary>
+    static SkillRarity SkillRarityFor(int power, int index)
+    {
+        int tier = TierIndexFor(power, index);
+        return tier >= 2 ? SkillRarity.Legendary : tier == 1 ? SkillRarity.Rare : SkillRarity.Common;
+    }
+
+    /// <summary>装备品质按档：普通 / 稀有 / 传奇三档（与佣兵、技能同一套档位）。</summary>
+    static Rarity EquipRarityFor(int power, int index)
+    {
+        int tier = TierIndexFor(power, index);
+        return tier >= 2 ? Rarity.Legendary : tier == 1 ? Rarity.Rare : Rarity.Common;
+    }
+
+    /// <summary>
+    /// 敌方佣兵稀有度档（主人原话「前期就用普通佣兵中挑选 1-2 个然后加上三个职业中的一个，
+    /// 中期佣兵选稀有和普通的，后期选传奇的和稀有的」）：
+    ///   前期（&lt;800）  → 1 个普通（形象 + 1 佣兵，垫底对手不再光杆）
+    ///   其余          → 2 个，稀有度走 <see cref="TierIndexFor"/>（中期 稀有+普通 / 后期 传奇+稀有）
+    /// 档位按<b>展示战力</b>。count = 佣兵人数（不含玩家形象）。
+    /// </summary>
+    static MercRosterDefs.MercRarity[] RosterTiersFor(int power, out int count)
+    {
+        count = power < 800 ? 1 : 2;
+        var tiers = new MercRosterDefs.MercRarity[count];
+        for (int i = 0; i < count; i++)
+            tiers[i] = (MercRosterDefs.MercRarity)TierIndexFor(power, i);   // MercRarity 0/1/2 与档位数值一致
+        return tiers;
+    }
+
+    /// <summary>
+    /// 按稀有度档从花名册挑佣兵 AssetId（seed 确定性：同一机器人每次阵容一致）。
+    /// 🔴 固定消耗 <c>count</c> 次 rng.Next：<see cref="BuildBotLoadout"/> 与 <see cref="BuildBotBattleSquad"/>
+    /// 必须同序同耗，否则后面的技能/装备掷点整体错位，详情与实战分叉。
+    /// 排除形象位同款形象、队内重复；某档池空 → LogError 并退到全部佣兵池（不静默、不造数据）。
+    /// </summary>
+    static List<string> PickMercAssetIds(System.Random rng, int power, string heroAssetId)
+    {
+        var tiers = RosterTiersFor(power, out int count);
+        var picked = new List<string>(count);
+        for (int i = 0; i < count; i++)
+        {
+            var pool = MercPoolFor(tiers[i], heroAssetId, picked);
+            if (pool.Count == 0)
+            {
+                Debug.LogError($"[Arena] 佣兵池为空（稀有度 {tiers[i]}、形象 {heroAssetId}），退到全部佣兵池");
+                pool = MercPoolFor(null, heroAssetId, picked);
+            }
+            if (pool.Count == 0)
+            {
+                Debug.LogError("[Arena] 花名册里没有可用佣兵（MercRosterDefs 空？），该位空缺");
+                rng.Next(1);   // 固定消耗，保证两边掷点不错位
+                continue;
+            }
+            picked.Add(pool[rng.Next(pool.Count)]);
+        }
+        return picked;
+    }
+
+    /// <summary>稀有度池（null = 不限稀有度）；同 AssetId 多 hire 去重，排除形象位与已选。</summary>
+    static List<string> MercPoolFor(MercRosterDefs.MercRarity? rarity, string heroAssetId, List<string> taken)
+    {
+        var pool = new List<string>();
+        var all = MercRosterDefs.All;
+        for (int i = 0; i < all.Count; i++)
+        {
+            var def = all[i];
+            if (string.IsNullOrEmpty(def.AssetId)) continue;
+            if (rarity.HasValue && def.Rarity != rarity.Value) continue;
+            if (def.AssetId == heroAssetId) continue;                        // 别跟玩家形象撞形象
+            if (taken != null && taken.Contains(def.AssetId)) continue;      // 队内不重复
+            if (!pool.Contains(def.AssetId)) pool.Add(def.AssetId);
+        }
+        return pool;
+    }
 
     // ───────────────────────── 战力 → 佣兵/技能/装备 档案换算（详情弹窗展示用） ─────────────────────────
 
@@ -592,20 +689,17 @@ public static class ArenaRules
         int tplIdx = rng.Next(BotTeamTemplates.Length);
         var tpl = BotTeamTemplates[tplIdx];
 
-        // ── 玩家形象 + 模板佣兵：人数随战力 1→3（封顶镜像玩家队形 = 形象 + ≤2 佣兵）；
-        //    【2026-10-31 主人报「敌方怎么就一个人」】低分段（<800）也从 1 人抬到 2 人
-        //    （玩家形象+1 佣兵），垫底对手不再光杆司令；
+        // ── 玩家形象（三职业之一）+ 佣兵：佣兵按展示战力选稀有度档
+        //    （2026-10-31 主人拍板「前期普通佣兵 1-2 个 + 三职业之一 / 中期稀有+普通 / 后期传奇+稀有」）；
         //    等级/星级走 DeriveUnitLevelStar（lv×70 + ★×110 ≈ 预算，PowerCalc 口径）──
-        int unitCount = power < 800 ? 2 : power < 3000 ? 2 : 3;
+        var mercIds = PickMercAssetIds(rng, power, tpl.heroAssetId);
+        int unitCount = 1 + mercIds.Count;
         for (int i = 0; i < unitCount; i++)
         {
             DeriveUnitLevelStar(power / (float)unitCount, out int level, out int star);
-            // 佣兵稀有度口径（MercSkillMapping.StarToRarity）：★≥5 传说 / ★≥3 稀有 / 其余普通
-            var rar = star >= 5 ? MercRosterDefs.MercRarity.Legendary
-                    : star >= 3 ? MercRosterDefs.MercRarity.Rare
-                    : MercRosterDefs.MercRarity.Common;
-            // 第 0 位 = 玩家形象（属性真源 = 模板职业佣兵，头像也用它）；其余 = 模板佣兵池按序
-            string assetId = i == 0 ? tpl.heroAssetId : tpl.mercAssetIds[(i - 1) % tpl.mercAssetIds.Length];
+            // 颜色取花名册真实稀有度（与实战挑选口径一致：形象位看模板职业佣兵，佣兵位看被挑中的那位）
+            string assetId = i == 0 ? tpl.heroAssetId : mercIds[i - 1];
+            var rar = MercRosterDefs.TryGetByAssetId(assetId, out var def) ? def.Rarity : MercRosterDefs.MercRarity.Common;
             int iconId = 0;
             string hireId = MercRosterDefs.ResolveHireId(assetId);
             if (!string.IsNullOrEmpty(hireId) && hireId.Length >= 4 && hireId[0] == 'H')
@@ -621,16 +715,12 @@ public static class ArenaRules
             });
         }
 
-        // ── 技能：0~3 个，稀有度档随战力上移（PowerCalc.SkillPowerDelta = rar×90 + ★×140）──
+        // ── 技能：数量随战力，稀有度按档（前期普通 / 中期 稀有+普通 / 后期 传奇+稀有）──
         int skillCount = power < 1500 ? rng.Next(0, 2) : power < 6000 ? rng.Next(1, 3) : rng.Next(2, 4);
-        float skillUp = Mathf.Clamp01((power - 1500f) / 45000f);
         for (int i = 0; i < skillCount; i++)
         {
             int star = rng.Next(1, 4);
-            double r = rng.NextDouble();
-            var rar = r < skillUp * 0.35 ? SkillRarity.Legendary
-                    : r < skillUp * 0.8 ? SkillRarity.Rare
-                    : SkillRarity.Common;   // 三档口径：不产 Epic（主人 2026-10-05 拍板）
+            var rar = SkillRarityFor(power, i);
             list.Add(new LoadoutEntry
             {
                 section = 1,
@@ -641,7 +731,7 @@ public static class ArenaRules
             });
         }
 
-        // ── 装备：1~6 件，部位不重复，品质档随战力上移 ──
+        // ── 装备：1~6 件，部位不重复，品质按档（前期普通 / 中期 稀有+普通 / 后期 传奇+稀有）──
         int equipCount = power < 800 ? rng.Next(1, 3) : power < 3000 ? rng.Next(2, 4)
                        : power < 12000 ? rng.Next(3, 6) : rng.Next(4, 7);
         var slots = new List<string> { "武器", "副手", "头盔", "铠甲", "护腕", "靴子" };
@@ -650,15 +740,9 @@ public static class ArenaRules
             int j = rng.Next(i + 1);
             var t = slots[i]; slots[i] = slots[j]; slots[j] = t;
         }
-        float equipUp = Mathf.Clamp01((power - 800f) / 30000f);
         for (int i = 0; i < equipCount && i < slots.Count; i++)
         {
-            double r = rng.NextDouble();
-            var rar = r < equipUp * 0.22 ? Rarity.Legendary
-                    : r < equipUp * 0.45 ? Rarity.Epic
-                    : r < equipUp * 0.7 ? Rarity.Rare
-                    : r < equipUp ? Rarity.Uncommon
-                    : Rarity.Common;
+            var rar = EquipRarityFor(power, i);
             list.Add(new LoadoutEntry
             {
                 section = 2,
@@ -706,8 +790,14 @@ public static class ArenaRules
     /// ≤0 = 不缩放，直接用 bot.power）。放水/加压锚玩家抽奖战力 → 敌方数值低于/高于玩家当前构筑。
     /// ⚠ 与 BuildBotLoadout 逐行同源（同 seed、模板掷点各消耗一次 rng.Next，其余掷点顺序一致），改动必须两边同步。
     /// 映射不到的 AssetId 跳过并 LogError 不静默（铁律 14）。
+    /// <paramref name="figureOutfit"/> 非空 = 顺带回填「玩家形象」的护甲外观清单（每部位一件、品质随战斗战力），
+    /// 供 <see cref="EnemyFigureOutfit"/> 给 wanjia 白模穿装备（2026-10-31 主人报「敌人一个什么都没穿」）。
+    /// <paramref name="easeValve"/> = 本场走「必赢门」（新手必赢/连输保底/低分保底，见
+    /// <see cref="GetValvePowerMultiplier"/>）：等级/星级再压一道上限（Lv2 / ★1）——
+    /// 2026-10-31 主人报「测试的时候总是输」，实测放水档仍是 Lv1★2 打不过，必赢门得真的能赢。
     /// </summary>
-    public static List<BotSquadEntry> BuildBotBattleSquad(ArenaBotEntry bot, int battlePower = 0)
+    public static List<BotSquadEntry> BuildBotBattleSquad(ArenaBotEntry bot, int battlePower = 0,
+        List<EnemyFigureOutfit.Piece> figureOutfit = null, bool easeValve = false)
     {
         var squad = new List<BotSquadEntry>();
         if (bot == null) return squad;
@@ -719,13 +809,21 @@ public static class ArenaRules
         int tplIdx = rng.Next(BotTeamTemplates.Length);
         var tpl = BotTeamTemplates[tplIdx];
 
-        // ── 玩家形象 + 模板佣兵：人数档按展示战力（详情=实战，低分段同样 ≥2 人，见 BuildBotLoadout），
+        // ── 玩家形象（三职业之一）+ 佣兵：佣兵按<b>展示战力</b>选稀有度档（2026-10-31 主人拍板
+        //    「前期普通佣兵挑 1~2 个 + 三职业之一；中期稀有和普通；后期传奇和稀有」），
         //    强度按战斗战力反推（DeriveUnitLevelStar，lv×70+★×110 ≈ 预算）──
-        int unitCount = displayPower < 800 ? 2 : displayPower < 3000 ? 2 : 3;
+        var mercIds = PickMercAssetIds(rng, displayPower, tpl.heroAssetId);
+        int unitCount = 1 + mercIds.Count;
         for (int i = 0; i < unitCount; i++)
         {
             DeriveUnitLevelStar(battlePower / (float)unitCount, out int level, out int star);
-            string assetId = i == 0 ? tpl.heroAssetId : tpl.mercAssetIds[(i - 1) % tpl.mercAssetIds.Length];
+            // 必赢门再压一道：等级 ≤2、星级 ★1（放水档原样会算出 Lv1★2，实测仍打不过，见方法注释）
+            if (easeValve)
+            {
+                level = Mathf.Min(level, 2);
+                star = 1;
+            }
+            string assetId = i == 0 ? tpl.heroAssetId : mercIds[i - 1];
             if (!MercRosterDefs.TryGetByAssetId(assetId, out var def) || string.IsNullOrEmpty(def.AssetId))
             {
                 // 模板表配错（AssetId 不在花名册）：报出来不静默（铁律 14）；英雄位缺失直接断言级别报错
@@ -745,41 +843,46 @@ public static class ArenaRules
             });
         }
 
-        // ── 技能：0~3 个，稀有度档随战力上移（掷点顺序与 BuildBotLoadout 完全一致；战力用战斗战力）──
-        int skillCount = battlePower < 1500 ? rng.Next(0, 2) : battlePower < 6000 ? rng.Next(1, 3) : rng.Next(2, 4);
-        float skillUp = Mathf.Clamp01((battlePower - 1500f) / 45000f);
+        // ── 技能：数量随展示战力，稀有度按档（2026-10-31 主人拍板「技能也按稀有度来」：
+        //    前期普通 / 中期 稀有+普通 / 后期 传奇+稀有）。掷点顺序与 BuildBotLoadout 完全一致 ──
+        int skillCount = displayPower < 1500 ? rng.Next(0, 2) : displayPower < 6000 ? rng.Next(1, 3) : rng.Next(2, 4);
         var skillTiers = new List<string>();
         for (int i = 0; i < skillCount; i++)
         {
-            int star = rng.Next(1, 4);
-            double r = rng.NextDouble();
-            var rar = r < skillUp * 0.35 ? SkillRarity.Legendary
-                    : r < skillUp * 0.8 ? SkillRarity.Rare
-                    : SkillRarity.Common;   // 三档口径：不产 Epic（主人 2026-10-05 拍板）
+            int star = rng.Next(1, 4);   // 星级仍掷（展示用，两边同耗）
+            var rar = SkillRarityFor(displayPower, i);
             skillTiers.Add($"{RarityName(rar)}技能 · {star}星");
         }
 
-        // ── 装备：1~6 件，部位不重复，品质档随战力上移（掷点顺序与 BuildBotLoadout 完全一致）──
-        int equipCount = battlePower < 800 ? rng.Next(1, 3) : battlePower < 3000 ? rng.Next(2, 4)
-                       : battlePower < 12000 ? rng.Next(3, 6) : rng.Next(4, 7);
-        var slots = new List<string> { "武器", "副手", "头盔", "铠甲", "护腕", "靴子" };
+        // ── 装备：1~6 件，部位不重复，品质按档（同上：前期普通 / 中期 稀有+普通 / 后期 传奇+稀有）──
+        int equipCount = displayPower < 800 ? rng.Next(1, 3) : displayPower < 3000 ? rng.Next(2, 4)
+                       : displayPower < 12000 ? rng.Next(3, 6) : rng.Next(4, 7);
+        var slots = new List<KeyValuePair<EquipSlotType, string>>
+        {
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.MainHand, "武器"),
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.OffHand,  "副手"),
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.Head,     "头盔"),
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.Chest,    "铠甲"),
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.Hands,    "护腕"),
+            new KeyValuePair<EquipSlotType, string>(EquipSlotType.Feet,     "靴子"),
+        };
         for (int i = slots.Count - 1; i > 0; i--)   // 洗牌取前 N → 部位不重复
         {
             int j = rng.Next(i + 1);
             var t = slots[i]; slots[i] = slots[j]; slots[j] = t;
         }
-        float equipUp = Mathf.Clamp01((battlePower - 800f) / 30000f);
         var equipTiers = new List<string>();
+        var rolledEquips = new List<EnemyFigureOutfit.Piece>();   // 部位+品质（外观装配用，与展示文案同源）
         for (int i = 0; i < equipCount && i < slots.Count; i++)
         {
-            double r = rng.NextDouble();
-            var rar = r < equipUp * 0.22 ? Rarity.Legendary
-                    : r < equipUp * 0.45 ? Rarity.Epic
-                    : r < equipUp * 0.7 ? Rarity.Rare
-                    : r < equipUp ? Rarity.Uncommon
-                    : Rarity.Common;
-            equipTiers.Add($"{RarityName(rar)}{slots[i]}");
+            var rar = EquipRarityFor(displayPower, i);
+            equipTiers.Add($"{RarityName(rar)}{slots[i].Value}");
+            rolledEquips.Add(new EnemyFigureOutfit.Piece { slot = slots[i].Key, rarity = rar });
         }
+
+        // 玩家形象护甲外观（2026-10-31 主人拍板「基础装备 + 再配上其他装备」）：
+        // 头/身/手/脚/披风五件保底各穿一件（品质同样按战力档），掷点里该部位品质更高就用掷点品质。
+        if (figureOutfit != null) BuildFigureOutfit(displayPower, rolledEquips, figureOutfit);
 
         // 技能档/装备品质按顺序回填（展示对齐字段：详情弹窗第 N 条技能/装备 = 这里第 N 条）
         for (int i = 0; i < squad.Count; i++)
@@ -790,6 +893,36 @@ public static class ArenaRules
             squad[i] = e;
         }
         return squad;
+    }
+
+    /// <summary>玩家形象护甲部位（顺序固定：头 → 身 → 手 → 脚 → 披风）。</summary>
+    static readonly EquipSlotType[] FigureArmorSlots =
+    {
+        EquipSlotType.Head, EquipSlotType.Chest, EquipSlotType.Hands,
+        EquipSlotType.Feet, EquipSlotType.Cape,
+    };
+
+    /// <summary>
+    /// 「玩家形象」护甲外观清单（2026-10-31 主人拍板「三个职业随机一个基础装备，再配上其他的装备、
+    /// 技能和佣兵，然后计算战力」）：五个部位保底各一件（基础套，品质按<b>展示战力</b>档位，
+    /// 与佣兵/技能/装备同一套档位），掷点里该部位品质更高就用掷点品质（其他装备叠加）。
+    /// 只产外观清单，不参与属性计算（属性真源仍是战力 → 等级/星级，见 DeriveUnitLevelStar）。
+    /// </summary>
+    static void BuildFigureOutfit(int power, List<EnemyFigureOutfit.Piece> rolled,
+        List<EnemyFigureOutfit.Piece> dst)
+    {
+        dst.Clear();
+        for (int i = 0; i < FigureArmorSlots.Length; i++)
+        {
+            var slot = FigureArmorSlots[i];
+            var rarity = EquipRarityFor(power, i);
+            if (rolled != null)
+            {
+                for (int r = 0; r < rolled.Count; r++)
+                    if (rolled[r].slot == slot && rolled[r].rarity > rarity) rarity = rolled[r].rarity;
+            }
+            dst.Add(new EnemyFigureOutfit.Piece { slot = slot, rarity = rarity });
+        }
     }
 
     // ───────────────────────── 阀门战力系数（2026-10-30 晚「真战斗版」） ─────────────────────────

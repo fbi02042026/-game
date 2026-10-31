@@ -506,12 +506,10 @@ public enum ActivityDungeonKind
 public static class ActivityDungeonRules
 {
     /// <summary>
-    /// 【2026-10-23 主人拍板「现在把活动副本都开启让我测试 等打包的时候再区分」】测试期总闸：
-    /// true = 三本不区分开放日、进本不看章节通关门槛、三难度全开（难度逐级解锁旁路），
-    /// 方便随时进任意副本/难度测试；**正式打包前改回 false** 即恢复全部区分口径（一处改回，全链生效）。
-    /// 【2026-10-24 晚收窄】总闸<b>不再旁路显示层</b>：活动横条显隐/左列标签锁永远按真实存档章节门槛
-    /// （主人「没达到开放条件的不要显示」）——未达门槛的横条/标签直接看不到、点不进。
-    /// 注意：每日次数与体力消耗<b>不受</b>总闸影响（照常计）。
+    /// 活动副本测试总闸（2026-10-31 主人拍板：活动副本先全部开放测试）。
+    /// true = 三本不区分开放日、进本不看章节通关门槛、三难度全开，方便随时进任意副本/难度测试；
+    /// 显示层不受此闸旁路（主人「没达到开放条件的不要显示」），每日次数与体力消耗照常计。
+    /// 正式打包前改回 false 即恢复：按开放日（金=一三六 / 徽=二四日 / 卷=五）+ 章节门槛 + 难度逐级解锁。
     /// </summary>
     public const bool TEST_OPEN_ALL = true;
 
@@ -635,9 +633,9 @@ public static class ActivityDungeonRules
     static void EnsureDay(SaveData data, ref string dayKey, ref int tries)
     {
         if (data == null) return;
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (dayKey == today) return;
-        if (ShopDefs.LegacyUtcDayKeyStillToday(dayKey))
+        if (DayKeyUtil.LegacyUtcDayKeyStillToday(dayKey))
         {
             dayKey = today;
             SaveSystem.Instance?.Save();
@@ -841,9 +839,9 @@ public static class EndlessRiftRules
     public static void EnsureDay(SaveData data)
     {
         if (data == null) return;
-        string today = ShopDefs.TodayKey();
+        string today = DayKeyUtil.TodayKey();
         if (data.endlessRiftDayKey == today) return;
-        if (ShopDefs.LegacyUtcDayKeyStillToday(data.endlessRiftDayKey))
+        if (DayKeyUtil.LegacyUtcDayKeyStillToday(data.endlessRiftDayKey))
         {
             data.endlessRiftDayKey = today;
             SaveSystem.Instance?.Save();

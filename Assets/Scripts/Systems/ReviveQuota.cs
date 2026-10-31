@@ -30,7 +30,7 @@ public static class ReviveQuota
     public static int Tier4DiamondPrice => ResourceAdRewards.Tier4DiamondPrice;
 
     /// <summary>日键（本地日历日 yyyyMMdd，0 点刷新）。【2026-10-28 改】原 UTC 键在国内=早 8 点才刷新，
-    /// 与每日登录/商店（ShopDefs.TodayKey 本地日）口径不一致 → 统一本地日。</summary>
+    /// 与每日登录/商店（DayKeyUtil.TodayKey 本地日）口径不一致 → 统一本地日。</summary>
     static string TodayKey() => DateTime.Now.ToString("yyyyMMdd");
 
     /// <summary>跨天清零（幂等，读档后/判定前调用均可）。</summary>
@@ -41,7 +41,7 @@ public static class ReviveQuota
         if (data.reviveDayKey == today) return;
         // 【2026-10-28 升级兼容】旧 UTC 日键在本地 0~8 点 == 本地今天：平移保留计数，不清零加次数。
         // 平移必须立即落盘（理由同 ResourceAdRewards.EnsureDay：防平移丢失后被清零多领）。
-        if (ShopDefs.LegacyUtcDayKeyStillToday(data.reviveDayKey))
+        if (DayKeyUtil.LegacyUtcDayKeyStillToday(data.reviveDayKey))
         {
             data.reviveDayKey = today;
             SaveSystem.Instance?.Save();

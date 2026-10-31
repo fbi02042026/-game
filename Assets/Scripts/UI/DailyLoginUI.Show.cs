@@ -52,6 +52,31 @@ public partial class DailyLoginUI
         // 【2026-10-16 主人拍板】玩家关掉登录界面，这时才提示「您有新的邮件」——
         // 引导收尾串行链的最后一环（欢迎信在 MarkTutorialDone 时已入邮，只登记未弹）。
         NewMailToast.FlushPending();
+
+        // 【2026-10-31 主人拍板】关闭每日登录后，当天首次自动弹「看广告领艾拉」面板一次
+        TryAutoShowEllaEvent();
+    }
+
+    /// <summary>
+    /// 关闭每日登录后，当天首次自动弹出「看广告领艾拉」面板（AdMercEventUI）一次。
+    /// 按天去重 + 落盘：今天已弹过就不再弹，避免回主界面 / 反复关登录时反复弹。
+    /// 两道门槛（自检 2026-10-31 补，与自动弹每日登录同口径）：
+    ///   · 引导未出师不弹——引导中途手动开/关登录弹窗（GuildHallUI 手动入口无门槛）时不得插进引导；
+    ///   · 本会话刚出师不弹——出师当次关登录是引导收尾链的信号（TutorialDirector 等关窗后
+    ///     连弹夸奖气泡/装备提示，「屏幕上始终只有一件事」），艾拉让位，出师当天靠手动入口。
+    /// 仅当广告活动开启（GameConfig.ADS_ENABLED）时弹，与入口 / 活动「未接入过渡期整体折叠」口径一致。
+    /// </summary>
+    void TryAutoShowEllaEvent()
+    {
+        if (!GameConfig.ADS_ENABLED) return;               // 广告未接入过渡期：活动整体折叠，不弹
+        if (!StoryProgress.TutorialDone) return;           // 引导未出师不弹（防中途手动开关登录插队引导）
+        if (FirstRunGuide.FinishedThisSession) return;     // 出师当次不弹（让位引导收尾链，第二天起正常）
+        var d = SaveSystem.Instance?.Data;
+        if (d == null) return;
+        if (d.ellaPanelShownDay == DayKeyUtil.TodayKey()) return;   // 今天已弹过（关登录可能会多次触发）
+        d.ellaPanelShownDay = DayKeyUtil.TodayKey();
+        SaveSystem.Instance.Save();
+        AdMercEventUI.Show();
     }
 
     // ============================================================
@@ -86,9 +111,9 @@ public partial class DailyLoginUI
         _guideConsumed = true;
         Instance?.RemoveLoginGuide();
         var d = SaveSystem.Instance?.Data;
-        if (d != null && d.loginPopupShownDay != ShopDefs.TodayKey())
+        if (d != null && d.loginPopupShownDay != DayKeyUtil.TodayKey())
         {
-            d.loginPopupShownDay = ShopDefs.TodayKey();
+            d.loginPopupShownDay = DayKeyUtil.TodayKey();
             SaveSystem.Instance.Save();
         }
     }
