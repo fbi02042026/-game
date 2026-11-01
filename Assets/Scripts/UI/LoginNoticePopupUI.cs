@@ -22,15 +22,15 @@ public class LoginNoticePopupUI : MonoBehaviour
     const string SeenPrefKey = "login_notice_seen_id";
 
     const string NoticeBody =
-        "这么长时间让大家久等了。\n" +
+        "好久不见，久等啦！\n" +
         "\n" +
-        "这版优化了很多次，\n" +
-        "也加了不少新玩法。\n" +
+        "这段日子反复打磨了好几轮，\n" +
+        "新玩法也一个接一个加进来。\n" +
         "\n" +
-        "老玩家的存档已自动清空，\n" +
-        "会从新档重新开始。\n" +
+        "注意：老存档已经清空，\n" +
+        "要和大家从新档再出发。\n" +
         "\n" +
-        "新玩家当没看见，直接开冲。";
+        "新朋友不用理会，直接开玩！";
 
     static LoginNoticePopupUI _instance;
 

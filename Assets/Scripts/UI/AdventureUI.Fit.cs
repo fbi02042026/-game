@@ -155,11 +155,22 @@ public partial class AdventureUI
                 var activityOrderRestore = transform.Find("RightContent/" + ActivityNodeName);
                 if (activityOrderRestore != null) ApplyActivityRowOrder(activityOrderRestore);
                 RestoreAdventureSidebarEven();
+                // 【2026-11-01 主人报「左边的标签又拉开空隙了」】紧凑排不再只限瘦屏：
+                // 标准 9:16 屏同样有「隐藏的每日/BOSS 占 1/3 号位 → 可见 0/2/4 间隔 190」的问题
+                //（10-27 那次修复只挂在瘦屏闸门后，9:16 一直没排）。这里同样按主人节奏紧凑排，
+                // 幂等（每次从 base 重算）；一键回退（EnableAdventureUiFit=false）时不排。
+                if (EnableAdventureUiFit) FitSidebarEvenSpacing();
                 RestoreAdventureSidebarOrder(right);
                 // 【2026-11-01】编辑器模拟刘海（编辑器当真机）/ 真机刘海下，资源条比预制体假设的低，
                 // 标准屏也要让顶部两块（横幅/左列）+ 右列容器与资源条【同步下移同一避让量】——
                 // 无刘海标准屏真机 dodge=5 与资源条固定下移完全同步，相对布局与之前一致。
                 FitAdventureTopBelowResourceStrip(transform as RectTransform);
+                // 【2026-11-01 引导途中重启再进复现】冷启动同帧自动进页时 Canvas 还没布局（rect=0），
+                // 本分支此前直接 return、没有瘦屏那套补跑 → 上面的紧凑排这帧静默漏跑，间隔一直散着。
+                // rect 未就绪时挂起补跑一次（幂等，等价于晚一帧进页）。
+                if (EnableAdventureUiFit && transform is RectTransform rr0
+                    && (rr0.rect.width <= 0f || rr0.rect.height <= 0f))
+                    BeginFitWhenRootReady();
                 return;
             }
 
@@ -1052,6 +1063,8 @@ public partial class AdventureUI
     /// 之前禁用的原因（标签消失）事后查明真凶是 FitAdventureTopBelowResourceStrip 的 +688 位移，
     /// 不是本方法；TopShift 已关（EnableTopShiftBelowStrip=false）后间隔问题重新露出
     /// （隐藏的每日/BOSS 占住 1/3 号位，可见 0/2/4 号中心距 190）→ 恢复紧凑排，实现与 cd6809b7^ 一致。
+    /// 【2026-11-01 起标准 9:16 屏也排】（主人「左边的标签又拉开空隙了」，见 ApplyAdventureFit 还原分支）；
+    /// 本方法本身无瘦屏依赖，rect 未就绪时内部 no-op。
     /// </summary>
     void FitSidebarEvenSpacing()
     {

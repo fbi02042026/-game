@@ -50,8 +50,30 @@ public partial class Mercenary : UnitBase
         return true;
     }
 
+    /// <summary>【临时诊断，定位后删除】敌方单位 AI 状态，每秒一条。</summary>
+    float _aiDbgTimer;
+    void LogEnemyAiStateOncePerSec()
+    {
+        if (isAlly) return;
+        _aiDbgTimer -= Time.deltaTime;
+        if (_aiDbgTimer > 0f) return;
+        _aiDbgTimer = 1f;
+        bool hasTarget = target != null && !target.isDead;
+        float dist = hasTarget ? Mathf.Abs(GetCombatX(this) - GetCombatX(target)) : -1f;
+        Debug.Log($"[ArenaAI] {mercId} x={GetCombatX(this):F2} mapEnter={_mapEnterActive} " +
+                  $"canAct={(BattleManager.Instance != null ? BattleManager.Instance.UnitsCanAct : false)} " +
+                  $"target={(hasTarget ? target.name : "null")} dist={dist:F2} " +
+                  $"range={(attr != null ? attr.GetAttr(AttrType.AttackRange) : -1f):F2} eff={GetEffectiveAttackRange():F2} " +
+                  $"atkLock={(unitAnim != null && unitAnim.InAttackLock)} dmgRec={(unitAnim != null && unitAnim.InDamagedRecovery())} " +
+                  $"spd={GetCombatMoveSpeed():F2} hp={currentHp:F0} stun={IsStunned}");
+    }
+
     protected override void AIUpdate()
     {
+        // 【2026-11-01 临时诊断】主人报「竞技场玩家形象的机器人（弓）一直往左走 不攻击，佣兵攻击了」
+        // —— 敌方单位每秒一条 AI 状态，定位卡在哪条分支；定位根因后整段删掉。
+        LogEnemyAiStateOncePerSec();
+
         if (TutorialStunned)
         {
             if (rb != null) rb.velocity = Vector2.zero;

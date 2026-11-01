@@ -49,6 +49,15 @@ public class QuestBarBinder : MonoBehaviour
     const float FoldEdgeLeftInset = 8f;
     /// <summary>折叠按钮整体缩放（2026-11-01 主人拍板「再缩小20%」→ 0.72×0.8=0.576；预制体不动）。</summary>
     const float FoldButtonScale = 0.576f;
+    /// <summary>
+    /// 折叠按钮热区外扩（2026-11-01 修「任务栏收起后不好打开、点偏误碰前台小姐」）：
+    /// 按钮 0.576 缩放后热区只剩 ~50×28 设计像素，收起位贴屏左又整块落在看板立绘 show
+    /// （1171×1345×0.7 ≈ 820×961，锚点画布中心偏上）的射线矩形里——点偏一点射线就穿到
+    /// show（show 运行时挂了 Button，点它＝戳前台小姐说话），既打不开任务栏又误触看板。
+    /// 负值 Image.raycastPadding 把热区向四周各扩 FoldHitPad 像素，视觉与预制体不动；
+    /// 扩展区若压到任务行，行在 panl 里晚于折叠节点（层级更高），行点击不受影响。
+    /// </summary>
+    const float FoldHitPad = 30f;
     int _dailyBaseSibling = -1;      // 日常行原始次序（支线行回来时还原）
     bool _collapsed;                 // 折叠态（会话内，不写存档）
     bool _appliedCollapsed, _appliedSideVisible = true;   // 上次实际套到 UI 的状态（变了才动 UI）
@@ -186,19 +195,45 @@ public class QuestBarBinder : MonoBehaviour
 
     /// <summary>
     /// 任务栏正文动态字号（2026-10-27 主人拍板「字少的时候大点、多的时候小点，限定最多字数」）：
-    /// 框宽 160 / 高 52 / 行距 1.3（GameFonts 下限），按全角字宽≈字号估算容量，档位——
-    ///   ≤7 字 → 20 号（单行大字）；≤14 字 → 18 号（两行）；≤20 字 → 16 号（两行）；
-    ///   超过 → 15 号并截断到 19 字 + 「…」（最多展示 20 字），最小 15 号保证看得清。
+    /// 框宽 160 / 高 52 / 行距 1.3（GameFonts 下限）。
+    ///   基础档按字数：≤7 字 → 20 号；≤14 字 → 18 号；≤20 字 → 16 号；超过 → 截断到 19 字 + 「…」、15 号。
+    ///   【2026-11-01 主人「右边还有一点空位就换行了」】再按估算像素宽沿档位降号（数字/字母按半宽），
+    ///   能塞进 160 宽单行就不换行；15 号仍放不下才维持换行（框高 52 容两行），最小 15 号保证看得清。
     /// </summary>
     const int InfoMaxChars = 20;   // 每条任务最多展示字数（含省略号），超出截断
+    /// <summary>Info 框宽（预制体值 160，只拿来估算放不放得下，不改框本身——铁律 20）。</summary>
+    const float InfoBoxWidth = 160f;
+    /// <summary>字号档位（与旧字数档同源）：估宽放不下就沿档位往下降，最低 15 号。</summary>
+    static readonly int[] InfoFontTiers = { 20, 18, 16, 15 };
+
+    /// <summary>估算一行文案在指定字号下的像素宽：全角字 ≈ 字号，半角（数字/字母/符号）≈ 字号 × 0.5。</summary>
+    static float EstimatedTextWidth(string s, int size)
+    {
+        float w = 0f;
+        for (int i = 0; i < s.Length; i++)
+            w += s[i] > 0x2E7F ? size : size * 0.5f;   // CJK 及全角区按全宽，ASCII 按半宽
+        return w;
+    }
+
     static void FitInfoFont(Text t)
     {
         if (t == null) return;
         string s = t.text ?? "";
         int len = s.Length;
-        t.fontSize = len <= 7 ? 20 : len <= 14 ? 18 : len <= InfoMaxChars ? 16 : 15;
+        int sizeIdx = len <= 7 ? 0 : len <= 14 ? 1 : 2;
         if (len > InfoMaxChars)
-            t.text = s.Substring(0, InfoMaxChars - 1) + "…";
+        {
+            s = s.Substring(0, InfoMaxChars - 1) + "…";
+            t.text = s;
+            sizeIdx = 3;
+        }
+        // 【2026-11-01 主人「右边还有一点空位就换行了」】按字数定档只看字数不看宽窄，
+        // 「今日获取375/500金币」数字按半宽本可塞下却按全角估 → 差一点也换行。
+        // 这里沿档位降号直到估宽 ≤ 框宽（最低 15 号）；15 号还放不下才维持换行（框高 52 容两行）。
+        while (sizeIdx < InfoFontTiers.Length - 1
+               && EstimatedTextWidth(s, InfoFontTiers[sizeIdx]) > InfoBoxWidth)
+            sizeIdx++;
+        t.fontSize = InfoFontTiers[sizeIdx];
     }
 
     /// <summary>按候选名找折叠按钮；顺带检查它别挂在三行里面（挂行里 = 折叠时连按钮一起藏，展开不了）。</summary>
@@ -231,6 +266,11 @@ public class QuestBarBinder : MonoBehaviour
                 // 冲回 1.0（＝主人报的变大）。缩放定稿后同步它的基准，按下/松手都回到 FoldButtonScale。
                 var fb = _foldRt.gameObject.GetComponent<UiButtonPressFeedback>();
                 if (fb != null) fb.SyncBaseScale(_foldRt.localScale);
+
+                // 【2026-11-01 修「收起后不好打开/误碰前台小姐」】热区外扩见 FoldHitPad 注释；只改射线区，视觉不动
+                var foldImg = t.GetComponent<Image>();
+                if (foldImg != null)
+                    foldImg.raycastPadding = new Vector4(-FoldHitPad, -FoldHitPad, -FoldHitPad, -FoldHitPad);
 
                 _foldY = _foldRt.anchoredPosition.y;
                 _foldX = _foldRt.anchoredPosition.x;   // 展开态基准 x（panl 空间），收起时改、展开时还原
@@ -289,9 +329,8 @@ public class QuestBarBinder : MonoBehaviour
         if (_mainText != null)
         {
             var m = snap.main;
-            _mainText.text = m != null
-                ? m.Desc + (string.IsNullOrEmpty(m.ProgressText) ? "" : "（" + m.ProgressText + "）")
-                : "本章主线已完成";
+            // 【2026-11-01 主人「不要括号里的，全部短点」】去掉（进度/总数）尾巴——主线文案本身不带实时数字也按主人口径砍掉
+            _mainText.text = m != null ? m.Desc : "本章主线已完成";
             FitInfoFont(_mainText);   // 按最终文案长度定字号/截断
         }
 
@@ -315,9 +354,9 @@ public class QuestBarBinder : MonoBehaviour
         if (_dailyText != null)
         {
             var d = snap.daily;   // DailyQuestView? 可空结构体：判空用 HasValue，取值必须 .Value（CS1061 教训）
-            _dailyText.text = d.HasValue
-                ? d.Value.desc + (d.Value.need > 1 ? $"（{d.Value.progress}/{d.Value.need}）" : "")
-                : "今日已完成";
+            // 【2026-11-01 主人「今日获取375/500金币后面怎么又有括号375/500」】表文案已带 {0}/{1}
+            //（DailyViews/WeeklyViews 里 string.Format 过），再补括号就是重复 → 只显示 desc。
+            _dailyText.text = d.HasValue ? d.Value.desc : "今日已完成";
             FitInfoFont(_dailyText);   // 按最终文案长度定字号/截断
         }
     }

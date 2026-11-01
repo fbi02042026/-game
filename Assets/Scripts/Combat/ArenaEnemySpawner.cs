@@ -83,14 +83,23 @@ public static class ArenaEnemySpawner
         }
 
         int spawned = 0;
-        for (int i = 0; i < squad.Count; i++)
+        // 【2026-11-01 主人报「机器人拿着弓还是走的很近」】入场列队位按射程排：射程越远越靠后。
+        // 根因：列队位原按 i 顺序排、不看职业，而第 0 位（机器人「玩家形象」）在游侠两套模板里
+        // 就是弓手（gongshou101），加 startOffset 钳制下限 1.5 → 弓手恒排最前排、贴脸站桩平射。
+        // 只改列队位顺序（AI 解冻后仍按各自射程自行走位），阵容/属性/屏外出生点一概不动。
+        var drawOrder = new System.Collections.Generic.List<int>(squad.Count);
+        for (int i = 0; i < squad.Count; i++) drawOrder.Add(i);
+        drawOrder.Sort((a, b) => MercRosterDefs.ResolveRange(squad[b].mercId)
+                               .CompareTo(MercRosterDefs.ResolveRange(squad[a].mercId)));
+        int slot = 0;
+        foreach (int si in drawOrder)
         {
-            var e = squad[i];
+            var e = squad[si];
             // 玩家半场右侧列队：横向铺开（间隔 1.4 世界单位），朝向由生成后 Face(-1) 定
-            var pos = new Vector3(baseX + startOffset + i * 1.4f, UnitBase.GROUND_Y, z);
+            var pos = new Vector3(baseX + startOffset + slot * 1.4f, UnitBase.GROUND_Y, z);
             // 屏外出生点：镜头右缘（limit）再往外扩 1.2，纵向按序号再排开，保证整只都在屏外
             if (limit != float.MaxValue)
-                pos.x = limit + 1.2f + i * 0.45f;
+                pos.x = limit + 1.2f + slot * 0.45f;
             // 【2026-10-31 主人拍板「机器人一定要有玩家的形象」】isHeroFigure 条目 = 玩家形象单位
             //（视觉 Units/wanjia，属性/技能按模板职业佣兵查表）；其余照旧敌方佣兵。
             var merc = MercenaryManager.Instance == null ? null
@@ -104,10 +113,10 @@ public static class ArenaEnemySpawner
             // 【2026-11-01 主人拍板「对方弓手要和我方用同一种子弹，不要怪物那套」】
             // 敌方镜像小队弹道/远程 VFX 走我方套装（消费点唯一出口 UnitBase.ResolveProjectileFaction）
             merc.projectileVfxAsAlly = true;
-            merc.SetPartyIndex(i);              // 车道偏移按队内序错开
+            merc.SetPartyIndex(slot);           // 车道偏移按队内序错开
             merc.Face(-1);                      // 面向玩家半场（左）
             // 【2026-10-31 主人拍板】屏外走入：目标 = 各自的交战位（镜头内列队点），到位后交还普通 AI
-            merc.BeginMapEnter(baseX + startOffset + i * 1.4f, -1);
+            merc.BeginMapEnter(baseX + startOffset + slot * 1.4f, -1);
             // 花名册默认技能（主动+被动）——敌方队伍照常放技能（牧师奶队友等）
             MercRosterDefs.GetSkillIds(e.mercId, out string activeId, out string passiveId);
             if (!string.IsNullOrEmpty(activeId) || !string.IsNullOrEmpty(passiveId))
@@ -116,6 +125,7 @@ public static class ArenaEnemySpawner
             bm._totalMonstersSpawnedThisStage++;
             bm.InvalidateAliveMonsterCache();
             spawned++;
+            slot++;
             Debug.Log($"[Arena] 敌方单位入场：{(e.isHeroFigure ? "玩家形象" : e.hireId)}({e.mercId}) Lv{e.level}★{e.star} x={pos.x:F1}");
         }
         if (spawned == 0)

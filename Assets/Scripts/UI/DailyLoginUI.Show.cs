@@ -15,6 +15,13 @@ public partial class DailyLoginUI
     {
         if (_root == null) Build();
         _root.SetActive(true);
+        // 【DDOL 弹窗规范 §4.6】每次打开重绑相机 + 重算适配（幂等）。
+        // 根因：进过一次战斗后 AutoGameInitializer.EnsureDesignResolution 会把全量 CanvasScaler
+        // （含本 DDOL 弹窗）的 match 强改回 1（按高匹配），瘦屏上重开本弹窗逻辑宽从 720 缩到
+        // 1280×屏比（<720），整个界面视觉放大且左右被裁出屏。RefreshPopup 按
+        // DesignAspectLetterbox.ResolveUiMatch() 纠回瘦屏按宽匹配（与竞技场/全局toast等
+        // 其它 DDOL 弹窗每次 Show 先 RefreshPopup 的既有口径一致）。
+        UICanvasSetup.RefreshPopup(GetComponent<Canvas>(), GameConfig.UiSort.TownPopup);
         ShowVisuals();   // 2026-10-15 主人拍板：等待期/关闭期只收画面（HideVisuals）不停宿主；这里放回来
         Canvas.ForceUpdateCanvases();
         Layout();

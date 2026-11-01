@@ -83,8 +83,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
             }
             if (nameT != null)
             {
-                // 锁格名字直接显示解锁条件（2026-10-23：第 4 格通关第 2 章、第 5 格 100 钻）
-                nameT.text = open ? "空格" : LockHintOf(index);
+                // 【2026-11-01 主人拍板】锁格名字统一显示「未解锁」，解锁条件改由点击 toast 弹
+                // （Swap.OnPoolSlotClick）；原「锁格名字直接显示解锁条件」口径作废。
+                nameT.text = open ? "空格" : "未解锁";
                 if (_slotDefaultNameColors.TryGetValue(slot, out var defColor))
                     nameT.color = defColor;
             }
@@ -167,7 +168,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 锁格提示（第 4 格 = 通关第 2 章；第 5 格 = 2026-10-23 主人拍板改 100 钻解锁，条件在 SaveData.DrawPoolSlots）。
+    /// 锁格解锁条件文案（点击 toast 用，见 Swap.OnPoolSlotClick；第 4 格 = 通关第 2 章，
+    /// 第 5 格 = 2026-10-23 主人拍板改 100 钻解锁，条件在 SaveData.DrawPoolSlots）。
+    /// 【2026-11-01 主人拍板】格子上不再显示本文案（改「未解锁」），本方法只供 toast 取条件。
     /// </summary>
     static string LockHintOf(int index)
     {

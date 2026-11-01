@@ -47,8 +47,8 @@ public class ArenaPopupUI : MonoBehaviour
     readonly Text[] _rowPts = new Text[RowTotal];
     readonly GameObject[] _rowFight = new GameObject[RowTotal];   // 「对战」按钮（可挑战行显示）
     readonly GameObject[] _rowDash = new GameObject[RowTotal];    // 「—」（不可挑战行显示）
-    Sprite _rowBarSprite;   // 行模板原条（主人预制体摆的九宫格条，克隆源 Image 上的）
-    Sprite _rowSelSprite;   // 选中条（主人预制体 MyBar 上摆的九宫格条；2026-11-01 拍板「直接用」，只换 sprite 不改别的）
+    Sprite _rowBarSprite;   // 普通行条（_0009_条1，无外框；按路径加载）
+    Sprite _rowSelSprite;   // 玩家行选中条（_0009_条1选中，金色外框；按路径加载）
 
     ScrollRect _scroll;
     RectTransform _content;
@@ -418,14 +418,14 @@ public class ArenaPopupUI : MonoBehaviour
         _content.sizeDelta = new Vector2(tmplRt != null ? tmplRt.sizeDelta.x : 640f, _contentH);   // BotCount 变化时运行时同步
         if (_rowTemplate.activeSelf) _rowTemplate.SetActive(false);   // 模板恒隐藏（防手滑）
 
-        // 行条全以预制体为准（2026-11-01 主人拍板「直接用预制体里做好的九宫格选中条，不要改里面条的数值」）：
-        // 不写隔行色、不改 Image 任何参数，只记两支 sprite 供 Refresh 给玩家行切换（两支都是主人摆的 Sliced，随框拉伸不变形）
-        var tmplImg = _rowTemplate.GetComponent<Image>();
-        _rowBarSprite = tmplImg != null ? tmplImg.sprite : null;
-        var myBarImg = UiFind.Deep(transform, "MyBar")?.GetComponent<Image>();
-        _rowSelSprite = myBarImg != null ? myBarImg.sprite : null;
+        // 行条全按路径加载（2026-11-01 主人报「玩家该有外框 其他机器人没有 现在反了」）：
+        // 根因＝行条走 prefab 旧 hex32 引用（对战美术是 56 字符 guid，这两个 guid 磁盘上无 meta 拥有，
+        // 引擎兼容映射不可靠导致外框条/普通条发反）；改同 ApplyArt 的 Resources.Load 口径，图定死不靠映射。
+        // 普通行 = _0009_条1（无外框），玩家行 = _0009_条1选中（金色外框）；边框照 meta spriteBorder（Sliced 随框拉伸不变形）。
+        _rowBarSprite = LoadArt("_0009_条1", new Vector4(68f, 38f, 79f, 36f));
+        _rowSelSprite = LoadArt("_0009_条1选中", new Vector4(73f, 45f, 70f, 45f));
         if (_rowBarSprite == null || _rowSelSprite == null)
-            Debug.LogError("[Arena] 预制体缺行条 sprite：RowTemplate 或 MyBar 的 Image 没图（玩家行选中条切不了，报主人）");
+            Debug.LogError("[Arena] 行条图缺失：Resources/UI/Art/对战/_0009_条1(-选中).png（玩家行选中条切不了，报主人）");
 
         for (int i = 0; i < RowTotal; i++)
         {
@@ -541,6 +541,22 @@ public class ArenaPopupUI : MonoBehaviour
             ? Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0,
                 SpriteMeshType.FullRect, new Vector4(border, border, border, border))
             : Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
+        ArtCache[file] = sp;
+        return sp;
+    }
+
+    /// <summary>同上，但 9-slice 边框按四边给（x=左 y=下 z=右 w=上，与 meta spriteBorder 同序）。缺图 LogError 不兜底。</summary>
+    static Sprite LoadArt(string file, Vector4 border)
+    {
+        if (ArtCache.TryGetValue(file, out var hit) && hit != null) return hit;
+        var tex = Resources.Load<Texture2D>(ArtDir + file);
+        if (tex == null)
+        {
+            Debug.LogError($"[Arena] 对战美术缺失：Resources/{ArtDir}{file}（确认 png 与 .meta 都在）");
+            return null;
+        }
+        var sp = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0,
+            SpriteMeshType.FullRect, border);
         ArtCache[file] = sp;
         return sp;
     }
@@ -776,8 +792,8 @@ public class ArenaPopupUI : MonoBehaviour
             if (_rowRoots[i] != null) _rowRoots[i].SetActive(on);
             if (!on) continue;
 
-            // 玩家行 = 主人预制体里摆好的九宫格选中条：只换 sprite 引用（Image 的 Sliced/颜色/几何一概不动，
-            // 随框拉伸不变形）；其余行 = 模板原条。条的一切数值照预制体（2026-11-01 主人拍板「直接用，不要改里面条的数值」）。
+            // 玩家行 = 选中条（_0009_条1选中，金色外框）、其余行 = 普通条（_0009_条1）；两支按路径加载（见 BuildRows），
+            // 只换 sprite 引用，Image 的 Sliced/颜色/几何一概不动，随框拉伸不变形。
             if (_rowRoots[i] != null)
             {
                 var img = _rowRoots[i].GetComponent<Image>();
@@ -964,7 +980,7 @@ public class ArenaPopupUI : MonoBehaviour
 
     // 货架滚动区（RecordsBox 中心锚坐标）：顶部让开余额行（积分icon 底 ≈ y137），底部到框底 y-345。
     const float ShopShelfTopY = 137f;
-    const float ShopShelfBottomY = -345f;
+    const float ShopShelfBottomY = -315f;   // 2026-11-01 主人报「滑动列表超出下面的框」：底边 -345 上收 30
     /// <summary>行间距 = 行高 + 12（沿用榜单 8px 行距的呼吸感，行卡更高取 12）。</summary>
     const float ShopRowGap = 12f;
 
@@ -1096,9 +1112,19 @@ public class ArenaPopupUI : MonoBehaviour
                     Debug.LogError($"[Arena] 稀有度底框缺失：酒馆头像框（{good.frameRarity}，商品 {good.id}，底框留空可见）");
                 else
                 {
+                    // 【2026-11-01 主人拍板「要原始的大小 然后缩放 不要改宽高」】Sliced 把框拉到格子
+                    // 尺寸会变形：改 Simple + SetNativeSize 用贴图原始尺寸，再按主人摆的框**等比**缩放
+                    // 包进去（min 比例），宽高一概不写、只动 localScale。
+                    var frameRt = frameImg.rectTransform;
+                    Vector2 frameBox = frameRt.sizeDelta;   // 主人摆的目标框，只当缩放基准用
                     frameImg.sprite = frameSp;
-                    frameImg.type = Image.Type.Sliced;
+                    frameImg.type = Image.Type.Simple;
                     frameImg.preserveAspect = false;
+                    frameImg.SetNativeSize();
+                    float fs = Mathf.Min(
+                        frameSp.rect.width > 0.5f ? frameBox.x / frameSp.rect.width : 1f,
+                        frameSp.rect.height > 0.5f ? frameBox.y / frameSp.rect.height : 1f);
+                    frameRt.localScale = new Vector3(fs, fs, 1f);
                 }
             }
             else
@@ -1122,8 +1148,16 @@ public class ArenaPopupUI : MonoBehaviour
                     Debug.LogError($"[Arena] 商品图标缺失：{good.id}（不兜底，格内留灰块可见）");
                 else
                 {
+                    // 【2026-11-01 主人拍板「其他的也是」】与图框同口径：原始大小 + 等比缩放，不写宽高
+                    var iconRt = iconImg.rectTransform;
+                    Vector2 iconBox = iconRt.sizeDelta;
                     iconImg.sprite = sp;
-                    iconImg.preserveAspect = true;
+                    iconImg.preserveAspect = false;
+                    iconImg.SetNativeSize();
+                    float isc = Mathf.Min(
+                        sp.rect.width > 0.5f ? iconBox.x / sp.rect.width : 1f,
+                        sp.rect.height > 0.5f ? iconBox.y / sp.rect.height : 1f);
+                    iconRt.localScale = new Vector3(isc, isc, 1f);
                 }
             }
 
@@ -1140,9 +1174,27 @@ public class ArenaPopupUI : MonoBehaviour
                 if (buyBtn == null) buyBtn = buyT.gameObject.AddComponent<Button>();
                 var captured = good;
                 buyBtn.onClick.AddListener(() => OnShopUnitClicked(captured));
+                // 【2026-11-01 主人拍板「按钮放大20%」】不好点 → localScale ×1.2（缩放，不改宽高）
+                buyT.localScale = Vector3.one * 1.2f;
             }
             else
                 Debug.LogError("[Arena] 商品单元缺节点：购买（购买钮不显示）");
+
+            // 【2026-11-01 主人报「点条的中间部分弹窗竟然关闭了」】横条行底原来不接点击，
+            // 点中间落空冒泡到页根 Button（点空白关页）→ 整页被关。改为横条整条可点 →
+            // 打开商品信息框（与点图框/购买钮同一条出口 OnShopUnitClicked）。
+            var rowStrip = UiFind.Deep(row.transform, "横条");
+            if (rowStrip != null)
+            {
+                var stripImg = rowStrip.GetComponent<Image>();
+                if (stripImg != null) stripImg.raycastTarget = true;
+                var stripBtn = rowStrip.GetComponent<Button>();
+                if (stripBtn == null) stripBtn = rowStrip.gameObject.AddComponent<Button>();
+                var capturedRow = good;
+                stripBtn.onClick.AddListener(() => OnShopUnitClicked(capturedRow));
+            }
+            else
+                Debug.LogError("[Arena] 商品单元缺节点：横条（行底整条点击接不上，点中间仍会关页）");
         }
     }
 

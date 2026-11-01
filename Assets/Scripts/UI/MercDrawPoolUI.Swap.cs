@@ -37,7 +37,9 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 }
                 if (data == null || !data.HasClearedChapter(2))
                 {
-                    UIManager.Instance?.ShowToast("通关第 2 章后开启", true);
+                    // 【2026-11-01 主人拍板】点锁格弹解锁条件 toast：第 5 格条件 = 通关第 2 章 + 花钻，一次说全
+                    UIManager.Instance?.ShowToast(
+                        $"通关第 2 章后，可花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁", true);
                     return;
                 }
             }
