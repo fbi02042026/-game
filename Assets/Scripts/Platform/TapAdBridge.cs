@@ -5,7 +5,7 @@ using UnityEngine;
 /// TapADN（聚合）真广告桥（2026-10-25 T2）：封装 Dirichlet.Mediation SDK，是
 /// <see cref="RewardedAdBridge"/>（玩法层唯一出口）背后的真实实现。
 /// 设计：
-/// · 所有 SDK API 引用都关在 #if UNITY_ANDROID && !UNITY_EDITOR 里 —— 编辑器/非安卓平台
+/// · 所有 SDK API 引用都关在 #if false // 【2026-11-01 主人拍板】TapTap/Android 端放弃，TapADN SDK（DirichletMediation）已移出工程；真实现代码原样保留，P2-B 接微信激励视频时重写或回滚 里 —— 编辑器/非安卓平台
 ///   零 SDK 依赖（编辑器下 SDK 本就是 Noop 桥，真实验收必须 Android 真机）；
 /// · 发奖只认 OnRewardVerify 且 IsVerified=true（官方铁律）；关闭/跳过/失败一律 onComplete(false)；
 /// · 激励视频用 ShowRewardVideoAutoAd（官方推荐，加载+展示合一，内部管理缓存）。
@@ -16,7 +16,7 @@ using UnityEngine;
 /// </summary>
 public static class TapAdBridge
 {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if false // 【2026-11-01 主人拍板】TapTap/Android 端放弃，TapADN SDK（DirichletMediation）已移出工程；真实现代码原样保留，P2-B 接微信激励视频时重写或回滚
     static Dirichlet.Mediation.DirichletAdNative _adNative;
 
     /// <summary>SDK 初始化状态机。【2026-10-26 修】原先 _initRequested 只置一次，
@@ -127,7 +127,7 @@ public static class TapAdBridge
     {
         get
         {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if false // 【2026-11-01 主人拍板】TapTap/Android 端放弃，TapADN SDK（DirichletMediation）已移出工程；真实现代码原样保留，P2-B 接微信激励视频时重写或回滚
             return true;
 #else
             return false;
@@ -140,7 +140,7 @@ public static class TapAdBridge
     /// </summary>
     public static void ShowRewarded(string placement, Action<bool> onComplete)
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if false // 【2026-11-01 主人拍板】TapTap/Android 端放弃，TapADN SDK（DirichletMediation）已移出工程；真实现代码原样保留，P2-B 接微信激励视频时重写或回滚
         InitIfNeeded();
         switch (_initState)
         {
@@ -165,7 +165,7 @@ public static class TapAdBridge
 #endif
     }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if false // 【2026-11-01 主人拍板】TapTap/Android 端放弃，TapADN SDK（DirichletMediation）已移出工程；真实现代码原样保留，P2-B 接微信激励视频时重写或回滚
     /// <summary>激励视频回调集。_done 防双回调（核验与关闭竞态）；关闭时未核验 = 未完成不发奖。</summary>
     sealed class RewardListener : Dirichlet.Mediation.IDirichletRewardVideoAutoAdListener
     {

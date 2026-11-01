@@ -631,8 +631,12 @@ public class AdventureLogCodexPanel
             ApplyRedDot(go.transform, false);
             string meta = string.IsNullOrEmpty(e.Role) ? e.Place : e.Role + "  ·  " + e.Place;
             // 佣兵弹窗显示头像；点头像可放大看全身立绘（2026-10-20 用户拍板）
+            // 【2026-11-01 主人拍板「点头像出现立绘的功能先注释掉」】不再传立绘大图，头像不可点；
+            // 想恢复时把下面注释的三行换回去即可（CodexInfoPopupUI 内部放大层逻辑保留未动）。
+            // CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore,
+            //     AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true);
             CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore,
-                AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true);
+                AdventureCodex.LoadMercHead(e), null, codexKind: true);
         });
         _spawned.Add(go);
     }

@@ -277,17 +277,25 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId, casterBasicKit);
 
         GameObject prefab = GetSkillVfxPrefab(skillId);
+        // 【2026-11-01】技能护盾特效：玩家 holy_barrier(ally_shield) 与佣兵 SK008 同一处理——
+        // 时长跟护盾真实持续时间走（player_skills 5s / merc_skills 6s，读 SkillConfig.duration），
+        // 粒子临时改循环（预制体粒子 lengthInSec=1 且不循环，只闪一下就没了），
+        // 整体缩小 20%（×0.8）。2026-11-01 主人拍板。
+        bool shieldSkill = (skillId != null && skillId.IndexOf("shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            || MercSkillExecutor.Resolve(skillId) == MercSkillExecutor.Kind.TeamShield;
         // 远程单位放物攻技能时：专属多为近战 slash（挂在自身），跳过改走弓/法球弹道
         if (prefab != null && !(rangedCaster && kit != AttackVfxKit.Heal))
         {
             float life = 2.5f;
-            if (skillId != null && skillId.IndexOf("shield", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                life = 6.2f;
+            if (shieldSkill)
+                life = (cfg != null && cfg.duration > 0.5f) ? cfg.duration : 6.2f;
             else if (cfg != null && cfg.duration > 0.5f)
                 life = Mathf.Max(2.5f, cfg.duration + 0.2f);
 
             if (BattleVFXSystem.Instance != null)
-                BattleVFXSystem.Instance.PlaySkillPrefab(prefab, toPos, facingDir, life, attach);
+                BattleVFXSystem.Instance.PlaySkillPrefab(
+                    prefab, toPos, facingDir, life, attach,
+                    shieldSkill ? 0.8f : 1f, shieldSkill);
             else
             {
                 GameObject go = Object.Instantiate(prefab, toPos, prefab.transform.rotation);

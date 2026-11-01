@@ -87,18 +87,15 @@ public static class StageRoller
     public const float PinnedEliteChance = 1.0f;
 
     /// <summary>
-    /// 正式关类型按位置定死（2026-10-23 批 B1 改 5 小关制）：
-    /// 第 5 小关（0-based <see cref="GameConfig.STAGES_PER_GRAND"/>-1 = 4）= Boss；
-    /// 第 3 小关（0-based 2）= <see cref="PinnedEliteChance"/> 概率精英（当前 1.0 = 必精英）；
-    /// 其余普通。
-    /// 旧的 10 关制口径（0-based 4/9 Boss、2/6 精英）随之作废。
-    /// 只服务主线正式关（ChapterManager.RollNextStageType 唯一调用方）；引导局走 TutorialDirector、
-    /// 金币本（StartGoldDungeon）/无限裂隙（StartEndlessRift）建关不经这里，类型来源未波及。
-    /// 原权重抽签 <see cref="Roll"/> 保留退役不删（恢复关闸已在）。
+    /// 正式关类型按位置定死：
+    /// 每关最后一节（0-based = <see cref="GameConfig.StagesPerGrandOf"/>(章)-1）= Boss；
+    /// 第 3 节（0-based 2）= <see cref="PinnedEliteChance"/> 概率精英（当前 1.0 = 必精英）；
+    /// 其余普通。8/10 节章的精英位沿用第 3 节（2026-11-01 待主人确认）。
+    /// 只服务主线正式关（ChapterManager.RollNextStageType 唯一调用方）。
     /// </summary>
-    public static StageType RollByPosition(int stageIndex0Based)
+    public static StageType RollByPosition(int stageIndex0Based, int chapter)
     {
-        if (stageIndex0Based == GameConfig.STAGES_PER_GRAND - 1) return StageType.Boss;
+        if (stageIndex0Based == GameConfig.StagesPerGrandOf(chapter) - 1) return StageType.Boss;
         if (stageIndex0Based == 2)
             return Random.value < PinnedEliteChance ? StageType.Elite : StageType.Normal;
         return StageType.Normal;

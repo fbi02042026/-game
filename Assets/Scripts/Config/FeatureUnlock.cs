@@ -9,7 +9,8 @@
 /// 口径（纯广告小游戏首日节奏，2026-10-31 主人确认）：
 /// ┌ 引导结束 主线（恒开）+ 天赋 / 背包 / 竞技场 + **佣兵队列**（D1 每日登录已送佣兵本体，得让他配）
 /// ├ D1 通第 1 座大关（≈25 体力）→ 无限裂隙（标签 + 进本）、世界地图入口、支线岛派岛
-/// ├ D2 通第 1 章（50 小关）  → 金币副本、**佣兵招募**、定向抽
+/// ├ D1~2 通第 2 座大关（打到 3-1）→ **佣兵招募**（2026-11-01 主人拍板「三选一在第二大关完成后解锁」）
+/// ├ D2 通第 1 章（50 小关）  → 金币副本、定向抽
 /// ├ D3 通第 2 章（100 小关） → 徽记副本、佣兵抽池末格、**佣兵情报**、**进阶/升星**
 /// └ D4~5 通第 3 章           → 卷轴副本、**佣兵羁绊 + 酒馆闲话**
 ///
@@ -61,8 +62,11 @@ public static class FeatureUnlock
     // 玩家过完引导就已有佣兵，队列再锁着等于让他有兵不能编。
     // ────────────────────────────────────────────────────────────────
 
-    /// <summary>佣兵招募（三选一）：通第 1 章（D2）——后开，且必然晚于队列。</summary>
-    public const int MERC_RECRUIT_CHAPTER_GATE = 1;
+    /// <summary>
+    /// 佣兵招募（三选一）：通第 1 篇第 2 座大关（2026-11-01 主人拍板「三选一在第二大关完成后解锁，
+    /// 就是 3-1 解锁」——玩家通关 1-1…2-5、可打 3-1 时开启）。必然晚于队列（队列 = 引导结束即开）。
+    /// </summary>
+    public const int MERC_RECRUIT_GRAND_GATE = 2;
 
     /// <summary>佣兵情报（每日答题）：通第 2 章（D3）。</summary>
     public const int MERC_INTEL_CHAPTER_GATE = 2;
@@ -119,8 +123,8 @@ public static class FeatureUnlock
     /// </summary>
     public static bool MercQueueOpen(SaveData data) => data != null && data.tutorialDone;
 
-    /// <summary>佣兵招募是否开放（D2，必然晚于队列 —— 主人要求「招募开了队列也得开」）。</summary>
-    public static bool MercRecruitOpen(SaveData data) => ChapterCleared(data, MERC_RECRUIT_CHAPTER_GATE);
+    /// <summary>佣兵招募是否开放（通第 2 座大关，必然晚于队列 —— 主人要求「招募开了队列也得开」）。</summary>
+    public static bool MercRecruitOpen(SaveData data) => GrandCleared(data, MERC_RECRUIT_GRAND_GATE);
 
     /// <summary>佣兵情报是否开放。</summary>
     public static bool MercIntelOpen(SaveData data) => ChapterCleared(data, MERC_INTEL_CHAPTER_GATE);
@@ -148,7 +152,7 @@ public static class FeatureUnlock
         => $"通关第 {DungeonGateChapter(kind)} 章后开启{ActivityDungeonRules.DungeonName(kind)}";
 
     /// <summary>佣兵招募未开放提示。</summary>
-    public static string MercRecruitLockHint() => $"通关第 {MERC_RECRUIT_CHAPTER_GATE} 章后开启佣兵招募";
+    public static string MercRecruitLockHint() => $"通关第 {MERC_RECRUIT_GRAND_GATE} 座大关后开启佣兵招募";
 
     /// <summary>佣兵队列未开放提示。</summary>
     public static string MercQueueLockHint() => "完成新手引导后开启佣兵队列";
@@ -163,7 +167,7 @@ public static class FeatureUnlock
     public static string MercBondLockHint() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章后开启佣兵羁绊";
 
     /// <summary>卡面副标题用的短锁文案（酒馆功能卡 Desc 直接吃这个）。</summary>
-    public static string MercRecruitLockDesc() => $"通关第 {MERC_RECRUIT_CHAPTER_GATE} 章开启";
+    public static string MercRecruitLockDesc() => $"通关第 {MERC_RECRUIT_GRAND_GATE} 座大关开启";
     public static string MercQueueLockDesc() => "完成新手引导开启";
     public static string MercIntelLockDesc() => $"通关第 {MERC_INTEL_CHAPTER_GATE} 章开启";
     public static string MercBondLockDesc() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章开启";

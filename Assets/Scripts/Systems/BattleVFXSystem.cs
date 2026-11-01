@@ -838,6 +838,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
     static Color Mul(Color a, Color b) => new Color(a.r * b.r, a.g * b.g, a.b * b.b, a.a * b.a);
 
+    /// <summary>把实例上全部粒子临时改成循环播放（运行时改实例，不碰预制体）。</summary>
+    static void SetParticlesLooping(GameObject go)
+    {
+        var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < systems.Length; i++)
+        {
+            if (systems[i] == null) continue;
+            var main = systems[i].main;
+            // 团结引擎 2022.3.62t16：MainModule.looping 改名为 MainModule.loop（反射引擎 DLL 确认）
+            main.loop = true;
+        }
+    }
+
     #endregion
 
     #region 生成与排序
@@ -857,8 +870,12 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
     /// <summary>
     /// 技能专属预制体：保留原色/粒子，不走刀光 PrepareSlash；可挂单位跟随。
+    /// 【2026-11-01】技能护盾用：scaleMul 整体缩放（0.8 = 缩小 20%），loopParticles=true 时
+    /// 把粒子临时改循环——护盾预制体粒子 lengthInSec=1 且不循环，不 loop 只会闪一下就消失，
+    /// 实例寿命由调用方按护盾真实时长给定，到期随 ScheduleRelease 回收。
     /// </summary>
-    public GameObject PlaySkillPrefab(GameObject prefab, Vector3 position, int facingDir, float lifetime, Transform attach = null)
+    public GameObject PlaySkillPrefab(GameObject prefab, Vector3 position, int facingDir, float lifetime,
+        Transform attach = null, float scaleMul = 1f, bool loopParticles = false)
     {
         if (!_prefabsLoaded) AutoLoadPrefabs();
         GameObject go = AcquireVfxInstance(prefab, position, resetTint: false);
@@ -866,12 +883,14 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
         go.transform.rotation = prefab.transform.rotation;
         Vector3 baseScale = prefab.transform.localScale;
+        float mul = Mathf.Max(0.01f, scaleMul);
         go.transform.localScale = new Vector3(
-            Mathf.Abs(baseScale.x) * (facingDir < 0 ? -1f : 1f),
-            baseScale.y,
-            baseScale.z);
+            Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f),
+            baseScale.y * mul,
+            baseScale.z * mul);
 
         SetVFXSortingLayer(go.transform);
+        if (loopParticles) SetParticlesLooping(go);
 
         if (attach != null)
         {

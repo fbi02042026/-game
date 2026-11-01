@@ -128,7 +128,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         if (enemies.Count == 0 || caster == null) return;
 
         float damage = CalculateDamage(skill, caster);
-        VfxFaction faction = caster.isAlly ? VfxFaction.Ally : VfxFaction.Enemy;
+        // 【2026-11-01 主人拍板「竞技场对方弓手和我方用同一种子弹」】弹道阵营唯一出口：
+        // 竞技场敌方佣兵（projectileVfxAsAlly）的技能弹也取我方套；真怪物照旧 Enemy。
+        VfxFaction faction = caster.ResolveProjectileFaction();
         Vector3 firePos = caster.GetFirePosition();
 
         int vfxDir = caster.GetVfxFacingDir();

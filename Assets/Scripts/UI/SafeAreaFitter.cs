@@ -399,10 +399,12 @@ public class SafeAreaFitter : MonoBehaviour
 
     /// <summary>
     /// 顶栏统一额外下移量（设计单位，2026-10-23 主人「顶部的资源条往下点避免顶部的刘海」；
-    /// 同日晚主人「有点太往下了 回一半的距离」→ 40 减半为 20）：
+    /// 同日晚主人「有点太往下了 回一半的距离」→ 40 减半为 20；
+    /// 2026-11-01 主人「要是整体下移的话 可以不要移这么多」→ 20 再减半为 10；
+    /// 同日主人「顶端有点下降的多了 减一半吧 其他界面的同时调整」→ 10 再减半为 5）：
     /// 安全区避让之外再给整条顶栏固定呼吸量；全项目顶栏统一走 TotalTopInsetUnits，一处改全界面一致。
     /// </summary>
-    public const float TopBarExtraDropUnits = 20f;
+    public const float TopBarExtraDropUnits = 5f;
 
     /// <summary>
     /// 顶栏总避让量 = 安全区顶部内缩 + 微信胶囊预留 + 固定额外下移（设计单位）。

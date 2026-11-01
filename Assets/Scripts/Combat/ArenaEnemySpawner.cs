@@ -101,6 +101,9 @@ public static class ArenaEnemySpawner
             // 【2026-10-31 主人拍板「只给玩家形象挂机器人名」】名字牌只挂形象位：佣兵也挂同名牌子
             // 会让场上出现「两个一样的玩家名」—— 这正是「敌人出现两个玩家形象」的观感来源。
             if (e.isHeroFigure) merc.SetDisplayName(ctx.BotName);
+            // 【2026-11-01 主人拍板「对方弓手要和我方用同一种子弹，不要怪物那套」】
+            // 敌方镜像小队弹道/远程 VFX 走我方套装（消费点唯一出口 UnitBase.ResolveProjectileFaction）
+            merc.projectileVfxAsAlly = true;
             merc.SetPartyIndex(i);              // 车道偏移按队内序错开
             merc.Face(-1);                      // 面向玩家半场（左）
             // 【2026-10-31 主人拍板】屏外走入：目标 = 各自的交战位（镜头内列队点），到位后交还普通 AI

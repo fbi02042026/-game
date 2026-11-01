@@ -79,6 +79,11 @@ public partial class BattleManager
         {
             case ReviveClaimKind.Ad:
                 // 【2026-10-28 远程急停】维护中直接提示，界面停留（可点【返回】走死亡收尾），不消耗档位
+                if (RewardedAdBridge.PlatformClosed)
+                {
+                    UIManager.Instance?.ShowToast("暂未开放");   // 【2026-11-01】转微信小游戏过渡期
+                    return false;
+                }
                 if (AdKillSwitch.AdsOff)
                 {
                     UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
@@ -228,8 +233,11 @@ public partial class BattleManager
         TriggerLegacyFlow(isDeath: false);
     }
 
-    /// <summary>引导撤离：弹出结算 → 再回城（TownAfterBattle 剧情）。</summary>
-    void TriggerTutorialEvacuateWithSettlement()
+    /// <summary>
+    /// 引导撤离：弹出结算 → 再回城（TownAfterBattle 剧情）。
+    /// 【2026-11-01 主人拍板】引导结尾不再进传送门，由 TutorialDirector 收尾直接调本方法出战斗结果。
+    /// </summary>
+    public void TriggerTutorialEvacuateWithSettlement()
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
@@ -270,6 +278,7 @@ public partial class BattleManager
     /// 玩家先走、佣兵隔一个身位跟着进，每人进门各播一次传送特效（见 <see cref="TickPortalWalkIn"/>）；
     /// 全员进完（或超时）经 <see cref="FinishStageAfterPortalReached"/> 的引导分支接撤离结算 → 回城。
     /// 门开不出来也不锁死玩家：LogError 后直接走撤离结算。
+    /// 【2026-11-01 主人拍板作废】引导结尾不再进传送门（直接出结果），本方法已无调用方，保留不删。
     /// </summary>
     public void BeginTutorialPortalExit()
     {

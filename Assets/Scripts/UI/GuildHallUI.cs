@@ -112,6 +112,15 @@ public class GuildHallUI : MonoBehaviour
         }
         Instance = this;
         EnsureTopBarFromPrefab();
+        // 【2026-11-01 主人拍板】顶条（TopBar）走 SafeAreaFitter.EnsureTopOffset 整体下移避刘海后，
+        // 大厅根下这几个独立节点不跟着走，下移后的顶条底图会盖住它们（主人实测「资源条把邮件和
+        // 设置挡住了，下面还有右侧那几个按钮」）—— 这里让 topright（邮件/设置）、RightBar（排行/
+        // 广告佣兵/每日登录/对战/商城右侧一列）、topleft（头像名牌）与顶条同量下移，整体一起动。
+        // Offset 模式只挪 anchoredPosition，幂等；与 TownEntranceMotion 入场动效不冲突
+        // （动效只动 x 且基准在挂载之后捕获）。
+        SafeAreaFitter.EnsureTopOffset(transform.Find("topright") as RectTransform);
+        SafeAreaFitter.EnsureTopOffset(transform.Find("RightBar") as RectTransform);
+        SafeAreaFitter.EnsureTopOffset(transform.Find("topleft") as RectTransform);
         UICanvasSetup.ApplyOn(gameObject, UICanvasSetup.ResolveUiCamera());
         // 城镇大厅底图（Background）运行时 envelope 铺满：覆盖更瘦屏（match width）
         // canvas 逻辑高变高后的上下空区。原 UiPrefabRectGuard 会把底图还原为 prefab

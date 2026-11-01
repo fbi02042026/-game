@@ -73,12 +73,13 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     static readonly Color DisabledColor = new Color(0.55f, 0.50f, 0.44f, 1f);   // 置灰
 
     // ===== 手工预制体行几何（与磁盘预制体实测对齐，勿按旧构建常量猜） =====
-    // 行宽 414 / 行高 83 / 步距 70；Row_0 顶边 Inner 本地 y=-7.5（2026-10-20 主人拍板：商品行累计上移 30），
-    // Inner 底边 -460（视口底边不动，6 行全量 433 < 视口高 452.5，最后一行底框不再被裁）
+    // 行宽 414 / 行高 83 / 步距 70；Row_0 顶边 Inner 本地 y=-7.5（2026-10-20 主人拍板：商品行累计上移 30）。
+    // 2026-11-01 主人报「滑动列表超出框体」：视口底边 -460 实测压在面板底框边饰上沿，
+    // 行滚到底会顶进金色边框 → 上收到 -430（行区裁切线留出与底框的间距）。
     const float HandRowH = 83f;
     const float HandRowStep = 70f;
     const float ListViewportTopY = -7.5f;
-    const float ListViewportBottomY = -460f;
+    const float ListViewportBottomY = -430f;
     const float ListViewportW = 424f;
 
     // ===== 竖屏整体放大（2026-10-24 主人拍板；预制体设计几何实测值，勿改） =====
@@ -696,16 +697,15 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         {
             bool claimed = AdventureLogMileage.IsLevelClaimed(2);
             bool can = AdventureLogMileage.CanClaimLevel(2);
-            // 2026-10-26 主人拍板：杖行只留武器名（稀有蓝），「Lv2里程奖励」那句字去掉
+            // 2026-10-26 主人拍板：杖行只留武器名（稀有蓝），「Lv2里程奖励」那句字去掉；
+            // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string staffHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>";
+                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{AdventureLogMileage.LevelThresholds[1]}点</color>";
 
             if (_countTexts[rowIdx] != null)
             {
-                _countTexts[rowIdx].text = claimed ? "已领取"
-                    : can ? "可领取"
-                    : $"需{AdventureLogMileage.LevelThresholds[1]}点";
+                _countTexts[rowIdx].text = claimed ? "已领取" : "购买";
                 _countTexts[rowIdx].color = can ? _countBaseColors[rowIdx] : DisabledColor;
             }
 
@@ -747,15 +747,14 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             bool claimed = AdventureLogMileage.IsWeaponMilestoneClaimed(m.GrantKey);
             bool can = AdventureLogMileage.CanClaimWeaponMilestone(m);
 
+            // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"<color=#{rareHex}>{WeaponAffixSystem.RarityPrefix(Rarity.Rare)}{m.Label}</color>";
+                _actionLabels[rowIdx].text = $"<color=#{rareHex}>{WeaponAffixSystem.RarityPrefix(Rarity.Rare)}{m.Label}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{m.NeedPoints}点</color>";
 
             if (_countTexts[rowIdx] != null)
             {
-                _countTexts[rowIdx].text = claimed ? "已领取"
-                    : can ? "可领取"
-                    : $"需{m.NeedPoints}点";
+                _countTexts[rowIdx].text = claimed ? "已领取" : "购买";
                 _countTexts[rowIdx].color = can ? _countBaseColors[rowIdx] : DisabledColor;
             }
 
@@ -805,7 +804,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
             if (_countTexts[rowIdx] != null)
             {
-                _countTexts[rowIdx].text = bought ? "已兑" : "每日限1";
+                // 2026-11-01 主人拍板：按钮只放「购买」（价格已在左边条上），兑完显「已兑」
+                _countTexts[rowIdx].text = bought ? "已兑" : "购买";
                 _countTexts[rowIdx].color = canBuyDaily ? _countBaseColors[rowIdx] : DisabledColor;
             }
 
@@ -831,17 +831,18 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         bool canBuy = AdventureLogMileageShop.CanBuy(idx, out _);
         int remain = AdventureLogMileageShop.RemainThisWeek(item);
 
-        // Label：只写名称 + 消耗点数，不含限购次数；名称按稀有度变色（2026-10-24 主人拍板），价格仍走价格亮金
+        // Label：只写名称 + 消耗点数 + 本周余量，不含在按钮上（2026-11-01 主人拍板：消耗的点放左边条，按钮只放「购买」）；
+        // 名称按稀有度变色（2026-10-24 主人拍板），价格仍走价格亮金
         if (_actionLabels[rowIdx] != null)
         {
             string nameHex = ColorUtility.ToHtmlStringRGB(ShopItemLabelColor(item.Id));
-            _actionLabels[rowIdx].text = $"<color=#{nameHex}>{item.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>";
+            _actionLabels[rowIdx].text = $"<color=#{nameHex}>{item.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>　本周余{remain}/{item.WeeklyLimit}";
         }
 
-        // 次数：本周可领/总次数；每周领完或点数不足 → 置灰
+        // 按钮文字：只放「购买」，兑完显「已兑完」；每周领完或点数不足 → 置灰
         if (_countTexts[rowIdx] != null)
         {
-            _countTexts[rowIdx].text = $"{remain}/{item.WeeklyLimit}";
+            _countTexts[rowIdx].text = remain <= 0 ? "已兑完" : "购买";
             _countTexts[rowIdx].color = canBuy ? _countBaseColors[rowIdx] : DisabledColor;
         }
 

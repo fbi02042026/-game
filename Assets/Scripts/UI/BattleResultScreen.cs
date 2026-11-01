@@ -306,6 +306,7 @@ public class BattleResultScreenUI : MonoBehaviour
             onDone?.Invoke();
             return;
         }
+        ShiftPanelUp(_panel);   // 【2026-11-01 主人拍板】整体上移 40
         BindSprite(showNode, victory);
         showNode.gameObject.SetActive(true);
         hideNode.gameObject.SetActive(false);   // 另一个节点的粒子随失活停止（预制体两节点默认全 active）
@@ -339,12 +340,25 @@ public class BattleResultScreenUI : MonoBehaviour
         }
     }
 
+    /// <summary>【2026-11-01 主人拍板「这种小的弹窗都整体往上移40」】结果界面 Panel 整体上移量（只动 y，
+    /// x/尺寸不碰）。Panel 是 胜利/失败 两节点的父级，挪一处四种形态（胜利/失败直出/复活选择/竞技场失败）全生效；
+    /// 失败节点此前单独拍板的 +100（<see cref="ShiftFailNodeUp"/>）照旧叠加，互不影响。</summary>
+    const float PanelShiftUpY = 40f;
+
     /// <summary>失败节点整体上移 100（2026-10-31 主人拍板「战斗失败节点往上挪100 胜利节点不动」；
     /// 纵向 y 属必要介入口径，x/尺寸一律不碰）。三种失败显示（直出 / 复活选择 / 竞技场仅返回）共用。</summary>
     static void ShiftFailNodeUp(RectTransform failRt)
     {
         if (failRt == null) return;
         failRt.anchoredPosition = new Vector2(failRt.anchoredPosition.x, failRt.anchoredPosition.y + 100f);
+    }
+
+    /// <summary>【2026-11-01 主人拍板】结果界面 Panel 整体上移 <see cref="PanelShiftUpY"/>（只动 y）。
+    /// 三个入口（Play / PlayChoice / PlayArenaFailure）各调一次，Panel 是实例化出来的、每次新建不存在叠加。</summary>
+    static void ShiftPanelUp(RectTransform panelRt)
+    {
+        if (panelRt == null) return;
+        panelRt.anchoredPosition = new Vector2(panelRt.anchoredPosition.x, panelRt.anchoredPosition.y + PanelShiftUpY);
     }
 
     /// <summary>
@@ -759,6 +773,7 @@ public class BattleResultScreenUI : MonoBehaviour
             onGiveUp?.Invoke();
             return;
         }
+        ShiftPanelUp(_panel);   // 【2026-11-01 主人拍板】整体上移 40
         BindSprite(showNode, victory: false);
         showNode.gameObject.SetActive(true);
         hideNode.gameObject.SetActive(false);
@@ -839,6 +854,7 @@ public class BattleResultScreenUI : MonoBehaviour
             onReturn?.Invoke();
             return;
         }
+        ShiftPanelUp(_panel);   // 【2026-11-01 主人拍板】整体上移 40
         BindSprite(showNode, victory: false);
         showNode.gameObject.SetActive(true);
         hideNode.gameObject.SetActive(false);
@@ -865,6 +881,11 @@ public class BattleResultScreenUI : MonoBehaviour
         {
             WireChoiceButton(cancelT.gameObject, OnArenaReturnClicked);
             EnlargeResultButton(cancelT);   // 【2026-10-31 主人拍板】竞技场失败【返回】钮放大 30%
+            // 【2026-11-01 主人报「按钮歪了」】竞技场失败只剩【返回】一颗钮：预制体里 取消x=-124/确定x=+129
+            // 是双钮对称摆位，【确定】隐藏后单钮留在左位不居中 → x 归 0（只动 x，y/缩放/尺寸不动；
+            // 先例 = 胜利确定钮「分享过后 x 归中」同文件同手法）。复活选择窗双钮态不走此处，不受影响。
+            if (cancelT is RectTransform cancelRt)
+                cancelRt.anchoredPosition = new Vector2(0f, cancelRt.anchoredPosition.y);
             // Dim 不接跳过：失败只有「返回」一个出口（拍板口径）
             var dimBtn = rootT.Find("Dim") != null ? rootT.Find("Dim").GetComponent<Button>() : null;
             if (dimBtn != null) dimBtn.onClick.RemoveAllListeners();

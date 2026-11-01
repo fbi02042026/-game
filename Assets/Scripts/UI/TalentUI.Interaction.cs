@@ -26,8 +26,10 @@ public partial class TalentUI
         }
         if (resetButtonGray != null)
         {
+            // 【2026-11-01 主人要求】灰态重置钮也要有反馈：点它同样走 OnClickReset，
+            // 由里面的拦截原因（右列无可洗天赋 / 遗忘药水不足）给 toast，不再「点了没反应」。
             resetButtonGray.onClick.RemoveAllListeners();
-            resetButtonGray.interactable = false;
+            resetButtonGray.onClick.AddListener(OnClickReset);
         }
         if (choiceCancelButton != null)
         {

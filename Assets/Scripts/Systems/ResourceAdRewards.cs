@@ -141,6 +141,11 @@ public static class ResourceAdRewards
                 // 【2026-10-28】先给「加载中」反馈（拉起到展示最长可达数十秒，无提示会被当成没反应而狂点；
                 // 重复点击由 RewardedAdBridge busy 守卫静默忽略）。
                 // 【2026-10-28 远程急停】维护中直接提示，不弹加载中、不消耗档位。
+                if (RewardedAdBridge.PlatformClosed)
+                {
+                    UIManager.Instance?.ShowToast("暂未开放");   // 【2026-11-01】转微信小游戏过渡期
+                    return;
+                }
                 if (AdKillSwitch.AdsOff)
                 {
                     UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
@@ -217,6 +222,11 @@ public static class ResourceAdRewards
 
             case ClaimKind.Ad:
                 // 【2026-10-28】同体力：先给「加载中」反馈，防狂点；远程急停时直接提示维护中
+                if (RewardedAdBridge.PlatformClosed)
+                {
+                    UIManager.Instance?.ShowToast("暂未开放");   // 【2026-11-01】转微信小游戏过渡期
+                    return;
+                }
                 if (AdKillSwitch.AdsOff)
                 {
                     UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
@@ -314,12 +324,17 @@ public static class ResourceAdRewards
             UIManager.Instance?.ShowToast($"今日钻石补给已达上限（{DiamondAdPerDay}次）");
             return;
         }
-        if (AdKillSwitch.AdsOff)
-        {
-            UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
-            return;
-        }
-        int reward = DiamondAdRewardOf(data.adDiamondClaimCount);
+            if (RewardedAdBridge.PlatformClosed)
+            {
+                UIManager.Instance?.ShowToast("暂未开放");   // 【2026-11-01】转微信小游戏过渡期
+                return;
+            }
+            if (AdKillSwitch.AdsOff)
+            {
+                UIManager.Instance?.ShowToast("广告维护中，请稍后再试");
+                return;
+            }
+            int reward = DiamondAdRewardOf(data.adDiamondClaimCount);
         if (reward <= 0) return;   // fail-closed：不该到这
         UIManager.Instance?.ShowToast("广告加载中…");
         RewardedAdBridge.ShowRewarded("diamond_plus", ok =>

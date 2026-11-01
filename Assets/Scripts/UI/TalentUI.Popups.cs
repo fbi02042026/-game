@@ -250,6 +250,24 @@ public partial class TalentUI
         if (_mutexChoiceCost != null)
             _mutexChoiceCost.text = "消耗天赋石：" + cost
                 + (have >= cost ? "（持有 " + have + "）" : "（持有 " + have + "，天赋石不足）");
+
+        // 【2026-11-01 主人要求】选中侧要弹 toast 说清这条流派加什么属性（打开弹窗默认预选也弹一次，
+        // 玩家确认前就能看到）。数值真源 = 配表 valueByLevel（经 EffectSummary），这里只管说话。
+        GlobalToastUI.Show(MutexOptionAttrToast(node), true);
+    }
+
+    /// <summary>
+    /// 【2026-11-01 主人要求】二选一弹窗选卡时的属性说明 toast（单一出口）：
+    /// 「物理专精：每级 物理伤害 +5%，满级 物理伤害 +25%」这种。
+    /// 效果取不到（配表缺）时回落选项名，绝不弹空串。
+    /// </summary>
+    static string MutexOptionAttrToast(TalentDefs.TalentRightNode node)
+    {
+        string optName = OptionDisplayName(node);
+        string lv1 = node.EffectSummary(1, 0);
+        if (string.IsNullOrEmpty(lv1) || lv1 == node.name) return optName;
+        string max = node.EffectSummary(Mathf.Max(1, node.maxLevel), 0);
+        return optName + "：每级 " + lv1 + "，满级 " + max;
     }
 
     void ConfirmMutexChoice()

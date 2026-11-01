@@ -62,8 +62,19 @@ public static class UiKeyedBackgrounds
         return true;
     }
 
-    public static bool ApplyLogTabIllust(Image target, string tabName) =>
-        Apply(target, AdventureLogIllust, tabName);
+    // 2026-11-01 主人报「预制体我已经是拉宽的，但是你代码给我改了」：旧版走 Apply 默认
+    // 强制 preserveAspect=true，每次切页签都覆盖预制体里的比例设置，宽框里的图被等比压窄。
+    // 改为只换图/颜色，preserveAspect 一律按预制体原样（「以预制体为准」）。
+    public static bool ApplyLogTabIllust(Image target, string tabName)
+    {
+        if (target == null) return false;
+        var sp = Load(AdventureLogIllust, tabName);
+        if (sp == null) return false;
+        target.sprite = sp;
+        target.color = Color.white;
+        target.enabled = true;
+        return true;
+    }
 
     public static bool ApplyLogFrame(Image target, string fileNameNoExt, bool preserveAspect = false) =>
         Apply(target, AdventureLogFrames, fileNameNoExt, preserveAspect);

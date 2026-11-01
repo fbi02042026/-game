@@ -301,6 +301,13 @@ public partial class AdventureUI
 
     void OnSelectActivityRow(ActivityDungeonKind kind)
     {
+        // 门槛没到：提示开启条件（2026-11-01 主人拍板「活动副本全部显示」后，锁条也要给说法；
+        // 文案与门槛同源 FeatureUnlock.DungeonLockHint，不在这里另写一份）
+        if (!FeatureUnlock.DungeonOpen(SaveSystem.Instance?.Data, kind))
+        {
+            Toast(FeatureUnlock.DungeonLockHint(kind));
+            return;
+        }
         // 没轮到（今天不开放）：不选中，只提示开启日期（2026-10-24 主人拍板「点击提示开启日期」）
         if (!ActivityDungeonRules.IsOpenToday(kind))
         {
@@ -313,9 +320,10 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 该横条当前能不能作为选中项：门槛已到 + 今天开放。显隐/灰显/选中判断同源（2026-10-24 主人拍板）。
-    /// 【2026-10-24 晚拍板】章节门槛<b>不再被</b> TEST_OPEN_ALL 总闸旁路（主人「没达到开放条件的不要显示」）
-    /// ——总闸只旁路开放日/进本，显示层永远按真实存档门槛走。
+    /// 该横条当前能不能作为选中项（= 今天可玩）：门槛已到 + 今天开放。
+    /// 显隐/灰显/排序/选中判断同源（2026-11-01 主人拍板「全部显示，开放的放上面、未开放的放下面」，
+    /// 覆盖 2026-10-24 晚「门槛没到整条隐藏」的旧口径）。
+    /// 章节门槛<b>不被</b> TEST_OPEN_ALL 总闸旁路（总闸只旁路开放日/进本），显示层永远按真实存档门槛走。
     /// </summary>
     bool IsActivityRowSelectable(ActivityDungeonKind kind)
     {
@@ -325,10 +333,13 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 活动横条状态统一出口（2026-10-24 主人拍板）：
-    /// ① 未达到开启条件（章节门槛没到）→ 整条隐藏；
-    /// ② 没轮到（今天不开放）→ 灰显（bg 压灰，点击由 OnSelectActivityRow 弹开启日期）；
-    /// ③ 选中效果 = 主人在 prefab 摆好的「选中」子节点，开启即亮（不改排版、不改颜色）。
+    /// 活动横条状态统一出口（2026-11-01 主人拍板「活动副本全部显示，开放的放上面、未开放的放下面」，
+    /// 覆盖 2026-10-24 的「门槛没到整条隐藏」）：
+    /// ① 四条横条全部常显，不再按章节门槛隐藏；
+    /// ② 未开放（门槛没到 或 今天没轮到）→ 灰显（bg 压灰），点击弹对应提示
+    ///    （门槛没到 → DungeonLockHint；没轮到 → OpenDayHint，见 OnSelectActivityRow）；
+    /// ③ 排序落位：开放的排上面、未开放的排下面（ApplyActivityRowOrder，组内保持预制体先后序）；
+    /// ④ 选中效果 = 主人在 prefab 摆好的「选中」子节点，可玩且被选中即亮。
     /// 切战斗标签来回时 RefreshAll 会重刷本方法 → 选中状态不丢。
     /// </summary>
     void ApplyActivityRowStates()
@@ -341,17 +352,10 @@ public partial class AdventureUI
         {
             var row = list.Find(names[i]);
             if (row == null) continue;
-            // ① 门槛没到 → 整条隐藏【2026-10-24 晚主人拍板：显示层不被 TEST_OPEN_ALL 总闸旁路，
-            //    总闸只旁路开放日/进本（测试便利），显示永远按真实存档门槛】
-            bool gateOk = false;
-            {
-                var data = SaveSystem.Instance?.Data;
-                gateOk = FeatureUnlock.DungeonOpen(data, kinds[i]);
-            }
-            row.gameObject.SetActive(gateOk);
-            if (!gateOk) continue;
-            bool openToday = ActivityDungeonRules.IsOpenToday(kinds[i]);
-            // ② 灰显：bg 压灰（原色缓存 × 灰度系数），正常日恢复原色
+            // ① 全部显示（门槛没到的也不再隐藏；显示层不被 TEST_OPEN_ALL 总闸旁路，口径不变）
+            if (!row.gameObject.activeSelf) row.gameObject.SetActive(true);
+            bool playable = IsActivityRowSelectable(kinds[i]);
+            // ② 灰显：未开放（门槛没到/没轮到）bg 压灰，可玩恢复原色
             var bgImg = row.Find("bg")?.GetComponent<Image>();
             if (bgImg != null)
             {
@@ -360,13 +364,15 @@ public partial class AdventureUI
                     baseColor = bgImg.color;
                     _activityRowBaseColors[bgImg] = baseColor;
                 }
-                bgImg.color = openToday ? baseColor : baseColor * ActivityRowGrayFactor;
+                bgImg.color = playable ? baseColor : baseColor * ActivityRowGrayFactor;
             }
-            // ③ 选中节点：主人 prefab 已摆（bg/选中/Name/Info），开启即亮
+            // ④ 选中节点：主人 prefab 已摆（bg/选中/Name/Info），可玩且被选中即亮
             var sel = row.Find("选中");
             if (sel != null)
-                sel.gameObject.SetActive(openToday && _selectedActivityKind == kinds[i]);
+                sel.gameObject.SetActive(playable && _selectedActivityKind == kinds[i]);
         }
+        // ③ 排序落位：开放的在上、未开放的在下（只动 y；x/缩放归 FitActivityRowsScale 管）
+        ApplyActivityRowOrder(list);
     }
 
     void OnSelectChapter(int chapter)

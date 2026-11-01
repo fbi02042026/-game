@@ -15,10 +15,10 @@ public static class SlotMachineSystem
     {
         var cm = ChapterManager.Instance;
         if (cm == null) return 1;
-        // 【2026-10-23 批 E3】章内关数 10 → 5（大关小关制）。
-        // 行为等价：CoinsForStage 的增长系数 1.2^(n-1) 在 n≥5 就顶到 COIN_GROWTH_CAP，
-        // 所以 10 关制与 5 关制在「第 1 章前 5 关」上数值一字不差，只是更早进入封顶平台。
-        int n = (cm.currentChapter - 1) * GameConfig.STAGES_PER_GRAND + cm.currentStageIndex + 1;
+        // 【2026-11-01 批 B3】章内全局节序号（跨章连续增长），真源 CurrentSubIndex0（节 5/8/10 按章换算）。
+        // 行为等价：CoinsForStage 的增长系数 1.2^(n-1) 很快顶到 COIN_GROWTH_CAP，
+        // 所以数值口径只是把「(章-1)*5+节」换成精确的章内节下标。
+        int n = cm.CurrentSubIndex0 + 1;
         return Mathf.Max(1, n);
     }
 
@@ -654,8 +654,8 @@ public static class SlotMachineSystem
                       " / 精英 " + SlotMachineDefs.COIN_PER_ELITE + " / Boss " + SlotMachineDefs.COIN_PER_BOSS +
                       "　启动下限 " + SlotMachineDefs.STARTER_COINS);
 
-        // 【2026-10-23 批 B1】每大关 5 小关（STAGES_PER_CHAPTER 是章级旧常量，这里按局内关数走）
-        int stages = GameConfig.STAGES_PER_GRAND;
+        // 【2026-11-01 批 B3】自检按第 1 章的 5 节口径估算（诊断用途）
+        int stages = GameConfig.StagesPerGrandOf(1);
         int sumPrice = 0, sumFocus = 0, sumIncome = 0;
         // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（2026-10-23 起 40 起、每抽 +10）。
         // 这里按「每关只抽一次」估：第 n 关那一抽 = 已抽 n-1 次。

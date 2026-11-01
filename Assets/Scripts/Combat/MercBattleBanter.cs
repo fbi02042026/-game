@@ -31,6 +31,9 @@ public class MercBattleBanter : MonoBehaviour
     {
         if (_bm == null) _bm = BattleManager.Instance;
         if (_bm == null || !_bm.isInBattle) return;
+        // 【2026-11-01 主人拍板「无限关卡不要出现剧情」】裂隙里不播佣兵闲聊气泡（含章节风味台词入口，
+        // ChapterBattleFlavor 本就只认 Normal 模式，这里把个人台词一并关掉）
+        if (_bm.IsEndlessRift) return;
         if (TutorialRules.Current.SkipMercBanter || _bm.PartyIntroWalking || !_bm.UnitsCanAct) return;
         if (_nextAt < 0f) ArmNext();
         if (Time.unscaledTime < _nextAt) return;

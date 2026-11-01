@@ -113,7 +113,10 @@ public partial class Monster : UnitBase
         // V6 词缀「荆棘」：打我的人按比例吃回一点伤害。
         // 这里不区分攻击者是近战还是远程 —— 用一个「攻击者类型」判定既不可靠也会让词缀显得随机，
         // 统一反弹更好懂。source 传 null 是必须的：否则会弹回来源、形成互弹死循环。
-        if (affix != null && affix.ThornsRatio > 0f && source != null && !source.isDead)
+        // 【2026-11-01 主人拍板】引导局跳过反弹：演出判死 999999 会被按比例弹回塔克、
+        // 钳到 1 滴血（主人实机复现「打完 boss 塔克瞬间 1 血」），开关真源在 TutorialRules。
+        if (affix != null && affix.ThornsRatio > 0f && source != null && !source.isDead
+            && !TutorialRules.Current.SuppressThornsReflect)
         {
             float back = inDamage * affix.ThornsRatio;
             if (back >= 1f)

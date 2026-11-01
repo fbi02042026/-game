@@ -511,6 +511,16 @@ public class TutorialHintUI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// 设置弹窗等高层弹窗打开时收掉软引导（2026-11-01 主人：点设置弹出的时候不要出现抽奖提示）。
+    /// 硬引导不收 —— 那是引导流程自己的事，收了引导局会卡死。
+    /// </summary>
+    public void HideSoft()
+    {
+        if (_hard) return;
+        Hide();
+    }
+
     /// <summary>设置弹窗等更高层 UI 打开时，暂时关掉硬遮罩挡点击。</summary>
     public void SetHardBlocking(bool on)
     {

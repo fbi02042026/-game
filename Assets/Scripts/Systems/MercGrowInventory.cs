@@ -301,7 +301,13 @@ public static class MercGrowInventory
         data.TownBagAdd(itemId, amount);
         r.bagCount = amount;
         SaveSystem.Instance?.Save();
-        UIManager.Instance?.ShowToast($"获得 {def.Name}的本命碎片 ×{amount}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
+        // 【2026-11-01 主人拍板】提示里的道具名用 item_defs 真名（如「塔克碎片」），不再写「塔克·重盾的本命碎片」；
+        // 查不到道具名才回退花名册旧文案（防御，正常配表都能查到）。
+        var itemDef = ItemDefs.Get(itemId);
+        string itemName = itemDef != null && !string.IsNullOrEmpty(itemDef.name)
+            ? itemDef.name
+            : def.Name + "的本命碎片";
+        UIManager.Instance?.ShowToast($"获得 {itemName} ×{amount}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
         Debug.Log($"[MercGrow] 发碎片 {def.Name}({hireId}) ×{amount} → 城镇背包（reason={reason}）");
         return r;
     }

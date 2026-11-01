@@ -75,6 +75,18 @@ public abstract partial class UnitBase : MonoBehaviour
     public bool isDead => currentHp <= 0;
     public int facingDir = 1; // 1右 -1左
     public bool isAlly; // true己方 false敌方
+
+    /// <summary>
+    /// 【2026-11-01 主人拍板「竞技场对方弓手要和我方用同一种子弹，不要怪物那套」】
+    /// 弹道/远程攻击 VFX 按我方（Ally）套装取。只由 ArenaEnemySpawner 对竞技场敌方镜像小队置位；
+    /// 消费点统一走 <see cref="ResolveProjectileFaction"/>（普攻弹 UnitBase.Attack / 技能弹 SkillSystem）。
+    /// 真怪物不置位，照旧走 Enemy 套。
+    /// </summary>
+    public bool projectileVfxAsAlly;
+
+    /// <summary>弹道 VFX 阵营唯一出口：己方恒 Ally；竞技场敌方佣兵（projectileVfxAsAlly）也按 Ally 取弹；其余敌方走 Enemy。</summary>
+    public VfxFaction ResolveProjectileFaction() => (isAlly || projectileVfxAsAlly) ? VfxFaction.Ally : VfxFaction.Enemy;
+
     /// <summary>精灵默认是否朝右（SPUM预制体朝向不一致，需子类设置）</summary>
     public bool spriteDefaultFacesRight = true;
 

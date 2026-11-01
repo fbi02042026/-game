@@ -26,6 +26,14 @@ public static class RewardedAdBridge
     public static bool HasRealSdk { get; set; } = true;
 
     /// <summary>
+    /// 【2026-11-01 主人拍板】TapTap/Android 端放弃，转微信小游戏：TapADN 已拆除、
+    /// 微信激励视频（P2-B）接入前，所有广告入口统一「暂未开放」（不发奖、编辑器也不模拟）。
+    /// 入口置灰提示由本闸统一收口（各调用点在「广告加载中」toast 之前也有各自的提前拦截）。
+    /// 接入微信广告后置 false 并在 TapAdBridge 位置换成微信实现。
+    /// </summary>
+    public static bool PlatformClosed = true;
+
+    /// <summary>
     /// 【2026-10-31】任意广告位成功核验后的全局广播（placement 参数 = 哪个点位）。
     /// 看广告送佣兵活动「看任意地方的广告都可累计」的收口点：金币加号/体力/复活……
     /// 任何 placement 成功都广播，AdMercEventSystem 订阅落账（本类不关心谁在听）。
@@ -81,6 +89,16 @@ public static class RewardedAdBridge
     public static void ShowRewarded(string placement, Action<bool> onComplete)
     {
         AdKillSwitch.EnsureStarted();   // 兜底：任何路径到广告点都保证发起过拉取（幂等）
+
+        // 【2026-11-01 平台闸】TapADN 已移除、微信广告未接入：统一拒绝 + 玩家可见提示（不静默）
+        if (PlatformClosed)
+        {
+            Debug.Log($"[RewardedAdBridge] 平台闸关闭（转微信小游戏过渡期），拒绝 placement={placement}");
+            Analytics.AdFail(placement, "platform_closed");
+            UIManager.Instance?.ShowToast("暂未开放");
+            onComplete?.Invoke(false);
+            return;
+        }
 
         if (SpotlightBuild.Enabled)
         {

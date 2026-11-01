@@ -116,7 +116,9 @@ public partial class Mercenary : UnitBase
         if (SkillCaster != null && SkillCaster.HasActiveSkill && SkillCaster.CooldownRemain <= 0f
             && AllyNeedsHeal())
         {
-            var waitHero = Hero.Instance;
+            // 【2026-11-01 主人报「竞技场敌方弓手总贴很近打」】锚玩家只属于我方佣兵（聚队概念）；
+            // 敌方佣兵无玩家可跟，tooFarFromHero 恒 false，只吃下面的最大等待时长上限。
+            var waitHero = isAlly ? Hero.Instance : null;
             bool tooFarFromHero = waitHero != null && !waitHero.isDead
                 && Mathf.Abs(GetCombatX(this) - GetCombatX(waitHero)) > GameConfig.MERC_STICK_RADIUS;
             _healWaitTimer += Time.deltaTime;
@@ -169,7 +171,9 @@ public partial class Mercenary : UnitBase
                 // 【2026-10-19 主人拍板】交战跟随上限：离玩家超过 MERC_STICK_RADIUS 就「边打边跟」——
                 // 朝玩家方向移动（攻距内照常按 CD 开火），保证佣兵始终聚在玩家身边；
                 // 半径内仍维持站桩不并道（2026-10-09 拍板不变）。
-                var stickHero = Hero.Instance;
+                // 【2026-11-01 主人报「竞技场敌方弓手总贴很近打」】此逻辑只属我方佣兵（锚玩家聚队）；
+                // 敌方佣兵走它会「一边开火一边朝玩家挪」，远程停不住 → 敌方恒站桩开火。
+                var stickHero = isAlly ? Hero.Instance : null;
                 bool mustStickBack = stickHero != null && !stickHero.isDead
                     && Mathf.Abs(GetCombatX(this) - GetCombatX(stickHero)) > GameConfig.MERC_STICK_RADIUS;
                 if (mustStickBack)

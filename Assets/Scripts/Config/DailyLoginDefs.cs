@@ -124,15 +124,15 @@ public static class DailyLoginDefs
     public static Reward[] Starter = new Reward[]
     {
         MercGrant("塔克·重盾",   STARTER_MERC_ID),                                // D1 稀有佣兵本体（2026-10-23 主人重申：D1=塔克；塔克移出默认名单真发本体+报喜，领过才折碎片）
-        Frag("塔克碎片10",     STARTER_MERC_ID,                           10), // D2（2026-10-22 主人拍板：第2天给1星碎片×10）
+        Frag("塔克碎片×10",    STARTER_MERC_ID,                           10), // D2（2026-10-22 主人拍板：第2天给1星碎片×10；【2026-11-01】道具名改「塔克碎片」，数量×N跟后）
         // 【2026-10-23 主人拍板】D3 发塔克升星徽记：塔克=剑盾·稀有 →「中级徽记」；双倍日已取消，直发 30 =
         // 升2星10 + 升3星20 全包（消耗见 MercStarDefs.BadgeCost）。
         Badge("中级徽记30",    STARTER_MERC_ID,                           30), // D3（双倍日取消后直发30；原金币×120）
-        Frag("塔克碎片20",     STARTER_MERC_ID,                           20), // D4（2026-10-22 主人拍板：第4天给2星碎片×20）
+        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D4（2026-10-22 主人拍板：第4天给2星碎片×20）
         Res("金币500",         ResourceWallet.ResourceType.Gold,          500), // D5（2026-10-23 主人拍板：800→500）
-        Frag("塔克碎片20",     STARTER_MERC_ID,                           20), // D6（2026-10-22 主人拍板：第6天给3星碎片×20，与D8合计40=第3星；累计D8满星70零溢出）
+        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D6（2026-10-22 主人拍板：第6天给3星碎片×20，与D8合计40=第3星；累计D8满星70零溢出）
         Res("钻石200",         ResourceWallet.ResourceType.Diamond,      200), // D7（2026-10-23 主人拍板：改钻石×200，原金币×200）
-        Frag("塔克碎片20",     STARTER_MERC_ID,                           20), // D8（2026-10-22 主人拍板：第8天给3星碎片×20，与D6合计40=第3星；累计70零溢出）
+        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D8（2026-10-22 主人拍板：第8天给3星碎片×20，与D6合计40=第3星；累计70零溢出）
     };
 
     /// <summary>
@@ -154,7 +154,7 @@ public static class DailyLoginDefs
 
         var r = Starter[(day - 1) % Starter.Length];
         if (r.grant == Grant.Merc && mercOwned)
-            r = Frag("塔克碎片10", STARTER_MERC_ID, 10);
+            r = Frag("塔克碎片×10", STARTER_MERC_ID, 10);   // 【2026-11-01 主人拍板】道具名=「塔克碎片」，数量×N跟后
         return r;
     }
 

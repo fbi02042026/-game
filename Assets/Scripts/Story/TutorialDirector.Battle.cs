@@ -408,16 +408,14 @@ public partial class TutorialDirector
         headTalk?.HideNow();
         hint.Hide();
 
-        // —— 14)【2026-10-15 主人拍板】引导结尾也走传送门：「所有打完一关后都出现传送门，
-        // 进传送门的步骤」照旧（玩家先走、佣兵隔一个身位跟着进，各播一次传送特效）。
-        // 全员进完经 BattleManager 的引导分支接撤离结算（BattleSettlement → 回城）。
-        // 【2026-10-09 旧口径】塔克说完「走吧。」直接回城结算、没有门——已被上面 10-15 拍板覆盖。
-        // 这里先停一下让最后两句台词读完，再开门。
+        // —— 14)【2026-11-01 主人拍板】引导结尾不再进传送门（主人原话「不要有进传送门这个了，直接出结果」）：
+        // 塔克「走吧」说完停 0.6 秒，直接接引导撤离结算（战斗结果界面 → 点确定回城接剧情）。
+        // 旧的「开门 → 全员走入门 → 结算」链（BeginTutorialPortalExit）保留不再被引导调用。
         yield return new WaitForSecondsRealtime(0.6f);
         if (bm != null)
-            bm.BeginTutorialPortalExit();
+            bm.TriggerTutorialEvacuateWithSettlement();
         else
-            Debug.LogError("[Tutorial] 引导收尾失败：BattleManager 为空，无法触发传送门出口");
+            Debug.LogError("[Tutorial] 引导收尾失败：BattleManager 为空，无法接撤离结算");
 
         _battleTutorialFlowStarted = false;
         _flow = null;

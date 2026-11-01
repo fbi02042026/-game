@@ -105,6 +105,15 @@ public class TownIdleNudgeDriver : MonoBehaviour
     MainNavTab? _showing;
     MainBottomNav _subscribedNav;
 
+    // —— 通用弹窗让位扫描（2026-11-01 主人拍板「看广告送艾拉面板或其他弹窗出现时，不要弹闲置引导」）——
+    // 不再逐个枚举弹窗（每次新弹窗都会漏，这次漏的就是广告送佣兵面板）：
+    // 任何 enabled 且在显示中的 Canvas，sortingOrder >= TownPopup(900) 一律算「弹窗占屏」让位。
+    // 自己的软引导气泡在 TutorialHint(600) 层，不会被算进来；硬引导跟到 900+ 的情况
+    // 由 CanRun 里 FirstRunGuide 检查先一步兜住。每 0.5 秒扫一次缓存结果，不在每帧全场景找。
+    const float PopupScanInterval = 0.5f;
+    float _nextPopupScan;
+    bool _popupOnScreen;
+
     void Update()
     {
         TrackNavInstance();
@@ -180,6 +189,10 @@ public class TownIdleNudgeDriver : MonoBehaviour
     {
         if (!GameSceneGate.IsTown) return false;
 
+        // 【2026-11-01 主人拍板】任何 TownPopup(900) 及以上层级的弹窗开着（广告送佣兵面板、
+        // 竹篓纳福、世界地图、设置……一律在内）→ 让位：收掉气泡、闲置清零，关窗后重新计 15 秒。
+        if (HasVisibleTownPopup()) return false;
+
         // 只在「主界面」（大厅页）计时；玩家切去了别的页签就算离开主界面
         var nav = MainBottomNav.Instance;
         if (nav == null || nav.Current != MainNavTab.Guild) return false;
@@ -210,6 +223,33 @@ public class TownIdleNudgeDriver : MonoBehaviour
         if (RewardPopupUI.Instance != null && RewardPopupUI.Instance.gameObject.activeInHierarchy) return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// 【2026-11-01 主人拍板】屏上是否开着 TownPopup(900) 及以上层级的弹窗。
+    /// 泛化口径：不再逐个枚举弹窗类，只要有一个 enabled 且在显示中的 Canvas 层级 ≥ 900 就算占屏
+    /// （广告送佣兵面板 / 竹篓纳福 / 世界地图 / 设置 / 确认框……全部自动覆盖，以后新弹窗也不会漏）。
+    /// 排除自己：软引导气泡在 TutorialHint(600) 层；硬引导跟高的情况由 CanRun 的 FirstRunGuide 检查兜住。
+    /// 结果缓存 0.5 秒，避免每帧全场景扫 Canvas。
+    /// </summary>
+    bool HasVisibleTownPopup()
+    {
+        if (Time.unscaledTime < _nextPopupScan) return _popupOnScreen;
+        _nextPopupScan = Time.unscaledTime + PopupScanInterval;
+        _popupOnScreen = false;
+
+        var canvases = UnityEngine.Object.FindObjectsOfType<Canvas>(true);
+        for (int i = 0; i < canvases.Length; i++)
+        {
+            var c = canvases[i];
+            if (c == null || !c.enabled || !c.gameObject.activeInHierarchy) continue;
+            if (c.sortingOrder < GameConfig.UiSort.TownPopup) continue;
+            // 引导气泡/引导体系自己的 Canvas 不算弹窗（硬引导另有检查管）
+            if (c.GetComponentInParent<TutorialHintUI>() != null) continue;
+            _popupOnScreen = true;
+            break;
+        }
+        return _popupOnScreen;
     }
 
     static RectTransform ButtonRect(MainBottomNav nav, MainNavTab tab)

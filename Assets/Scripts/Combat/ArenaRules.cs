@@ -1316,6 +1316,11 @@ public static class ArenaRules
             GlobalToastUI.Show("今天的广告次数已经看完啦", true);
             return;
         }
+        if (RewardedAdBridge.PlatformClosed)
+        {
+            GlobalToastUI.Show("暂未开放", true);   // 【2026-11-01】转微信小游戏过渡期
+            return;
+        }
         if (AdKillSwitch.AdsOff)
         {
             GlobalToastUI.Show("广告维护中，请稍后再试", true);

@@ -445,7 +445,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】下一关 = 第一个未通关（精确查单关），不再用最大号+1 推断
         int chapterTotal = ChapterSubTotal(chapter, SaveSystem.Instance?.Data);
         int nextStage = Mathf.Clamp(FirstUnclearedStage(chapter, chapterTotal, SaveSystem.Instance?.Data), 1, chapterTotal);
-        Toast($"已前往 {GameConfig.GetChapterMapName(chapter)} {chapter}-{nextStage}");
+        Toast($"已前往 {GameConfig.GetChapterMapName(chapter)} {ActProgressionDefs.GlobalStageLabel(chapter, nextStage - 1)}");
     }
 
     public void HidePage()

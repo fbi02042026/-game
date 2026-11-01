@@ -30,6 +30,20 @@ public class TavernUI : MonoBehaviour, ITownPage
     bool _preloaded;
     bool _playWelcomeBack;
 
+    /// <summary>【2026-11-01 主人要求】剧情（StoryDirector）在播时场景立绘（老板娘）已隐藏，收窗后还原。</summary>
+    bool _portraitHiddenByStory;
+
+    /// <summary>剧情在播时藏场景老板娘立绘（portraitRoot），播完还原 —— 避免剧情立绘和场景立绘两个老板娘同屏叠加。
+    /// 只在酒馆页激活期间轮询（本 Update 只在页面 active 时跑）；剧情在别页收尾时由 ShowPage 兜底还原。</summary>
+    void Update()
+    {
+        bool story = StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying;
+        if (story == _portraitHiddenByStory) return;
+        _portraitHiddenByStory = story;
+        if (portraitRoot != null)
+            portraitRoot.gameObject.SetActive(!story);
+    }
+
     /// <summary>酒馆闲话图标（主人手摆的「对话」按钮，TavernUI.prefab 右上角）。</summary>
     Button _gossipButton;
 
@@ -103,6 +117,12 @@ public class TavernUI : MonoBehaviour, ITownPage
         ResourceStrip.SetMode(ResourceStrip.Mode.GoldDia);
 
         EnsurePortraitMotion();
+        // 【2026-11-01 主人要求】剧情若在别的页面收尾，这里兜底还原场景立绘（Update 只在页面激活时轮询）
+        if (_portraitHiddenByStory)
+        {
+            _portraitHiddenByStory = false;
+            if (portraitRoot != null) portraitRoot.gameObject.SetActive(true);
+        }
         RefreshGossipButton();   // 【2026-10-26 信任交流】跨天进酒馆恢复闲话次数（置灰→可点）
         RefreshMercCardLocks();  // 【2026-10-31】四张佣兵功能卡锁态（跨天推图后自动解锁）
         if (SuppressEggOnce)

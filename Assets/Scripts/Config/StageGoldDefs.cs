@@ -103,16 +103,17 @@ public static class StageGoldDefs
 
     /// <summary>本关通关该发的固定金币（局外）。按关卡类型分档，章间每章 +10% 复利。</summary>
     /// <param name="chapter">第几章（1 起）</param>
-    /// <param name="stageIndex0Based">大关内第几小关（0 起，0~4；第 2 = 精英、第 4 = Boss）</param>
+    /// <param name="stageIndex0Based">关内第几节（0 起；第 2 = 精英、末节 = Boss，节数按章 5/8/10）</param>
     public static int StageGold(int chapter, int stageIndex0Based)
     {
         int ch = Mathf.Clamp(chapter, 1, 8);
-        int idx = Mathf.Clamp(stageIndex0Based, 0, GameConfig.STAGES_PER_GRAND - 1);
+        int last = GameConfig.StagesPerGrandOf(ch) - 1;   // 【2026-11-01 批 B3】末节 Boss 按章取
+        int idx = Mathf.Clamp(stageIndex0Based, 0, last);
 
         // 章间倍率：第 1 章 = 1.0，第 8 章 = 1.1^7 ≈ 1.9487
         float mul = Mathf.Pow(1f + CHAPTER_GOLD_GROWTH, ch - 1);
 
-        int gold = idx == GameConfig.STAGES_PER_GRAND - 1 ? STAGE_GOLD_BOSS
+        int gold = idx == last ? STAGE_GOLD_BOSS
                  : idx == ELITE_STAGE_INDEX ? STAGE_GOLD_ELITE
                  : STAGE_GOLD_NORMAL;
         return Mathf.Max(1, Mathf.RoundToInt(gold * mul));
@@ -136,8 +137,8 @@ public static class StageGoldDefs
         {
             int sum = 0;
             sb.Append($"  第{ch}章：");
-            // 【2026-10-23 批 E4】章内按大关 5 小关走（0~4）
-            for (int s = 0; s < GameConfig.STAGES_PER_GRAND; s++)
+            // 【2026-11-01 批 B3】章内按每关节数走（5/8/10 按章取）
+            for (int s = 0; s < GameConfig.StagesPerGrandOf(ch); s++)
             {
                 int g = StageGold(ch, s);
                 sum += g;

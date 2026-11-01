@@ -44,6 +44,14 @@ public sealed class TutorialRules
     public bool AllowStackSpawnWhileAlive { get; private set; }
 
     /// <summary>
+    /// 【2026-11-01 主人拍板】引导局禁用精英词缀「荆棘」的反弹：
+    /// 引导演出判死一刀写死 999999（塔克天降清场 / 宿敌遗言后收尾），
+    /// 荆棘按比例反弹会把塔克瞬间打到 1 滴血（引导我方钳血下限），主人实机复现。
+    /// 正式关不受影响（Formal 恒 false）。
+    /// </summary>
+    public bool SuppressThornsReflect { get; private set; }
+
+    /// <summary>
     /// 引导关是否也开「局内构筑」（装备 / 佣兵 / 技能都从抽奖来）。
     /// 以前引导关整条构筑链是关掉的（玩家学不到核心循环），现在打开。
     /// 2026-10-05：教学拍已改成正式抽奖入口 <c>BattleManager.CoMidBattleDraft</c>，
@@ -151,6 +159,7 @@ public sealed class TutorialRules
             ApplyTableMonsterHp = true,
             QuestCountsOnlySpawnedWaves = true,
             AllowStackSpawnWhileAlive = true,
+            SuppressThornsReflect = true,
             EnableRunDraft = true,
             GuideEntryDraft = true,
             EngageMinAhead = 4.5f,

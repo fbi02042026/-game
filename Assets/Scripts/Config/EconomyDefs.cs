@@ -37,11 +37,11 @@ public static class EconomyDefs
     // ============================================================
 
     /// <summary>
-    /// 一次尝试（一局）能打几个小关。
-    /// 【2026-10-23 批 E5】10 → 5（大关小关制；普通关不结束本局，仅第 5 小关 Boss 关结束）。
+    /// 一次尝试（一局）能打几节。
+    /// 【2026-11-01 批 B3】5 → 按章取（第 1 章 5、第 2 章 8、第 3 章起 10，见 GameConfig.StagesPerGrandOf）。
     /// 用途：StageGold 判 Boss 通关金、RunGold 的 clamp 上界。
     /// </summary>
-    public const int STAGES_PER_RUN = GameConfig.STAGES_PER_GRAND;
+    public static int StagesPerRun(int chapter) => GameConfig.StagesPerGrandOf(chapter);
 
     /// <summary>
     /// 各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。
@@ -83,13 +83,13 @@ public static class EconomyDefs
     /// </summary>
     public static int StageGold(int chapter, int stageNo, float monsterGoldMul)
     {
-        int s = Mathf.Clamp(stageNo, 1, STAGES_PER_RUN);
+        int s = Mathf.Clamp(stageNo, 1, StagesPerRun(chapter));
 
         // 2026-09-29：金币产出改为「每关固定额度」（StageGoldDefs.StageGold），
         // 旧的「怪物掉金累加」口径作废 —— 怪物数量不再决定金币，所以上面那张
         // MonstersPerStage 表从此只用于估波次/战斗时长，不再参与金币估算。
         // 难度倍率 monsterGoldMul 对固定额度不生效，参数保留只为兼容旧调用点。
-        int clear = s >= STAGES_PER_RUN ? BossClearGold(chapter) : NormalClearGold(chapter);
+        int clear = s >= StagesPerRun(chapter) ? BossClearGold(chapter) : NormalClearGold(chapter);
         return StageGoldDefs.StageGold(chapter, s - 1) + clear;
     }
 
@@ -118,12 +118,12 @@ public static class EconomyDefs
     /// <summary>一次尝试清掉 n 关的收入，怪物掉金再乘 monsterGoldMul（难度倍率）。</summary>
     public static int RunGold(int chapter, float stagesCleared, float monsterGoldMul)
     {
-        float n = Mathf.Clamp(stagesCleared, 0f, STAGES_PER_RUN);
+        float n = Mathf.Clamp(stagesCleared, 0f, StagesPerRun(chapter));
         int full = Mathf.FloorToInt(n);
         int gold = 0;
         for (int s = 1; s <= full; s++) gold += StageGold(chapter, s, monsterGoldMul);
         float frac = n - full;
-        if (frac > 0f && full < STAGES_PER_RUN)
+        if (frac > 0f && full < StagesPerRun(chapter))
             gold += Mathf.RoundToInt(StageGold(chapter, full + 1, monsterGoldMul) * frac);
         return gold;
     }
@@ -168,7 +168,7 @@ public static class EconomyDefs
     public static int ChapterGold(int chapter)
     {
         var g = GateFor(chapter);
-        return (g.expectedTries - 1) * RunGold(chapter, g.failStages) + RunGold(chapter, STAGES_PER_RUN);
+        return (g.expectedTries - 1) * RunGold(chapter, g.failStages) + RunGold(chapter, StagesPerRun(chapter));
     }
 
     /// <summary>从头打到第 chapter 章结束的**累计**金币。</summary>
@@ -218,7 +218,7 @@ public static class EconomyDefs
         {
             var g = GateFor(ch);
             sb.AppendLine($"  第{ch}章：尝试 {g.expectedTries} 次（失败清 {g.failStages:0.0} 关）　" +
-                          $"单次失败 {RunGold(ch, g.failStages)}　单次通关 {RunGold(ch, STAGES_PER_RUN)}　" +
+                          $"单次失败 {RunGold(ch, g.failStages)}　单次通关 {RunGold(ch, StagesPerRun(ch))}　" +
                           $"本章 {ChapterGold(ch)}　累计 {CumulativeGold(ch)}　" +
                           $"累计体力 {CumulativeStamina(ch)}");
         }
@@ -226,9 +226,9 @@ public static class EconomyDefs
         sb.AppendLine("[Economy] 单局金币峰值（用于校准「千金在手」阈值 1000；难度只放大怪物掉金）");
         for (int ch = 1; ch <= 8; ch++)
         {
-            sb.AppendLine($"  第{ch}章满关：普通 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(0))}　" +
-                          $"困难 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(1))}　" +
-                          $"噩梦 {RunGold(ch, STAGES_PER_RUN, GameConfig.GetDifficultyGoldMul(2))}");
+            sb.AppendLine($"  第{ch}章满关：普通 {RunGold(ch, StagesPerRun(ch), GameConfig.GetDifficultyGoldMul(0))}　" +
+                          $"困难 {RunGold(ch, StagesPerRun(ch), GameConfig.GetDifficultyGoldMul(1))}　" +
+                          $"噩梦 {RunGold(ch, StagesPerRun(ch), GameConfig.GetDifficultyGoldMul(2))}");
         }
 
         sb.AppendLine("[Economy] 天赋石节奏（GOLD_PER_TALENT_POINT=100，右侧流派树全满需 491 石）");

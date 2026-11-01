@@ -155,22 +155,13 @@ public static class ResourceStrip
             _host.diaText = FindDeep(_dia, "钻石Text")?.GetComponent<Text>();
             if (_host.diaText == null)
                 Debug.LogError("[ResourceStrip] 钻石Panel 里没有 钻石Text —— 钻石数字将不显示（不兜底）");
-            // 【2026-10-29 主人拍板·纯广告扩位】钻石加号放出来：每日 2 次看广告领钻（50 → 100），
-            // 逻辑在 ResourceAdRewards.TryClaimDiamond（日键/计数/急停都在那边，这里只接点击）。
-            // 过渡期 ADS_ENABLED=false（TapADN 未验收）维持隐藏 —— 与金币/体力广告档同口径，别裸露死按钮。
-            var dplus = FindDeep(_dia, "PlusButton")?.GetComponent<Button>();
+            // 【2026-11-01 主人拍板「把钻石那个加号获取去掉」】钻石加号一律隐藏（覆盖 2026-10-29
+            // 「纯广告扩位放出来」的口径）：不再随 ADS_ENABLED 放出，也不接看广告领钻点击。
+            // ResourceAdRewards.TryClaimDiamond 保留不删，日后要恢复只需改回这里。
+            // 预制体里本来就没有 PlusButton 时无需报错——本来就是要它不出现。
+            var dplus = FindDeep(_dia, "PlusButton");
             if (dplus != null)
-            {
-                bool adsOn = GameConfig.ADS_ENABLED;
-                dplus.gameObject.SetActive(adsOn);
-                if (adsOn)
-                {
-                    dplus.onClick.RemoveAllListeners();
-                    dplus.onClick.AddListener(ResourceAdRewards.TryClaimDiamond);
-                }
-            }
-            else
-                Debug.LogError("[ResourceStrip] 钻石Panel 里没有 PlusButton —— 看广告领钻入口接不上（不兜底）");
+                dplus.gameObject.SetActive(false);
         }
 
         if (_talent == null)

@@ -150,6 +150,10 @@ public partial class AdventureUI
                 RefreshChestContentSize();   // 【2026-10-26 跨章连续列】还原收回内容高后按 15 槽重新撑出滚动余量（含基准补偿）
                 RestoreBranchIslandBaseY();
                 RestoreActivityRowsScale();
+                // 【2026-11-01 主人拍板「开放的放上面、未开放的放下面」】还原回预制体位后必须立刻按
+                // 开放状态重排（q=1 预制体节奏），否则标准屏首进页时 RefreshAll 排好的序会被本还原分支覆盖回去。
+                var activityOrderRestore = transform.Find("RightContent/" + ActivityNodeName);
+                if (activityOrderRestore != null) ApplyActivityRowOrder(activityOrderRestore);
                 RestoreAdventureSidebarEven();
                 RestoreAdventureSidebarOrder(right);
                 return;
@@ -976,11 +980,12 @@ public partial class AdventureUI
         // 基准/内容高重写后滚动余量变了：把当前关重新滚进视口（无标识或内容不比视口高时内部 no-op）
         ScrollChestToCurrent(_markerCurrentSlot);
 
-        // ── 3.6) 无限页关卡列与主线同带重排【2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」】
+        // ── 3.6) 无限页关卡列与主线同带重排【2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」；
+        //          2026-11-01 主人「无限关卡有点偏下了 要和主线一样的位置」改对齐顶 n 槽】
         // 无限/关卡 与 主线/关卡 同构（1-1..1-4 同名同基准），主线列瘦屏被拉进带内后无限列还在预制体位 → 显偏下。
-        // 修 = 无限/TitleBar 随主线同一 tbShift 钉顶；无限槽位按序号对齐主线根帧目标 y（ysRoot[0..3] 底对齐同节奏，
-        // 主线第 5 槽是增补槽，无限保持预制体 4 槽不增补）。x 不动。
-        // 幂等：槽位基准首触记录、目标每次从 ysRoot 现算；标准屏/关开关由 RestoreRiftColumnFit 还原。
+        // 修 = 无限/TitleBar 随主线同一 tbShift 钉顶；无限槽位按序号对齐主线可见带「顶 n 槽」的根帧位
+        // （顶槽贴 bandTop 往下按 rhythm 铺，与主线顶槽同位；主线第 5 槽是增补槽，无限保持预制体 4 槽不增补）。x 不动。
+        // 幂等：槽位基准首触记录、目标每次从 bandTop/rhythm 现算；标准屏/关开关由 RestoreRiftColumnFit 还原。
         var endlessNode = right.Find(EndlessNodeName) as RectTransform;
         if (endlessNode != null)
         {
@@ -999,13 +1004,15 @@ public partial class AdventureUI
             {
                 var riftSlots = CollectNumberedSlots(riftGuanKa);
                 EnsureRiftSlotBase(riftSlots);
-                // 【2026-10-26 跨章连续列】ysRoot 已是全列 15 槽；无限列只有 4 槽，
-                // 对齐「可见带 5 关」的根帧位（bandTop 顶格往下按 rhythm 铺），与主线视觉带一致。
+                // 【2026-11-01 主人「无限关卡有点偏下了 要和主线一样的位置」】
+                // 主线可见带 5 关：顶槽贴 bandTop 往下铺；无限 4 槽此前对齐带内「底 4 槽」
+                // （顶上空一格）→ 整列比主线低一档。改对齐「顶 n 槽」：顶节点与主线顶槽同贴 bandTop，
+                // 往下按同 rhythm 铺（排行榜文字跟顶槽位 +92 走，自动跟上）。
                 int n = Mathf.Min(riftSlots.Count, GameConfig.STAGES_PER_GRAND);
                 for (int i = 0; i < n; i++)
                 {
                     var srt = riftSlots[i];
-                    float bandYRoot = bandTop - (GameConfig.STAGES_PER_GRAND - 1 - i) * rhythm;
+                    float bandYRoot = bandTop - (n - 1 - i) * rhythm;
                     float targetY = bandYRoot - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
                     var p = srt.anchoredPosition;
                     if (!Mathf.Approximately(p.y, targetY))

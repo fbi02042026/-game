@@ -59,6 +59,12 @@ public static class SettleDoubleAd
             onResult?.Invoke(false);
             return;
         }
+        if (RewardedAdBridge.PlatformClosed)
+        {
+            UIManager.Instance?.ShowToast("暂未开放");   // 【2026-11-01】转微信小游戏过渡期
+            onResult?.Invoke(false);
+            return;
+        }
         if (AdKillSwitch.AdsOff)
         {
             UIManager.Instance?.ShowToast("广告维护中，请稍后再试");

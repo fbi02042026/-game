@@ -63,9 +63,17 @@ public static partial class GameConfig
     /// <see cref="STAGES_PER_GRAND"/>（每大关 5 小关）；本常量只保留给仍按「章」计数的存量引用
     /// （如 MainQuestSystem.ChapterStageTotal 章级任务分母）。新增代码一律用 STAGES_PER_GRAND。</summary>
     public const int STAGES_PER_CHAPTER = 10;
-    /// <summary>每大关（= 每局）小关数：1-1…1-5，第 5 小关 = Boss，第 3 小关 = 50% 精英。
-    /// 关卡结构重构批 B1（2026-10-23）真源，与 ActProgressionDefs.SUBS_PER_GRAND 同值（=5）。</summary>
+    /// <summary>每大关（= 每局）小关数：旧批 B1 固定 5；【2026-11-01 批 B3】改为按章取
+    /// （第 1 章 5 节、第 2 章 8 节、第 3 章起 10 节，真源 <see cref="ActProgressionDefs.SubsPerGrandOf"/>）。
+    /// 本常量只代表第 1 章的节数，留给少数无章上下文的旧引用；**新代码一律用 <see cref="StagesPerGrandOf"/>**。</summary>
     public const int STAGES_PER_GRAND = 5;
+
+    /// <summary>
+    /// 【2026-11-01 批 B3 主人拍板 方案A】某章一局（关卡）的节数：第 1 章 5、第 2 章 8、第 3 章起 10。
+    /// 运行时所有「这一局打几节 / Boss 在第几节」一律走这里，不再用写死的 5。
+    /// </summary>
+    public static int StagesPerGrandOf(int chapter)
+        => ActProgressionDefs.SubsPerGrandOf(chapter);
     public const int SPECIAL_STAGES_PER_CHAPTER = 2; // 每章最多2个特殊关卡（商人/附魔/诅咒/休息）
     public const int MAX_OFFLINE_HOURS = 8; // 最多8小时离线收益
     public const int GOLD_PER_TALENT_POINT = 100; // 每100金币给1天赋点
@@ -89,8 +97,10 @@ public static partial class GameConfig
     // true = 每日档位切换为广告版（见 ResourceAdRewards.ResolveClaimKind / ReviveQuota），
     //        所有广告调用走 RewardedAdBridge 单一出口，TapADN 接入见 Docs/《TapADN激励视频接入》_待办任务清单.md。
     /// <summary>广告总开关。【2026-10-25 19:2x 主人拍板「翻」】true = 广告版阶梯生效（金币/体力每日 2免费+2广告+50/100钻；复活每日 2广告+50钻+100钻后只能返回）。
-    /// 当前媒体/推广位为「测试」态，只出测试广告、无收益；转正式+出计费包走 T6（Docs/《TapADN激励视频接入》_待办任务清单.md）。</summary>
-    public const bool ADS_ENABLED = true;
+    /// 【2026-11-01 主人拍板】TapTap 端放弃、转微信小游戏：翻回 false 过渡期口径 —— 广告档全关、钻石补上
+    /// （体力/金币 2免费→50钻→100钻→封顶；复活 10钻一次无上限；结算双倍/佣兵活动/钻石加号/竞技场加次按钮折叠）。
+    /// 微信激励视频（P2-B）接入并验证后改回 true。</summary>
+    public const bool ADS_ENABLED = false;
 
     /// <summary>钻石定价：顶栏体力补给一次（体力 +ResourceAdRewards.StaminaPerAd）。2026-09-20 钻石经济调整：20→15。</summary>
     public const int AD_SLOT_STAMINA_DIAMOND = 15;

@@ -286,8 +286,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             var next = ChapterManager.Instance.stageMap[nextIdx];
             if (next != null)
             {
-                // 类型走唯一出口（v4 按位置定死：0-based 4/9 → Boss、2/6 → 50% 精英），与正常推进同口径
-                next.type = StageRoller.RollByPosition(next.stageIndex);
+                // 类型走唯一出口（按位置定死：末节 Boss、第 3 节精英），与正常推进同口径
+                next.type = StageRoller.RollByPosition(next.stageIndex, targetChapter);
                 ChapterManager.Instance.currentStageIndex = next.stageIndex;
                 ChapterManager.Instance.availableNextStages.Clear();
                 ChapterManager.Instance.availableNextStages.Add(next);
@@ -310,7 +310,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             var next = ChapterManager.Instance.stageMap[startIdx];
             if (next != null)
             {
-                next.type = StageRoller.RollByPosition(next.stageIndex);
+                next.type = StageRoller.RollByPosition(next.stageIndex, targetChapter);
                 ChapterManager.Instance.currentStageIndex = next.stageIndex;
                 ChapterManager.Instance.availableNextStages.Clear();
                 ChapterManager.Instance.availableNextStages.Add(next);
@@ -345,8 +345,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     static int FirstUnclearedStageIndex0(int chapter, int grand, int stageCount)
     {
         var cleared = SaveSystem.Instance?.Data?.clearedStages;
-        // 【2026-10-31 B2 落地】存档 key 是「篇内小关下标」，本座大关的起点 = (大关-1)*5
-        int baseSub = ActProgressionDefs.Sub0Of(grand, 0);
+        // 【2026-11-01 批 B3】存档 key 是「章内节下标」，本关的起点 = (关卡-1)×每关节数（节 5/8/10 按章取）
+        int baseSub = ActProgressionDefs.Sub0Of(chapter, grand, 0);
         for (int s0 = 0; s0 < stageCount; s0++)
             if (cleared == null || !cleared.Contains(chapter + "_" + (baseSub + s0))) return s0;
         return stageCount;
@@ -366,7 +366,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         string prefix = chapter + "_";
         int chapterTotal = SaveSystem.Instance?.Data != null
             ? SaveSystem.Instance.Data.ChapterSubTotal(chapter)
-            : GameConfig.STAGES_PER_GRAND;
+            : ActProgressionDefs.StageCountOf(Mathf.Clamp(chapter, 1, ActProgressionDefs.ActCount));
         foreach (var key in cleared)
         {
             if (string.IsNullOrEmpty(key) || !key.StartsWith(prefix, System.StringComparison.Ordinal)) continue;

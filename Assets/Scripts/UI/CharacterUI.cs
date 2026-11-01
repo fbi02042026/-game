@@ -78,6 +78,49 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     GameObject _potionRow;
     Text _potionCountLabel;
 
+    // ── 流派专精角标（2026-11-01 主人要求：选了物理/魔法专精后，背包面板上方左上角常驻图标）──
+    GameObject _specIcon;
+
+    /// <summary>
+    /// 背包面板上方左上角的流派专精图标：选了 R_F1（流派·物理专精）→ 物理专精图，
+    /// 选了 R_F2（流派·魔法专精）→ 魔法专精图；都没选 / 洗点清掉 → 隐藏。
+    /// 图标走 TalentIcons 既有映射（Resources/UI/TalentIcons，与二选一弹窗选项卡同一张图），
+    /// 运行时挂在 BackpackPanel 顶边（左上角、面板外沿上方），不碰预制体。
+    /// </summary>
+    void EnsureSpecIcon()
+    {
+        if (_specIcon == null && bagPanelRoot != null)
+        {
+            var go = new GameObject("SpecIcon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(bagPanelRoot, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);   // 面板左上角
+            rt.pivot = new Vector2(0f, 0f);                      // 图标左下角贴锚点 → 整体落在面板上沿之外
+            rt.sizeDelta = new Vector2(64f, 64f);
+            rt.anchoredPosition = new Vector2(8f, 6f);
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            _specIcon = go;
+        }
+        if (_specIcon == null) return;
+
+        var data = SaveSystem.Instance?.Data;
+        bool phys = data != null && TalentDefs.GetRightNodeLevel(data.talents, "R_F1") > 0;
+        bool magic = !phys && data != null && TalentDefs.GetRightNodeLevel(data.talents, "R_F2") > 0;
+        bool show = phys || magic;
+
+        if (_specIcon.activeSelf != show) _specIcon.SetActive(show);
+        if (!show) return;
+        var icon = _specIcon.GetComponent<Image>();
+        var sp = TalentIcons.GetTalent(phys ? "物理专精" : "魔法专精");
+        if (sp != null)
+        {
+            icon.sprite = sp;
+            icon.color = Color.white;
+        }
+    }
+
     [Header("弹层")]
     public SkillSelectUI skillSelect;
 
@@ -248,6 +291,7 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         // 携带技能展示按主人 2026-09-19 要求移除（技能改随机，已装备技能入口失效），不再刷新
         RefreshAttrs();
         RefreshBag();
+        EnsureSpecIcon();   // 2026-11-01：选了物理/魔法专精后，背包面板上方左上角常驻对应图标
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
     }
 }

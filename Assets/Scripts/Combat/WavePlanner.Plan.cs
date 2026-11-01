@@ -145,8 +145,8 @@ public partial class WavePlanner
         else
         {
             total = elite
-                ? GameConfig.GetEliteStageMonsterTotal(stageIdx)
-                : GameConfig.GetNormalStageMonsterTotal(stageIdx);
+                ? GameConfig.GetEliteStageMonsterTotal(stageIdx, CurrentChapter)
+                : GameConfig.GetNormalStageMonsterTotal(stageIdx, CurrentChapter);
             int waveCountMin = GameConfig.STAGE_WAVE_MIN;
             int waveCountMax = GameConfig.STAGE_WAVE_MAX;
             if (StageSpawnTable.TryResolve(CurrentChapter, stageIdx, spawnType, out var spawnRule))
@@ -634,7 +634,7 @@ public partial class WavePlanner
         _bossPressureCo = null;
 
         float startX = GetStageStartX();
-        int minions = GameConfig.GetBossStageMinionTotal(stageIdx);
+        int minions = GameConfig.GetBossStageMinionTotal(stageIdx, CurrentChapter);
         int bossCount = GameConfig.GetBossStageMonsterTotal();
 
         // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss

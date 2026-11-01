@@ -38,6 +38,9 @@ public static class MonsterAffixBanter
     /// <summary>词缀怪刷出后调（CoSpawnWaveMonsters）：按首个词缀挑一句介绍。</summary>
     public static void OnAffixMonsterSpawned(Monster m)
     {
+        // 【2026-11-01 主人拍板「无限关卡不要出现剧情」】裂隙里不冒对话气泡
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.IsEndlessRift) return;
         if (m == null || m.isDead) return;
         var affix = MonsterAffix.Get(m);
         if (affix == null || affix.Count <= 0) return;
@@ -58,6 +61,9 @@ public static class MonsterAffixBanter
     /// <summary>荆棘反伤命中玩家侧后调（Monster.TakeDamage 荆棘分支）。</summary>
     public static void OnThornsReflected(UnitBase attacker)
     {
+        // 【2026-11-01 主人拍板「无限关卡不要出现剧情」】裂隙里不冒对话气泡
+        var bm = BattleManager.Instance;
+        if (bm != null && bm.IsEndlessRift) return;
         if (_saidThornsHurt) return;
         if (attacker == null || !attacker.isAlly) return; // 只在玩家/佣兵挨反伤时吐槽
         _saidThornsHurt = true;

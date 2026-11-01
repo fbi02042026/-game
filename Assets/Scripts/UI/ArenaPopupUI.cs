@@ -8,8 +8,10 @@ using UnityEngine.UI;
 /// 展示层走预制体 Assets/Resources/Prefabs/Town/ArenaPopupUI.prefab
 ///（菜单 Tools/竞技场/生成竞技场弹窗预制体 一次性生成；主人手改后【禁止重跑生成器】）。
 /// 运行时只按节点名绑定（UiFind.Deep）+ 克隆榜单行 + 填数据/接事件；
-/// 主人改排版/图标/按钮色都会保留。行底色例外：换位时玩家行高亮写 _rowMine，
-/// 非玩家行恢复隔行色（想改色改本文件常量）。
+/// 主人改排版/图标/按钮色都会保留。条的图/色/九宫格一律以预制体为准
+///（2026-11-01 主人拍板「直接用预制体里做好的九宫格选中条，不要改里面条的数值」）：
+/// 玩家行只把 sprite 引用换成 MyBar 上主人摆的选中条（同为 Sliced，随框拉伸不变形），
+/// 其余行用模板原条；Image 的颜色/类型/几何代码一概不碰，适配靠整窗缩放（Canvas 统一管）。
 /// 节点名契约见 ArenaPopupPrefabBuilder.cs，改名前先对齐两边。
 /// 字号 24/48（fusion-pixel 12px 点阵整倍数）；数据与规则全部在 ArenaRules（真源 SaveData.arena*）。
 /// </summary>
@@ -45,8 +47,8 @@ public class ArenaPopupUI : MonoBehaviour
     readonly Text[] _rowPts = new Text[RowTotal];
     readonly GameObject[] _rowFight = new GameObject[RowTotal];   // 「对战」按钮（可挑战行显示）
     readonly GameObject[] _rowDash = new GameObject[RowTotal];    // 「—」（不可挑战行显示）
-    readonly bool[] _rowIsMine = new bool[RowTotal];
-    readonly Outline[] _rowOutline = new Outline[RowTotal];   // 2026-10-30 主人拍板：滑动列表「我的那一条」加描边（运行时 Outline 组件，不用材质球）
+    Sprite _rowBarSprite;   // 行模板原条（主人预制体摆的九宫格条，克隆源 Image 上的）
+    Sprite _rowSelSprite;   // 选中条（主人预制体 MyBar 上摆的九宫格条；2026-11-01 拍板「直接用」，只换 sprite 不改别的）
 
     ScrollRect _scroll;
     RectTransform _content;
@@ -108,11 +110,7 @@ public class ArenaPopupUI : MonoBehaviour
     readonly List<GameObject> _shopUnits = new List<GameObject>();   // 克隆单元（显示顺序，与 _shopGoods 同下标）
     readonly List<ArenaShopGoods.Good> _shopGoods = new List<ArenaShopGoods.Good>();   // 显示顺序的商品（=AllGoods 顺序，2026-10-31 起纵向列表）
 
-    // 行底色（运行时在克隆与换位时写；预制体里摆的同款色只是初始观感）
-    readonly Color _rowColorA = new Color(0.21f, 0.20f, 0.28f, 0.95f);
-    readonly Color _rowColorB = new Color(0.25f, 0.24f, 0.33f, 0.95f);
-    readonly Color _rowMine = new Color(0.42f, 0.32f, 0.13f, 0.97f);
-    readonly Color _rowOutlineGold = new Color(1f, 0.80f, 0.35f, 1f);   // 玩家行描边色（金色）
+    // 行条图/色全以预制体为准（2026-11-01 主人拍板），代码不再持有行底色
     readonly Color _txtSub = new Color(0.75f, 0.75f, 0.80f, 1f);
     readonly Color _txtGold = new Color(1f, 0.80f, 0.35f, 1f);
 
@@ -189,6 +187,8 @@ public class ArenaPopupUI : MonoBehaviour
         FitBackdrop();   // 背景等比铺满：父级实际矩形此刻才算得出（2026-10-30 主人拍板）
         Refresh();
         ScrollToPlayer();
+        ResetRowTransient();    // 清换位动效残留（见方法注释，2026-11-01 主人报「滑动看到一条机器人的条显示有问题」）
+        GlobalToastUI.Hide();   // 战败「积分 -10」toast 会活着飘进榜单压住一行（2026-11-01 主人截图）：开榜即收，掉分由名次动效表达
         TryPlayShiftAnim();   // 战斗结算名次动效（2026-10-30 主人拍板：胜=放大上移砸落 / 败=隐藏下移出现）
         if (_noticeText != null)
         {
@@ -230,7 +230,15 @@ public class ArenaPopupUI : MonoBehaviour
         //（位置/父级/层级全以预制体为准，铁律 9）。自适应已实测闭环：Top 距屏顶恒定，金框顶距顶
         // 最矮情形（逻辑高 1280）=140 > 按钮底 133，任何分辨率都不遮挡。
         // 下面的运行时挪只剩「预制体还没有 Top」的兜底职责（正常永远走不到）。
-        if (UiFind.Deep(transform, "Top") != null) return;   // 全 prefab 唯一（2026-10-30 实测），不会误命中
+        var topT = UiFind.Deep(transform, "Top");
+        if (topT != null)
+        {
+            // 2026-11-01 主人拍板「跟主界面一样避开刘海」：主人手摆的 Top 排挂主界面同款
+            // SafeAreaFitter.EnsureTopOffset（Offset 模式只下移 anchoredPosition、不碰锚点/布局；
+            // 幂等可重复调，DDOL 常驻弹窗组件自己跟随安全区变化）。
+            SafeAreaFitter.EnsureTopOffset(topT as RectTransform);
+            return;   // 有 Top 就一个节点都不碰（位置/父级/层级全以预制体为准，铁律 9）
+        }
         var root = UiFind.Deep(transform, "Root");
         if (root == null)
         {
@@ -300,14 +308,23 @@ public class ArenaPopupUI : MonoBehaviour
         if (_noticeText != null) _noticeText.gameObject.SetActive(false);
 
         // 顶部：看广告 +2 按钮
+        // 【2026-11-01】广告过渡期（ADS_ENABLED=false）按钮折叠不显示（与结算双倍/佣兵活动同口径）；
+        // 微信激励视频接入后自动恢复显示
         var adBtn = UiFind.Deep(transform, "AdBonusBtn");
         if (adBtn != null)
         {
-            var lt = UiFind.Deep(adBtn, "Label");
-            if (lt != null) _adBtnText = lt.GetComponent<Text>();
-            var btn = adBtn.GetComponent<Button>();
-            if (btn == null) btn = adBtn.gameObject.AddComponent<Button>();
-            btn.onClick.AddListener(ArenaRules.RequestAdBonus);
+            if (!GameConfig.ADS_ENABLED)
+            {
+                adBtn.gameObject.SetActive(false);
+            }
+            else
+            {
+                var lt = UiFind.Deep(adBtn, "Label");
+                if (lt != null) _adBtnText = lt.GetComponent<Text>();
+                var btn = adBtn.GetComponent<Button>();
+                if (btn == null) btn = adBtn.gameObject.AddComponent<Button>();
+                btn.onClick.AddListener(ArenaRules.RequestAdBonus);
+            }
         }
         else { _bindFailed = true; Debug.LogError("[Arena] 预制体缺节点：AdBonusBtn"); }
 
@@ -401,6 +418,15 @@ public class ArenaPopupUI : MonoBehaviour
         _content.sizeDelta = new Vector2(tmplRt != null ? tmplRt.sizeDelta.x : 640f, _contentH);   // BotCount 变化时运行时同步
         if (_rowTemplate.activeSelf) _rowTemplate.SetActive(false);   // 模板恒隐藏（防手滑）
 
+        // 行条全以预制体为准（2026-11-01 主人拍板「直接用预制体里做好的九宫格选中条，不要改里面条的数值」）：
+        // 不写隔行色、不改 Image 任何参数，只记两支 sprite 供 Refresh 给玩家行切换（两支都是主人摆的 Sliced，随框拉伸不变形）
+        var tmplImg = _rowTemplate.GetComponent<Image>();
+        _rowBarSprite = tmplImg != null ? tmplImg.sprite : null;
+        var myBarImg = UiFind.Deep(transform, "MyBar")?.GetComponent<Image>();
+        _rowSelSprite = myBarImg != null ? myBarImg.sprite : null;
+        if (_rowBarSprite == null || _rowSelSprite == null)
+            Debug.LogError("[Arena] 预制体缺行条 sprite：RowTemplate 或 MyBar 的 Image 没图（玩家行选中条切不了，报主人）");
+
         for (int i = 0; i < RowTotal; i++)
         {
             var row = Object.Instantiate(_rowTemplate, _content);
@@ -412,8 +438,6 @@ public class ArenaPopupUI : MonoBehaviour
                 // 只写纵向排队 y（必要介入）；锚点/宽高/x 一律跟随预制体模板，不写死（铁律 20）
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -(i * _rowStep + 4f));
             }
-            var rowImg = row.GetComponent<Image>();
-            if (rowImg != null) rowImg.color = i % 2 == 0 ? _rowColorA : _rowColorB;
             _rowRoots[i] = row;
 
             var rankT = UiFind.Deep(row.transform, "RankText");
@@ -477,12 +501,8 @@ public class ArenaPopupUI : MonoBehaviour
             // 2026-10-31 主人拍板「点其他玩家那个条无反应就行」：行点击弹档案已收掉（原 rowBtn+ShowDetailForRow 整块删除）。
             // 点行不再有任何反应；进对战只走行上「对战」钮 → 选职业 → 进入挑战（OnChallengeClicked，单一出口）。
             // 同日晚「点前三名的卡也不用弹信息」→ 领奖台入口也收，机器人档案弹窗整条链已删（见字段区与档案弹窗区拍板记录）。
-            // 2026-10-30 主人拍板：玩家行描边（金色 Outline，随 Refresh 里玩家行开关启停）
-            var ol = row.AddComponent<Outline>();
-            ol.effectColor = _rowOutlineGold;
-            ol.effectDistance = new Vector2(3f, 3f);
-            ol.enabled = false;
-            _rowOutline[i] = ol;
+            // 2026-11-01 主人拍板「还原和别人一样的条 + 代码做一个选中框」→ 当日晚改口「直接用预制体里
+            // 做好的九宫格选中条」：代码金框整块废弃，玩家行只换 sprite 引用（见 Refresh），别的不碰。
         }
     }
 
@@ -537,7 +557,7 @@ public class ArenaPopupUI : MonoBehaviour
 
     /// <summary>
     /// 按示意图把对战美术铺到预制体节点上（Bind 时一次；只换图不改布局——布局在 prefab 里，主人可手调）。
-    /// 映射：Panel/MyBar=底框(9-slice)、TitleImg=标题横幅（烤字，TitleText 已隐藏）、TriesCapsule=对战次数胶囊、
+    /// 映射：Panel=底框(9-slice)、MyBar 不设图（预制体主人摆的选中条为准，2026-11-01）、TitleImg=标题横幅（烤字，TitleText 已隐藏）、TriesCapsule=对战次数胶囊、
     /// Podium1/2/3=第1/第2/第三卡（名次已烤图，RankNum 已隐藏，运行时 tint 改白）、
     /// FightBtn=对战按钮（烤字，Label 已清空）、PtsIcon 系列=积分.png（主人 2026-10-29 新放）。
     /// </summary>
@@ -545,8 +565,9 @@ public class ArenaPopupUI : MonoBehaviour
     {
         var panelImg = UiFind.Deep(transform, "Panel")?.GetComponent<Image>();
         if (panelImg != null) panelImg.sprite = LoadArt("_0000_底框", 40f);
-        var myBarImg = UiFind.Deep(transform, "MyBar")?.GetComponent<Image>();
-        if (myBarImg != null) myBarImg.sprite = LoadArt("_0000_底框", 24f);
+        // MyBar 不再由代码设图（2026-11-01 主人拍板）：主人已在预制体里摆好「选中条」，
+        // 旧版这里强设 _0000_底框 把选中条盖掉（面板大框图塞进 620×103 横条）→ 一运行就变形。
+        // 预制体有值→代码不写，图全信 prefab。
 
         var titleImg = UiFind.Deep(transform, "TitleImg")?.GetComponent<Image>();
         if (titleImg != null) titleImg.sprite = LoadArt("_0007_标题");
@@ -755,30 +776,13 @@ public class ArenaPopupUI : MonoBehaviour
             if (_rowRoots[i] != null) _rowRoots[i].SetActive(on);
             if (!on) continue;
 
-            // 行底色：只在「是不是玩家行」切换时写，主人改的隔行色平时不被覆盖
-            if (isPlayer != _rowIsMine[i])
+            // 玩家行 = 主人预制体里摆好的九宫格选中条：只换 sprite 引用（Image 的 Sliced/颜色/几何一概不动，
+            // 随框拉伸不变形）；其余行 = 模板原条。条的一切数值照预制体（2026-11-01 主人拍板「直接用，不要改里面条的数值」）。
+            if (_rowRoots[i] != null)
             {
-                _rowIsMine[i] = isPlayer;
-                if (_rowRoots[i] != null)
-                {
-                    var img = _rowRoots[i].GetComponent<Image>();
-                    if (img != null)
-                    {
-                        if (isPlayer)
-                        {
-                            // 玩家自己的那一行：用「选中态」底图（对战美术包 _0009_条1选中），金边高亮
-                            var mineSp = LoadArt("_0009_条1选中");
-                            if (mineSp != null) img.sprite = mineSp;
-                            img.color = Color.white;
-                        }
-                        else
-                        {
-                            img.sprite = null;   // 恢复非玩家行的默认底（不再显示选中条）
-                            img.color = (i % 2 == 0 ? _rowColorA : _rowColorB);
-                        }
-                    }
-                    if (_rowOutline[i] != null) _rowOutline[i].enabled = isPlayer;   // 描边只挂在玩家那一条（2026-10-30 主人拍板）
-                }
+                var img = _rowRoots[i].GetComponent<Image>();
+                if (img != null && _rowBarSprite != null && _rowSelSprite != null)
+                    img.sprite = isPlayer ? _rowSelSprite : _rowBarSprite;
             }
 
             if (_rowRank[i] != null) _rowRank[i].text = (i + 1).ToString();
@@ -833,6 +837,27 @@ public class ArenaPopupUI : MonoBehaviour
 
     /// <summary>胜利条放大倍数（主人拍板 1.5 倍）。</summary>
     const float ShiftScaleBig = 1.5f;
+
+    /// <summary>
+    /// 清换位动效残留（幂等，每次 Open 调）：行是 DDOL 常驻对象，换位动效（CoWinShift/CoFailShift）
+    /// 若被中途关弹窗打断（SetActive(false) 停协程），半透明 CanvasGroup / 缩放 / 错位 y / 滚动锁
+    /// 会原样带到下一次打开——主人 2026-11-01 报「滑动看到一条机器人的条显示有问题」即此。
+    /// 在 TryPlayShiftAnim 前复位：alpha=1、scale=1、归位 y、解锁滚动；动效自己再从旧位起步不受影响。
+    /// </summary>
+    void ResetRowTransient()
+    {
+        for (int i = 0; i < RowTotal; i++)
+        {
+            var row = _rowRoots[i];
+            if (row == null) continue;
+            var cg = row.GetComponent<CanvasGroup>();
+            if (cg != null) cg.alpha = 1f;
+            row.transform.localScale = Vector3.one;
+            var rt = row.GetComponent<RectTransform>();
+            if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -(i * _rowStep + 4f));   // 同 BuildRows/动效 home 公式
+        }
+        if (_scroll != null) _scroll.enabled = true;
+    }
 
     /// <summary>Open 时消费结算标记并启动名次动效（没打过分/名次没动直接跳过——动效是锦上添花，不报错）。</summary>
     void TryPlayShiftAnim()
@@ -1032,7 +1057,13 @@ public class ArenaPopupUI : MonoBehaviour
         float rowStep = rowH + ShopRowGap;
         float firstOffset = ShopShelfTopY - unitT.anchoredPosition.y;   // 模板摆在哪，首行就在哪（距视口顶）
 
-        var goods = new List<ArenaShopGoods.Good>(ArenaShopGoods.AllGoods);
+        // 货架显示顺序按稀有度排列（2026-11-01 主人拍板「让商品按稀有度排列」）：
+        // 传奇 → 稀有 → 普通；同档保持 AllGoods 定义顺序（分桶追加，稳定不乱序）。
+        // 只动货架显示顺序，AllGoods 定义与购买链一概不动。
+        var goods = new List<ArenaShopGoods.Good>(ArenaShopGoods.AllGoods.Length);
+        for (int r = (int)MercRosterDefs.MercRarity.Legendary; r >= (int)MercRosterDefs.MercRarity.Common; r--)
+            foreach (var g in ArenaShopGoods.AllGoods)
+                if ((int)g.frameRarity == r) goods.Add(g);
         contentRt.anchorMin = contentRt.anchorMax = contentRt.pivot = new Vector2(0.5f, 1f);
         contentRt.anchoredPosition = Vector2.zero;
         contentRt.sizeDelta = new Vector2(listRt.sizeDelta.x, firstOffset + (goods.Count - 1) * rowStep + rowH * 0.5f + 20f);

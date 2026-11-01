@@ -768,49 +768,31 @@ public partial class BattleManager
         BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, FindNextUnspawnedWaveIndex()), _waves != null ? _waves.Count : 0);
 
         GamePerf.Log("[BattleManager] 下一波来袭 Banner");
-        // 【2026-10-21 主人拍板】每清完一波停下弹一次抽奖窗，点「继续」或倒计时走完
-        // 再播「下一波来袭」进下一波。【2026-10-26 主人反馈】窗内改连抽（multiDraw:true），
-        // 不再一抽即收。整段（波间抽奖 + 预告 + 出兵）都在 _waveAnnounceCo 里，
+        // 【2026-11-01 主人拍板】抽奖只在每层开始（CoStageEntryDraft），波清一律不弹抽奖窗：
+        // 无限裂隙与正式关/金币本同款 —— 倒计时（不冻结）→「下一波来袭」预告出兵。
+        // 旧「裂隙每波清完弹连抽窗」（2026-10-21/26 口径）作废。整段在 _waveAnnounceCo 里，
         // :671 `if (_waveAnnounceCo != null) return;` 的防重入语义不变。
         _waveAnnounceCo = StartCoroutine(CoWaveIntermissionDraftThenNextWave());
     }
 
     /// <summary>
-    /// 【2026-10-21 主人拍板】波间单拍抽奖窗 → 原预告+出兵链。
-    /// 复用 CoMidBattleDraft：自带 UnitsCanAct 冻结/finally 还原、面板 3 秒没弹出的防卡死跳过、
-    /// 正式关 30s 倒计时自动继续。【2026-10-26 主人反馈「第二波抽奖只能抽一次」】改传 multiDraw:true
-    /// 连抽 —— 抽完回面板可再抽（价格每轮重算），点「继续」/倒计时走完才收面板开打，
-    /// 与进关抽奖（CoStageEntryDraft）同款体验；引导局不进本方法，一拍一抽口径不受影响。
-    /// 其等待循环不查 _runClosed（进关抽奖既有口径，不动），
-    /// 下面的 guard 就是波间这条链的防线：撤离/死亡/通关后旧协程当场退场，不串台。
-    /// 末波/Boss 波清完走 StartStageClearRewardSequence 通关链，不进本方法 → 末波后无波间抽；
-    /// 进关抽奖（CoStageEntryDraft）承担下一关第一抽。
+    /// 波清 → 倒计时 → 预告+出兵链。
+    /// 🔴【2026-11-01 主人拍板】波清**不弹抽奖窗**，无限裂隙与正式关/金币本统一口径：
+    /// 5 秒倒计时（不冻结，玩家可趁机实时抽——裂隙实时抽仍被 TryLiveDraw 守卫拦着，
+    /// 裂隙的抽奖只发生在每层开始的 CoStageEntryDraft）→「下一波来袭」预告出兵。
+    /// 旧「裂隙每波清完弹连抽窗」（2026-10-21/26 口径）随本拍板整体作废。
+    /// 末波/Boss 波清完走 StartStageClearRewardSequence 通关链，不进本方法 → 末波后无波间流程。
     /// </summary>
     IEnumerator CoWaveIntermissionDraftThenNextWave()
     {
-        // 🔴【2026-10-29 主人拍板·实时抽改版】波清后**不再弹抽奖窗**（抽奖改常显按钮实时抽）：
-        // 正式关/金币本 → 5 秒倒计时（不冻结，玩家可趁机点常显按钮实时抽）→「下一波来袭」预告出兵。
-        // 旧「回合末（isRoundEnd）才弹」判定与金币本「每波弹」口径随实时抽改版**整体作废**；
-        // 无限裂隙保持原设定：每波清完弹连抽窗（2026-10-21/26 口径原样保留）。
-        if (!IsEndlessRift)
-        {
-            yield return CoWaveCountdown(5f);
-            // 防撤离/死亡/通关后旧协程串台：当场退场（协程被外部 StopWaveAnnounce 停时同样安全）
-            if (_runClosed || !isInBattle || _stageCleared) yield break;
-            yield return CoAnnounceThenSpawnNextWave();
-            yield break;
-        }
+        // 【2026-10-22 主人拍板】石像未点 → 一并收起，不结转（原裂隙波清口径保留；
+        // 正式关石像挂在旧波间抽奖窗上，实时抽改版后本就不弹，此处对裂隙兜一把）
+        if (IsEndlessRift)
+            BattleStatueEventUI.ForceCollapse();
 
-        // —— 无限裂隙：原设定不动（每波弹连抽窗）——
-        yield return CoMidBattleDraft(multiDraw: true);
-
-        // 【2026-10-22 主人拍板】抽奖窗关闭（点继续/超时）未点石像 → 石像一并收起，不结转
-        BattleStatueEventUI.ForceCollapse();
-
+        yield return CoWaveCountdown(5f);
         // 防撤离/死亡/通关后旧协程串台：当场退场（协程被外部 StopWaveAnnounce 停时同样安全）
-        if (_runClosed || !isInBattle || _stageCleared)
-            yield break;
-
+        if (_runClosed || !isInBattle || _stageCleared) yield break;
         yield return CoAnnounceThenSpawnNextWave();
     }
 

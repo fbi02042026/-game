@@ -4,7 +4,8 @@ using System;
 using System.Linq;
 
 /// <summary>
-/// 章节关卡管理器：每章一个大关，每大关 <see cref="GameConfig.STAGES_PER_GRAND"/> 小关（2026-10-23 批 B1 起）。
+/// 章节关卡管理器：每章 10 个关卡，每关节数按章取（第 1 章 5、第 2 章 8、第 3 章起 10，
+/// 见 <see cref="GameConfig.StagesPerGrandOf"/>，2026-11-01 批 B3 主人拍板 方案A）。
 ///
 /// 现行规则（对齐 StageRoller，勿按旧注释排商人/诅咒）：
 /// - 第 1 小关是起点，第 5 小关占位 Boss
@@ -27,7 +28,7 @@ public class ChapterManager : Singleton<ChapterManager>
     public int currentGrand = 1;
 
     /// <summary>当前大关内小关下标 → 篇内小关下标（0 起）。存档 / 宝箱列 / 首通判定唯一主键。</summary>
-    public int CurrentSubIndex0 => ActProgressionDefs.Sub0Of(currentGrand, currentStageIndex);
+    public int CurrentSubIndex0 => ActProgressionDefs.Sub0Of(currentChapter, currentGrand, currentStageIndex);
 
     /// <summary>
     /// 当前章的所有关卡节点
@@ -73,7 +74,9 @@ public class ChapterManager : Singleton<ChapterManager>
         ChapterBranchTable.Reload();
         StageRollerWeightsTable.Reload();
 
-        for (int i = 0; i < GameConfig.STAGES_PER_GRAND; i++)
+        // 【2026-11-01 批 B3】每局节数按章取（5/8/10），不再写死 5。
+        int subsPerGrand = GameConfig.StagesPerGrandOf(chapterNum);
+        for (int i = 0; i < subsPerGrand; i++)
         {
             stageMap.Add(new StageData { stageIndex = i, nextStages = new List<int>() });
         }
@@ -319,7 +322,7 @@ public class ChapterManager : Singleton<ChapterManager>
             stageMap[i].type = StageType.Normal;
 
         stageMap[0].type = StageType.Normal;
-        stageMap[GameConfig.STAGES_PER_GRAND - 1].type = StageType.Boss;
+        stageMap[stageMap.Count - 1].type = StageType.Boss;   // 【批 B3】末节 = Boss（节数按章 5/8/10）
 
         string log = "[ChapterManager] 关卡占位: ";
         for (int i = 0; i < stageMap.Count; i++)
@@ -341,7 +344,7 @@ public class ChapterManager : Singleton<ChapterManager>
             stageMap[i].nextStages.Clear();
 
         // 每关的下一关固定为 i+1（线性顺序）
-        for (int i = 0; i < GameConfig.STAGES_PER_GRAND - 1; i++)
+        for (int i = 0; i < stageMap.Count - 1; i++)
             stageMap[i].nextStages.Add(i + 1);
 
         LogBranchInfo();
@@ -380,7 +383,7 @@ public class ChapterManager : Singleton<ChapterManager>
         {
             int nodeIdx = branchPool[i];
             int skipTarget = nodeIdx + skipDistance;
-            if (skipTarget <= GameConfig.STAGES_PER_GRAND - 2
+            if (skipTarget <= stageMap.Count - 2
                 && nodeIdx >= 0 && nodeIdx < stageMap.Count
                 && !stageMap[nodeIdx].nextStages.Contains(skipTarget))
                 stageMap[nodeIdx].nextStages.Add(skipTarget);
@@ -505,9 +508,9 @@ public class ChapterManager : Singleton<ChapterManager>
 
         // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
         bool bossCleared = cleared != null && cleared.type == StageType.Boss;
-        // 【2026-10-31 B2 落地】一篇 = GrandCountOf(篇) 座大关（10/10/14/16/18/18/20/20）。
-        // 打完一座大关只算「大关通关」，整篇的大关全部打完才走章节解锁/剧情/成就。
-        if (bossCleared || currentStageIndex >= GameConfig.STAGES_PER_GRAND - 1)
+        // 【2026-11-01 批 B3】一篇 = 每章 10 关卡（关内节数 5/8/10）。打完一关只算「关卡通关」，
+        // 整章的关卡全部打完才走章节解锁/剧情/成就。
+        if (bossCleared || currentStageIndex >= stageMap.Count - 1)
         {
             var gData = SaveSystem.Instance?.Data;
 
@@ -627,7 +630,7 @@ public class ChapterManager : Singleton<ChapterManager>
         // 原权重抽签保留退役不删（恢复关闸已在）；引导局/金币本/裂隙不走本方法（金币本 StartGoldDungeon、
         // 裂隙 StartEndlessRift 各自建关，类型来源未波及）。
         // next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_GRAND);
-        next.type = StageRoller.RollByPosition(next.stageIndex);
+        next.type = StageRoller.RollByPosition(next.stageIndex, currentChapter);
         Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（v4 按位置，2026-10-23 批 B1 改 5 关制）"
                   + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
@@ -705,15 +708,18 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     public bool IsChapterCleared()
     {
-        return currentStageIndex >= GameConfig.STAGES_PER_GRAND - 1;
+        return currentStageIndex >= stageMap.Count - 1;   // 【批 B3】末节通关 = 整关通关
     }
 
     /// <summary>
     /// 获取关卡显示名称 "1-3"
+    /// 【2026-11-01 主人拍板】编号 = 全局大关号-小关号（大关跨篇连续：1-1…10-5 → 11-1…18-5 → …），
+    /// 不再是「章号-小关号」（旧写法第 2 章第 1 关会显示 2-1，与新编号口径冲突）。
     /// </summary>
     public string GetStageDisplayName(int stageIndex)
     {
-        return $"{currentChapter}-{stageIndex + 1}";
+        int globalGrand = ActProgressionDefs.StartGrandOf(currentChapter) + Mathf.Max(1, currentGrand) - 1;
+        return $"{globalGrand}-{stageIndex + 1}";
     }
 
     /// <summary>

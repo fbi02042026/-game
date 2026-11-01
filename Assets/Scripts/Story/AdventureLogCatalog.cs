@@ -719,8 +719,11 @@ public static class AdventureLogCatalog
         if (e.StoryNpc)
         {
             if (e.Id == "C001") return StoryProgress.TutorialIntroDone || StoryProgress.GetBond(StoryProgress.NpcXiaomei) > 0;
-            if (e.Id == "C002") return StoryProgress.GetBond(StoryProgress.NpcAltor) > 0 || ChapterCleared(1);
-            if (e.Id == "C003") return StoryProgress.GetBond(StoryProgress.NpcGrey) > 0 || ChapterCleared(1);
+            // 【2026-11-01 主人拍板「只有出现过才会点亮」】删掉 || ChapterCleared(1) 兜底：
+            // 之前第一章通关就直接点亮，哪怕全程没遇到。现在只认好感度（剧情真互动过），
+            // 未出场前图鉴保持剪影。
+            if (e.Id == "C002") return StoryProgress.GetBond(StoryProgress.NpcAltor) > 0;
+            if (e.Id == "C003") return StoryProgress.GetBond(StoryProgress.NpcGrey) > 0;
             return StoryProgress.TutorialIntroDone;
         }
         if (e.Id == "H001") return StoryProgress.TutorialBattleCleared || StoryProgress.TutorialDone || HasMerc("dunbing101") || HasMerc("dunbing102");

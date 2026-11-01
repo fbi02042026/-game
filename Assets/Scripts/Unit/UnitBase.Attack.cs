@@ -204,7 +204,9 @@ public partial class UnitBase
 
         AttackVfxKit kit = GetAttackVfxKit();
         bool allyMelee = isAlly && kit == AttackVfxKit.MeleeSlash;
-        bool allyRanged = isAlly && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
+        // 【2026-11-01 主人拍板「竞技场对方弓手和我方用同一种子弹」】projectileVfxAsAlly（竞技场敌方佣兵）
+        // 远程普攻整条走我方路径（弹速/缩放/无闪避判定与我方完全一致），弹 prefab 由 faction=Ally 取我方套。
+        bool allyRanged = (isAlly || projectileVfxAsAlly) && (kit == AttackVfxKit.Bow || kit == AttackVfxKit.Orb);
         float atkCd = GetAttackCooldown();
         if (unitAnim != null)
             unitAnim.PlayAttack(kit, allyMelee && isCrit, atkCd);
@@ -230,7 +232,8 @@ public partial class UnitBase
             : 0f;
 
         // 普攻：近战即时/下落时结算；弓/法球（敌我）FirePoint→HitPoint 飞到再结算
-        if (!isAlly && SkillNaming.IsRangedKit(kit) && BattleVFXSystem.Instance != null)
+        // projectileVfxAsAlly（竞技场敌方佣兵）不进怪物远程分支 —— 已由上面 allyRanged 接走我方路径
+        if (!isAlly && !projectileVfxAsAlly && SkillNaming.IsRangedKit(kit) && BattleVFXSystem.Instance != null)
         {
             StartCoroutine(CoRangedBasicProjectile(
                 target, damage, isCrit, openingHit, kit, faction, facingDir,
@@ -248,8 +251,9 @@ public partial class UnitBase
 
         if (allyRanged)
         {
+            // 弹道阵营走唯一出口：我方恒 Ally；竞技场敌方佣兵也取我方弹（2026-11-01 主人拍板）
             FireAllyRangedBasicProjectile(
-                target, damage, isCrit, openingHit, kit, faction, facingDir,
+                target, damage, isCrit, openingHit, kit, ResolveProjectileFaction(), facingDir,
                 releaseDelay);
             return;
         }

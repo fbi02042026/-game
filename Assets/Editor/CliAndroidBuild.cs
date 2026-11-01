@@ -40,7 +40,10 @@ public static class CliAndroidBuild
 
         PlayerSettings.SetScriptingBackend(BuildTargetGroup.Android, ScriptingImplementation.IL2CPP);
         PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
-        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel22;
+        // 【2026-11-01 修调试包打包失败】穿山甲 ads-sdk-pro 7.8.1.5 硬要求 minSdk 24，
+        // 这里原来写死 22 会压掉 ProjectSettings 的 24 → Manifest merger failed。
+        // 与接入文档 T2 拍板一致（新包不再支持 Android 5.x/6.x 设备）。
+        PlayerSettings.Android.minSdkVersion = AndroidSdkVersions.AndroidApiLevel24;
         PlayerSettings.Android.targetSdkVersion = SpotlightTargetSdk;
         PlayerSettings.Android.forceInternetPermission = false;
 

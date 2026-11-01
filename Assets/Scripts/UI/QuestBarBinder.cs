@@ -594,7 +594,9 @@ public class QuestBarBinder : MonoBehaviour
     void OnClickMain()
     {
         var m = QuestBarData.Build().main;
-        if (m == null) { QuestPanelUI.Show(true); return; }
+        // 【2026-11-01 主人拍板「任务完成时不要弹这个界面」】主线已完成/本章走完（m == null）
+        // 点任务栏不再回退弹全屏任务面板，忽略即可；有进行中任务时跳转失败仍回退面板（原口径不动）。
+        if (m == null) return;
         if (!QuestJumpRouter.GoMain(m.def))
             QuestPanelUI.Show(true);
     }
@@ -609,7 +611,9 @@ public class QuestBarBinder : MonoBehaviour
     void OnClickDaily()
     {
         var d = QuestBarData.Build().daily;
-        if (d == null) { QuestPanelUI.Show(false); return; }
+        // 【2026-11-01 主人拍板「任务完成时不要弹这个界面」】日常已完成（d == null，行文案「今日已完成」）
+        // 点任务栏不再回退弹全屏任务面板，忽略即可；有进行中任务时跳转失败仍回退面板（原口径不动）。
+        if (d == null) return;
         if (!QuestJumpRouter.GoDaily(d.Value))
             QuestPanelUI.Show(false);
     }

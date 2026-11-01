@@ -126,6 +126,8 @@ public static class GameAnalytics
 
     static void RegisterCommonPropertySafe(string key, string value)
     {
+        // 【2026-11-01】原先没套宏——SDK 包在时编辑器也能编译所以没炸；包移除后必须关进宏内
+#if TAPSDK_ENABLED
         try
         {
             TapSDK.Core.TapTapEvent.AddCommonProperty(key, value);
@@ -134,6 +136,7 @@ public static class GameAnalytics
         {
             Debug.LogError($"[Analytics] AddCommonProperty({key}) 失败：{e.Message}");
         }
+#endif
     }
 
     // ==================== 事件上报 ====================

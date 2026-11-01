@@ -30,7 +30,7 @@ public partial class AdventureUI
         RefreshChestNodes();   // 章内 10 小关宝箱节点（2026-10-22 新增，见 AdventureUI.ChestNodes.cs）
         RefreshBranchIslands();   // 主线窗口旁的支线岛屿宝箱（2026-10-23 主人拍板，见 AdventureUI.BranchIslands.cs）
         RefreshFinaleRow();       // 活动副本区「追查真相」横条（2026-10-23 终章追查线，见 AdventureUI.Finale.cs）
-        // 活动副本横条状态（2026-10-24 主人拍板：门槛没到隐藏/没轮到灰显/选中节点点亮）；
+        // 活动副本横条状态（2026-11-01 主人拍板：全部显示/未开放灰显/开放的排上面未开放的排下面/选中节点点亮）；
         // 切战斗标签来回也会刷到 → 选中状态不丢。非活动模式时列表节点隐藏，刷了也无副作用。
         if (IsActivityMode(_selectedMode))
         {
@@ -173,6 +173,8 @@ public partial class AdventureUI
         // B2 后若还挂「通第 1 章」= 50 小关，首日连地图都打不开。
         bool show = IsMainMode(_selectedMode)
                     && FeatureUnlock.WorldMapOpen(SaveSystem.Instance?.Data);
+        // 【2026-11-01 主人拍板】世界地图点击无反应 + 入口字挡图，先整体隐藏（要恢复删掉下一行即可）
+        show = false;
         var pre = transform.Find("RightContent/" + MainNodeName + "/WorldMapBtn");
         if (pre == null) pre = transform.Find("RightContent/WorldMapBtn");   // 旧布局残留路径
         if (pre != null) pre.gameObject.SetActive(show);

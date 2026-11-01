@@ -1002,16 +1002,25 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 unlocked++;
                 if (!hasCurrent) { current = e; hasCurrent = true; }
             }
+            // 2026-11-01 主人报「点条后信息不对（组织/组织）」：行目标槽原先也放 Category，
+            // 与右侧状态字同词重复。改为显示解锁/来源条件（如「首次进入恢复关」），
+            // 右侧状态字保持分类（世界观/组织/地点/物品）。
             AddRow(rows, on ? e.Name : "？？？",
                 on ? e.Category : e.Unlock,
                 on ? e.Desc + "\n" + e.Flavor : "解锁条件：" + e.Unlock,
                 !on,
-                on ? e.Category : "尚未解锁");
+                on ? e.Unlock : "尚未解锁");
         }
         title = hasCurrent ? current.Name : "世界图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Flavor : "世界观、地点、组织、物品与传说。";
-        objective = hasCurrent ? current.Category : "到达对应节点后解锁";
-        progress = unlocked + "/" + list.Length + "\n" + AdventureLogFragments.FormatInventory();
+        // 2026-11-01 主人报「信息还是不对」：
+        // ① 「当前目标」原先放当前条目的分类（组织/世界观），与目标槽语义不符 ——
+        //    改为第一个未解锁条目的达成条件（与主线/支线页同口径），集齐后「世界记录已集齐」。
+        // ② 进度槽原先拼碎片清单换行文本（森林残页0…），窄框装不下挤成一团 —— 只留 x/y；
+        //    碎片/里程在世界页签的 Phase3 面板里已有展示。
+        objective = NextGoal(list, AdventureLogCatalog.WorldUnlocked, e => e.Unlock)
+                    ?? "世界记录已集齐";
+        progress = unlocked + "/" + list.Length;
     }
 
     static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked,
@@ -1031,14 +1040,16 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     // 2026-10-31 主人报「这些字有点小」：只调字号不动框（字号属允许项）。
-    // 章节描述 16→20、当前目标正文 20→22、当前目标小标 14→16、行任务名 20→22。
-    // 行右侧状态字保持 18 不动：要装「首次击败森之守护者」这类长条件，再大会加重折行。
+    // 2026-11-01 主人再报「字还是有点小」：整体再上一档 —— 图上标题 22→26、
+    // 图上描述 20→24、当前目标正文 22→24、当前目标小标 16→18、行任务名 22→24、
+    // 行状态字 18→20（20 为「首次击败森之守护者」这类长条件折行的上限，不再加）。
     void ApplyReadableFontSizes()
     {
         var paperT = transform.Find("Root/Frame/Paper");
         if (paperT == null) return;
-        SetFontSize(paperT.Find("ActiveCard/ActiveDesc"), 20);
-        SetFontSize(paperT.Find("ActiveCard/Art/Objective"), 22);
+        SetFontSize(paperT.Find("ActiveCard/ActiveTitle"), 26);
+        SetFontSize(paperT.Find("ActiveCard/ActiveDesc"), 24);
+        SetFontSize(paperT.Find("ActiveCard/Art/Objective"), 24);
 
         // 「当前目标」小节标：节点名是 Text (Legacy) 且预制体文案写死，按文案找更稳。
         var card = paperT.Find("ActiveCard");
@@ -1047,7 +1058,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             var texts = card.GetComponentsInChildren<Text>(true);
             for (int i = 0; i < texts.Length; i++)
                 if (texts[i] != null && texts[i].text == "当前目标")
-                    texts[i].fontSize = 16;
+                    texts[i].fontSize = 18;
         }
 
         // 行模板（已完成）：任务名。从列表 Content 下找，避免撞上
@@ -1055,7 +1066,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var done = _listContent != null ? _listContent.Find("已完成") : null;
         if (done != null)
         {
-            SetFontSize(done.Find("Objective"), 22);
+            SetFontSize(done.Find("Objective"), 24);
+            var prog = done.Find("Progress")?.GetComponent<Text>();
+            if (prog != null && !prog.resizeTextForBestFit) prog.fontSize = 20;
         }
     }
 

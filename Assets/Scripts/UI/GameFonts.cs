@@ -99,12 +99,21 @@ public static class GameFonts
         {
             Text t = texts[i];
             if (t == null) continue;
+            // 【2026-11-01 主人拍板「尊重预制体字体」】预制体已指定项目中文字体（fusion-pixel）的
+            // 不再按「数字规则」换成 PixelFont——同字号 PixelFont 数字明显偏小，冒险页详情面板
+            // 「消耗体力 X10 / 剩余次数」就是被这条换小的。只修仍挂着默认/旧字体的节点。
+            if (t.font == cn) { KeepMinLineSpacing(t); continue; }
             // 含中文的控件一律 fusion-pixel（即使名字像数值控件）
             bool useNum = IsNumberText(t) && !HasCjk(t.text);
             t.font = useNum ? num : cn;
-            // 多行行距统一抬到下限（见 MinLineSpacing 注释）
-            if (t.lineSpacing < MinLineSpacing) t.lineSpacing = MinLineSpacing;
+            KeepMinLineSpacing(t);
         }
+    }
+
+    /// <summary>多行行距统一抬到下限（见 <see cref="MinLineSpacing"/> 注释，只增不减）。</summary>
+    static void KeepMinLineSpacing(Text t)
+    {
+        if (t.lineSpacing < MinLineSpacing) t.lineSpacing = MinLineSpacing;
     }
 
     static bool IsNumberText(Text t)

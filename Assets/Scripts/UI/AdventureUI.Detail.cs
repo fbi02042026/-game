@@ -40,8 +40,8 @@ public partial class AdventureUI
                 int cur = Mathf.Clamp(FirstUnclearedStage(_selectedChapter, chapterTotal, SaveSystem.Instance?.Data), 1, chapterTotal);
                 string stageName = StageNameDefs.Get(_selectedChapter, cur);
                 stageNameLabel.text = string.IsNullOrEmpty(stageName)
-                    ? $"{_selectedChapter}-{cur}"
-                    : $"{_selectedChapter}-{cur}  {stageName}";
+                    ? ActProgressionDefs.GlobalStageLabel(_selectedChapter, cur - 1)
+                    : $"{ActProgressionDefs.GlobalStageLabel(_selectedChapter, cur - 1)}  {stageName}";
             }
             else stageNameLabel.text = ModeLabel(_selectedMode);
         }

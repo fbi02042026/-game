@@ -250,7 +250,9 @@ public partial class TalentUI
         if (resetButtonGray != null)
         {
             resetButtonGray.gameObject.SetActive(!canReset);
-            resetButtonGray.interactable = false;
+            // 【2026-11-01 主人要求】灰态也要可点：点了走 OnClickReset 弹原因
+            //（右列暂无可洗天赋 / 遗忘药水不足的人设 toast），不再禁用按钮让玩家以为没反应。
+            resetButtonGray.interactable = true;
             // 预制体 ResetButton灰 的 sprite 引用悬空（guid 全库无 meta，AGENTS.md §2.3）：
             // 按路径加载补真图（与主界面名牌 Icon 同一口径，不是复制资源兜底）；缺图报错不静默。
             if (!canReset)

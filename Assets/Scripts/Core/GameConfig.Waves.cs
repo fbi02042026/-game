@@ -376,10 +376,10 @@ public static partial class GameConfig
     /// 2026-09-29 重做，旧版的「第 1 关特意加量拉长战斗」会让波次在第 2 关倒退，已去掉。
     /// 波次数由 <see cref="GetSuggestedWaveCount"/> 按「总数 / 单波上限」推，所以跟着单调不减。
     /// </summary>
-    public static int GetStageMonsterTotal(int stageIndex0Based)
+    public static int GetStageMonsterTotal(int stageIndex0Based, int chapter)
     {
-        // 【2026-10-23 批 E1】输入域从 0..9 收到 0..4（大关 5 小关）
-        int stageNo = Mathf.Clamp(stageIndex0Based + 1, 1, STAGES_PER_GRAND);
+        // 【2026-11-01 批 B3】输入域按章取（节数 5/8/10），曲线每关 +2 自然延长
+        int stageNo = Mathf.Clamp(stageIndex0Based + 1, 1, StagesPerGrandOf(chapter));
         float baseTotal = MONSTER_TOTAL_BASE + (stageNo - 1) * MONSTER_TOTAL_STEP;
 
         int lo = Mathf.RoundToInt(baseTotal * (1f - MONSTER_TOTAL_JITTER));
@@ -389,12 +389,12 @@ public static partial class GameConfig
     }
 
     /// <summary>普通关总怪数</summary>
-    public static int GetNormalStageMonsterTotal(int stageIndex0Based)
-        => GetStageMonsterTotal(stageIndex0Based);
+    public static int GetNormalStageMonsterTotal(int stageIndex0Based, int chapter)
+        => GetStageMonsterTotal(stageIndex0Based, chapter);
 
     /// <summary>精英关总怪数（同随机曲线）</summary>
-    public static int GetEliteStageMonsterTotal(int stageIndex0Based)
-        => GetStageMonsterTotal(stageIndex0Based);
+    public static int GetEliteStageMonsterTotal(int stageIndex0Based, int chapter)
+        => GetStageMonsterTotal(stageIndex0Based, chapter);
 
     // ============================================================
     // 无限裂隙（2026-10-17 主人拍板）——难度与奖励数值唯一真源
@@ -440,8 +440,9 @@ public static partial class GameConfig
     /// <summary>该层是否 BOSS 记录点层</summary>
     public static bool IsEndlessBossStage(int riftStage) => Mathf.Max(1, riftStage) % ENDLESS_CHECKPOINT_INTERVAL == 0;
 
-    // —— 层类型排布（2026-10-19 主人拍板）——
-    // 每 5 层小 BOSS、每 10 层大 BOSS；精英层每 10 层随机 2~4 个，越深越偏多。
+    // —— 层类型排布（2026-10-19 主人拍板；2026-11-01 主人拍板收紧节首层）——
+    // 每 5 层小 BOSS、每 10 层大 BOSS；精英层每 10 层块随机 2~4 个，
+    // 且节首层（每节第 1 层）恒普通 —— 开局/记录点之后先热身，隔几关才来一次精英或 Boss。
     // 排布只由层号决定（种子哈希），同一层号永远同一结果，重进/换机不翻脸。
 
     /// <summary>该层是否大 BOSS 层（10 的倍数；小 BOSS 是 5 的倍数但非 10 的倍数）</summary>
@@ -466,8 +467,11 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 该层是否精英层：块内（每 10 层一块）从 8 个非 BOSS 槽位里随机抽 2~4 个，
+    /// 该层是否精英层：块内（每 10 层一块）从 6 个候选槽位里随机抽 2~4 个，
     /// 同一块内洗牌结果固定（种子只跟块号走），同一层号永远同一结果。
+    /// 【2026-11-01 主人拍板「不要一上来就是精英/Boss，隔几关来一次」】节首层恒普通：
+    /// 槽 0（第 1/11/21…层，开局层）与槽 5（第 6/16/26…层，记录点 Boss 后第一层）
+    /// 不进精英候选 —— 开局和每个记录点之后必是普通关热身，精英夹在节中间。
     /// </summary>
     public static bool IsEndlessEliteStage(int riftStage)
     {
@@ -475,8 +479,8 @@ public static partial class GameConfig
         if (IsEndlessBossStage(stage)) return false; // 5/10 的倍数是 BOSS，不当精英
         int block = (stage - 1) / 10;
         int slot = (stage - 1) % 10;
-        // 块内非 BOSS 槽位（4、9 是小/大 BOSS，排除）
-        var candidates = new System.Collections.Generic.List<int> { 0, 1, 2, 3, 5, 6, 7, 8 };
+        // 候选槽位：排除槽 4/9（小/大 BOSS）与槽 0/5（节首层恒普通，2026-11-01 主人拍板）
+        var candidates = new System.Collections.Generic.List<int> { 1, 2, 3, 6, 7, 8 };
         var rng = new System.Random((int)(block * 83492791L + 297121507L));
         for (int i = candidates.Count - 1; i > 0; i--) // Fisher-Yates 洗牌
         {
@@ -528,8 +532,8 @@ public static partial class GameConfig
     /// ⚠ 这只是「兜底」：WavePlanner.ResolveBossMinionTotal 优先读 stage_spawn.csv 的 Boss 行，
     /// 表里配了正数就走表，表没配（0 / 空）才回来用这个公式。
     /// </summary>
-    public static int GetBossStageMinionTotal(int stageIndex0Based)
-        => Mathf.Max(8, GetStageMonsterTotal(stageIndex0Based) - GetBossStageMonsterTotal());
+    public static int GetBossStageMinionTotal(int stageIndex0Based, int chapter)
+        => Mathf.Max(8, GetStageMonsterTotal(stageIndex0Based, chapter) - GetBossStageMonsterTotal());
 
     /// <summary>
     /// 建议波次数：先按「总数 / 单波上限」估，再受刷怪点数量与 [MIN,MAX] 约束。

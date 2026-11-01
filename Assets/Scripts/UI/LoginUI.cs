@@ -193,6 +193,15 @@ public class LoginUI : MonoBehaviour
     /// </summary>
     void EnsureTapLoginRow()
     {
+        // 【2026-11-01 主人拍板】TapTap 端放弃：登录按钮直接收掉不出现（游客「开始冒险」即玩），
+        // 不再是「置灰可点」——它没有开放的那天，微信侧登录方案定了再另行设计入口。
+        if (TapLoginClosed)
+        {
+            var panelToHide = transform.Find("ActionPanel") as RectTransform;
+            var tapRow = panelToHide != null ? panelToHide.Find(LoginTapRowBuilder.TapButtonName) : null;
+            if (tapRow != null) tapRow.gameObject.SetActive(false);
+            return;
+        }
         var panel = transform.Find("ActionPanel") as RectTransform;
         if (panel == null)
         {
@@ -202,8 +211,20 @@ public class LoginUI : MonoBehaviour
         LoginTapRowBuilder.Ensure(panel, OnClickTapLogin);
     }
 
+    /// <summary>【2026-11-01 主人拍板】TapTap 端放弃、转微信小游戏：登录入口暂时关闭。
+    /// 接微信登录方案（P2-B）定了再改回 false 并替换实现。</summary>
+    const bool TapLoginClosed = true;
+
     void OnClickTapLogin()
     {
+        // 【2026-11-01 主人拍板】TapTap 端放弃、转微信小游戏：登录入口保留可点，点击提示未开放；
+        // 接微信登录方案（P2-B）定了再改这里。const 开关编译期剪枝，无不可达代码警告。
+        if (TapLoginClosed)
+        {
+            if (!EnsureAgreed()) return;
+            ShowTip("暂未开放");
+            return;
+        }
         if (!EnsureAgreed()) return;
         TapTapBootstrap.Ensure().TapLogin((ok, msg) =>
         {
@@ -251,7 +272,14 @@ public class LoginUI : MonoBehaviour
 
         // 【2026-10-17 主人拍板】真机包只留 TapTap 登录：「开始冒险」是游客入口
         // （LoginTapRowBuilder 头注：TapTap 大陆区要求无游客模式入口），编辑器保留便于调试。
-        if (!Application.isEditor)
+        // 【2026-11-01 主人拍板】TapTap 端放弃：登录按钮收掉，「开始冒险」在所有平台常显（即点即玩）；
+        // 微信侧登录方案定了再改这里。
+        if (TapLoginClosed)
+        {
+            if (startButton != null) startButton.gameObject.SetActive(true);
+            else SetActivePath("ActionPanel/StartButton", true);
+        }
+        else if (!Application.isEditor)
         {
             SetActivePath("ActionPanel/StartButton", false);
             if (startButton != null) startButton.gameObject.SetActive(false);

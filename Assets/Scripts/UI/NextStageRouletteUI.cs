@@ -363,8 +363,12 @@ public class NextStageRouletteUI : MonoBehaviour
             Destroy(_content.GetChild(i).gameObject);
 
         var state = ChapterManager.Instance?.RollState;
+        // 【2026-11-01 批 B3】轮盘环长按章取节数（5/8/10）
+        int totalSubs = ChapterManager.Instance != null
+            ? GameConfig.StagesPerGrandOf(ChapterManager.Instance.currentChapter)
+            : GameConfig.STAGES_PER_GRAND;
         List<StageType> pool = StageRoller.BuildReel(state, _stage.stageIndex,
-            GameConfig.STAGES_PER_GRAND, _stage.type, LoopCardCount);
+            totalSubs, _stage.type, LoopCardCount);
 
         // 保证环里至少有一张赢家，并记下下标
         _winnerSlot = -1;

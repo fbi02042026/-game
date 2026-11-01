@@ -189,6 +189,9 @@ public partial class BattleEntryDraftPanel
             return;
         }
 
+        // 设置弹窗开着不计时（2026-11-01 主人：点设置弹出的时候不要出现抽奖提示），关掉后接着数
+        if (SettingsPopupUI.IsBlockingSoftGuide) return;
+
         _liveDrawHintTimer += Time.unscaledDeltaTime;
         if (_liveDrawHintTimer < LiveDrawHintDelaySec) return;
 
@@ -588,7 +591,10 @@ public partial class BattleEntryDraftPanel
         float t = 0f;
         while (t < IdleGuideSec && _draftActive)
         {
-            t += Time.unscaledDeltaTime;
+            // 设置弹窗开着不计时（2026-11-01 主人：点设置弹出的时候不要出现抽奖提示），
+            // 关掉后从暂停处继续数，不重置。
+            if (!SettingsPopupUI.IsBlockingSoftGuide)
+                t += Time.unscaledDeltaTime;
             yield return null;
         }
         _idleGuideCo = null;

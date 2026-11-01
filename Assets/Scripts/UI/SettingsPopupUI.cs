@@ -59,6 +59,12 @@ public class SettingsPopupUI : MonoBehaviour
     float _prevTimeScale = 1f;
 
     public bool IsOpen => root != null && root.activeSelf;
+
+    /// <summary>
+    /// 设置弹窗是否开着（供引导计时判断的单一出口：弹窗盖着时不要弹/不要计软引导）。
+    /// 2026-11-01 主人：点设置弹出的时候不要出现抽奖提示。
+    /// </summary>
+    public static bool IsBlockingSoftGuide => Instance != null && Instance.IsOpen;
     public Button EvacuateButton => evacuateButton;
     public SettingsHost CurrentHost => ResolveHost(_host);
 
@@ -147,6 +153,9 @@ public class SettingsPopupUI : MonoBehaviour
         _prevTimeScale = Time.timeScale;
         bool battle = CurrentHost == SettingsHost.Battle;
         if (battle) Time.timeScale = 0f;
+
+        // 弹窗盖上时收掉软引导提示（如「点这里抽一次奖」）—— 盖着还晃着只会误导（2026-11-01 主人）。
+        TutorialHintUI.Instance?.HideSoft();
 
         if (root == null) BuildFallbackHierarchy();
         var canvas = GetComponent<Canvas>();

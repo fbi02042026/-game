@@ -875,7 +875,8 @@ public partial class BattleManager
             // 【2026-10-31 二次拍板】出现 5 秒后自动消失；点抽奖按钮立刻消失；
             // 一场战斗只出现一次（drawHintShown 局部标记）；底框用主人给的「像素风空白对话框指针」。
             if (!onceOnly && freeLeft <= 0 && SlotMachineSystem.DrawIndex == 0
-                && currentGold >= price && !drawHintShown)
+                && currentGold >= price && !drawHintShown
+                && !SettingsPopupUI.IsBlockingSoftGuide)   // 设置弹窗开着不弹（2026-11-01 主人）
             {
                 drawHintShown = true;
                 var coinHintRect = BattleEntryDraftPanel.Instance != null

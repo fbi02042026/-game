@@ -247,7 +247,7 @@ public partial class Monster
         // 金币本/徽记/支线岛/终章 stageIdx0 恒 0 不命中，行为不变。旧 MINI_BOSS_STAT_MUL 已随小 Boss 位退役删除。
         bool finalBossStage = bossUnit && !endlessRift
             && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun
-            && stageIdx0 == GameConfig.STAGES_PER_GRAND - 1;
+            && stageIdx0 == GameConfig.StagesPerGrandOf(BattleManager.Instance.RunStats.Chapter) - 1;   // 【批 B3】末节 Boss 按章取节数
         float bossStatMul = finalBossStage ? GameConfig.BOSS_FINAL_STAT_MUL : 1f;
         baseHp *= bossStatMul;
         baseAtk *= bossStatMul;

@@ -122,7 +122,19 @@ public class AdMercEventUI : MonoBehaviour
             return;
         }
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup);
+
+        // 【2026-11-01 主人拍板「小的弹窗整体往上移40」】主面板整体上移 40（只动 y，x/尺寸不碰，
+        // 同 BattleResultScreen 失败节点上移的介入口径）。Ensure 只走一次，不存在叠加。
+        var rootT = Deep(transform, "Root");
+        var panelT = rootT != null ? rootT.Find("Panel") : null;
+        if (panelT is RectTransform panelRt)
+            panelRt.anchoredPosition = new Vector2(panelRt.anchoredPosition.x, panelRt.anchoredPosition.y + PanelShiftUpY);
+        else
+            Debug.LogError("[AdMercEvent] 缺 Root/Panel 节点，面板上移 40 没生效（预制体结构被改过？）");
     }
+
+    /// <summary>【2026-11-01 主人拍板「小的弹窗都整体往上移40」】面板/详情浮层的整体上移量（只动 y）。</summary>
+    const float PanelShiftUpY = 40f;
 
     void Open()
     {
@@ -315,6 +327,12 @@ public class AdMercEventUI : MonoBehaviour
                 else
                     GlobalToastUI.Show($"看广告成功，今日 {AdMercEventSystem.TodayAdProgress()}/{AdMercEventDefs.AdsPerDay} 个，已累计 {AdMercEventSystem.Days}/{AdMercEventDefs.MaxDay} 天");
             }
+            else
+            {
+                // 【2026-11-01 主人报「点击看广告按钮无反应」】拉起失败/无填充/中途关闭原先静默，
+                // 按钮像坏的；失败必须让主人看见（不允许静默，铁律 10）
+                GlobalToastUI.Show("广告没能拉起来，稍后再试试");
+            }
             Refresh();
         });
     }
@@ -422,7 +440,7 @@ public class AdMercEventUI : MonoBehaviour
         pImg.color = new Color(0.12f, 0.12f, 0.16f, 0.97f);
         var pRt = _detailPanel.GetComponent<RectTransform>();
         pRt.anchorMin = pRt.anchorMax = pRt.pivot = new Vector2(0.5f, 0.5f);
-        pRt.anchoredPosition = Vector2.zero;
+        pRt.anchoredPosition = new Vector2(0f, PanelShiftUpY);   // 【2026-11-01 主人拍板】详情浮层与主面板同步上移 40
         pRt.sizeDelta = new Vector2(480f, 340f);
 
         _detailTitle = MakeText(_detailPanel.transform, "DetailTitle", 26, TextAnchor.MiddleCenter,
