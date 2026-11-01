@@ -17,19 +17,20 @@ public class LoginNoticePopupUI : MonoBehaviour
     /// 已读记录在 PlayerPrefs：老玩家点「清除数据」走 SaveSystem.DeleteLocalSaveAndReset（不碰 PlayerPrefs），
     /// 所以清完档不会再弹；SaveSystem 版本自动清档的 DeleteAll 会把它一起清掉（= 新版正好重弹一次，与清档同节奏）。
     /// </summary>
-    public const string CurrentNoticeId = "2026-10-20b";
+    public const string CurrentNoticeId = "2026-11-01";
 
     const string SeenPrefKey = "login_notice_seen_id";
 
     const string NoticeBody =
-        "这版优化改了很多东西。\n" +
+        "这么长时间让大家久等了。\n" +
+        "\n" +
+        "这版优化了很多次，\n" +
+        "也加了不少新玩法。\n" +
         "\n" +
         "老玩家的存档已自动清空，\n" +
         "会从新档重新开始。\n" +
         "\n" +
-        "新玩家当没看见这段，直接开冲。\n" +
-        "\n" +
-        "给大家添麻烦了，多谢理解。";
+        "新玩家当没看见，直接开冲。";
 
     static LoginNoticePopupUI _instance;
 
