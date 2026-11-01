@@ -30,6 +30,25 @@ public class CodexInfoPopupUI : MonoBehaviour
     public Button unlockButton;
     public Text unlockButtonLabel;
 
+    /// <summary>
+    /// 奖励图标胶（2026-11-01 主人要求「奖励的字用图标代替」）：
+    /// 金币/天赋石等不再写文字行，改弹窗内 icon＋×N 胶，运行时建在 Panel 上。
+    /// </summary>
+    public struct RewardChip
+    {
+        public Sprite Icon;
+        /// <summary>图标名（缺图报错定位用，不兜底）。</summary>
+        public string IconPath;
+        public string Label;
+    }
+
+    GameObject _rewardRow;
+    RectTransform _rewardRowRt;
+    /// <summary>奖励胶图标边长 / 数量字字号 / 数量字颜色（跟正文深棕一致）。</summary>
+    const float RewardIconSize = 40f;
+    const int RewardLabelSize = 24;
+    static readonly Color RewardLabelColor = new Color(0.32f, 0.21f, 0.12f, 1f);
+
     Action _onUnlock;
     int _baseDescSize;   // Desc/Lore 基准字号（首次打开时记录，降档排版后用于恢复）
     int _baseLoreSize;
@@ -57,10 +76,10 @@ public class CodexInfoPopupUI : MonoBehaviour
     public bool IsOpen => root != null && root.activeSelf;
 
     public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null)
     {
         Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind,
-            topTitleOverride: topTitleOverride, topIconPath: topIconPath);
+            topTitleOverride: topTitleOverride, topIconPath: topIconPath, rewards: rewards);
     }
 
     /// <summary>
@@ -252,7 +271,7 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
         string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null)
     {
         BindRefs();
         Wire();
@@ -306,6 +325,7 @@ public class CodexInfoPopupUI : MonoBehaviour
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";
         if (loreText != null) loreText.text = lore ?? "";
+        ApplyRewardChips(rewards);   // 2026-11-01 主人要求：奖励用图标胶代替文字行
         if (portrait != null)
         {
             portrait.sprite = portraitSprite;
@@ -474,12 +494,114 @@ public class CodexInfoPopupUI : MonoBehaviour
     }
 
     /// <summary>
+    /// 奖励图标行：挂在 Panel 上，锚点/宽度照抄 Desc（只换内容，不另立版式）。
+    /// 横排居中，胶 = icon(40×40) ＋ ×N 数量字；行高由 ContentSizeFitter 按内容算。
+    /// </summary>
+    void BuildRewardRow()
+    {
+        var descRt = descText.rectTransform;
+        _rewardRowRt = CreateUi(panel.transform, "RewardRow", true);
+        _rewardRowRt.anchorMin = descRt.anchorMin;
+        _rewardRowRt.anchorMax = descRt.anchorMax;
+        _rewardRowRt.pivot = descRt.pivot;
+        _rewardRowRt.sizeDelta = new Vector2(descRt.sizeDelta.x, 0f);
+        _rewardRowRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, descRt.anchoredPosition.y);
+        var hlg = _rewardRowRt.gameObject.AddComponent<HorizontalLayoutGroup>();
+        hlg.childAlignment = TextAnchor.MiddleCenter;
+        hlg.spacing = 36f;
+        hlg.childControlWidth = true;
+        hlg.childControlHeight = true;
+        hlg.childForceExpandWidth = false;
+        hlg.childForceExpandHeight = false;
+        var csf = _rewardRowRt.gameObject.AddComponent<ContentSizeFitter>();
+        csf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        _rewardRow = _rewardRowRt.gameObject;
+        _rewardRow.SetActive(false);
+    }
+
+    /// <summary>
+    /// 2026-11-01 主人要求「奖励的字用图标代替」：desc 下方一行 icon＋×N 胶
+    /// （金币/天赋石走 CommonIconSprites 统一出口）；无奖励传 null/空 → 整行收起。
+    /// </summary>
+    void ApplyRewardChips(RewardChip[] chips)
+    {
+        if (_rewardRow == null && panel != null)
+            BuildRewardRow();
+        if (_rewardRow == null) return;
+        if (chips == null || chips.Length == 0)
+        {
+            _rewardRow.SetActive(false);
+            return;
+        }
+        // 旧胶先停用再销毁：当帧布局重建不会把已销毁节点算进 preferred
+        for (int i = _rewardRow.transform.childCount - 1; i >= 0; i--)
+        {
+            var c = _rewardRow.transform.GetChild(i);
+            c.gameObject.SetActive(false);
+            Destroy(c.gameObject);
+        }
+        for (int i = 0; i < chips.Length; i++)
+        {
+            var chip = chips[i];
+            var chipRt = CreateUi(_rewardRow.transform, "RewardChip" + i, true);
+            var hlg = chipRt.gameObject.AddComponent<HorizontalLayoutGroup>();
+            hlg.childControlWidth = true;
+            hlg.childControlHeight = true;
+            hlg.childForceExpandWidth = false;
+            hlg.childForceExpandHeight = false;
+            hlg.spacing = 8f;
+            var csf = chipRt.gameObject.AddComponent<ContentSizeFitter>();
+            csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var iconRt = CreateUi(chipRt, "Icon", true);
+            iconRt.sizeDelta = new Vector2(RewardIconSize, RewardIconSize);
+            var img = iconRt.gameObject.AddComponent<Image>();
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            if (chip.Icon != null)
+                img.sprite = chip.Icon;
+            else
+            {
+                // 缺图不兜底：数量字仍可读，图标位空着让人看见
+                img.enabled = false;
+                Debug.LogError("[CodexInfoPopup] 奖励图标缺失：" + chip.IconPath);
+            }
+            var le = iconRt.gameObject.AddComponent<LayoutElement>();
+            le.preferredWidth = RewardIconSize;
+            le.preferredHeight = RewardIconSize;
+
+            CreateChipText(chipRt, "Num", chip.Label ?? "", RewardLabelSize, RewardLabelColor);
+        }
+        _rewardRow.SetActive(true);
+        LayoutRebuilder.ForceRebuildLayoutImmediate(_rewardRowRt);
+    }
+
+    static Text CreateChipText(Transform parent, string name, string content, int size, Color color)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        go.layer = 5;
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<Text>();
+        t.text = content;
+        t.fontSize = size;
+        t.color = color;
+        t.alignment = TextAnchor.MiddleLeft;
+        t.raycastTarget = false;
+        t.font = GameFonts.GetChinese();
+        return t;
+    }
+
+    /// <summary>
     /// 【2026-10-19 排版优化】Desc/Lore 按实际文本高度流式排列。
     /// 【2026-10-21 主人拍板】图 / 字可以换，**字的宽度不许代码改**。
     /// 所以这里只写纵向：Desc 紧贴 Meta 底、Lore 紧跟 Desc 实际高度下方；
     /// Desc/Lore 的 Width、x、sizeDelta 全部以预制体为准，代码一笔都不碰
     /// （旧写法把 sizeDelta 读出来再原样写回，仍是代码在动预制体的值，且拉伸锚点下会算错宽度）。
     /// 文本长度超出可用区时才降字号，避免压到底部「关闭/解锁」按钮。
+    /// 【2026-11-01 排版优化（主人要求）】①Meta 为空（任务/世界弹窗不传副标题）不再白占一格；
+    /// ②奖励图标行插在 Desc 与 Lore 之间；③内容少时面板对称收高，底部不再空一大块。
     /// </summary>
     void LayoutContent()
     {
@@ -498,17 +620,23 @@ public class CodexInfoPopupUI : MonoBehaviour
         // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
         float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
         const float metaGap = 12f;      // Meta 与 Desc 的间距
+        const float rewardGapAbove = 10f;   // Desc 与奖励行间距
+        const float rewardGapBelow = 20f;   // 奖励行与 Lore 间距
 
         // 顶部起点 = Meta 框底 + 间距（预制体原值 -360 与 Meta 框底 -366 有 6px 重叠）
         float top = -372f;
         var metaRt = metaText != null ? metaText.rectTransform : null;
         if (metaRt != null)
-            top = metaRt.anchoredPosition.y - metaRt.sizeDelta.y - metaGap;
+        {
+            // 2026-11-01 排版优化：Meta 空（任务/世界弹窗）时不再占整格，desc 贴 meta 框顶下 8px
+            top = string.IsNullOrEmpty(metaText.text)
+                ? metaRt.anchoredPosition.y - 8f
+                : metaRt.anchoredPosition.y - metaRt.sizeDelta.y - metaGap;
+        }
 
         // 底部红线：关闭按钮（y=28 + 高 52）上方留 12px；有解锁按钮时抬高红线
-        float bottomLimit = -panelRt.rect.height + 92f;
-        if (unlockButton != null && unlockButton.gameObject.activeSelf)
-            bottomLimit = -panelRt.rect.height + 164f;
+        float bottomPad = unlockButton != null && unlockButton.gameObject.activeSelf ? 164f : 92f;
+        float bottomLimit = -panelRt.rect.height + bottomPad;
 
         // 首次记录基准字号；之后每次先恢复，避免上一次降档残留。
         // 【2026-10-31 主人报「这个字可以再大点」】基准在预制体字号上各 +4（22→26 / 20→24）。
@@ -527,23 +655,44 @@ public class CodexInfoPopupUI : MonoBehaviour
         float descH = descText.preferredHeight;
         float loreH = loreText.preferredHeight;
 
+        // 奖励图标行高度（active 才占位）
+        float rewardH = 0f;
+        if (_rewardRow != null && _rewardRow.activeSelf && _rewardRowRt != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(_rewardRowRt);
+            rewardH = _rewardRowRt.rect.height;
+        }
+        float rewardBlock = rewardH > 0f ? rewardGapAbove + rewardH + rewardGapBelow : 0f;
+
         float avail = top - bottomLimit;
         // 2026-11-01 主人拍板「条的位置不够可以上下拉伸」：内容放不下先把面板上下加高
         //（上限近满屏，参考高 1280 留 100 边）；顶栏内容锚顶、关闭/解锁钮锚底，跟着边走不压字。
-        float need = descH + loreGap + loreH;
+        float need = descH + rewardBlock + loreGap + loreH;
+        const float maxPanelH = 1180f;
+        const float minPanelH = 560f;
         if (need > avail)
         {
-            const float maxPanelH = 1180f;
             float grow = Mathf.Min(need - avail, Mathf.Max(0f, maxPanelH - panelRt.rect.height));
             if (grow > 0f)
             {
                 panelRt.sizeDelta = new Vector2(panelRt.sizeDelta.x, panelRt.sizeDelta.y + grow);
-                bool hasUnlock = unlockButton != null && unlockButton.gameObject.activeSelf;
-                bottomLimit = -panelRt.rect.height + (hasUnlock ? 164f : 92f);
+                bottomLimit = -panelRt.rect.height + bottomPad;
                 avail = top - bottomLimit;
             }
         }
-        if (descH + loreGap + loreH > avail)
+        else if (need < avail)
+        {
+            // 2026-11-01 排版优化：内容少时面板对称收高（pivot 0.5 居中缩），底部不再空一大块；
+            // 下限 minPanelH 防收过头挤到标题/关闭钮。
+            float shrink = Mathf.Min(avail - need, Mathf.Max(0f, panelRt.rect.height - minPanelH));
+            if (shrink > 0f)
+            {
+                panelRt.sizeDelta = new Vector2(panelRt.sizeDelta.x, panelRt.sizeDelta.y - shrink);
+                bottomLimit = -panelRt.rect.height + bottomPad;
+                avail = top - bottomLimit;
+            }
+        }
+        if (descH + rewardBlock + loreGap + loreH > avail)
         {
             // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）
             int[] ds = { 23, 21, 19 };
@@ -554,15 +703,18 @@ public class CodexInfoPopupUI : MonoBehaviour
                 loreText.fontSize = ls[i];
                 descH = descText.preferredHeight;
                 loreH = loreText.preferredHeight;
-                if (descH + loreGap + loreH <= avail) break;
+                if (descH + rewardBlock + loreGap + loreH <= avail) break;
             }
-            if (descH + loreGap + loreH > avail)
-                loreGap = Mathf.Max(4f, avail - descH - loreH);
+            if (descH + rewardBlock + loreGap + loreH > avail)
+                loreGap = Mathf.Max(4f, avail - descH - rewardBlock - loreH);
         }
 
         // 只动 y：宽度、x、sizeDelta 一律保留预制体原值
         descRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, top);
-        loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, top - descH - loreGap);
+        if (_rewardRowRt != null && _rewardRow != null && _rewardRow.activeSelf)
+            _rewardRowRt.anchoredPosition = new Vector2(
+                _rewardRowRt.anchoredPosition.x, top - descH - rewardGapAbove);
+        loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, top - descH - rewardBlock - loreGap);
     }
 
     /// <summary>编辑器生成 / 运行时兜底共用。</summary>

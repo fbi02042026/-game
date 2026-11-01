@@ -1210,10 +1210,32 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             codexKind: null, topTitleOverride: "世界图鉴", topIconPath: "");
     }
 
+    /// <summary>奖励 icon 胶数据：金币/天赋石走 CommonIconSprites 统一出口；数值 ≤0 不出胶（2026-11-01 主人要求「奖励的字用图标代替」）。</summary>
+    static CodexInfoPopupUI.RewardChip[] BuildRewardChips(int gold, int stones)
+    {
+        var list = new List<CodexInfoPopupUI.RewardChip>();
+        if (gold > 0)
+            list.Add(new CodexInfoPopupUI.RewardChip
+            {
+                Icon = CommonIconSprites.Load("icon_gold"),
+                IconPath = "icon_gold",
+                Label = "×" + gold
+            });
+        if (stones > 0)
+            list.Add(new CodexInfoPopupUI.RewardChip
+            {
+                Icon = CommonIconSprites.Load("icon_talent_stone"),
+                IconPath = "icon_talent_stone",
+                Label = "×" + stones
+            });
+        return list.Count > 0 ? list.ToArray() : null;
+    }
+
     /// <summary>
     /// 2026-11-01 主人拍板「不能有两套主线支线」：主线/支线行数据已与任务栏同源，
-    /// 点击弹 CodexInfoPopupUI（世界页同款）：达成方式/进度/奖励写全，奖励带数量放开头；
-    /// 【同日晚追加】主人拍板：不要图标（topIconPath 空串收起）、meta 留空少字、
+    /// 点击弹 CodexInfoPopupUI（世界页同款）：达成方式/进度/奖励写全。
+    /// 【同日晚主人要求】排版优化＋奖励的字用图标代替：奖励不再写「奖励：金币×N」文字行，
+    /// 改弹窗内 icon×N 奖励条（desc 与说明之间）；lore 只留进度/入口/锁定提示。
     /// 未开启的主线补「先完成当前章节的任务」、未开启的支线补「通关对应篇章后开启」。
     /// </summary>
     void OpenQuestPopup(bool isMain, string questId)
@@ -1228,26 +1250,22 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             MainQuestView v = null;
             for (int i = 0; i < views.Count; i++)
                 if (views[i].def.id == questId) { v = views[i]; break; }
-            string reward = def.rewardGold > 0 || def.rewardStones > 0
-                ? "奖励："
-                    + (def.rewardGold > 0 ? "金币\u00d7" + def.rewardGold : "")
-                    + (def.rewardGold > 0 && def.rewardStones > 0 ? "＋" : "")
-                    + (def.rewardStones > 0 ? "天赋石\u00d7" + def.rewardStones : "")
-                : "奖励：无";
             string lore;
             if (done)
             {
-                lore = "已完成（奖励已发放）\n" + reward;
+                lore = "已完成（奖励已发放）";
             }
             else
             {
-                // 2026-11-01 主人拍板：奖励写明+数量放开头；进度其次；未开启一句话
-                lore = reward
-                    + (v != null && v.need > 1 ? "\n进度 " + v.progress + "/" + v.need : "")
-                    + (def.chapter > MainQuestSystem.CurrentChapter() ? "\n先完成当前章节的任务" : "");
+                // 奖励改图标条后，这里只留进度与未开启提示（有则各占一行）
+                var lines = new List<string>();
+                if (v != null && v.need > 1) lines.Add("进度 " + v.progress + "/" + v.need);
+                if (def.chapter > MainQuestSystem.CurrentChapter()) lines.Add("先完成当前章节的任务");
+                lore = string.Join("\n", lines);
             }
             CodexInfoPopupUI.Show(name, "", how, lore, null,
-                codexKind: null, topTitleOverride: "主线任务", topIconPath: "");
+                codexKind: null, topTitleOverride: "主线任务", topIconPath: "",
+                rewards: BuildRewardChips(def.rewardGold, def.rewardStones));
         }
         else
         {
@@ -1266,18 +1284,18 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string lore;
             if (cleared)
             {
-                lore = "已通关（奖励已发放）\n奖励：金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward;
+                lore = "已通关（奖励已发放）";
             }
             else
             {
-                // 2026-11-01 主人拍板：短行直白——入口/体力/奖励各占一行，数量写明
-                lore = "进入：冒险页 · 支线岛槽（体力" + SideIslandDefs.SIDE_ISLAND_STAMINA_COST + "）\n"
-                    + "奖励：金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward;
+                // 2026-11-01 主人拍板：短行直白——入口/锁定提示各占一行；奖励改图标条
+                lore = "进入：冒险页 · 支线岛槽（体力" + SideIslandDefs.SIDE_ISLAND_STAMINA_COST + "）";
                 if (!current)
                     lore += "\n通关对应篇章后开启";
             }
             CodexInfoPopupUI.Show(isl.name, "", "通关" + isl.name, lore, null,
-                codexKind: null, topTitleOverride: "支线任务", topIconPath: "");
+                codexKind: null, topTitleOverride: "支线任务", topIconPath: "",
+                rewards: BuildRewardChips(isl.goldReward, isl.talentReward));
         }
     }
 
