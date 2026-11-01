@@ -402,9 +402,11 @@ public partial class AdventureUI
 
     // ────────────────────────────────────────────────────
     // 当前关标识（2026-11-01 主人拍板改版）：
-    // 行为（主人原话「不管玩家滑动岛到哪 头像在右边显示 箭头指向需要打的当前关卡」）：
-    // ① 头像钉在滑动列表视口右侧垂直居中，不随滚动/槽位移动；
-    // ② 箭头按当前关方位翻转：关在头像上方 → 翻到头像上侧尖朝上，否则在头像下侧尖朝下；
+    // 行为（主人原话「不管玩家滑动岛到哪 头像在右边显示 箭头指向需要打的当前关卡」；
+    // 2026-11-01 晚主人追加「头像放大30% 放到左边 箭头应该指向1-1 现在直直的冲下」）：
+    // ① 头像钉在滑动列表视口左侧垂直居中，不随滚动/槽位移动；
+    // ② 箭头绕头像中心自由旋转瞄准当前关槽位（不再只上下翻转），尖始终指向该打的关；
+    //    箭头图左右不对称（长翅扫左侧），槽位在头像右侧时水平镜像让长翅扫向岛链（2026-11-01 主人）；
     // ③ 跨章后该难度没有可打的关（灰锁章）→ 只有头像没有箭头；
     // ④ 点头像 = 一键滚回该打的关。
     // 节点来源：prefab 根下有「头像指示」→ 以预制体为准；没有 → 代码生成（图走 Adventure 新路径）。
@@ -419,15 +421,15 @@ public partial class AdventureUI
     // prefab 里没有「头像指示」节点 → 缺节点时代码生成，样式常量集中在这组，主人要调尺寸只改这里。
     const string MarkerAvatarSpritePath = "UI/Art/Adventure/头像指引";
     const string MarkerArrowSpritePath = "UI/Art/Adventure/指引";
-    const float MarkerAvatarW = 110f;     // 头像显示宽（原图 150×169 等比）
-    const float MarkerAvatarH = 124f;
+    const float MarkerAvatarW = 143f;     // 头像显示宽（原图 150×169 等比；2026-11-01 主人：放大 30%，110×124 → 143×161）
+    const float MarkerAvatarH = 161f;
     const float MarkerArrowW = 55f;       // 箭头原尺寸 55×64
     const float MarkerArrowH = 64f;
-    const float MarkerRightMargin = 56f;  // 头像中心距视口右缘
+    const float MarkerSideMargin = 56f;   // 头像中心距视口左缘（2026-11-01 主人：挪到左边）
 
     /// <summary>
     /// 绑定/生成当前关标识节点：prefab 里主人摆了「头像指示」→ 以预制体为准只绑不改样式；
-    /// 没有 → 代码生成（2026-11-01 主人拍板：头像钉右边、箭头指当前关，图走 Adventure 新路径）。
+    /// 没有 → 代码生成（2026-11-01 主人拍板：头像钉左边、箭头指当前关，图走 Adventure 新路径）。
     /// </summary>
     void EnsureStageMarkerNode()
     {
@@ -479,11 +481,15 @@ public partial class AdventureUI
             _stageMarker.anchorMin = new Vector2(0.5f, 0.5f);
             _stageMarker.anchorMax = new Vector2(0.5f, 0.5f);
         }
+        // 【2026-11-01 主人「头像再整体x轴-1就行」】整个标识（头像立绘+箭头）水平镜像；
+        // 箭头瞄准角在 UpdateStageMarkerFollow 里按镜像坐标系补偿（atan2(-dx,-dy)）
+        if (_stageMarker.localScale.x > 0f)
+            _stageMarker.localScale = new Vector3(-1f, 1f, 1f);
     }
 
     /// <summary>
     /// 代码生成标识节点（prefab 缺「头像指示」时）：头像（新图「头像指引」，点击一键回当前关）
-    /// +「旋转」容器里的「箭头」（新图「指引」，尖朝下贴头像正下方；容器转 180° 翻到上方尖朝上）。
+    /// +「旋转」容器里的「箭头」（新图「指引」，尖朝下为基准态；容器每帧旋转瞄准当前关槽位）。
     /// </summary>
     RectTransform BuildStageMarkerNode()
     {
@@ -574,8 +580,8 @@ public partial class AdventureUI
 
     /// <summary>
     /// 标识每帧贴位（Update 调，槽位位置写入之后）：
-    /// 【2026-11-01 主人拍板改版】头像钉在视口右侧垂直居中（不管滑到哪都不动）；
-    /// 箭头按当前关方位翻转：关在头像上方 → 箭头翻到头像上侧尖朝上，否则在头像下侧尖朝下。
+    /// 【2026-11-01 主人拍板改版】头像钉在视口左侧垂直居中（不管滑到哪都不动）；
+    /// 箭头绕头像中心旋转，尖始终指向当前关槽位。
     /// </summary>
     void UpdateStageMarkerFollow()
     {
@@ -588,24 +594,37 @@ public partial class AdventureUI
             if (_stageMarker.gameObject.activeSelf) _stageMarker.gameObject.SetActive(false);
             return;
         }
-        var canvas = _stageMarker.GetComponentInParent<Canvas>();
-        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, slotRt.position, cam, out var slotLocal))
-            return;
+        // 槽位世界坐标 → 视口本地坐标：直接用 InverseTransformPoint（含父链缩放），
+        // 不再走 ScreenPointToLocalPointInRectangle——那个要的是「屏幕像素点」，
+        // 旧代码把 UI 世界坐标当屏幕点喂（UI 已全摄像机模式，铁律 4.6），换算结果是畸变的
+        var slotLocal = (Vector2)viewport.transform.InverseTransformPoint(slotRt.position);
         // localPoint 以 viewport.pivot 为原点 → 换到中心系（箭头方向判定按同一坐标系）
         slotLocal += new Vector2((0.5f - viewport.pivot.x) * viewport.rect.width,
                                  (0.5f - viewport.pivot.y) * viewport.rect.height);
-        // 头像钉右边：贴视口右缘往里 MarkerRightMargin，y 恒居中
-        float x = viewport.rect.width * 0.5f - MarkerRightMargin;
+        // 头像钉左边：贴视口左缘往里 MarkerSideMargin，y 恒居中（2026-11-01 主人：挪到左边）
+        float x = -(viewport.rect.width * 0.5f - MarkerSideMargin);
         var pos = _stageMarker.anchoredPosition;
         if (Mathf.Abs(pos.x - x) > 0.5f || Mathf.Abs(pos.y) > 0.5f)
             _stageMarker.anchoredPosition = new Vector2(x, 0f);
         if (_stageMarkerArrowRot != null)
         {
-            var e = _stageMarkerArrowRot.localEulerAngles;
-            float z = slotLocal.y > 0f ? 180f : 0f;   // 180° = 箭头翻到头像上方、尖朝上
-            if (Mathf.Abs(Mathf.DeltaAngle(e.z, z)) > 0.5f)
-                _stageMarkerArrowRot.localEulerAngles = new Vector3(0f, 0f, z);
+            // 箭头瞄准当前关（2026-11-01 主人「箭头应该指向1-1 现在直直的冲下」）。
+            // 【2026-11-01 主人「头像再整体x轴-1就行」】整个标识根节点 localScale.x=-1 水平镜像
+            // （头像立绘朝向 + 箭头长翅一起翻）；镜像后子节点旋转视觉上是反角，
+            // 瞄准角要按镜像后的向量算：z = atan2(-dx, -dy)，尖才仍指向槽位。
+            float dx = slotLocal.x - x;
+            float dy = slotLocal.y;
+            if (dx * dx + dy * dy > 1f)   // 槽位与头像几乎重合时不转（避免无意义抖动）
+            {
+                float z = Mathf.Atan2(-dx, -dy) * Mathf.Rad2Deg;
+                float cur = _stageMarkerArrowRot.localEulerAngles.z;
+                if (Mathf.Abs(Mathf.DeltaAngle(cur, z)) > 0.5f)
+                    _stageMarkerArrowRot.localEulerAngles = new Vector3(0f, 0f, z);
+#if UNITY_EDITOR
+                if (Time.frameCount % 60 == 0)   // 【临时诊断】滚动跟手性验证，验完删
+                    Debug.Log($"[标识DBG] slotLocal=({slotLocal.x:0.0},{slotLocal.y:0.0}) z={z:0.0}° applied={cur:0.0}° scale.x={_stageMarker.localScale.x}");
+#endif
+            }
         }
     }
 

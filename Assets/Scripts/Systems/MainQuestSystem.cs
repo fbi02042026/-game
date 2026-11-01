@@ -236,7 +236,7 @@ public static class MainQuestSystem
     /// 各类任务的完成判定：
     ///   ClearStage    → 存档 clearedStages 里有没有 "章_关卡下标"（现成字段，不新增持久化）
     ///   TalkNpc       → 播完对话后 NotifyTalk 写计数
-    ///   WatchStory    → 播完剧情后 NotifyStory 写计数
+    ///   （WatchStory 已废：2026-11-01 主人拍板「不要回顾剧情这个模式」，任务行全删，见 NotifyTalk 下方注）
     ///   RecruitMerc   → 已解锁佣兵数 - 接任务时的基线（不入侵 TavernUnlockUI，只轮询）
     ///   UpgradeTalent → 接任务时的天赋石基线 - 当前天赋石（不入侵 TalentUI，只轮询）
     /// </summary>
@@ -311,11 +311,8 @@ public static class MainQuestSystem
         BumpCount(def => def.type == MainQuestType.TalkNpc && def.param == npcId);
     }
 
-    /// <summary>剧情播完：把本章对应的 WatchStory 任务计数 +1。</summary>
-    public static void NotifyStory(string storyId)
-    {
-        BumpCount(def => def.type == MainQuestType.WatchStory && def.param == storyId);
-    }
+    // NotifyStory（WatchStory 完成回调）已删（2026-11-01 主人拍板「不要回顾剧情这个模式」）：
+    // watch_story 任务行全部出表，剧情并入各章战前剧情，无回调入口。
 
     static void BumpCount(Func<MainQuestDef, bool> match)
     {
@@ -342,17 +339,21 @@ public static class MainQuestSystem
 
         MarkDone(def.id);
 
+        // 2026-11-01 主人拍板：主线每条都给点奖励（哪怕几十金币），金币 + 天赋石都发、toast 写明
+        string gains = "";
+        if (def.rewardGold > 0)
+        {
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.rewardGold, save: true, notify: true);
+            gains += " 金币\u00d7" + def.rewardGold;
+        }
         if (def.rewardStones > 0)
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.rewardStones,
                 save: true, notify: true);
-            GlobalToastUI.Show("\u4e3b\u7ebf\u4efb\u52a1\u5b8c\u6210\uff1a" + def.title
-                               + "  \u83b7\u5f97 " + def.rewardStones + " \u5929\u8d4b\u77f3");
+            gains += " \u5929\u8d4b\u77f3\u00d7" + def.rewardStones;
         }
-        else
-        {
-            GlobalToastUI.Show("\u4e3b\u7ebf\u4efb\u52a1\u5b8c\u6210\uff1a" + def.title);
-        }
+        GlobalToastUI.Show("\u4e3b\u7ebf\u4efb\u52a1\u5b8c\u6210\uff1a" + def.title
+                           + (gains.Length > 0 ? "  \u83b7\u5f97" + gains : ""));
 
         Debug.Log("[MainQuest] done: " + def.id);
         Analytics.QuestComplete(def.id); // 埋点：主线任务完成

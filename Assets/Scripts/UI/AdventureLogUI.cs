@@ -41,6 +41,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         public string Objective;
         public bool Locked;
         public string AchId;
+        /// <summary>世界页条目在 AdventureLogCatalog.World 的下标；-1 = 非世界行（2026-11-01 主人拍板：世界页点行改走怪物信息弹窗）。</summary>
+        public int WorldIndex;
+        /// <summary>主线/支线任务行：主线=任务表 id（quest.csv），支线=岛 id 数字串；null = 非任务行。2026-11-01 主人拍板「不能有两套主线支线」：与主界面任务栏同源，点行弹详情。</summary>
+        public string QuestId;
+        /// <summary>QuestId 非空时生效：true = 主线任务，false = 支线岛。</summary>
+        public bool QuestMain;
     }
 
     static readonly string[] TabNames =
@@ -779,8 +785,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             default: FillWorld(out title, out desc, out objective, out progress, rows); break;
         }
 
-        if (_activeTitle != null) _activeTitle.text = title;
-        if (_activeDesc != null) _activeDesc.text = desc;
+        // 2026-11-01 主人拍板：世界页顶部插图只做装饰，条目详情走弹窗 —— 顶部标题/描述不再写条目信息。
+        bool worldDeco = _tab == LogTab.World;
+        if (_activeTitle != null) _activeTitle.text = worldDeco ? "" : title;
+        if (_activeDesc != null) _activeDesc.text = worldDeco ? "" : desc;
         if (_activeObj != null) _activeObj.text = objective;
         if (_activeProg != null) _activeProg.text = progress;
 
@@ -808,67 +816,92 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void FillMain(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var list = AdventureLogCatalog.Main;
-        int unlocked = 0;
-        AdventureLogCatalog.StoryEntry current = default;
-        bool hasCurrent = false;
-        for (int i = 0; i < list.Length; i++)
+        // 2026-11-01 主人拍板「不能有两套主线」：主线页与主界面任务栏同一数据源 ——
+        // 任务表 MainQuestDefs + MainQuestSystem 状态/进度，列出全部主线任务（含已完成）；
+        // 原剧情摘要记录（AdventureLogCatalog.Main）不再混进任务页。
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        int curChapter = MainQuestSystem.CurrentChapter();
+        var current = MainQuestSystem.CurrentView();
+
+        var chapters = new List<int>();
+        for (int i = 0; i < MainQuestDefs.All.Length; i++)
         {
-            var e = list[i];
-            bool on = AdventureLogCatalog.MainUnlocked(e);
-            if (on)
-            {
-                unlocked++;
-                current = e;
-                hasCurrent = true;
-            }
-            string extra = e.Id == "C1" && StoryProgress.Chapter1ChoiceDone
-                ? "石碑选择：" + (StoryProgress.GetChoice(1) ?? "")
-                : e.Extra;
-            // 2026-10-31 主人报「点任务条信息不对」：点击卡片 = 标题/描述(摘要)/目标(下一步)/进度，
-            // 描述与目标不再重复同一段文字；未解锁行目标槽统一「尚未解锁」。
-            AddRow(rows, on ? e.Title : "？？？",
-                on ? "已记录" : e.Unlock,
-                on ? e.Summary : "解锁条件：" + e.Unlock,
-                !on,
-                on ? extra : "尚未解锁");
+            int ch = MainQuestDefs.All[i].chapter;
+            if (!chapters.Contains(ch)) chapters.Add(ch);
         }
-        title = hasCurrent ? current.Title : "主线故事";
-        desc = hasCurrent ? current.Summary : "完成引导后将在此记录章节摘要。";
-        // 2026-10-31 主人报「任务信息不合适」：「当前目标」原先是最新一段的剧情独白（Extra），
-        // 玩家看不出下一步要干什么。改为第一个未解锁条目的达成条件（如「通关 1-3」）。
-        objective = NextGoal(list, AdventureLogCatalog.MainUnlocked, e => e.Unlock)
-                    ?? "主线记录已集齐";
-        progress = unlocked + "/" + list.Length;
+        chapters.Sort();
+
+        int doneCount = 0, totalCount = 0;
+        for (int c = 0; c < chapters.Count; c++)
+        {
+            int ch = chapters[c];
+            var views = MainQuestSystem.ChapterViews(ch);
+            for (int i = 0; i < views.Count; i++)
+            {
+                var v = views[i];
+                totalCount++;
+                if (v.done) doneCount++;
+                bool reachable = ch <= curChapter;   // 未推到的章节行整体锁定（先做完前面的）
+                string how = MainQuestDefs.AutoDesc(v.def);
+                string name = string.IsNullOrEmpty(v.def.title) ? how : v.def.title;
+                string status = v.done ? "已完成"
+                    : !reachable ? "未开启"
+                    : v.need > 1 ? v.progress + "/" + v.need
+                    : "进行中";
+                AddRow(rows, name, status,
+                    "第" + ch + "章 · " + how,
+                    !reachable,
+                    v.done ? "已完成：" + how : how,
+                    questId: v.def.id, questMain: true);
+            }
+        }
+
+        title = current != null
+            ? (string.IsNullOrEmpty(current.def.title) ? MainQuestDefs.AutoDesc(current.def) : current.def.title)
+            : "主线任务";
+        // 2026-11-01 主人拍板：顶部副标题不要「第X章主线」，就一行「主线简介」，字少点
+        desc = "主线简介";
+        objective = current != null ? MainQuestDefs.AutoDesc(current.def) : "推进下一章后开启新任务";
+        progress = current != null && current.need > 1 ? current.progress + "/" + current.need
+            : doneCount + "/" + totalCount;
     }
 
     void FillSide(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
     {
-        var list = AdventureLogCatalog.Side;
-        int unlocked = 0;
-        AdventureLogCatalog.StoryEntry current = default;
-        bool hasCurrent = false;
-        for (int i = 0; i < list.Length; i++)
+        // 2026-11-01 主人拍板「不能有两套支线」：支线页与任务栏同源 —— 支线岛
+        // （SideIslandDefs 岛表 + SaveData.branchRoll1/2 派定 + clearedSideIslandIds 通关态，
+        // 当前岛直接走 QuestBarData.CurrentSideIsland 同一出口），不再列剧情目录。
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        var currentSide = QuestBarData.CurrentSideIsland();
+        int total = SideIslandDefs.Count;
+        int clearedCount = 0;
+        for (int id = 1; id <= total; id++)
         {
-            var e = list[i];
-            bool on = AdventureLogCatalog.SideUnlocked(e);
-            if (on)
+            var isl = SideIslandDefs.Get(id);
+            if (isl == null)
             {
-                unlocked++;
-                current = e;
-                hasCurrent = true;
+                Debug.LogError("[AdventureLogUI] SideIslandDefs 缺岛 id=" + id);
+                continue;
             }
-            AddRow(rows, on ? e.Title : "？？？",
-                on ? "已完成" : e.Unlock,
-                on ? e.Summary : "解锁条件：" + e.Unlock,
-                !on,
-                on ? e.Extra : "尚未解锁");
+            bool cleared = SideIslandDefs.IsCleared(id, data);
+            if (cleared) clearedCount++;
+            bool current = currentSide != null && currentSide.Value.islandId == id;
+            // 2026-11-01 主人报「待派定什么玩意」：状态词改直白——没轮到的岛就是「未开启」
+            string status = cleared ? "已通关" : current ? "可挑战" : "未开启";
+            AddRow(rows, isl.name, status,
+                "奖励 金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward,
+                !cleared && !current,
+                cleared ? "已通关「" + isl.name + "」" : "通关「" + isl.name + "」",
+                questId: id.ToString(), questMain: false);
         }
-        title = hasCurrent ? current.Title : "支线故事";
-        desc = hasCurrent ? current.Summary : "支线通过佣兵参战、NPC 对话或关卡掉落触发。";
-        objective = NextGoal(list, AdventureLogCatalog.SideUnlocked, e => e.Unlock)
-                    ?? "支线记录已集齐";
-        progress = unlocked + "/" + list.Length;
+
+        title = currentSide != null ? currentSide.Value.name : "支线岛";
+        // 2026-11-01 主人拍板：副标题一行短话，别写「暂无待打支线」这类绕口文案
+        desc = "支线简介";
+        objective = currentSide != null
+            ? "通关「" + currentSide.Value.name + "」（体力" + SideIslandDefs.SIDE_ISLAND_STAMINA_COST + "）"
+            : "通关对应篇章后开启";
+        progress = clearedCount + "/" + total;
     }
 
     void FillMonsters(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
@@ -1009,7 +1042,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 on ? e.Category : e.Unlock,
                 on ? e.Desc + "\n" + e.Flavor : "解锁条件：" + e.Unlock,
                 !on,
-                on ? e.Unlock : "尚未解锁");
+                on ? e.Unlock : "尚未解锁", null, i);
         }
         title = hasCurrent ? current.Name : "世界图鉴";
         desc = hasCurrent ? current.Desc + "\n" + current.Flavor : "世界观、地点、组织、物品与传说。";
@@ -1024,10 +1057,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked,
-        string objective, string achId = null)
+        string objective, string achId = null, int worldIndex = -1,
+        string questId = null, bool questMain = false)
     {
         rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail,
-            Objective = objective, Locked = locked, AchId = achId });
+            Objective = objective, Locked = locked, AchId = achId, WorldIndex = worldIndex,
+            QuestId = questId, QuestMain = questMain });
     }
 
     /// <summary>第一个未达成条目的目标文案；全部达成返回 null。</summary>
@@ -1127,6 +1162,20 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() =>
         {
+            // 2026-11-01 主人拍板：世界页点条目不再写顶部卡（顶部插图只做装饰），
+            // 详情改走 CodexInfoPopupUI 怪物信息弹窗（分类/描述/传说/解锁条件写全）。
+            if (copy.WorldIndex >= 0)
+            {
+                OpenWorldPopup(copy.WorldIndex);
+                return;
+            }
+            // 2026-11-01 主人拍板：主线/支线任务行点击弹世界页同款详情弹窗，
+            // 写清「达成方式」（怎么去完成）与进度；未解锁行补先推进前面进度的提示。
+            if (!string.IsNullOrEmpty(copy.QuestId))
+            {
+                OpenQuestPopup(copy.QuestMain, copy.QuestId);
+                return;
+            }
             // 2026-10-31 主人报「点任务条后当前目标只显示进行中」：旧写法把进度字同时塞进
             // 目标槽和进度槽。改为行自带 Objective（是什么/怎么做的条件），进度槽照常显状态。
             // 【同日晚补充】主人报「长条件折行第二行只有一个字」：卡片进度槽是窄框（约 160px），
@@ -1139,6 +1188,97 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     RefreshBody();
             }
         });
+    }
+
+    /// <summary>
+    /// 2026-11-01 主人拍板：世界页点条目改弹 CodexInfoPopupUI（怪物信息弹窗同款），
+    /// 分类进 meta，描述进 desc，传说 + 解锁条件进 lore；未解锁只给解锁条件。
+    /// 【同日晚追加】主人拍板「不要图标」：topIconPath 传空串收起头部图标。
+    /// </summary>
+    void OpenWorldPopup(int index)
+    {
+        var list = AdventureLogCatalog.World;
+        if (index < 0 || index >= list.Length) return;
+        var e = list[index];
+        bool on = AdventureLogCatalog.WorldUnlocked(e);
+        string title = on ? e.Name : "？？？";
+        string desc = on ? e.Desc : "尚未记录该条目。";
+        string lore = on
+            ? e.Flavor + "\n\n解锁条件：" + e.Unlock
+            : "解锁条件：" + e.Unlock;
+        CodexInfoPopupUI.Show(title, "分类：" + e.Category, desc, lore, null,
+            codexKind: null, topTitleOverride: "世界图鉴", topIconPath: "");
+    }
+
+    /// <summary>
+    /// 2026-11-01 主人拍板「不能有两套主线支线」：主线/支线行数据已与任务栏同源，
+    /// 点击弹 CodexInfoPopupUI（世界页同款）：达成方式/进度/奖励写全，奖励带数量放开头；
+    /// 【同日晚追加】主人拍板：不要图标（topIconPath 空串收起）、meta 留空少字、
+    /// 未开启的主线补「先完成当前章节的任务」、未开启的支线补「通关对应篇章后开启」。
+    /// </summary>
+    void OpenQuestPopup(bool isMain, string questId)
+    {
+        if (isMain)
+        {
+            if (!MainQuestDefs.TryFind(questId, out var def)) return;
+            bool done = MainQuestSystem.IsDone(def);
+            string how = MainQuestDefs.AutoDesc(def);
+            string name = string.IsNullOrEmpty(def.title) ? how : def.title;
+            var views = MainQuestSystem.ChapterViews(def.chapter);
+            MainQuestView v = null;
+            for (int i = 0; i < views.Count; i++)
+                if (views[i].def.id == questId) { v = views[i]; break; }
+            string reward = def.rewardGold > 0 || def.rewardStones > 0
+                ? "奖励："
+                    + (def.rewardGold > 0 ? "金币\u00d7" + def.rewardGold : "")
+                    + (def.rewardGold > 0 && def.rewardStones > 0 ? "＋" : "")
+                    + (def.rewardStones > 0 ? "天赋石\u00d7" + def.rewardStones : "")
+                : "奖励：无";
+            string lore;
+            if (done)
+            {
+                lore = "已完成（奖励已发放）\n" + reward;
+            }
+            else
+            {
+                // 2026-11-01 主人拍板：奖励写明+数量放开头；进度其次；未开启一句话
+                lore = reward
+                    + (v != null && v.need > 1 ? "\n进度 " + v.progress + "/" + v.need : "")
+                    + (def.chapter > MainQuestSystem.CurrentChapter() ? "\n先完成当前章节的任务" : "");
+            }
+            CodexInfoPopupUI.Show(name, "", how, lore, null,
+                codexKind: null, topTitleOverride: "主线任务", topIconPath: "");
+        }
+        else
+        {
+            int id;
+            if (!int.TryParse(questId, out id)) return;
+            var isl = SideIslandDefs.Get(id);
+            if (isl == null)
+            {
+                Debug.LogError("[AdventureLogUI] SideIslandDefs 缺岛 id=" + id);
+                return;
+            }
+            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            bool cleared = SideIslandDefs.IsCleared(id, data);
+            var currentSide = QuestBarData.CurrentSideIsland();
+            bool current = currentSide != null && currentSide.Value.islandId == id;
+            string lore;
+            if (cleared)
+            {
+                lore = "已通关（奖励已发放）\n奖励：金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward;
+            }
+            else
+            {
+                // 2026-11-01 主人拍板：短行直白——入口/体力/奖励各占一行，数量写明
+                lore = "进入：冒险页 · 支线岛槽（体力" + SideIslandDefs.SIDE_ISLAND_STAMINA_COST + "）\n"
+                    + "奖励：金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward;
+                if (!current)
+                    lore += "\n通关对应篇章后开启";
+            }
+            CodexInfoPopupUI.Show(isl.name, "", "通关" + isl.name, lore, null,
+                codexKind: null, topTitleOverride: "支线任务", topIconPath: "");
+        }
     }
 
     void ApplyActiveCard(string title, string desc, string objective, string progress)

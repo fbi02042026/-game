@@ -36,18 +36,9 @@ public static class QuestJumpRouter
                     () => MainQuestSystem.NotifyTalk(def.param));
                 return true;
 
-            case MainQuestType.WatchStory:
-                // 看剧情：先弹确认框，玩家点「播放」才就地开演
-                //（2026-11-01 主人拍板「剧情要有前置的动作，当玩家做了什么再出现剧情，
-                //  不能无缘无故的出现」——直接全屏弹剧情框会让人不知道发生了什么；
-                //  确认框硬规则：双按钮一律走 StaminaConfirmPopup，不新建弹窗皮）
-                string storyId = def.param;
-                StaminaConfirmPopup.Show("回顾剧情",
-                    "要回顾剧情「" + MainQuestDefs.StoryTitle(storyId) + "」吗？",
-                    "播放",
-                    () => Play(MainQuestDialogues.Story(storyId),
-                        () => MainQuestSystem.NotifyStory(storyId)));
-                return true;
+            // WatchStory（回顾剧情）已整条删除（2026-11-01 主人拍板「不要回顾剧情这个模式，
+            // 改成关卡里的或者酒馆对话里的」）：任务行全部出表，5 段剧情并入各章战前剧情
+            // ChapterStoryBeats.PlayPre1/3/4/6/8，随进关自动播，不再走任务跳转。
 
             case MainQuestType.RecruitMerc:
                 // 雇人：酒馆的三选一招募是**唯一**雇佣入口

@@ -119,7 +119,10 @@ public static class ItemDefs
         return def;
     }
 
-    /// <summary>取道具图标；整图未切 Sprite 时退回 Texture 现搓一个。</summary>
+    /// <summary>取道具图标；整图未切 Sprite 时退回 Texture 现搓一个。
+    /// 表里配了 icon 路径但资源加载不到 → LogError（缺真值要看见，不静默白块；每个 id 只报一次防刷屏）。</summary>
+    static readonly HashSet<string> _iconErrorLogged = new HashSet<string>();
+
     public static Sprite LoadIcon(string defId)
     {
         var def = Get(defId);
@@ -127,7 +130,12 @@ public static class ItemDefs
         var sp = Resources.Load<Sprite>(def.icon);
         if (sp != null) return sp;
         var tex = Resources.Load<Texture2D>(def.icon);
-        if (tex == null) return null;
+        if (tex == null)
+        {
+            if (_iconErrorLogged.Add(defId))
+                Debug.LogError($"[ItemDefs] 道具图标加载失败：{defId} → Resources/{def.icon}（表里配了路径但资源不存在）");
+            return null;
+        }
         return Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
     }
 

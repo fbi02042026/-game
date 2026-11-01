@@ -131,66 +131,8 @@ public static class MainQuestDialogues
     }
 
     /// <summary>可回顾的剧情段。storyId 见 MainQuestDefs.StoryTitle。</summary>
-    public static List<StoryBeat> Story(string storyId)
-    {
-        if (storyId == MainQuestDefs.StoryC1Blade)
-        {
-            return new List<StoryBeat>
-            {
-                StoryDirector.Narration(
-                    "\u4f60\u6478\u4e86\u6478\u8170\u95f4\u7684\u88c2\u9699\u4e4b\u5203\uff0c\u5203\u53e3\u6709\u4e00\u9053\u65e7\u7f3a\u53e3\u3002"),
-                StoryDirector.Narration(
-                    "\u516c\u4f1a\u6863\u6848\u5199\u7740\uff1a\u8fd9\u628a\u5251\u7684\u524d\u4e00\u4efb\u4e3b\u4eba\uff0c\u4e09\u5e74\u524d\u5728\u68ee\u6797\u5c42\u5931\u8e2a\u3002"),
-            };
-        }
-
-        if (storyId == MainQuestDefs.StoryC3Jungle)
-        {
-            return new List<StoryBeat>
-            {
-                StoryDirector.Narration(
-                    "藤蔓后头有一座塌了的石门，门上刻着不属于这个时代的字。"),
-                StoryDirector.Narration(
-                    "守在这里的东西没有名字——它只是记得，有人曾经从这儿走进去，再没出来。"),
-            };
-        }
-
-        if (storyId == MainQuestDefs.StoryC4Field)
-        {
-            return new List<StoryBeat>
-            {
-                StoryDirector.Narration(
-                    "草原的风里混着铁锈味，那是更远处的战火被吹了过来。"),
-                StoryDirector.Narration(
-                    "你在草根下捡到一块木牌，背面刻着一个名字，笔画很新。"),
-            };
-        }
-
-        if (storyId == MainQuestDefs.StoryC6Cave)
-        {
-            return new List<StoryBeat>
-            {
-                StoryDirector.Narration(
-                    "深窟的石壁上有人用刀刻过字，一层压着一层，像很多人写过同一句话。"),
-                StoryDirector.Narration(
-                    "最上面那行还没写完：『如果你读到这——』"),
-            };
-        }
-
-        if (storyId == MainQuestDefs.StoryC8Ice)
-        {
-            return new List<StoryBeat>
-            {
-                StoryDirector.Narration(
-                    "雪落到剑刃上就化了，像它认得这把剑。"),
-                StoryDirector.Narration(
-                    "裂隙在前面收成一条白线。你想起老板娘那句没说完的话，忽然明白她为什么没往下说。"),
-            };
-        }
-
-        return new List<StoryBeat>
-        {
-            StoryDirector.Narration("\u4e00\u6bb5\u8fd8\u6ca1\u5199\u7684\u5267\u60c5\u3002"),
-        };
-    }
+    // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的或者酒馆对话里的」】
+    // Story(storyId) 整个方法已删：5 段剧情文案（c1_blade/c3_jungle/c4_field/c6_cave/c8_ice）
+    // 并入各章战前剧情 ChapterStoryBeats.PlayPre1/3/4/6/8，随进关自动播；
+    // quest.csv 的 watch_story 任务行同步全删（C1_Q4/C3_Q3/C4_Q3/C6_Q2/C8_Q1）。
 }

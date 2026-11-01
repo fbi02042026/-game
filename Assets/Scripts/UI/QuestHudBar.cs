@@ -380,6 +380,8 @@ public class QuestHudBar : MonoBehaviour
         float h = root != null && root.rect.height > 0f ? root.rect.height : GameConfig.DESIGN_HEIGHT;
         Rect safe = Screen.safeArea;
         float topPx = Screen.height - (safe.y + safe.height);
+        float simPx = SafeAreaFitter.EditorNotchTopPx();   // 编辑器模拟刘海，与真机预览一致（2026-11-01）
+        if (simPx > topPx) topPx = simPx;
         return topPx > 0f ? topPx / Screen.height * h : 0f;
     }
 

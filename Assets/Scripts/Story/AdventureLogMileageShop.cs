@@ -46,11 +46,13 @@ public static class AdventureLogMileageShop
         // 【2026-10-20 主人拍板】体力药改 20点=10体力（一次冒险的量），原 15点=1体力不够一次冒险基本无用
         new ShopItem { Id = "stamina_1", Name = "体力药", CostPoints = 200, WeeklyLimit = 3, Kind = RewardKind.Stamina, Amount = 10 },
         // 【2026-10-20 主人拍板】里程商店价格 ×10
-        new ShopItem { Id = "scroll_c", Name = "普通卷轴（招募稀有佣兵）", CostPoints = 300, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
+        // 2026-11-01 名字精简配合货架 Label 收窄：括号说明删掉（面板顶部已有「卷轴库存 普通/高级」行，语义不丢）
+        new ShopItem { Id = "scroll_c", Name = "普通招募卷轴", CostPoints = 300, WeeklyLimit = 3, Kind = RewardKind.ScrollCommon, Amount = 1 },
         // 【2026-10-20 主人拍板】里程商店价格 ×10
         // 【2026-10-17 主人拍板】卷轴改版：旧「稀有招募卷」失去用途下架（存量已在存档加载时折算进普通卷轴）；
-        // 「传奇招募卷」语义升级为「高级招募卷轴」（招募传奇佣兵专用，id 不动，周限购计数照旧）
-        new ShopItem { Id = "scroll_l", Name = "高级招募卷轴（招募传奇佣兵）", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
+        // 「传奇招募卷」语义升级为「高级招募卷轴」（招募传奇佣兵专用，id 不动，周限购计数照旧）；
+        // 2026-11-01 名字精简配合货架 Label 收窄：括号说明删掉（同上，语义在面板顶部库存行）
+        new ShopItem { Id = "scroll_l", Name = "高级招募卷轴", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
         // 【2026-10-21 主人拍板】遗忘药水：洗天赋消耗道具，500 点/周限 1；发放口 = townBagItems（角色页可见）
         new ShopItem { Id = "forget_potion", Name = "遗忘药水", CostPoints = 500, WeeklyLimit = 1, Kind = RewardKind.Item, Amount = 1, DefId = "item_forget_potion" },
     };

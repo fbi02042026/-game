@@ -331,6 +331,36 @@ public class SafeAreaFitter : MonoBehaviour
         return 1f;
     }
 
+    // ────────────────────────────────────────────────
+    // 编辑器刘海模拟（2026-11-01 主人拍板「编辑器当成真机，刘海按真实位置移动」）
+    // ────────────────────────────────────────────────
+
+    /// <summary>
+    /// 编辑器模拟刘海的安全区顶高（占屏高比例）。主流安卓刘海/挖孔的安全区顶内缩
+    /// 约为屏高 3.5%（1080×2340 机型约 80~90px）。
+    /// 【2026-11-01 主人「往下移动的有点多了 减少20%」】0.035 → 0.028。
+    /// 与真机量出值有出入时只调这一个数。
+    /// </summary>
+    public const float EditorNotchHeightRatio = 0.028f;
+
+    /// <summary>
+    /// 编辑器模拟刘海的顶高（屏幕像素）。只在编辑器生效：
+    /// Game 视口没有真刘海，Screen.safeArea 恒等于全屏，顶栏在编辑器里不会像真机那样
+    /// 被刘海往下顶，预览位置与真机对不上 —— 这里补一个典型刘海高。
+    /// 若安全区已不是全屏（如 Device Simulator 手动设置过），尊重现值返回 0，不叠加。
+    /// </summary>
+    public static float EditorNotchTopPx()
+    {
+#if UNITY_EDITOR
+        if (Screen.width <= 0 || Screen.height <= 0) return 0f;
+        Rect safe = Screen.safeArea;
+        if (Screen.height - (safe.y + safe.height) > 1f) return 0f;   // 已有真实/模拟安全区
+        return Screen.height * EditorNotchHeightRatio;
+#else
+        return 0f;
+#endif
+    }
+
     /// <summary>
     /// 安全区顶部内缩量（画布逻辑单位 = 屏幕像素 ÷ Canvas.scaleFactor）。
     /// 供「自己写排版」的界面直接把这层 padding 加进布局（如登录页底部忠告），
@@ -340,6 +370,8 @@ public class SafeAreaFitter : MonoBehaviour
     {
         if (rt == null || Screen.width <= 0 || Screen.height <= 0) return 0f;
         float px = Mathf.Max(0f, Screen.height - (Screen.safeArea.y + Screen.safeArea.height));
+        float simPx = EditorNotchTopPx();   // 编辑器没有真刘海 → 用模拟刘海顶高（2026-11-01）
+        if (simPx > px) px = simPx;
         return px <= 0f ? 0f : px / Mathf.Max(0.01f, ScaleFactorOf(rt));
     }
 

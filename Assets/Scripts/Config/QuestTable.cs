@@ -29,6 +29,7 @@ public static class QuestTable
         public int order;           // 同章内推进顺序
         public string rewardText;   // 日常展示用奖励文案
         public int rewardExp;       // 任务奖励经验（2026-10-29 扩编末列；0=不发，DailyTaskSystem 随达标自动发）
+        public int rewardGold;      // 主线完成发金币（2026-11-01 主人拍板：主线多少都要给点奖励，哪怕几十金币）
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -67,7 +68,8 @@ public static class QuestTable
                 rewardStones = GameTableCsv.TryInt(c[8], out int rs) ? rs : 0,
                 order = GameTableCsv.TryInt(c[9], out int od) ? od : 0,
                 rewardText = c.Length > 10 ? c[10] : "",
-                rewardExp = c.Length > 12 && GameTableCsv.TryInt(c[12], out int rExp) ? rExp : 0   // 末列（2026-10-29 扩编）
+                rewardExp = c.Length > 12 && GameTableCsv.TryInt(c[12], out int rExp) ? rExp : 0,  // 末列（2026-10-29 扩编）
+                rewardGold = c.Length > 13 && GameTableCsv.TryInt(c[13], out int rGold) ? rGold : 0 // 主线金币奖励（2026-11-01）
             };
             _rows.Add(row);
         }

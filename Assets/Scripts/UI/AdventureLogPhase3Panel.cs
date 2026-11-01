@@ -82,6 +82,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     const float ListViewportBottomY = -430f;
     const float ListViewportW = 424f;
 
+    /// <summary>行内文字统一字号（2026-11-01 主人要求「购买按钮的字小一号，字的大小不一样 统一下」）：
+    /// 预制体里按钮字 22、Label 多数 20、Row_5 Label 15，三档不齐 → 行内 Label 与按钮字一律 20。
+    /// 代码侧统一（ prefab 由主人自己改，这里运行时归一，克隆行走同一绑定出口自动生效）。</summary>
+    const int RowTextFontSize = 20;
+
     // ===== 竖屏整体放大（2026-10-24 主人拍板；预制体设计几何实测值，勿改） =====
     // Phase3Panel 464×932.6 @(121,0)；renwu 496×1024 @(-182,0)（设计稿 720×1280 坐标）。
     // 2026-10-24 晚主人拍板：面板整体缩窄 500→464（只比商品行区宽一点，多露出左侧装饰人物），
@@ -233,6 +238,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         _icons[i] = row.transform.Find(IconName)?.GetComponent<Image>();
         if (_actionLabels[i] == null)
             Debug.LogError($"[Phase3Panel] 节点 {RowName(i)} 缺子节点 Label（Text）");
+        else
+            _actionLabels[i].fontSize = RowTextFontSize;   // 2026-11-01 主人要求：行文字统一 20（Row_5 原是 15）
 
         // 兑换节点：点击兑换的按钮（预制体若没挂 Button，运行时补一个并指向自身底图）
         var ex = row.transform.Find(ExchangeName);
@@ -265,7 +272,13 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         var cnt = ex.Find(CountName);
         _countTexts[i] = cnt != null ? cnt.GetComponent<Text>() : null;
         if (_countTexts[i] != null)
+        {
             _countBaseColors[i] = _countTexts[i].color;
+            // 2026-11-01 主人要求「购买按钮的字小一号」：22 → 20，与行内 Label 同号
+            _countTexts[i].fontSize = RowTextFontSize;
+            // 「已领取/已兑完」3 字在 60 宽文本框正好顶满，防换行被竖向裁掉（居中对齐不会偏位）
+            _countTexts[i].horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
         else
             Debug.LogError($"[Phase3Panel] 节点 {RowName(i)}/{ExchangeName} 缺子节点 {CountName}（Text）");
 
@@ -701,7 +714,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string staffHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{AdventureLogMileage.LevelThresholds[1]}点</color>";
+                // 2026-11-01 配合 Label 收窄（prefab 宽 470→230）：分隔空格　→ 半角，防长行折行被裁
+                _actionLabels[rowIdx].text = $"<color=#{staffHex}>{SpecialWeapons.InstanceName}</color> <color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{AdventureLogMileage.LevelThresholds[1]}点</color>";
 
             if (_countTexts[rowIdx] != null)
             {
@@ -750,7 +764,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
             if (_actionLabels[rowIdx] != null)
-                _actionLabels[rowIdx].text = $"<color=#{rareHex}>{WeaponAffixSystem.RarityPrefix(Rarity.Rare)}{m.Label}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{m.NeedPoints}点</color>";
+                // 2026-11-01 配合 Label 收窄（prefab 宽 470→230）：分隔空格　→ 半角
+                _actionLabels[rowIdx].text = $"<color=#{rareHex}>{WeaponAffixSystem.RarityPrefix(Rarity.Rare)}{m.Label}</color> <color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>需{m.NeedPoints}点</color>";
 
             if (_countTexts[rowIdx] != null)
             {
@@ -800,7 +815,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             bool canBuyDaily = AdventureLogMileageShop.CanBuyDailyLegendaryGift(out _);
             string legHex = MercFavorDefs.QualityColorHex(MercFavorDefs.GiftQuality.Legendary);
             if (_actionLabels[rowIdx] != null && gift != null)
-                _actionLabels[rowIdx].text = $"<color=#{legHex}>{gift.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{AdventureLogMileageShop.DailyLegendaryCost}点</color>";
+                // 2026-11-01 配合 Label 收窄（prefab 宽 470→230）：分隔空格　→ 半角
+                _actionLabels[rowIdx].text = $"<color=#{legHex}>{gift.Name}</color> <color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{AdventureLogMileageShop.DailyLegendaryCost}点</color>";
 
             if (_countTexts[rowIdx] != null)
             {
@@ -836,7 +852,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         if (_actionLabels[rowIdx] != null)
         {
             string nameHex = ColorUtility.ToHtmlStringRGB(ShopItemLabelColor(item.Id));
-            _actionLabels[rowIdx].text = $"<color=#{nameHex}>{item.Name}</color>　<color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color>　本周余{remain}/{item.WeeklyLimit}";
+            // 2026-11-01 配合 Label 收窄（prefab 宽 470→230）：分隔空格　→ 半角、「本周余」→「余」，防长行折行被裁
+            _actionLabels[rowIdx].text = $"<color=#{nameHex}>{item.Name}</color> <color=#{ColorUtility.ToHtmlStringRGB(PriceColorHex)}>{item.CostPoints}点</color> 余{remain}/{item.WeeklyLimit}";
         }
 
         // 按钮文字：只放「购买」，兑完显「已兑完」；每周领完或点数不足 → 置灰

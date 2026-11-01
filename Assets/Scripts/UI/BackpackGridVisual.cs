@@ -199,11 +199,14 @@ public static class BackpackGridVisual
             EquipRarityRim.Apply(go.transform, (isItem || p.IsDisplay) ? (Rarity?)null : p.equip.rarity);
 
             // ownerFragCard 路径整卡就是视觉本体，不走名字兜底
+            // 【2026-11-01 修 NRE】展示位（IsDisplay）没有 equip，原三元 false 分支直接取 p.equip.rarity
+            // 必空引用 → 铺格循环中断、后面格子全不渲染（角色页每次刷新报 BackpackGridVisual.cs:203 的真凶）。
+            // 修正：非装备位一律传 null 稀有度。
             if (!ownerFragCard && !hasIcon)
                 AddNameFallback(go.transform,
                     p.IsDisplay ? p.displayName
                         : isItem ? (p.item.Name ?? "道具") : (EquipUiText.EquipTitleWithHand(p.equip) ?? "装备"),
-                    isItem ? (Rarity?)null : p.equip.rarity);
+                    isItem || p.IsDisplay ? (Rarity?)null : p.equip.rarity);
 
             if (p.IsDisplay)
             {

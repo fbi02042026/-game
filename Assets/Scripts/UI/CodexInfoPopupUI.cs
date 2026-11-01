@@ -33,6 +33,11 @@ public class CodexInfoPopupUI : MonoBehaviour
     Action _onUnlock;
     int _baseDescSize;   // Desc/Lore 基准字号（首次打开时记录，降档排版后用于恢复）
     int _baseLoreSize;
+    /// <summary>面板基准尺寸（首次打开记录；每次打开从基准重算，拉伸不残留）。</summary>
+    Vector2 _basePanelSize;
+    /// <summary>标题/简介基准 y（首次打开记录；无立绘弹窗上移填补头像框空位用，2026-11-01）。</summary>
+    float? _baseTitleY;
+    float? _baseMetaY;
     /// <summary>可选大图（佣兵全身立绘）：非空时点弹窗头像放大查看，点任意处关闭（2026-10-20）。</summary>
     Sprite _zoomSprite;
     RectTransform _zoomRoot;
@@ -51,9 +56,11 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     public bool IsOpen => root != null && root.activeSelf;
 
-    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null)
+    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null,
+        string topTitleOverride = null, string topIconPath = null)
     {
-        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind);
+        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind,
+            topTitleOverride: topTitleOverride, topIconPath: topIconPath);
     }
 
     /// <summary>
@@ -244,7 +251,8 @@ public class CodexInfoPopupUI : MonoBehaviour
     }
 
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
-        string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null)
+        string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
+        string topTitleOverride = null, string topIconPath = null)
     {
         BindRefs();
         Wire();
@@ -274,9 +282,26 @@ public class CodexInfoPopupUI : MonoBehaviour
             if (topTitleText != null)
                 topTitleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
             if (topIcon != null)
+            {
+                topIcon.gameObject.SetActive(true);
                 topIcon.sprite = Resources.Load<Sprite>(codexKind.Value
                     ? "UI/Art/冒险日志/yongbingicon"
                     : "UI/Art/冒险日志/guaiwuicon");
+            }
+        }
+        // 2026-11-01 主人拍板：世界页条目详情也走本弹窗，头部文案/图标按入口自定义（不传保持原样）；
+        // 同日晚追加：topIconPath 传空串 = 明确不要图标（主线/支线/世界弹窗），节点收起防残留上一单的图
+        if (!string.IsNullOrEmpty(topTitleOverride) && topTitleText != null)
+            topTitleText.text = topTitleOverride;
+        if (topIconPath != null && topIcon != null)
+        {
+            if (topIconPath.Length == 0)
+                topIcon.gameObject.SetActive(false);
+            else
+            {
+                topIcon.gameObject.SetActive(true);
+                topIcon.sprite = Resources.Load<Sprite>(topIconPath);
+            }
         }
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";
@@ -286,6 +311,24 @@ public class CodexInfoPopupUI : MonoBehaviour
             portrait.sprite = portraitSprite;
             portrait.preserveAspect = true;
             portrait.color = portraitSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.15f);
+            // 2026-11-01 主人拍板「弹窗不用加图标，排版也不好」：任务/世界类弹窗不传立绘，
+            // 头像框整个收起（留着就是一块空框），标题/简介上移填补，弹窗不空一大块。
+            var frameTf = portrait.transform.parent;
+            if (frameTf != null && frameTf.name == "PortraitFrame")
+                frameTf.gameObject.SetActive(portraitSprite != null);
+            float textShift = portraitSprite != null ? 0f : 200f;   // 标题/简介上移量（补头像框空位）
+            if (titleText != null)
+            {
+                var trt = titleText.rectTransform;
+                if (!_baseTitleY.HasValue) _baseTitleY = trt.anchoredPosition.y;
+                trt.anchoredPosition = new Vector2(trt.anchoredPosition.x, _baseTitleY.Value + textShift);
+            }
+            if (metaText != null)
+            {
+                var mrt2 = metaText.rectTransform;
+                if (!_baseMetaY.HasValue) _baseMetaY = mrt2.anchoredPosition.y;
+                mrt2.anchoredPosition = new Vector2(mrt2.anchoredPosition.x, _baseMetaY.Value + textShift);
+            }
             if (portraitSprite != null)
                 PortraitIdleMotion.EnsureOn(portrait.rectTransform, 0.18f);
             else
@@ -446,6 +489,11 @@ public class CodexInfoPopupUI : MonoBehaviour
         var loreRt = loreText.rectTransform;
         if (panelRt == null || descRt == null || loreRt == null) return;
 
+        // 2026-11-01 主人拍板「位置不够可以上下拉伸」：先记面板基准尺寸，每次打开从基准重算
+        //（内容放不下时面板上下对称加高，pivot 0.5 居中长；基准高只记第一次，拉伸不残留）。
+        if (_basePanelSize.x <= 0f) _basePanelSize = panelRt.sizeDelta;
+        else panelRt.sizeDelta = _basePanelSize;
+
         // 2026-10-31 主人报「怪物信息排版优化」：Meta 与正文、描述与趣闻两段间距拉开
         // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
         float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
@@ -480,6 +528,21 @@ public class CodexInfoPopupUI : MonoBehaviour
         float loreH = loreText.preferredHeight;
 
         float avail = top - bottomLimit;
+        // 2026-11-01 主人拍板「条的位置不够可以上下拉伸」：内容放不下先把面板上下加高
+        //（上限近满屏，参考高 1280 留 100 边）；顶栏内容锚顶、关闭/解锁钮锚底，跟着边走不压字。
+        float need = descH + loreGap + loreH;
+        if (need > avail)
+        {
+            const float maxPanelH = 1180f;
+            float grow = Mathf.Min(need - avail, Mathf.Max(0f, maxPanelH - panelRt.rect.height));
+            if (grow > 0f)
+            {
+                panelRt.sizeDelta = new Vector2(panelRt.sizeDelta.x, panelRt.sizeDelta.y + grow);
+                bool hasUnlock = unlockButton != null && unlockButton.gameObject.activeSelf;
+                bottomLimit = -panelRt.rect.height + (hasUnlock ? 164f : 92f);
+                avail = top - bottomLimit;
+            }
+        }
         if (descH + loreGap + loreH > avail)
         {
             // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）

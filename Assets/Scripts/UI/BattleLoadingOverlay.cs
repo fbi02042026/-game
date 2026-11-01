@@ -65,6 +65,8 @@ public static class BattleLoadingOverlay
         if (_ui == null) return;
         Object.Destroy(_ui.gameObject);
         _ui = null;
+        // 【2026-11-01 修「loading 界面弹任务完成」】遮罩真收掉了，把攥住的 toast 放出来。
+        GlobalToastUI.FlushHeldToast();
     }
 
     static void RecreateInstance()

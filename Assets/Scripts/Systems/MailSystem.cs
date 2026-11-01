@@ -75,6 +75,10 @@ public static class MailSystem
         // 整封邮件标已领。旧口径「装不下的留在邮件」在满体力时一笔都进不来 → 邮件永远领不完、红点消不掉；
         // 邮件文案口径本就是「领取后仍受上限限制」，与领取即清空的预期一致。
         // （实际只有体力有真实上限，金币等上限 9999999 打不满，此改动无副作用面）
+        // 【2026-11-01 主人拍板】领取成功改弹「获得奖励」弹窗（不再 toast）：
+        // 清单必须在发放入账前收集 —— 下面会把附件 amount 置 0、flat 字段清零。
+        var claimRewards = notify ? BuildClaimRewardPopupEntries(mail) : null;
+
         ClaimOne(ResourceWallet.ResourceType.Gold, mail.gold);
         ClaimOne(ResourceWallet.ResourceType.Diamond, mail.diamond);
         ClaimOne(ResourceWallet.ResourceType.Stamina, mail.stamina);
@@ -158,7 +162,15 @@ public static class MailSystem
         mail.talentPoints = 0;
         mail.claimed = true;
 
-        if (notify) UIManager.Instance?.ShowToast("邮件已领取", force: true);
+        if (notify)
+        {
+            // 【2026-11-01 主人拍板】领取成功弹「获得奖励」弹窗（与每日登录/宝箱同款 RewardPopupUI）；
+            // 清单为空（理论上领取按钮只在有奖励时出现）才退回原 toast。
+            if (claimRewards != null && claimRewards.Count > 0)
+                RewardPopupUI.Show(claimRewards);
+            else
+                UIManager.Instance?.ShowToast("邮件已领取", force: true);
+        }
 
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
@@ -171,6 +183,83 @@ public static class MailSystem
         // 领取不重复入邮，避免死循环
         var r = ResourceWallet.Add(type, amount, save: false, notify: false, overflowToMail: false);
         return amount - r.added;
+    }
+
+    // ── 领取成功弹「获得奖励」弹窗（2026-11-01 主人拍板：不再 toast）──
+
+    /// <summary>领取前收集这封邮件的奖励清单。必须在发放入账前调用（发放会清零字段/附件 amount）。</summary>
+    static List<RewardPopupUI.Entry> BuildClaimRewardPopupEntries(MailEntry mail)
+    {
+        var items = new List<RewardPopupUI.Entry>();
+        if (mail == null) return items;
+
+        // flat 货币：图标与详情窗物品格同口径（Common 目录；体力用体力药水图，2026-10-17 主人拍板）
+        if (mail.gold > 0) items.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_gold"), $"金币 ×{mail.gold}"));
+        if (mail.diamond > 0) items.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_diamond_blue"), $"钻石 ×{mail.diamond}"));
+        if (mail.stamina > 0) items.Add(new RewardPopupUI.Entry(Resources.Load<Sprite>("UI/Art/Icons/Common/icon_stamina_potion"), $"体力 ×{mail.stamina}"));
+        if (mail.enchantStones > 0) items.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_enchant_stone"), $"附魔石 ×{mail.enchantStones}"));
+        if (mail.decomposeMats > 0) items.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_decompose_mat"), $"分解材料 ×{mail.decomposeMats}"));
+        if (mail.talentPoints > 0) items.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_talent_stone"), $"天赋石 ×{mail.talentPoints}"));
+
+        if (mail.attachments == null) return items;
+        for (int i = 0; i < mail.attachments.Count; i++)
+        {
+            var att = mail.attachments[i];
+            if (att == null || att.amount <= 0) continue;
+
+            // 碎片走主人碎片预制体卡片（与每日登录弹窗同口径），名字与详情窗一致「XX的本命碎片」
+            if (att.type == "mercfrag")
+            {
+                var rarity = MercRosterDefs.MercRarity.Rare;
+                string fragName = "本命碎片";
+                if (!string.IsNullOrEmpty(att.hireId) && MercRosterDefs.TryGetByHireId(att.hireId, out var fdef))
+                {
+                    rarity = fdef.Rarity;
+                    if (!string.IsNullOrEmpty(fdef.Name)) fragName = fdef.Name + "的本命碎片";
+                }
+                items.Add(RewardPopupUI.Entry.Fragment(rarity, att.hireId, $"{fragName} ×{att.amount}"));
+                continue;
+            }
+
+            var sp = !string.IsNullOrEmpty(att.iconOverride) ? Resources.Load<Sprite>(att.iconOverride) : null;
+            items.Add(new RewardPopupUI.Entry(sp, $"{AttachmentPopupName(att)} ×{att.amount}"));
+        }
+        return items;
+    }
+
+    /// <summary>结构化附件的弹窗名称（与 MailDetailUI 详情格同名口径；mercfrag 已在上方单独处理）。</summary>
+    static string AttachmentPopupName(MailAttachment att)
+    {
+        if (att == null) return "奖励";
+        if (att.type == "merc" && !string.IsNullOrEmpty(att.hireId))
+        {
+            if (MercRosterDefs.TryGetByHireId(att.hireId, out var def) && !string.IsNullOrEmpty(def.Name))
+                return def.Name;
+            return att.hireId;
+        }
+        if (att.type == "badge")
+        {
+            const string prefix = "badge:";
+            if (!string.IsNullOrEmpty(att.defId) && att.defId.StartsWith(prefix))
+            {
+                var parts = att.defId.Substring(prefix.Length).Split(':');
+                if (parts.Length == 2 && !string.IsNullOrEmpty(parts[0]))
+                    return parts[0] + "徽记·" + parts[1];
+            }
+            return "职业徽记";
+        }
+        switch (att.type)
+        {
+            case "gold": return "金币";
+            case "diamond": return "钻石";
+            case "stamina": return "体力";
+            case "enchant": return "附魔石";
+            case "mat": return "分解材料";
+            case "talent": return "天赋石";
+            case "scrollCommon": return "普通招募卷轴";
+            case "scrollLegendary": return "高级招募卷轴";
+            default: return att.type;
+        }
     }
 
     // ── 体力浪费预检（2026-10-18 主人拍板：领取会超出上限先弹确认「多余的会浪费」）──

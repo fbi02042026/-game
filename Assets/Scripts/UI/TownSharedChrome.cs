@@ -15,6 +15,13 @@ public static class TownSharedChrome
     static bool _topFontsDone;
     static bool _bottomFontsDone;
 
+    /// <summary>
+    /// 当前主界面顶条真源（<see cref="RaiseSharedChrome"/> / EnsureTopOffset 正在用的同一节点；
+    /// 尚未初始化时为 null）。【2026-11-01】冒险页顶部让位改从这里取 TopBar ——
+    /// 禁止再按名字深找（深搜会命中别页内层同名节点，10-27 +688 事故根因）。
+    /// </summary>
+    public static Transform CachedTopBar => _cachedTop;
+
     public static void InvalidateCache()
     {
         _cachedHallRoot = null;

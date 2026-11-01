@@ -36,13 +36,16 @@ public static class AdMercEventEntryUI
             return;
         }
 
-        // 过渡期（广告未接入）：活动整体折叠，入口隐藏（手摆节点 + 历史克隆体都收掉）
+        // 过渡期（广告未接入）：活动整体折叠，入口隐藏（手摆节点 + 历史克隆体都收掉），
+        // 下方两颗按钮（每日登录、对战）上移一格补位；黑底 bg 不动
+        // （2026-11-01 主人指令当天曾让 bg 跟移，同日晚主人纠正「按钮上移后那个黑底不要移」→ bg 保持原位）
         if (!GameConfig.ADS_ENABLED)
         {
             var handFolded = parent.Find(HandPlacedName);
             if (handFolded != null) handFolded.gameObject.SetActive(false);
             var legacyFolded = parent.Find(LegacyCloneName);
             if (legacyFolded != null) legacyFolded.gameObject.SetActive(false);
+            FoldUpBelowButtons(parent, dailyLoginButton.transform as RectTransform, handFolded);
             return;
         }
 
@@ -70,6 +73,49 @@ public static class AdMercEventEntryUI
         }
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(OnClicked);
+    }
+
+    /// <summary>标准格距：与 ArenaEntryUI / MiniGameEntryUI 的 OffsetY 同一档（每日登录上下格距）。</summary>
+    const float FoldSlotY = 140f;
+
+    /// <summary>已按标准格距补过位的每日登录按钮（实例 ID）——预制体缺手摆节点时防重复上移。</summary>
+    static readonly System.Collections.Generic.HashSet<int> s_foldedDailyIds = new System.Collections.Generic.HashSet<int>();
+
+    /// <summary>
+    /// 入口隐藏后，下方两颗按钮（每日登录、对战）上移补位；右列黑底 bg 不动（2026-11-01 主人拍板「黑底不要移」）。
+    /// 预制体摆了入口节点：位移量 = 入口原位 y − 每日登录现位 y（补位后差值为 0 → 幂等）。
+    /// 预制体没摆入口节点（当前仓库实况）：按标准格距 FoldSlotY 上移一格，本实例只补一次。
+    /// </summary>
+    static void FoldUpBelowButtons(Transform rightBar, RectTransform dailyRt, Transform handNode)
+    {
+        if (dailyRt == null) return;
+        float dy;
+        var handRt = handNode as RectTransform;
+        if (handRt != null)
+        {
+            dy = handRt.anchoredPosition.y - dailyRt.anchoredPosition.y;
+            if (Mathf.Abs(dy) < 0.5f) return;   // 已补过位（幂等）
+        }
+        else
+        {
+            if (!s_foldedDailyIds.Add(dailyRt.GetInstanceID())) return;   // 本实例已补过位
+            dy = FoldSlotY;
+        }
+
+        ShiftUp(dailyRt, dy);
+
+        var arena = rightBar.Find("对战");
+        if (arena == null) arena = rightBar.Find(ArenaEntryUI.NodeName);
+        if (arena != null)
+            ShiftUp(arena as RectTransform, dy);
+        else
+            Debug.LogError("[AdMercEntry] 未找到「对战」按钮，补位只挪了每日登录");
+    }
+
+    static void ShiftUp(RectTransform rt, float dy)
+    {
+        if (rt == null) return;
+        rt.anchoredPosition += new Vector2(0f, dy);
     }
 
     static void OnClicked()

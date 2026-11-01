@@ -92,6 +92,9 @@ public static class ChapterStoryBeats
             StoryDirector.Solo("艾丽娅", "还记得吗？三年前你揣着三枚铜板买面包，排在我后面。", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "现在你是公会第八支小队的队长了。今天只是新人试炼，别紧张。", StoryPortraits.Xiaomei),
             StoryDirector.Narration("这里是裂隙第一层的暮影森林。怪物是从缝里渗出来的——清完这波，把样本带回去交差。"),
+            // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c1_blade 两句并入战前
+            StoryDirector.Narration("你摸了摸腰间的裂隙之刃，刃口有一道旧缺口。"),
+            StoryDirector.Narration("公会档案写着：这把剑的前一任主人，三年前在森林层失踪。"),
             StoryDirector.Solo("你", "转正仪式上说好的，债没还清之前我哪都不去。走吧。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
@@ -115,6 +118,9 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Solo("艾丽娅", "岔路这边是翡翠秘境。十一年前，有一整支小队消失在这一层。", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "你转正那天，会长亲自给你别上徽章——他看我们的眼神，像在数还剩几个人。", StoryPortraits.Xiaomei),
+            // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c3_jungle 两句并入战前
+            StoryDirector.Narration("藤蔓后头有一座塌了的石门，门上刻着不属于这个时代的字。"),
+            StoryDirector.Narration("守在这里的东西没有名字——它只是记得，有人曾经从这儿走进去，再没出来。"),
             StoryDirector.Solo("你", "路标是新的。有人一直走在我们前面。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
@@ -125,6 +131,9 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("晨曦草原：裂隙第二层的风车草原。叶片一圈三年，替谁数着日子。"),
+            // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c4_field 两句并入战前
+            StoryDirector.Narration("草原的风里混着铁锈味，那是更远处的战火被吹了过来。"),
+            StoryDirector.Narration("你在草根下捡到一块木牌，背面刻着一个名字，笔画很新。"),
             StoryDirector.Solo("你", "艾丽娅，当年介绍我进公会的时候，你是不是早就知道会有今天？", StoryPortraits.Player),
             StoryDirector.Solo("艾丽娅", "我只知道我这支小队不能白组。走吧——今天风停了，这不正常。", StoryPortraits.Xiaomei),
         };
@@ -147,6 +156,9 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("巨岩深窟：再往下，诸神留下的东西就压在这一层底下。"),
+            // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c6_cave 两句并入战前
+            StoryDirector.Narration("深窟的石壁上有人用刀刻过字，一层压着一层，像很多人写过同一句话。"),
+            StoryDirector.Narration("最上面那行还没写完：『如果你读到这——』"),
             StoryDirector.Solo("艾丽娅", "当年我拉你进公会，你说『面包钱还没还我呢』。现在我怕你还想讨这笔债。", StoryPortraits.Xiaomei),
             StoryDirector.Solo("你", "三枚铜板，记着呢。等出去了，你请。", StoryPortraits.Player),
         };
@@ -169,6 +181,9 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("永霜雪境：裂隙最深处，雪一直下。这一趟的终点就在前面。"),
+            // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c8_ice 两句并入战前
+            StoryDirector.Narration("雪落到剑刃上就化了，像它认得这把剑。"),
+            StoryDirector.Narration("裂隙在前面收成一条白线。你想起老板娘那句没说完的话，忽然明白她为什么没往下说。"),
         };
         // 【2026-10-29 叙事体检】第 7 章选 A（先带她回去）后艾丽娅已送回城，不再对她说话；
         // B（一起砸了）/ C（让她坐上去）她仍同行，原台词保留。战前剧情每周目每章只播一次（看过即不重播）。

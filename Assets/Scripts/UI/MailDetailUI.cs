@@ -644,16 +644,18 @@ public class MailDetailUI : MonoBehaviour
                 "仍要领取",
                 () =>
                 {
-                    MailSystem.TryClaim(_mail != null ? _mail.id : null);   // notify=true：内部自动 toast
+                    MailSystem.TryClaim(_mail != null ? _mail.id : null);   // notify=true：内部弹「获得奖励」弹窗
                     GuildHallUI.RefreshAllHudStatic();
-                    if (_mail != null) RefreshAll();
+                    // 【2026-11-01 主人拍板】领取后直接回邮件列表，不再展示已领的详情页
+                    Close();
                 });
             return;
         }
 
-        MailSystem.TryClaim(_mail.id);      // notify=true：内部自动 toast + 刷新红点
+        MailSystem.TryClaim(_mail.id);      // notify=true：内部弹「获得奖励」弹窗 + 刷新红点
         GuildHallUI.RefreshAllHudStatic();
-        RefreshAll();
+        // 【2026-11-01 主人拍板】同上：领取后直接回邮件列表，不再展示已领的详情页
+        Close();
     }
 
     // ────────────────────────────────────────────────────────────────────────

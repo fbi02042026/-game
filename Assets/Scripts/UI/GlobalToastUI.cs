@@ -49,7 +49,43 @@ public class GlobalToastUI : MonoBehaviour
         msg = Persona(msg);   // 【2026-10-31 主人拍板】全局 toast 人设统一在这里套，调用方不用各改一遍
         // 直接调 GlobalToastUI 的路径也要挡气泡 —— 除非 force（物品变动）
         if (!force && AnyBubbleShowing) return;
+        // 【2026-11-01 修「loading 界面弹任务完成」】Loading 遮罩显示期间先把 toast 攥住，
+        // 遮罩收掉（BattleLoadingOverlay.Hide）时再放出来——日常任务结算（QuestBarBinder 轮询）
+        // 一进城就跑，toast 会弹在还没退场的 Loading 上面。只挡显示时机，结算/发奖照旧。
+        if (BattleLoadingOverlay.IsShowing)
+        {
+            _heldMsg = msg;      // 同 CoPlay「后一条顶掉前一条」的既有语义，只留最后一条
+            _heldForce = force;
+            return;
+        }
         Ensure().Play(msg);
+    }
+
+    /// <summary>攥住的 toast（Loading 期间来的），等遮罩收掉后冲刷。</summary>
+    static string _heldMsg;
+    static bool _heldForce;
+
+    /// <summary>【2026-11-01】域重载关闭时静态字段会跨 Play 残留（同 BattleLoadingOverlay.ResetStatics 口径），启动时清掉，防上一局的攥留 toast 开局冒出来。</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetHeldToast()
+    {
+        _heldMsg = null;
+        _heldForce = false;
+    }
+
+    /// <summary>
+    /// Loading 遮罩真正收掉时由 <see cref="BattleLoadingOverlay.Hide"/> 调：把攥住的 toast 放出来。
+    /// 若此刻又有新的一场 Loading 开着（连续切场景），继续攥着等下一次收。
+    /// </summary>
+    public static void FlushHeldToast()
+    {
+        if (string.IsNullOrEmpty(_heldMsg)) return;
+        var msg = _heldMsg;
+        var force = _heldForce;
+        _heldMsg = null;
+        _heldForce = false;
+        if (BattleLoadingOverlay.IsShowing) return;
+        Show(msg, force);
     }
 
     /// <summary>

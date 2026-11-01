@@ -5,6 +5,7 @@
 # 支线不进表：支线 = 支线岛（2026-10-23 合并方案），运行时读 SaveData.branchRoll1/2 + clearedSideIslandIds，见 QuestBarData.cs。
 # 加载器：Scripts/Config/QuestTable.cs；缺表 LogError 不兜底。
 # 第 0 行为表头，# 开头行忽略；逗号分隔（引号内逗号不切分）。
+# reward_gold（2026-11-01 主人拍板）：主线每条都给金币（哪怕几十金币），40+章号×10；空/0=不发。
 #
 # 列说明：
 # id            任务唯一ID（主线沿用旧 id；日常 daily_ 前缀）
@@ -16,7 +17,7 @@
 #                clear_stage        通关本章第 target_param 关（param=关卡下标 0 起）
 #                clear_stages       本章累计通关 target_count 关（密度行，基线=接手时已通关数）
 #                talk_npc           与 param=NPC 对话（innkeeper/guildmaster）
-#                watch_story        回顾剧情（param=storyId）
+#                watch_story        回顾剧情（param=storyId）——【2026-11-01 主人拍板「不要回顾剧情这个模式」】该类型任务行全部删除（C1_Q4/C3_Q3/C4_Q3/C6_Q2/C8_Q1），5 段剧情并入各章战前剧情 ChapterStoryBeats.PlayPre1/3/4/6/8；类型解析保留（老 bytes 兼容）
 #                recruit_merc       酒馆雇佣 target_count 名佣兵
 #                upgrade_talent     点 target_count 次天赋
 #                daily_login        每日登录（进度读 DailyLoginSystem）
@@ -29,49 +30,44 @@
 # reward_text   日常展示用奖励文案（登录的动态奖励由代码按当日循环填）
 # note          策划备注（开发可忽略）
 # reward_exp    任务奖励经验（2026-10-29 扩编；末列追加；0/缺省=不发经验；DailyTaskSystem 随达标自动发）
-id,category,chapter,title,desc,target_type,target_param,target_count,reward_stones,order,reward_text,note
-C1_Q1,主线,1,踏出第一步,,clear_stage,0,1,0,1,,
-C1_Q5,主线,1,热热身子,,clear_stages,,2,0,2,,新增密度行（前期密）
-C1_Q7,主线,1,打出感觉,,clear_stages,,3,0,3,,新增密度行（前期密）
-C1_Q2,主线,1,去见见老板娘,,talk_npc,innkeeper,1,1,4,,
-C1_Q3,主线,1,深入森林层,,clear_stage,2,1,0,5,,
-C1_Q4,主线,1,裂隙之刃的旧缺口,,watch_story,c1_blade,1,1,6,,
-C2_Q1,主线,2,新的委托,,clear_stage,0,1,0,1,,
-C2_Q5,主线,2,小试牛刀,,clear_stages,,2,0,2,,新增密度行
-C2_Q2,主线,2,先强化自己,,upgrade_talent,,1,1,3,,
-C2_Q3,主线,2,找个搭子,,recruit_merc,,1,1,4,,
-C2_Q6,主线,2,再接再厉,,clear_stages,,3,0,5,,新增密度行
-C2_Q4,主线,2,走到半程,,clear_stage,4,1,0,6,,
-C3_Q1,主线,3,密林的另一头,,talk_npc,innkeeper,1,1,1,,
-C3_Q5,主线,3,乘胜追击,,clear_stages,,2,0,2,,新增密度行
-C3_Q2,主线,3,穿过藤蔓,,clear_stage,2,1,0,3,,
-C3_Q3,主线,3,秘境守望者,,watch_story,c3_jungle,1,1,4,,
-C3_Q4,主线,3,翡翠尽头,,clear_stage,9,1,0,6,,
-C4_Q1,主线,4,再添一人,,recruit_merc,,1,1,1,,
-C4_Q5,主线,4,连战连捷,,clear_stages,,2,0,2,,新增密度行
-C4_Q2,主线,4,草原的风,,clear_stage,3,1,0,3,,
-C4_Q3,主线,4,风里的名字,,watch_story,c4_field,1,1,4,,
-C4_Q4,主线,4,长风尽头,,clear_stage,9,1,0,6,,
-C5_Q1,主线,5,出海前的委托,,talk_npc,guildmaster,1,1,1,,
-C5_Q5,主线,5,越战越勇,,clear_stages,,2,0,2,,新增密度行
-C5_Q2,主线,5,潮汐之上,,clear_stage,2,1,0,3,,
-C5_Q3,主线,5,沉下心来,,upgrade_talent,,3,1,4,,
-C5_Q4,主线,5,遗迹之门,,clear_stage,9,1,0,6,,
-C6_Q1,主线,6,走进深窟,,clear_stage,1,1,0,1,,
-C6_Q5,主线,6,步步为营,,clear_stages,,2,0,2,,新增密度行
-C6_Q2,主线,6,石壁旧字,,watch_story,c6_cave,1,1,3,,
-C6_Q3,主线,6,带上帮手,,recruit_merc,,1,1,4,,
-C6_Q4,主线,6,深窟尽头,,clear_stage,9,1,0,6,,
-C7_Q1,主线,7,老板娘的劝阻,,talk_npc,innkeeper,1,1,1,,
-C7_Q5,主线,7,烈火淬刃,,clear_stages,,2,0,2,,新增密度行
-C7_Q2,主线,7,烈焰之前,,clear_stage,2,1,0,3,,
-C7_Q3,主线,7,炼心,,upgrade_talent,,3,1,4,,
-C7_Q4,主线,7,炼狱尽头,,clear_stage,9,1,0,6,,
-C8_Q1,主线,8,裂隙的尽头,,watch_story,c8_ice,1,1,1,,
-C8_Q5,主线,8,裂隙前夕,,clear_stages,,2,0,2,,新增密度行
-C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,
-C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,
-C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,
+id,category,chapter,title,desc,target_type,target_param,target_count,reward_stones,order,reward_text,note,reward_exp,reward_gold
+C1_Q1,主线,1,踏出第一步,,clear_stage,0,1,0,1,,,,50
+C1_Q5,主线,1,热热身子,,clear_stages,,2,0,2,,新增密度行（前期密）,,50
+C1_Q7,主线,1,打出感觉,,clear_stages,,3,0,3,,新增密度行（前期密）,,50
+C1_Q2,主线,1,去见见老板娘,,talk_npc,innkeeper,1,1,4,,,,50
+C1_Q3,主线,1,深入森林层,,clear_stage,2,1,0,5,,,,50
+C2_Q1,主线,2,新的委托,,clear_stage,0,1,0,1,,,,60
+C2_Q5,主线,2,小试牛刀,,clear_stages,,2,0,2,,新增密度行,,60
+C2_Q2,主线,2,先强化自己,,upgrade_talent,,1,1,3,,,,60
+C2_Q3,主线,2,找个搭子,,recruit_merc,,1,1,4,,,,60
+C2_Q6,主线,2,再接再厉,,clear_stages,,3,0,5,,新增密度行,,60
+C2_Q4,主线,2,走到半程,,clear_stage,4,1,0,6,,,,60
+C3_Q1,主线,3,密林的另一头,,talk_npc,innkeeper,1,1,1,,,,70
+C3_Q5,主线,3,乘胜追击,,clear_stages,,2,0,2,,新增密度行,,70
+C3_Q2,主线,3,穿过藤蔓,,clear_stage,2,1,0,3,,,,70
+C3_Q4,主线,3,翡翠尽头,,clear_stage,9,1,0,6,,,,70
+C4_Q1,主线,4,再添一人,,recruit_merc,,1,1,1,,,,80
+C4_Q5,主线,4,连战连捷,,clear_stages,,2,0,2,,新增密度行,,80
+C4_Q2,主线,4,草原的风,,clear_stage,3,1,0,3,,,,80
+C4_Q4,主线,4,长风尽头,,clear_stage,9,1,0,6,,,,80
+C5_Q1,主线,5,出海前的委托,,talk_npc,guildmaster,1,1,1,,,,90
+C5_Q5,主线,5,越战越勇,,clear_stages,,2,0,2,,新增密度行,,90
+C5_Q2,主线,5,潮汐之上,,clear_stage,2,1,0,3,,,,90
+C5_Q3,主线,5,沉下心来,,upgrade_talent,,3,1,4,,,,90
+C5_Q4,主线,5,遗迹之门,,clear_stage,9,1,0,6,,,,90
+C6_Q1,主线,6,走进深窟,,clear_stage,1,1,0,1,,,,100
+C6_Q5,主线,6,步步为营,,clear_stages,,2,0,2,,新增密度行,,100
+C6_Q3,主线,6,带上帮手,,recruit_merc,,1,1,4,,,,100
+C6_Q4,主线,6,深窟尽头,,clear_stage,9,1,0,6,,,,100
+C7_Q1,主线,7,老板娘的劝阻,,talk_npc,innkeeper,1,1,1,,,,110
+C7_Q5,主线,7,烈火淬刃,,clear_stages,,2,0,2,,新增密度行,,110
+C7_Q2,主线,7,烈焰之前,,clear_stage,2,1,0,3,,,,110
+C7_Q3,主线,7,炼心,,upgrade_talent,,3,1,4,,,,110
+C7_Q4,主线,7,炼狱尽头,,clear_stage,9,1,0,6,,,,110
+C8_Q5,主线,8,裂隙前夕,,clear_stages,,2,0,2,,新增密度行,,120
+C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,,,120
+C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,,,120
+C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,,,120
 daily_login,日常,0,每日登录,领取今日登录奖励,daily_login,,1,0,1,经验 ×30,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,30
 daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,经验 ×50,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回)
 daily_gold,日常,0,财源广进,今日获取 {0}/{1} 金币,daily_gain_gold,,500,0,2,经验 ×20,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,20

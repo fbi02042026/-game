@@ -41,6 +41,8 @@ public struct MainQuestDef
     public string param;
     /// <summary>完成时发放的天赋石。0 = 不发（战斗类走现有关卡/章节里程碑，不重复给）。</summary>
     public int rewardStones;
+    /// <summary>完成时发放的金币（2026-11-01 主人拍板：主线每条都给点奖励，哪怕几十金币）。</summary>
+    public int rewardGold;
 
     public bool IsBattle => type == MainQuestType.ClearStage;
 }
@@ -96,7 +98,8 @@ public static class MainQuestDefs
                 desc = r.desc,
                 targetCount = r.targetCount,
                 param = r.param,
-                rewardStones = r.rewardStones
+                rewardStones = r.rewardStones,
+                rewardGold = r.rewardGold
             });
         }
         return list.ToArray();

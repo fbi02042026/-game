@@ -102,6 +102,7 @@ public static class LevelUpPopup
         {
             SetText(row1, "升级前", beforeLevel.ToString());
             SetText(row1, "升级后", afterLevel.ToString());
+            BumpFontSize(row1, 2);   // 2026-11-01 主人要求：标题下面的字字号大两号
         }
         var row2 = FindDeep(_host.transform, "第二行");
         if (row2 == null)
@@ -116,6 +117,7 @@ public static class LevelUpPopup
             SetText(row2, "职业", PlayerJobDefs.Get(job).DisplayName);
             SetText(row2, "属性", LevelSystem.JobTendencyLabel(job));   // 玩家口径：生命/攻速/魔攻（10-25 拍板）
             SetText(row2, "升级后", "+" + Mathf.Max(1, afterLevel - beforeLevel));
+            BumpFontSize(row2, 2);   // 2026-11-01 主人要求：标题下面的字字号大两号
         }
 
         var dim = FindDeep(_host.transform, "Dim");
@@ -152,6 +154,14 @@ public static class LevelUpPopup
             return;
         }
         text.text = value;
+    }
+
+    /// <summary>整行字号统一加大 delta（2026-11-01 主人要求「标题下面的字大两号」；字号属字体项，代码可改，不动预制体）。</summary>
+    static void BumpFontSize(Transform scope, int delta)
+    {
+        if (scope == null) return;
+        var texts = scope.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++) texts[i].fontSize += delta;
     }
 
     internal static Transform FindDeep(Transform root, string name)

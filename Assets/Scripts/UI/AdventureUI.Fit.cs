@@ -156,6 +156,10 @@ public partial class AdventureUI
                 if (activityOrderRestore != null) ApplyActivityRowOrder(activityOrderRestore);
                 RestoreAdventureSidebarEven();
                 RestoreAdventureSidebarOrder(right);
+                // 【2026-11-01】编辑器模拟刘海（编辑器当真机）/ 真机刘海下，资源条比预制体假设的低，
+                // 标准屏也要让顶部两块（横幅/左列）+ 右列容器与资源条【同步下移同一避让量】——
+                // 无刘海标准屏真机 dodge=5 与资源条固定下移完全同步，相对布局与之前一致。
+                FitAdventureTopBelowResourceStrip(transform as RectTransform);
                 return;
             }
 
@@ -1121,17 +1125,21 @@ public partial class AdventureUI
     // 缺真值不兜底：资源条节点找不到 / 还没量出有效位置时不动页面，等补跑协程。
     // ────────────────────────────────────────────────────
 
-    /// <summary>资源条底边与页面顶部内容（横幅顶边）之间的视觉间距（含药丸列悬出条底 ~5 的余量）。</summary>
+    /// <summary>【2026-11-01 退役】旧口径「对齐到资源条底+此间距」已改为同步下移（见 EnableTopShiftBelowStrip 注释），常量保留防外部引用。</summary>
     const float TopStripGapUnits = 16f;
 
     /// <summary>
-    /// 顶部让位位移总开关（2026-10-27 紧急回退，主人拍板口径「以前没事」）：
+    /// 顶部让位位移总开关（2026-10-27 紧急回退，主人拍板口径「以前没事」→ 2026-11-01 重开）：
     /// 本段位移（d926ba32 10-26 引入）在真机/编辑器实测把 Top 横幅、LeftSidebar 左列、
     /// 主线/无限/活动副本整列齐刷刷抬高 +688 推出屏顶（[AdventureFit诊断] 横幅顶 2277 = 预制体 1589+688），
     /// 病根是它按名字深找的 "TopBar" 量出的位置不在页顶（换算进页根局部落在顶边上方 685）。
-    /// 默认 false = 停用位移、还原预制体位（10-26 之前的行为）；要恢复让位改 true（同时修对 TopBar 查找后再开）。
+    /// 【2026-11-01 主人「编辑器当真机，冒险界面左边的标题没有下移」→ 重开本开关，配套三道防线】
+    /// ① TopBar 真源改走 TownSharedChrome.CachedTopBar（顶条实际显隐/避让用的同一节点，不再深找）；
+    /// ② 位移口径改为「同步下移」——shift = -TotalTopInsetUnits(资源条)，与资源条避让同一距离，
+    ///    不再量世界坐标对齐到「资源条底+间距」（会破预制体手调位）；
+    /// ③ 避让量 >300 设计单位 = 疑似找错节点，报错并放弃本次让位。
     /// </summary>
-    public static bool EnableTopShiftBelowStrip = false;
+    public static bool EnableTopShiftBelowStrip = true;
 
     void FitAdventureTopBelowResourceStrip(RectTransform rootRt)
     {
@@ -1158,11 +1166,17 @@ public partial class AdventureUI
         }
 
         // 资源条真源：主界面 TopBar；独立打开（无大厅）时是本页挂的 TopBar / SharedResourceBar。
-        Transform strip = null;
-        if (GuildHallUI.Instance != null)
-            strip = FindDeepChild(GuildHallUI.Instance.transform, "TopBar");
-        if (strip == null)
-            strip = FindDeepChild(transform, "TopBar") ?? FindDeepChild(transform, "SharedResourceBar");
+        // 【2026-11-01 修 10-27 +688 事故根因】优先取 TownSharedChrome.CachedTopBar ——
+        // 那是 RaiseSharedChrome 实际点亮/避让的那条顶条（权威）；深找只作回退
+        //（深搜可能命中别页内层同名 "TopBar"，量出位置换算进页根落在顶边上方 685）。
+        Transform strip = TownSharedChrome.CachedTopBar;
+        if (strip == null || !strip.gameObject.activeInHierarchy)
+        {
+            if (GuildHallUI.Instance != null)
+                strip = FindDeepChild(GuildHallUI.Instance.transform, "TopBar");
+            if (strip == null)
+                strip = FindDeepChild(transform, "TopBar") ?? FindDeepChild(transform, "SharedResourceBar");
+        }
         var stripRt = strip as RectTransform;
         if (stripRt == null) return;
 
@@ -1177,21 +1191,24 @@ public partial class AdventureUI
                       $"active={strip.gameObject.activeInHierarchy} sib={strip.GetSiblingIndex()}");
         }
 
-        // 资源条底边（世界四角 [0]=左下）→ 页根本地 →「距页根顶边多少」
-        var corners = new Vector3[4];
-        stripRt.GetWorldCorners(corners);
-        float rootBottomY = rootRt.rect.min.y;
-        float aboveBottom = rootRt.InverseTransformPoint(corners[0]).y - rootBottomY;
-        float stripBottomFromTop = rootRt.rect.height - aboveBottom;
-        if (stripBottomFromTop <= 1f) return;   // 量不到有效位置（刚实例化/未布局）→ 等下一轮补跑
+        // 【2026-11-01 改口径：同步下移，不再对齐到「资源条底+间距」】
+        // 位移量 = 资源条本帧的避让总量（安全区顶 + 胶囊预留 + 固定下移，与 SafeAreaFitter.Offset
+        // 施加给资源条的是同一个数），顶部两块 + 右列容器【同步下移同一距离】——
+        // 预制体里「横幅藏在资源条透明底衬下 / 首颗按钮比条底低 17」的手调相对节奏原样保持，
+        // 任何刘海机型都不会出现「资源条下去了、页面顶还吊在原位」的错位。
+        // 为什么不量世界坐标对齐（10-26 旧口径）：那会把藏在条底透明区里的横幅整块再推 ~140，
+        // 破坏手调布局；10-27 +688 抬出屏顶事故也源于量世界坐标这条路。
+        float dodge = SafeAreaFitter.TotalTopInsetUnits(stripRt);
+        // 护栏：避让总量正常 ≤ 屏高 ~8%（刘海+胶囊+呼吸）；量出异常（找错节点/scaleFactor 失真）不动页面。
+        if (dodge > 300f)
+        {
+            Debug.LogError($"[AdventureFit] 让位量到异常避让量 {dodge:F0}（>300，疑似找错 TopBar），本次不让位。");
+            return;
+        }
+        float shift = -dodge;
 
-        // 位移量以横幅 base 顶边为基准：横幅顶边 → 资源条底 + 间距。
         var topBanner = transform.Find("Top") as RectTransform;
         if (topBanner == null) return;
-        var bb = CaptureAdventureBase(topBanner);
-        float topEdgeY = Mathf.Lerp(rootRt.rect.min.y, rootRt.rect.max.y, bb.anchorMax.y) + bb.offsetMax.y;
-        float bannerTopFromTop = rootRt.rect.height - topEdgeY;
-        float shift = bannerTopFromTop - (stripBottomFromTop + TopStripGapUnits);   // 负 = 下移
 
         ApplyTopNodeShift(topBanner, shift);
         ApplyTopNodeShift(transform.Find("LeftSidebar") as RectTransform, shift);

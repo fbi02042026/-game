@@ -34,11 +34,14 @@ public class MercGainCinematicUI : MonoBehaviour
     Text _name;
     RectTransform _bgRt;
     CanvasGroup _bgCg, _standCg, _nameCg;
-    ParticleSystem[] _bgFx;   // 主人在 BG 节点下摆的特效，界面出现时一起播放
     Vector2 _nameBasePos;
     float _bgTargetAlpha;
     Coroutine _co;
     System.Action _onClosed;
+    // 【2026-11-01 主人报「最后砸那一下还会往下移动一下」】出场动画播放中为 true，
+    // LateUpdate 每帧把 Animator 写出的 Stand y 按 ×k 重缩放（见 LateUpdate 注释）
+    bool _entranceRescaling;
+    Animator _entranceAnim;   // 同上：播放中的 Animator 引用，LateUpdate 里的活性保险
 
     /// <summary>播一场获得佣兵演出；关闭（点击 / 超时）后回调 onClosed。预制体缺失时直接回调不阻塞流程。
     /// subtitle 非空时在名字下方显示副标题（引导入队用「已加入小队」；领取场景不传）。
@@ -130,6 +133,35 @@ public class MercGainCinematicUI : MonoBehaviour
             }
         }
 
+        // 【2026-11-01 主人拍板「直接把背景全屏就行」】紫色背景板 佣兵/bg 不再按预制体固定矩形摆、
+        // 也不再量缝补缝：直接把它的可视矩形撑到根画布大小（世界四角对齐，InverseTransformPoint
+        // 回父级局部空间，天然吃掉 佣兵 嵌套画布的缩放），任何屏比从上到下都盖满、无缝。
+        // 出场动画对 佣兵/bg 只有 m_Color.a 淡入淡出轨道，不碰矩形，不受影响。
+        Canvas.ForceUpdateCanvases();
+        var mercBgTf = mercGo != null ? mercGo.Find("bg") : null;
+        if (mercBgTf is RectTransform mercBgRt)
+        {
+            var rootRt = transform as RectTransform;
+            var parentRt = mercBgRt.parent as RectTransform;
+            if (rootRt != null && parentRt != null)
+            {
+                var wc = new Vector3[4];
+                rootRt.GetWorldCorners(wc);
+                Vector2 p0 = parentRt.InverseTransformPoint(wc[0]);   // 根画布左下 → 父级局部
+                Vector2 p2 = parentRt.InverseTransformPoint(wc[2]);   // 根画布右上 → 父级局部
+                mercBgRt.localScale = Vector3.one;
+                mercBgRt.anchorMin = new Vector2(0.5f, 0.5f);
+                mercBgRt.anchorMax = new Vector2(0.5f, 0.5f);
+                mercBgRt.pivot = new Vector2(0.5f, 0.5f);
+                mercBgRt.sizeDelta = p2 - p0;                         // 父级局部空间下的根画布尺寸
+                mercBgRt.anchoredPosition = (p0 + p2) * 0.5f;         // 中心对齐根画布中心
+            }
+        }
+        else if (mercGo != null)
+        {
+            Debug.LogError("[MercGainCinematic] 佣兵 下缺 bg 节点（紫色背景板铺不了全屏）");
+        }
+
         // 副标题（可选）：挂在 NamePlate 子节点，随名字一起淡入上移；null / 空 → 隐藏
         var subTr = nameTr.Find("SubTitle");
         if (subTr != null)
@@ -147,14 +179,13 @@ public class MercGainCinematicUI : MonoBehaviour
         _standCg = _stand.GetComponent<CanvasGroup>() ?? _stand.gameObject.AddComponent<CanvasGroup>();
         _nameCg = EnsureGroup(nameTr.gameObject, out _);
 
-        // BG 下特效：关掉 Play On Awake、清空残留，等 CoPlay 开场统一播（2026-10-20 主人拍板）
-        _bgFx = bg.GetComponentsInChildren<ParticleSystem>(true);
-        foreach (var ps in _bgFx)
-        {
-            var m = ps.main;
-            m.playOnAwake = false;
-            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-        }
+        // 【2026-11-01 主人报「到了展示环节我加的特效都没有了」·修】删掉代码对特效的全部干预
+        // （原 2026-10-20 口径：开场 Stop + playOnAwake=false、CoPlay 统一 Play）。根因：重做后的
+        // 出场动画把 BG 下特效节点（TreasureChestGlowRays / BasicZoneYellow）摆成「0 秒关、4.52 秒
+        // 才开」——统一 Play 时节点还没被动画激活（activeInHierarchy=false）播了个空；等动画打开
+        // 节点时 playOnAwake 已被代码关掉，再没人调 Play → 展示环节节点亮着、特效全空。
+        // 现在特效时机完全归预制体/动画：playOnAwake 保持预制体值，节点被动画 SetActive(true) 的
+        // 瞬间 OnEnable 自动开播，主人在预制体里加什么特效就播什么特效，代码一个不碰。
 
         // 2026-10-20 主人报「背景拉伸后人物离开台子」：先把立绘/名字/BG 特效贴回背景台子，
         // 再取 _nameBasePos（名字动画基准要取贴台后的位置）
@@ -261,16 +292,22 @@ public class MercGainCinematicUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-31 主人报「人物离开底座了」】出场动画播完后的贴台重钉：
-    /// 出场片段把 Stand 位置冻在片内落点（按 720×1280 摆的），Animator 播放期间每帧
-    /// 覆写 anchoredPosition，FitStageAlignment 的 ×k 补偿进不去。播完关掉 Animator 后
-    /// 把落点 y 按「BG 实际高 ÷ 设计高 1280」重乘一次，口径与 FitStageAlignment ① 完全一致；
-    /// 720×1280（k=1）时数值不变。x 居中不动。
+    /// 【2026-11-01 主人报「最后砸那一下还会往下移动一下」·根治】出场动画播放期间的贴台缩放：
+    /// 旧做法（RepinStandToStage）是等动画播完再把落点 y 重乘 k —— 瘦屏（k>1）上人物先按
+    /// k=1 的片内落点（y=-676）落地、再肉眼可见地下坠 (k-1)×676，就是主人看到的「砸完还往下移」。
+    /// 改为播放期间在 LateUpdate（Animator 每帧写完 m_AnchoredPosition 之后）把 Stand 的 y
+    /// 按同一口径 ×k：整条砸落轨迹（含片内起落点）一起缩放，落点天生就是贴台位，
+    /// 落地即停不再跳。720×1280（k=1）时数值不变。Coroutine 的 yield return null 在
+    /// Update 段恢复、早于动画求值，所以必须放 LateUpdate 才能改到「本帧动画写出的值」。
+    /// 程序化退路 CoPortraitEntrance 落点已带 ×k（FitStageAlignment ①），不走这里。
     /// </summary>
-    void RepinStandToStage()
+    void LateUpdate()
     {
+        if (!_entranceRescaling || _stand == null || _bgRt == null) return;
+        // Animator 已停写（被外部关掉等异常）时不再缩放，防止对同一姿态反复乘 k
+        if (_entranceAnim == null || !_entranceAnim.isActiveAndEnabled) return;
         var srt = _stand as RectTransform;
-        if (srt == null || _bgRt == null) return;
+        if (srt == null) return;
         float h = _bgRt.rect.height;
         if (h <= 0f) return;
         float k = h / GameConfig.DESIGN_HEIGHT;
@@ -291,10 +328,6 @@ public class MercGainCinematicUI : MonoBehaviour
     IEnumerator CoPlay()
     {
         float t = 0f;
-        // ⓪ BG 特效随界面出现一起播放
-        foreach (var ps in _bgFx)
-            if (ps != null && ps.gameObject.activeInHierarchy)
-                ps.Play(true);
         // ① 背景先出现
         while (t < BgFadeIn) { t += Time.unscaledDeltaTime; _bgCg.alpha = _bgTargetAlpha * Mathf.Clamp01(t / BgFadeIn); yield return null; }
         _bgCg.alpha = _bgTargetAlpha;
@@ -306,14 +339,16 @@ public class MercGainCinematicUI : MonoBehaviour
         var anim = GetComponentInChildren<Animator>();
         if (anim != null && anim.runtimeAnimatorController != null)
         {
+            // 【2026-11-01 修「砸完还往下移」】播放期间 LateUpdate 持续把 Stand y ×k 贴台
+            // （见 LateUpdate 注释），落点天生正确，播完不需要再重钉。
+            _entranceAnim = anim;
+            _entranceRescaling = true;
             yield return CoWaitEntranceDone(anim);
-            // 【2026-10-31 主人报「人物离开底座了」】chuchang 是非循环片段，播完姿态冻结、
-            // Animator 每帧仍覆写 Stand —— FitStageAlignment 在 Play 时做的贴台 ×k 进不去。
-            // 片内落点（y=-676）是按 720×1280（k=1）摆的；瘦屏逻辑高>1280（k>1）时台面随
-            // 背景拉伸下移、人物却停在 k=1 的落点 → 悬空。播完后关掉 Animator 再按同一
-            // 口径把落点 y 重乘 k（720×1280 时 k=1，一个像素不动）。
+            _entranceRescaling = false;
+            _entranceAnim = null;
+            // chuchang 是非循环片段，播完姿态冻结；关掉 Animator 前最后一帧的 y
+            // 已在当帧 LateUpdate 被 ×k 修正，姿态即为贴台落点，不会再动。
             anim.enabled = false;
-            RepinStandToStage();
         }
         else
         {
