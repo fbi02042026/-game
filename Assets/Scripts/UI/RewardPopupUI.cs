@@ -220,7 +220,22 @@ public class RewardPopupUI : MonoBehaviour
     public static void Show(List<Entry> items)
     {
         if (items == null || items.Count == 0) return;
-        Ensure().Open(items, null);
+        Ensure().Open(items, null, null);
+    }
+
+    /// <summary>
+    /// 【2026-11-02 主人拍板「弹完获得窗再弹出生点已保存」】带**关窗回调**的版本：
+    /// 玩家点「确定」/ 点任意处关掉本窗后触发一次（幂等，只触发一次）。
+    /// 用于「宝箱获得 → 出生点已保存 → 继续下一层」这种必须按顺序弹的链。
+    /// </summary>
+    public static void Show(List<Entry> items, Action onClosed)
+    {
+        if (items == null || items.Count == 0)
+        {
+            onClosed?.Invoke();   // 没有奖励可展示也不能把后续弹窗链卡死
+            return;
+        }
+        Ensure().Open(items, null, onClosed);
     }
 
     /// <summary>
@@ -231,7 +246,7 @@ public class RewardPopupUI : MonoBehaviour
     public static void Show(List<Entry> items, Action<Action<bool>> onAdDouble)
     {
         if (items == null || items.Count == 0) return;
-        Ensure().Open(items, onAdDouble);
+        Ensure().Open(items, onAdDouble, null);
     }
 
     static RewardPopupUI Ensure()
@@ -445,9 +460,18 @@ public class RewardPopupUI : MonoBehaviour
     // 打开 / 排版
     // ============================================================
 
-    void Open(List<Entry> items, Action<Action<bool>> onAdDouble)
+    void Open(List<Entry> items, Action<Action<bool>> onAdDouble, Action onClosed)
     {
         if (_panel == null) BuildFallback();
+        if (_panel == null)
+        {
+            // 弹窗彻底建不出来（预制体缺失 + 兜底失败）：**不能把调用方的后续流程卡死** ——
+            // 「获得 → 出生点已保存 → 继续下一层」这种链全靠关窗回调往下走。
+            Debug.LogError("[RewardPopup] 面板建不出来，跳过本次获得弹窗（后续流程继续）");
+            onClosed?.Invoke();
+            return;
+        }
+        _onClosed = onClosed;
         gameObject.SetActive(true);
         // DDOL 弹窗每次 Show 重新绑一次相机（切场景后旧相机会失效）
         var cv = GetComponent<Canvas>();
@@ -469,6 +493,8 @@ public class RewardPopupUI : MonoBehaviour
     Button _adBtn;
     Text _adBtnText;
     Action<Action<bool>> _onAdDouble;
+    /// <summary>【2026-11-02】关窗回调（弹完本窗要接着弹下一个窗时用；Hide 里只触发一次）。</summary>
+    Action _onClosed;
     bool _adPending;
     /// <summary>本次是否要广告加倍按钮（Layout 先读它决定让位高度）。</summary>
     bool _adButtonWanted;
@@ -573,6 +599,11 @@ public class RewardPopupUI : MonoBehaviour
         _onAdDouble = null;     // 【2026-10-31】关窗即解绑，防下次打开残留上一次的加倍回调
         _adPending = false;
         gameObject.SetActive(false);
+        // 【2026-11-02】关窗回调放最后、并先置空：回调里通常要接着弹下一个窗，
+        // 若在 SetActive 之前触发，玩家会看到两个窗叠着；置空则保证只触发一次。
+        var onClosed = _onClosed;
+        _onClosed = null;
+        onClosed?.Invoke();
     }
 
     /// <summary>

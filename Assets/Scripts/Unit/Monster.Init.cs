@@ -194,6 +194,11 @@ public partial class Monster
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = statScale * guildScale * diffScale;
+        // 【2026-11-02 主人拍板「无限裂隙血陡攻缓」】攻击侧单独一条线：血量吃满层数曲线（打不动 = 时间压力），
+        // 攻击只吃 45%（EndlessAttackMul），避免深层一刀秒人。非裂隙 atkScale 恒等于 scale，行为零变化。
+        float atkScale = endlessRift
+            ? GameConfig.EndlessAttackMul(BattleManager.Instance.EndlessRiftStage) * guildScale * diffScale
+            : scale;
 
         float baseHp = template != null && template.baseHp > 0 ? template.baseHp : GameConfig.MONSTER_NORMAL_HP;
         float baseAtk = template != null && template.baseAttack > 0 ? template.baseAttack : GameConfig.MONSTER_NORMAL_ATK;
@@ -335,12 +340,12 @@ public partial class Monster
             float baseMagDef = (template != null && template.baseMagicDefense > 0f)
                 ? template.baseMagicDefense
                 : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
-            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
             attr.SetAttr(AttrType.MagicDefense, baseMagDef * scale);
         }
         else
         {
-            attr.SetAttr(AttrType.Attack, baseAtk * scale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
+            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
             attr.SetAttr(AttrType.Defense, baseDef * scale);
             attr.SetAttr(AttrType.MagicAttack, 0f);
             attr.SetAttr(AttrType.MagicDefense, 0f);

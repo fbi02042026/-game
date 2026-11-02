@@ -30,6 +30,11 @@ public class MercJoinBannerUI : MonoBehaviour
     const float FadeOutSec = 1.60f;    // 过中间后：向右极慢缓行，总时长（前半段不透明=稍作停留）
     const float CreepDistance = 50f;   // 过中间后继续向右缓行的总距离（px，慢到肉眼近似停留）
 
+    /// <summary>整体上移量（px，2026-11-02 主人拍板「整体有点偏下了 整体往上100」）。
+    /// 只在动画里应用、不改预制体摆位：运行位 = 预制体位 + 本值；播完写回预制体原位，
+    /// 防止多次播放把偏移累加进 anchoredPosition。</summary>
+    const float YOffsetUp = 100f;
+
     /// <summary>立绘资源目录：按路径加载，不依赖 guid。
     /// 【2026-10-31 瘦身】原读 <c>UI/Icons/佣兵立绘/佣兵立绘_{id}.png</c>，与 <c>UI/Icons/MercStand/{id}.png</c>
     /// 是**同一批图的第二份**（MD5 全同，Resources 里白占 22MB，且重复内容会触发团结签发 56 字符 guid）。
@@ -47,6 +52,9 @@ public class MercJoinBannerUI : MonoBehaviour
     Text _nameText;           // name（佣兵名称）
     Coroutine _co;
     bool _bound;
+    /// <summary>预制体摆好的原位（Bind 时缓存，只跑一次必然干净）。上移偏移以它为基准、播完写回它，
+    /// 播放中途被打断（连续抽中两发）也不会把半路位置当原位累加偏移。</summary>
+    Vector2 _homePos;
     /// <summary>抬层 Canvas 是否已幂等挂好（见 <see cref="EnsureOverheadCanvas"/>）。</summary>
     bool _canvasLifted;
 
@@ -102,6 +110,7 @@ public class MercJoinBannerUI : MonoBehaviour
         if (_bound) return;
         _bound = true;
         _rt = rt;
+        _homePos = rt.anchoredPosition;   // 预制体原位，一次性缓存（此时位置绝没被代码动过）
 
         // 【2026-10-18 修】抬层 Canvas 不在这里挂，挪到 <see cref="EnsureOverheadCanvas"/>（播放前、节点已点亮时）。
         // 根因（Editor.log 2026-10-18 实锤）：Bind 跑在 Ensure 里、节点那一刻没进激活层级 →
@@ -141,15 +150,6 @@ public class MercJoinBannerUI : MonoBehaviour
     {
         if (!_bound) return;
 
-        var portrait = LoadPortrait(hireId);
-        if (_icon != null) _icon.sprite = portrait;
-
-        if (_nameText != null)
-        {
-            _nameText.text = displayName ?? "";
-            _nameText.color = RarityPalette.Get(rarity);   // 名字与稀有度对齐
-        }
-
         if (_co != null) StopCoroutine(_co);
         // 【2026-10-14 修】必须在 StartCoroutine **之前**把节点点亮：
         // Bind() 里 rt.gameObject.SetActive(false)，而 Unity 的 StartCoroutine 要求宿主 GameObject 是激活的，
@@ -158,7 +158,8 @@ public class MercJoinBannerUI : MonoBehaviour
         _rt.gameObject.SetActive(true);
         // 节点已点亮，这里才是挂抬层 Canvas 的安全时机（幂等，见方法注释）
         EnsureOverheadCanvas();
-        _co = StartCoroutine(CoPlay());
+        // 立绘加载 / 文本赋值挪进 CoPlay 开头的「屏外准备帧」（2026-11-02 修「播放卡一下」，见那边注释）
+        _co = StartCoroutine(CoPlay(hireId, displayName, rarity));
     }
 
     /// <summary>
@@ -190,8 +191,16 @@ public class MercJoinBannerUI : MonoBehaviour
         _canvasLifted = true;
     }
 
-    IEnumerator CoPlay()
+    IEnumerator CoPlay(string hireId, string displayName, MercRosterDefs.MercRarity rarity)
     {
+        // ── 屏外准备帧（2026-11-02 修「播放展示时卡一下」）──────────────────────
+        // 根因：Show 同帧干了三件重活——① Resources.Load 首次同步加载立绘大图（读盘+解码+上传 GPU）；
+        // ② SetActive(true)（Play 里）让横幅整棵树含 Mask / 995 抬层 Canvas 首次激活全量重建；
+        // ③ 滑入用 Time.unscaledDeltaTime 计步，掉帧那帧 dt 巨大 → 0.30s 的滑入一帧跨掉大半 = 「卡一下+瞬移」。
+        // 修法：重活全部集中在本帧，横幅此时摆在屏外（玩家看不见这帧的掉帧），
+        //       yield return null 之后才开始滑入 → 起跑帧 dt 恢复正常。
+        var portrait = LoadPortrait(hireId);
+
         // 【2026-10-18 修】必须取**父级**Canvas：横幅自己挂了抬层 Canvas 后，
         // GetComponentInParent<Canvas>() 会先取到自己（rect.width=横幅自身 517），
         // 屏宽/滑行距离全错 → 从 parent 往上找，拿到 BattleUI 根 Canvas 的真屏宽。
@@ -205,13 +214,25 @@ public class MercJoinBannerUI : MonoBehaviour
         float half = canvasW * 0.5f;
         float offscreen = half + _rt.rect.width;      // 整块完全在屏外
 
-        Vector2 basePos = _rt.anchoredPosition;       // 预制体摆好的中间位置（x=0）
-        _rt.gameObject.SetActive(true);
+        Vector2 rawPos = _homePos;                    // 预制体原位（Bind 缓存），播完写回它防偏移累加
+        // 【2026-11-02 主人拍板】整体往上 100：只应用在运行位，不动预制体
+        Vector2 basePos = new Vector2(rawPos.x, rawPos.y + YOffsetUp);
+        _rt.anchoredPosition = new Vector2(-offscreen, basePos.y);
 
         // 渐隐用 CanvasGroup（运行时挂，不改预制体）；每次播放先复位不透明度
         var cg = _rt.GetComponent<CanvasGroup>();
         if (cg == null) cg = _rt.gameObject.AddComponent<CanvasGroup>();
         cg.alpha = 1f;
+
+        // 立绘 / 名字赋值也在准备帧做完（后续帧不再因它们触发重建）
+        if (_icon != null) _icon.sprite = portrait;
+        if (_nameText != null)
+        {
+            _nameText.text = displayName ?? "";
+            _nameText.color = RarityPalette.Get(rarity);   // 名字与稀有度对齐
+        }
+
+        yield return null;   // ← 准备帧到此为止：上面的重活都发生在屏外，下一帧才开始滑入
 
         // ① 左侧屏外 → 中间（起步快、末端收住）
         float t = 0f;
@@ -238,7 +259,7 @@ public class MercJoinBannerUI : MonoBehaviour
         }
         cg.alpha = 1f;   // 复位，避免下次播放半透明
 
-        _rt.anchoredPosition = basePos;
+        _rt.anchoredPosition = rawPos;   // 写回预制体原位（不是带偏移的 basePos，防 YOffset 累加）
         _rt.gameObject.SetActive(false);
         _co = null;
     }

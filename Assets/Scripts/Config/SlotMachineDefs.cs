@@ -501,6 +501,67 @@ public static class SlotMachineDefs
     /// </summary>
     public const int ENDLESS_RIFT_FREE_DRAWS = 3;
 
+    /// <summary>
+    /// 【2026-11-02 主人拍板·本次进入内递减】裂隙每层免费抽按「**本次已连续推进几层**」递减，
+    /// 不是按绝对层数永久递减 —— 主人原话：「我要的不是这么递减，是一次进连续打的时候抽的递减，
+    /// 而不是下次进只能抽一回」。
+    /// <para>节奏：进本第 1 层 = 3 抽 + 起步补偿（见 <see cref="EndlessFreeDrawsForRun"/>）；
+    /// 第 2-3 层 3 抽 → 第 4-6 层 2 抽 → 第 7 层起 1 抽；下次进本重新捕获起始层，额度自动回满。
+    /// 作用 = 让「一口气连打十几层」的收益递减，鼓励打几层就撤、把记录点当节奏锚，
+    /// 而不是把玩家永久锁死在 1 抽。</para>
+    /// </summary>
+    public const int ENDLESS_RIFT_FREE_DRAWS_DEEP = 2;
+
+    /// <summary>本次进入内，连打第 2-3 层（advanced ≤ 2）仍给 3 抽</summary>
+    public const int ENDLESS_RUN_DRAW_TIER3_ADVANCE = 2;
+
+    /// <summary>本次进入内，连打第 4-6 层（advanced ≤ 5）降为 2 抽；第 7 层起 1 抽</summary>
+    public const int ENDLESS_RUN_DRAW_TIER2_ADVANCE = 5;
+
+    /// <summary>连打最深档的免费抽次数</summary>
+    public const int ENDLESS_RIFT_FREE_DRAWS_DEEPER = 1;
+
+    /// <summary>
+    /// 【2026-11-02 主人拍板·起步抽补偿】进本第一层的额外抽卡，按**起始层**给：
+    /// 每 3 层 +1 抽，封顶 <see cref="ENDLESS_RUN_DRAW_START_BONUS_CAP"/>。
+    /// <para>为什么必须有：裂隙构筑（RunLoadout）撤离/死亡即作废，下次进本从零开始。
+    /// 玩家在 30 层攒了二十几抽都打不过，重进却只给 3 抽 —— 那是**死锁**，永远过不去。
+    /// 起步抽随层数补偿，保证「进本时的构筑规模」跟「当前层的怪物强度」大致匹配，
+    /// 玩家靠局外成长（天赋/装备）变强后才推得动下一层，而不是被抽卡次数卡死。</para>
+    /// 锚点：1 层 3 抽、10 层 6 抽、20 层 9 抽、30 层 12 抽、40 层 15 抽（封顶）。
+    /// </summary>
+    public const int ENDLESS_RUN_DRAW_START_BONUS_CAP = 12;
+
+    /// <summary>起步抽补偿：每几层 +1 抽</summary>
+    public const int ENDLESS_RUN_DRAW_BONUS_PER_STAGE = 3;
+
+    /// <summary>
+    /// 无限裂隙该层的免费抽额度（唯一出口）。
+    /// </summary>
+    /// <param name="stagesAdvanced">
+    /// **本次进入内已推进的层数**（0 = 刚进本的第一层），
+    /// 调用方传 <c>BattleManager.EndlessRiftStage - EndlessRiftEntryStage</c>。
+    /// ⚠ 不要传绝对层数 —— 那会变成「下次进只能抽一回」，与主人拍板相反。
+    /// </param>
+    /// <param name="startStage">
+    /// 本次进入的起始层（记录点+1）。只用于第一层的起步抽补偿。
+    /// </param>
+    public static int EndlessFreeDrawsForRun(int stagesAdvanced, int startStage)
+    {
+        if (stagesAdvanced <= 0)
+        {
+            // 进本第一层：3 抽基础 + 按起始层补偿（解「构筑重置 + 深层难度」死锁）
+            int bonus = Mathf.Clamp(
+                (Mathf.Max(1, startStage) - 1) / ENDLESS_RUN_DRAW_BONUS_PER_STAGE,
+                0, ENDLESS_RUN_DRAW_START_BONUS_CAP);
+            return ENDLESS_RIFT_FREE_DRAWS + bonus;
+        }
+        // 之后按「本次连打了几层」递减：第 2-3 层 3 抽 → 第 4-6 层 2 抽 → 第 7 层起 1 抽
+        if (stagesAdvanced <= ENDLESS_RUN_DRAW_TIER3_ADVANCE) return ENDLESS_RIFT_FREE_DRAWS;
+        if (stagesAdvanced <= ENDLESS_RUN_DRAW_TIER2_ADVANCE) return ENDLESS_RIFT_FREE_DRAWS_DEEP;
+        return ENDLESS_RIFT_FREE_DRAWS_DEEPER;
+    }
+
     // 【2026-10-14 主人拍板】10-13 那版「引导三拍免费抽」（TUTORIAL_FREE_DRAWS = 3）已整条删除，
     // 不留开关 —— 引导三拍照常扣钱，由引导启动金兜住（2026-10-23 起 200 ≥ 150，见 TUTORIAL_STARTER_COINS）。
 

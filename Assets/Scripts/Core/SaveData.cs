@@ -152,6 +152,19 @@ public class SaveData
     /// <summary>已首通的最高层（首通奖励一次性真源；记录点 = 本值 / 5 * 5，只进不退）</summary>
     public int endlessRiftClearedStage = 0;
     /// <summary>
+    /// 【2026-11-02 主人拍板】**历史最高层**（只增不减，重置进度**不清**它）。
+    /// 与 <see cref="endlessRiftClearedStage"/> 的分工：
+    /// · clearedStage = 当前这一轮的进度（重置归零 → 可以重新吃首通奖励）；
+    /// · bestStage = 生涯最高（排行榜领先百分比 / 冒险日志「最高层数」展示 / 判断复刷还是首通）。
+    /// 老档迁移：载入时若 bestStage &lt; clearedStage 就抬到 clearedStage（见 SaveSystem）。
+    /// </summary>
+    public int endlessRiftBestStage = 0;
+    /// <summary>
+    /// 【2026-11-02 主人拍板】上一次主动重置进度的**周键**（yyyyWww，周一 0 点刷新）。
+    /// 与本周键不同 = 本周还没重置过 → 可点重置钮。每周 1 次。
+    /// </summary>
+    public string endlessRiftResetWeekKey = "";
+    /// <summary>
     /// 最近一次**真实进入**无限裂隙的日键 yyyyMMdd（UTC；只在 TryConsumeEnter 成功时写）。
     /// 虚拟排行榜的闲置衰减用它——不能拿 endlessRiftDayKey 顶替：那个每次存档都会被 EnsureDay
     /// 刷成今天，永远表现成「今天刚玩过」，排名就永远不会因几天没玩而回落。
@@ -402,6 +415,8 @@ public class SaveData
     [NonSerialized] public HashSet<int> finaleClearedIds = new HashSet<int>();
     /// <summary>完整揭底剧情已播（追查第 2 关打完播一次，防重播）。</summary>
     public bool finaleStoryPlayed = false;
+    /// <summary>【2026-11-02 主人拍板】试炼场解锁提示已弹：显示关卡 2-5 通关后第一次进冒险页 toast 一次，记档防重弹。</summary>
+    public bool arenaUnlockToastShown = false;
     /// <summary>
     /// 战前剧情「看过即不重播」位标记（2026-10-19 主人拍板）：bit0=第1章 … bit7=第8章。
     /// 每章战前剧情开播过一次就置位，之后进关不再重播（治「每次进都卡剧情」）。

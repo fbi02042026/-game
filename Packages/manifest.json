@@ -1,7 +1,8 @@
 {
   "dependencies": {
-    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.qq.weixin.minigame": "https://gitee.com/wechat-minigame/minigame-tuanjie-transform-sdk.git#915d4bf4f60ef0cd1c29316a8d67257185d609a7",
     "com.unity.feature.2d": "2.0.1",
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.render-pipelines.universal": "14.2.0-t1",
     "com.unity.ugui": "1.0.0",
     "com.unity.modules.ai": "1.0.0",

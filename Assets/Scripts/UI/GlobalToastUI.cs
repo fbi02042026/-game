@@ -3,6 +3,20 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
+/// 【2026-11-02 主人拍板】toast 口吻分类：以前所有屏幕浮字都统一接一句傲娇尾巴，
+/// 结果「奖励发放失败，请稍后重试」后面也挂「才、才不是关心你呢！」，功能提示全变了味。
+/// 现在按类走：默认 <see cref="ToastTone.Plain"/>（原文照发），
+/// 只有「看板娘主动说话」的引导 / 闲聊文案才显式标 <see cref="ToastTone.Persona"/>。
+/// </summary>
+public enum ToastTone
+{
+    /// <summary>系统 / 奖励 / 错误 / 操作指引：一个字都不加工（默认）。</summary>
+    Plain = 0,
+    /// <summary>看板娘口吻：句尾可以接一句傲娇短语（只给引导 / 闲聊）。</summary>
+    Persona = 1,
+}
+
+/// <summary>
 /// 全局提示 Toast（DontDestroyOnLoad）：深色半透明底板 + 文案。
 /// 登录未勾协议、存档提示、商人关等屏幕浮字一律走这里 / UIManager.ShowToast。
 /// </summary>
@@ -35,7 +49,7 @@ public class GlobalToastUI : MonoBehaviour
         if (_instance._rootRt != null) _instance._rootRt.anchoredPosition = _instance._basePos;
     }
 
-    public static void Show(string msg) => Show(msg, false);
+    public static void Show(string msg) => Show(msg, false, ToastTone.Plain);
 
     /// <summary>
     /// 【2026-10-06 主人拍板】物品变动（获得 / 分解 / 丢弃）必须让玩家看到 ——
@@ -43,10 +57,17 @@ public class GlobalToastUI : MonoBehaviour
     /// 走 <paramref name="force"/> = true 这一条；普通提示（「暂时无法前往」之类）仍走默认压制，避免盖住对话。
     /// 出口仍是这一个 <see cref="Show"/>，不另起一套。
     /// </summary>
-    public static void Show(string msg, bool force)
+    public static void Show(string msg, bool force) => Show(msg, force, ToastTone.Plain);
+
+    /// <summary>看板娘口吻 toast（句尾可能接一句傲娇短语）：只给引导 / 闲聊文案用。</summary>
+    public static void ShowPersona(string msg) => Show(msg, false, ToastTone.Persona);
+    public static void ShowPersona(string msg, bool force) => Show(msg, force, ToastTone.Persona);
+
+    /// <summary>唯一实现：按 <paramref name="tone"/> 决定要不要套人设，其余行为与以前一致。</summary>
+    public static void Show(string msg, bool force, ToastTone tone)
     {
         if (string.IsNullOrEmpty(msg)) return;
-        msg = Persona(msg);   // 【2026-10-31 主人拍板】全局 toast 人设统一在这里套，调用方不用各改一遍
+        if (tone == ToastTone.Persona) msg = Persona(msg);
         // 直接调 GlobalToastUI 的路径也要挡气泡 —— 除非 force（物品变动）
         if (!force && AnyBubbleShowing) return;
         // 【2026-11-01 修「loading 界面弹任务完成」】Loading 遮罩显示期间先把 toast 攥住，
@@ -89,8 +110,9 @@ public class GlobalToastUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-31 主人拍板】全局 toast 人设＝前台小姐（口吻傲娇）：屏幕浮字一律当作她在说话，
-    /// 在这一个出口统一包装 —— 信息原文一字不动，句尾随机接一句傲娇短语；
+    /// 【2026-10-31 主人拍板】看板娘人设＝前台小姐（口吻傲娇）。
+    /// 【2026-11-02 主人拍板·分类】只在 <see cref="ToastTone.Persona"/> 的文案上生效 ——
+    /// 系统 / 奖励 / 错误类提示一律走 Plain，原文照发，不再自动接尾巴。
     /// 文案里已带口吻字（啦/～/哦/嘛/哼/呢/呀）的视为已按人设写好，不再叠尾巴防重复。
     /// 战斗飞字（<see cref="ShowFlythrough"/>）不走本包装。
     /// </summary>
@@ -108,6 +130,8 @@ public class GlobalToastUI : MonoBehaviour
             "有我在就放心吧～",
             "别大意哦～",
         };
+        // Persona 文案若没以标点收尾（如「暂未开放」），直接怼尾巴会连成一串，补个停顿符
+        if (msg.Length > 0 && "。！？～…".IndexOf(msg[msg.Length - 1]) < 0) msg += "。";
         return msg + tails[Random.Range(0, tails.Length)];
     }
 

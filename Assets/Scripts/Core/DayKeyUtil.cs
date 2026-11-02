@@ -29,4 +29,21 @@ public static class DayKeyUtil
         => !string.IsNullOrEmpty(legacyKey)
            && DateTime.Now.Hour < 8
            && legacyKey == DateTime.UtcNow.ToString("yyyyMMdd");
+
+    /// <summary>
+    /// 本地**周键**（yyyyW{绝对周序}，周一 0 点刷新）。
+    /// <para>周序 = 自 1970-01-05（周一）起的天数 / 7 —— 绝对序号、单调递增，不做 ISO 周号的跨年回绕
+    /// （ISO 周号会出现「12 月 31 日属于明年第 1 周」，拿它当键会让同一周出现两个键）。</para>
+    /// <para>当前唯一消费点：无限裂隙「每周可重置进度 1 次」（<c>SaveData.endlessRiftResetWeekKey</c>）。
+    /// 以后凡要「按本地自然周刷新」的，一律用这里，别再各自算。</para>
+    /// </summary>
+    public static string WeekKey()
+    {
+        var now = DateTime.Now;
+        // DayOfWeek: 周日=0 … 周六=6 → 转成「周一=0 … 周日=6」
+        int dowFromMonday = ((int)now.DayOfWeek + 6) % 7;
+        var monday = now.Date.AddDays(-dowFromMonday);
+        int weekIndex = (int)((monday - new DateTime(1970, 1, 5)).TotalDays / 7);
+        return now.Year + "W" + weekIndex;
+    }
 }

@@ -58,6 +58,14 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         {
             var bip = _items[i];
             if (bip?.item == null || bip.item.count <= 0) continue;
+            // 【2026-11-02】招募卷是「存档计数字段」而不是背包条目：
+            // 裂隙每 10 层宝箱把它作为道具发进战斗背包（让玩家在背包里摸得到），
+            // 回城时必须折回 mercScrollCommon / mercScrollLegendary，否则酒馆认不到（两套账对不上）。
+            if (TryFoldScrollToSave(data, bip.item.defId, bip.item.count))
+            {
+                moved += bip.item.count;
+                continue;
+            }
             data.townBagItems.TryGetValue(bip.item.defId, out int cur);
             data.townBagItems[bip.item.defId] = cur + bip.item.count;
             moved += bip.item.count;
@@ -66,6 +74,28 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         {
             SaveSystem.Instance?.Save();
             Debug.Log($"[GridBackpack] 回城转移：本局道具 {moved} 个 → 城镇背包（角色页可见）");
+        }
+    }
+
+    /// <summary>
+    /// 招募卷道具 → 存档计数字段的折算出口（唯一）。返回 true = 已折算，不要再塞 townBagItems。
+    /// <para>rare（稀有）那一档 2026 年已废弃（SaveData 里会一次性折进普通卷轴并清零），
+    /// 所以这里也折进 <c>mercScrollCommon</c>，保持与酒馆口径一致。</para>
+    /// </summary>
+    static bool TryFoldScrollToSave(SaveData data, string defId, int count)
+    {
+        if (data == null || string.IsNullOrEmpty(defId) || count <= 0) return false;
+        switch (defId)
+        {
+            case "item_scroll_merc_common":
+            case "item_scroll_merc_rare":
+                data.mercScrollCommon += count;
+                return true;
+            case "item_scroll_merc_legendary":
+                data.mercScrollLegendary += count;
+                return true;
+            default:
+                return false;
         }
     }
 

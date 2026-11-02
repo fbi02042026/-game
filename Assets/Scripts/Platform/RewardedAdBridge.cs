@@ -124,6 +124,18 @@ public static class RewardedAdBridge
             return;
         }
 
+        // 【2026-11-02 P2-B】微信小游戏走真实微信激励视频（jslib → wx.createRewardedVideoAd）。
+        // 复用本层既有 busy/超时/一次性回调机制；WeChatAd.Available 仅在 UNITY_WECHATMINIGAME 构建为 true。
+        if (WeChatAd.Available && HasRealSdk)
+        {
+            _busy = true;
+            _busySince = Time.unscaledTime;
+            var guarded = Once(placement, onComplete);
+            Host.StartCoroutine(TimeoutGuard(placement, guarded));   // 超时兜底（SDK 丢回调时强收）
+            WeChatAd.ShowRewarded(WeChatMiniGameConfig.RewardedAdUnitId, ended => guarded?.Invoke(ended));
+            return;
+        }
+
         // 【2026-10-26 修】只在安卓真机走真广告；编辑器/其它平台回落本地模拟。
         // 原先 HasRealSdk=true 直接进 TapAdBridge，其 #else 分支当帧回调 false，
         // 导致编辑器广告档 100% 失败，本类注释里的「回落模拟」实为死路。

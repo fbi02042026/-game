@@ -37,6 +37,10 @@ public class LoginIntroSplash : MonoBehaviour
     /// </summary>
     public static void Prewarm()
     {
+#if UNITY_WECHATMINIGAME
+        // 【2026-11-02 P3-A】微信小游戏跳过登录视频：不预热播放器，Present 会因 _prewarmPlayer==null 直接完成。
+        return;
+#endif
         if (_prewarmPlayer != null) return;
         var clip = Resources.Load<VideoClip>(VideoResourcesPath);
         if (clip == null) return;
@@ -56,6 +60,12 @@ public class LoginIntroSplash : MonoBehaviour
 
     public static void Present(Action onFinished)
     {
+#if UNITY_WECHATMINIGAME
+        // 【2026-11-02 P3-A】微信小游戏跳过登录视频，直接走完成回调进登录。
+        Debug.Log("[LoginIntro] 微信小游戏：跳过登录视频");
+        onFinished?.Invoke();
+        return;
+#endif
         var existing = FindObjectOfType<LoginIntroSplash>();
         if (existing != null)
         {

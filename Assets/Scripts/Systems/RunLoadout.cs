@@ -298,6 +298,32 @@ public static class RunLoadout
         }
     }
 
+    /// <summary>
+    /// 【2026-11-02 主人拍板·裂隙记录点快照】把一个外部快照**直接写进盘上的可续局档**，
+    /// 供紧接着的 <see cref="ResumeOrBegin"/> 当成"续局"读回来。
+    /// <para>调用契约：只能在 <see cref="Clear"/> 之后、<c>RunDraftDirector.OnRunStart</c> 之前调
+    ///（裂隙进本时 parked 局已被作废，这里把记录点快照顶上去）。</para>
+    /// <para>⚠ 不改内存 <c>_data</c> —— 只写盘，由 ResumeOrBegin 统一读，避免出现"内存一套、盘上一套"。</para>
+    /// </summary>
+    public static void WriteSnapshotToPrefs(RunLoadoutData data)
+    {
+        if (data == null || MemoryMode) return;
+        try
+        {
+            data.active = true;
+            data.midBattle = false;
+            data.savedUtc = DateTimeOffset.UtcNow.ToString("o");
+            PlayerPrefs.SetString(PrefsKey, JsonUtility.ToJson(data));
+            PlayerPrefs.Save();
+            Debug.Log($"[RunLoadout] 记录点快照已顶到可续局档：skills={data.skills?.Count ?? 0} " +
+                      $"mercs={data.mercs?.Count ?? 0} drawCount={data.drawCount}");
+        }
+        catch (Exception e)
+        {
+            Debug.LogWarning("[RunLoadout] 记录点快照写盘失败: " + e.Message);
+        }
+    }
+
     /// <summary>本局结束（死亡/撤离/通关）：作废构筑。</summary>
     public static void Clear()
     {

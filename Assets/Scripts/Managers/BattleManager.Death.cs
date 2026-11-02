@@ -22,8 +22,9 @@ public partial class BattleManager
     bool _reviveAdPending;
 
     /// <summary>是否提供复活选择：非引导局、本关没用过、主角在场、今日复活额度未用完（ReviveQuota，ADS_ENABLED=false 期间恒有）。
-    /// 【2026-10-29 主人拍板】改走 <see cref="IBattleMode.OffersRevive"/>（与 UsesBattleResultScreen 解耦）——
-    /// 无限裂隙通关不播结果屏，但死亡同样弹复活窗（含看广告档）；正式关/副本行为不变。
+    /// 【2026-10-29 主人拍板】改走 <see cref="IBattleMode.OffersRevive"/>（与 UsesBattleResultScreen 解耦）。
+    /// 【2026-11-02 主人纠正「死亡只能返回」】裂隙已把 <c>EndlessBattleMode.OffersRevive</c> 改成 false ——
+    /// 死了就收局回城，下次进本再从保存点继续（选择权在进本入口 AskEndlessStartChoice，不在这里）。
     /// 引导局照旧「阵亡重进」。</summary>
     bool CanOfferRevive => Mode != null && Mode.OffersRevive
         && !Rules.Active && !SkipLegacyOnEvacuate
@@ -34,7 +35,9 @@ public partial class BattleManager
     {
         // 【2026-10-24 主人拍板】正式关阵亡先弹「失败 + 复活/返回」选择界面：冻场待抉择，
         // 点【复活】按当日档位（广告/50钻/100钻）原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
-        // 【2026-10-29 改版】无限裂隙**也要**这道门（Mode.OffersRevive=true，与结算屏解耦）；引导局照旧跳过。
+        // 【2026-11-02 主人纠正「死亡只能返回」】裂隙**不再**走这道门（EndlessBattleMode.OffersRevive = false）：
+        // 死了直接收局回城，下次进本由 AskEndlessStartChoice 问「要不要从保存点继续」。
+        // 引导局照旧跳过。
         if (CanOfferRevive)
         {
             OfferHeroRevive();
@@ -63,7 +66,8 @@ public partial class BattleManager
             revivePrice: price,
             onRevive: TryReviveHero,
             onGiveUp: FinalizeHeroDeath,
-            reviveLabel: label);
+            reviveLabel: label,
+            useAdIcon: kind == ReviveClaimKind.Ad);   // 【2026-11-02】广告图不再靠 label 非空推断（更稳）
     }
 
     /// <summary>

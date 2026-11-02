@@ -200,6 +200,21 @@ public partial class BattleManager
     public int EndlessRiftStage { get; private set; }
 
     /// <summary>
+    /// 【2026-11-02 主人拍板】本次进入裂隙的**起始层**（进本时捕获，续层不变）。
+    /// 用途：每层免费抽额度按「本次已连续推进几层」递减（`EndlessRiftStage - 本值`），
+    /// 而不是按绝对层数永久递减 —— 主人原话「我要的不是这么递减，是一次进连续打的时候抽的递减」。
+    /// 下次进本重新捕获，额度自动回满。非裂隙局恒 0，无消费点。
+    /// </summary>
+    public int EndlessRiftEntryStage { get; private set; }
+
+    /// <summary>
+    /// 【2026-11-02 主人拍板·记录点快照】本次进本是否接上了记录点构筑（EndlessRiftCheckpoint.RestoreToPrefs 的返回值）。
+    /// 用途：快照是按「续局」接回来的，OnRunStart 走 resumed 分支**不发启动金**，
+    /// 这里据此补发一次 —— 否则「回到记录点却一分抽奖币都没有」。
+    /// </summary>
+    bool _endlessCheckpointRestored;
+
+    /// <summary>
     /// 本局支线岛 id（2026-10-23 合并方案；1..8，非岛局恒 0）。
     /// 进本时从 AdventureUI.PendingSideIsland 拷入（Pending 读后即清，岛 id 留这里给结算读，
     /// 照 EndlessRiftStage 的「进本捕获」模式）。

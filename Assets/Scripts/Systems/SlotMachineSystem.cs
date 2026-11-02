@@ -289,6 +289,19 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
+    /// 【2026-11-02 主人拍板「一键到历史最高出生点 中间的抽奖全部自动抽」】批量授予免费抽。
+    /// <para>与「再来一次」同池（<c>_bonusFreeDraws</c>）：不扣币、<b>不推进抽数</b>（下一抽不涨价），
+    /// 这正是跳层补偿要的口径 —— 补偿抽不该把玩家后续的抽奖价格顶上去。</para>
+    /// <para>只在无限裂隙本次进本的第一层注入一次，来源见 <c>EndlessRiftRules.TakeCatchUpDraws</c>。</para>
+    /// </summary>
+    public static void GrantBonusFreeDraw(int count)
+    {
+        if (count <= 0) return;
+        _bonusFreeDraws += count;
+        Debug.Log($"[SlotMachineSystem] 跳层补偿 +{count} 次免费抽（待用 {_bonusFreeDraws}）");
+    }
+
+    /// <summary>
     /// 【2026-10-11 主人拍板】用掉一次「再来一次」送的免费抽。
     /// 返回 true = 这一抽走的是奖励额度（调用方据此**不推进抽数**，下一抽不涨价）。
     /// </summary>

@@ -377,6 +377,10 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
         if (!warmupOnly)
         {
+            // 【2026-11-02 主人拍板】试炼场解锁提示：2-5 通关后第一次进冒险页 toast 一次（主界面入口同刻亮出）。
+            // 放 warmupOnly 块内：进镇预热点亮那遍不触发、不写标记（同 SideIslandGuide 口径）。
+            TryShowArenaUnlockToast();
+
             // 【2026-10-28 主人拍板】会长支线岛情报指引：不在主界面主动弹（相关剧情以后一律不主动出来），
             // 只在玩家进冒险界面时播（每岛每次洗牌轮一次，播过记档）。有待续局的局让路给续局询问，
             // 本次不播、标记不写，下次进冒险页再播。
@@ -389,6 +393,20 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
             TryPromptInterruptedRun();
         }
+    }
+
+    /// <summary>
+    /// 试炼场解锁 toast（2026-11-02 主人拍板）：显示关卡 2-5 通关后第一次进冒险页弹一次，记档防重弹。
+    /// force=true：防止正巧有续局询问等气泡把它吞掉——标记已写就再也不弹了；Loading 期间 GlobalToastUI 自会攥住。
+    /// </summary>
+    void TryShowArenaUnlockToast()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || !ArenaEntryUI.IsUnlocked(data)) return;
+        if (data.arenaUnlockToastShown) return;
+        data.arenaUnlockToastShown = true;
+        SaveSystem.Instance?.Save();
+        GlobalToastUI.Show("试炼场已开启，快去看看吧！", true);
     }
 
     /// <summary>

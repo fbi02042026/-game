@@ -8,6 +8,12 @@
   瘦屏重锚定/垫黑底由 UiLayoutStretch 管。完整铁律见 AGENTS.md §4.6（跨机权威）。
 - 教训：广告送佣兵面板（AdMercEventUI）当初 Overlay+Match Height 没接统一出口，瘦屏被左右裁。
 
+## 仓库与远程（2026-11-02 主人拍板：以后都按微信端来）
+- **主仓库＝微信小游戏端** `git@github.com:fbi02042026/xiangsumaoxianweixin.git`（远程名 `weixin`），
+  `main` 已 `--set-upstream-to=weixin/main`，日常 pull/push 默认走它。
+- `gitee`（原主）、`origin`（GitHub 安卓版）**保留作历史备份**，不再作为日常跟踪。
+- 项目已转向微信小游戏：无内购、无后端、TapTap 端放弃（见 `Docs/微信小游戏移植方案_2026-11-01.md`）。
+
 ## 会话工作习惯
 - 主人短指令常指「继续/重试」＝上次会话中断的活接着收尾：先查代码现状，改完的要核对落盘，文档/记忆补齐。
 - 每日工作日志追加到 `.workbuddy-ai/memory/YYYY-MM-DD.md`（append-only）。

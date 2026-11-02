@@ -679,6 +679,10 @@ public class GuildHallUI : MonoBehaviour
         // 看广告送佣兵入口（2026-10-31 主人拍板 + 主人手摆）：预制体 RightBar 下主人手摆的
         // 「广告佣兵」节点（位置/图标/文案/黑底主人已手调），运行时只接线 + 挂红点，不克隆不动排版。
         AdMercEventEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 看视频领钻入口（2026-11-02 主人拍板：分享功能下线，主界面加领钻按钮 → 看激励视频给钻）：
+        // 运行时克隆每日登录按钮落到右列列尾，发奖走 ResourceAdRewards.TryClaimDiamond 唯一出口。
+        // 必须放在 AdMercEventEntryUI 之后 —— 列尾位置按「折叠后」的可见按钮最低点算。
+        DiamondAdEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店入口：2026-10-31 主人拍板「商店功能删掉」→ ShopUI / ShopSystem 已整体删除，
@@ -747,6 +751,51 @@ public class GuildHallUI : MonoBehaviour
         if (bgT is RectTransform rtBg)
             rtBg.sizeDelta = new Vector2(120.9f, 270f);
     }
+
+    /// <summary>
+    /// 【2026-11-02 主人拍板「主界面加个领钻按钮」】右列黑底按「列里实际有几颗可见按钮」拉长。
+    /// 只在 <see cref="RestoreRightBarBg"/> 的 270 基础上做**跟随**：宽度/图/pivot 一律不动，
+    /// 顶边也保持原位（2026-11-01 主人明确「黑底不要移」），只把底边往下延到最后一颗按钮下面。
+    /// 边距 <see cref="RightBarBgPadding"/> 由「原 270 高罩住每日登录+对战两颗」反推（两钮间距 140 + 钮高 + 30）。
+    /// 拉伸锚点（anchorMin.y != anchorMax.y）时 sizeDelta 语义不同 → 报错跳过，不硬算。
+    /// </summary>
+    public void FitRightBarBgToButtons()
+    {
+        var rightBar = dailyLoginButton != null ? dailyLoginButton.transform.parent : null;
+        var bgT = rightBar != null ? rightBar.Find("bg") as RectTransform : null;
+        if (bgT == null) return;   // RestoreRightBarBg 已报过错，这里静默跳过
+
+        if (!Mathf.Approximately(bgT.anchorMin.y, bgT.anchorMax.y))
+        {
+            Debug.LogError("[GuildHall] 右列黑底 bg 是拉伸锚点，按按钮数拉长会算错，已跳过（要跟随请把 bg 改成固定锚点）");
+            return;
+        }
+
+        float top = float.MinValue, bottom = float.MaxValue;
+        int counted = 0;
+        for (int i = 0; i < rightBar.childCount; i++)
+        {
+            var child = rightBar.GetChild(i);
+            if (child == bgT || !child.gameObject.activeSelf) continue;
+            if (child.GetComponent<Button>() == null) continue;   // 只算入口按钮，bg/装饰跳过
+            var rt = child as RectTransform;
+            if (rt == null) continue;
+            float half = rt.rect.height * Mathf.Abs(rt.localScale.y) * 0.5f;
+            top = Mathf.Max(top, rt.anchoredPosition.y + half);
+            bottom = Mathf.Min(bottom, rt.anchoredPosition.y - half);
+            counted++;
+        }
+        if (counted == 0) return;
+
+        float h = (top - bottom) + RightBarBgPadding;
+        float pivotY = bgT.pivot.y;
+        float topEdge = bgT.anchoredPosition.y + (1f - pivotY) * bgT.sizeDelta.y;   // 拉长前顶边（要保持不动）
+        bgT.sizeDelta = new Vector2(bgT.sizeDelta.x, h);
+        bgT.anchoredPosition = new Vector2(bgT.anchoredPosition.x, topEdge - (1f - pivotY) * h);
+    }
+
+    /// <summary>右列黑底上下留白（原 270 高罩住两颗按钮反推出来的 30）。</summary>
+    const float RightBarBgPadding = 30f;
 
     /// <summary>
     /// 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的，只摆了 Image+Shadow）。

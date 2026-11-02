@@ -5,6 +5,16 @@ using UnityEngine;
 /// <summary>
 /// 系统分享 + 每日分享奖励（2026-10-25 主人拍板：做分享、不做邀请码、不加验证、每日一次发 100 钻）。
 ///
+/// ⛔ 【2026-11-02 主人拍板「去掉分享的按钮和功能」——本类的分享/发奖业务已整体下线，无任何调用点】
+/// 下线原因：微信小游戏运营规范 2.5.1 禁止利益诱导分享（虚拟奖品属"利益"），
+/// 且本类在微信小游戏构建里是**空转**（真分享只有 UNITY_ANDROID 分支，微信走 #else 直接当成功发钻）。
+/// 处置：胜利界面分享入口整颗隐藏、确定钮居中（BattleResultScreen.ShareFeatureEnabled=false）；
+/// 每日钻石改挂激励视频（ResourceAdRewards.TryClaimDiamond + 主界面 DiamondAdEntryUI）。
+/// **本文件与 SharePanelUI.cs 保留不删**，将来若要恢复分享（仅限无奖励的纯传播），改回开关再接线即可。
+/// 唯一还活着的是两个常量：<see cref="ShareText"/> / <see cref="ShareImageResPath"/>，
+/// 由 <see cref="WeChatShare"/>（右上角菜单转发，无奖励、合规）借用作文案与封面出处。
+/// 体检报告：Docs/《分享功能可发性体检》_2026-11-02.md
+///
 /// 流程：点分享钮 → #share_click → 唤起 Android 系统分享面板 →
 /// 唤起成功记 #share_launch → 当日首次再发 100 钻（局外账，ResourceWallet.Add 唯一出口）并记 #share_reward。
 ///
@@ -27,8 +37,14 @@ using UnityEngine;
 /// </summary>
 public static class ShareService
 {
-    /// <summary>分享文案（纯文本带游戏名；主人未给落地页，不带链接）。</summary>
-    public const string ShareText = "我正在玩《像素冒险：裂隙之刃》，割草爆装超解压，快来一起冒险吧！";
+    /// <summary>
+    /// 分享文案（转发卡片标题，唯一出处 —— <see cref="WeChatShare"/> 启动时读它）。
+    /// 【2026-11-02 主人拍板换文案】原「我正在玩《像素冒险：裂隙之刃》，割草爆装超解压，快来一起冒险吧！」
+    /// → 改成三个卖点直给：割草爆装 / 招募佣兵 / 技能流派。
+    /// 不再带游戏名：微信转发卡片下方本来就有小游戏名称，标题位省下来讲卖点更划算。
+    /// 字数 24，微信卡片标题约两行内显示完整，别再往长了加。
+    /// </summary>
+    public const string ShareText = "割草爆装，招募佣兵，技能流派自由搭，一局 5 分钟";
 
     /// <summary>分享竖图 Resources 相对路径（无扩展名；2026-10-29 主人拍板统一竖图）。</summary>
     public const string ShareImageResPath = "UI/Art/分享/分享竖";

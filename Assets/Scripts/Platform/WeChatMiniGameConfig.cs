@@ -11,6 +11,13 @@ public static class WeChatMiniGameConfig
     /// <summary>主包建议上限（MB），超出需拆分包</summary>
     public const int MainPackageSoftLimitMb = 4;
 
+    /// <summary>
+    /// 微信激励视频广告位 id（流量主开通后在微信后台「流量主 → 广告位管理」复制填入）。
+    /// 空字符串 = 未配置，WeChatAd 会直接拒绝拉起并回调 false（不发奖）。
+    /// 【2026-11-02 P2-B】接入微信广告前先留空，开通流量主（个人主体累计独立访客 UV≥500）后补。
+    /// </summary>
+    public const string RewardedAdUnitId = ""; // TODO: 流量主开通后填入真实 adUnitId
+
     /// <summary>是否启用云存档上行（需微信 SDK）</summary>
     public static bool EnableCloudSave
     {

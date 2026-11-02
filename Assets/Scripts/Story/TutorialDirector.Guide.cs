@@ -109,7 +109,7 @@ public partial class TutorialDirector
 
         hint.Hide();
         if (TalentUI.LeftUnlockedCount() > before)
-            UIManager.Instance?.ShowToast("天赋点亮了，属性已更新。不错嘛。");
+            UIManager.Instance?.ShowToastPersona("天赋点亮了，属性已更新。不错嘛。");
     }
 
     // 【2026-10-06 已删除】CoRefreshMercHudNextFrame：只被「救援入队」那一段调用，
@@ -120,7 +120,7 @@ public partial class TutorialDirector
         var equip = CreateTutorialEquipDrop();
         if (equip == null)
         {
-            UIManager.Instance?.ShowToast("地上有件装备，快去捡呀～");
+            UIManager.Instance?.ShowToastPersona("地上有件装备，快去捡呀～");
             yield break;
         }
 

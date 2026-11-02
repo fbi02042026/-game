@@ -770,6 +770,10 @@ public partial class BattleManager
         // —— 按本局已抽数递增（DrawIndex 跨层累计，每抽 +10，见 SlotMachineSystem.DrawPrice）。
         if (IsEndlessRift) SlotMachineSystem.ResetStageFreeDraws();
 
+        // 【2026-11-02 主人拍板·解卡层死锁】记录点装备恢复：技能/佣兵已由 RunLoadout 续局自动带回，
+        // 装备在这里补穿（BattleBagSystem 此时必然就绪）。内部有"每次进本只做一次"的闸门，每层调安全。
+        if (IsEndlessRift) EndlessRiftCheckpoint.RestoreEquipsOnce();
+
         var cats = SlotMachineSystem.AvailableCategories();
         if (cats.Count == 0)
         {
@@ -809,6 +813,30 @@ public partial class BattleManager
         // 「再来一次」没出货、抽了但没生效（landed=false）都不占名额，回面板重抽 ——
         // 名额 = 玩家实际拿到的卡数，不跟点击走。抽满 TotalFreeDraws()（=3）收面板开打。
         int layerDraws = 0;
+
+        // 【2026-11-02 主人拍板「一键到历史最高出生点 中间的抽奖全部自动抽」】
+        // 跳层补偿：本次进本**第一层**把被跳过层的免费抽一次性注入（与「再来一次」同池：
+        // 不扣币、不推进抽数 → 后续抽奖价格不被顶高），下面 while 里再自动连抽。
+        // ⚠ TakeCatchUpDraws 读一次就清零；本方法每层都进，只有第一层拿得到。
+        // ⚠ 注入点必须在这里 —— RunDraftDirector.OnRunStart 的 ResetStageFreeDraws 已经跑完，
+        //   早一步注入会被那行清空。
+        int autoDrawLeft = 0;
+        if (IsEndlessRift)
+        {
+            int catchUp = EndlessRiftRules.TakeCatchUpDraws();
+            if (catchUp > 0)
+            {
+                SlotMachineSystem.GrantBonusFreeDraw(catchUp);
+                autoDrawLeft = catchUp;
+                GlobalToastUI.Show($"跳层补偿：额外 {catchUp} 次免费抽，正在自动抽取…", true);
+                Debug.Log($"[BattleManager] 裂隙跳层补偿：本次进本注入 {catchUp} 次免费抽并自动连抽");
+            }
+        }
+        // 自动抽节奏（每张间隔，给玩家看清卡面的时间）
+        const float AutoDrawIntervalSec = 0.22f;
+        float autoDrawTimer = 0f;
+        // 这一抽是不是跳层补偿的自动抽（决定：摘掉装备方向、跳过「再来一次」）
+        bool autoRound = false;
 
         while (true)
         {
@@ -894,6 +922,21 @@ public partial class BattleManager
         while (choice == 0 && offerGuard < 300f && !_runClosed)
         {
             offerGuard += Time.unscaledDeltaTime;
+            // 【2026-11-02 主人拍板「中间的抽奖全部自动抽」】跳层补偿自动连抽：
+            // 面板展开后按固定节奏自动点「随机抽」，玩家看到的是正常的抽卡演出，只是不用自己点。
+            // 抽满 autoDrawLeft 就停手，剩下的免费抽/付费抽仍由玩家自己决定。
+            if (autoDrawLeft > 0 && BattleEntryDraftPanel.IsLotteryOpen)
+            {
+                autoDrawTimer += Time.unscaledDeltaTime;
+                if (autoDrawTimer >= AutoDrawIntervalSec)
+                {
+                    autoDrawTimer = 0f;
+                    autoDrawLeft--;
+                    autoRound = true;
+                    picked = null;   // 走随机抽（0 币，吃刚注入的免费额度）
+                    choice = 1;
+                }
+            }
             yield return null;
         }
         if (choice != 1) break;
@@ -911,6 +954,15 @@ public partial class BattleManager
         // 每一轮都重算一次可抽类型：上一抽可能把技能槽 / 佣兵位占满，
         // 用旧列表会随机到一个已经发不出去的类型（2026-10-05）。
         cats = SlotMachineSystem.AvailableCategories();
+
+            // 【2026-11-02】跳层补偿的自动抽**摘掉装备方向**：装备卡会弹「要不要替换」的确认窗
+            // （CoApplyEquipCard 是异步的），那会把整条自动连抽打断成「点几十次弹窗」。
+            // 技能 / 佣兵 / 金币三个方向都是同步生效，自动抽零打扰。
+            if (autoRound && cats.Count > 1 && cats.Contains(DraftCategory.Equip))
+            {
+                cats = new List<DraftCategory>(cats);
+                cats.Remove(DraftCategory.Equip);
+            }
 
             // null = 点的是随机；有值 = 点的是定向
             var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
@@ -943,7 +995,9 @@ public partial class BattleManager
             // ⚠ 旧的「抽完再掷、额外再送一次免费抽」（2026-10-11 口径）已删除，不留开关。
             // ⚠【2026-10-19 主人拍板】「再来一次」只惠及随机抽（picked 为 null）；
             //   三个定向（佣兵/装备/技能）不吃 reroll，点了直接出类型奖品、正常扣费。
-            if (!onceOnly && !picked.HasValue && SlotMachineSystem.RollReroll())
+            // ⚠【2026-11-02】跳层补偿的自动抽不参与 reroll：命中要等 1.55 秒横幅，几十连抽会被拖长，
+            //   而且补偿抽本来就白送，再送额度没有意义。
+            if (!onceOnly && !autoRound && !picked.HasValue && SlotMachineSystem.RollReroll())
             {
                 SlotMachineSystem.GrantBonusFreeDraw();
                 var rerollPanel = BattleEntryDraftPanel.Instance;
@@ -966,6 +1020,7 @@ public partial class BattleManager
             // 「这一抽到底生效没有」唯一真源 = 保底定序有没有往前走（生效才 NoteDraw）。
             int drawsBefore = SlotMachineSystem.DrawIndex;
             yield return CoInstantPick(target, cost);
+            autoRound = false;   // 自动抽只影响这一轮（下一轮由等待循环重新置位）
             bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
             // 【2026-10-29 主人拍板·裂隙每层三抽改版】只有真出货才占每层名额（reroll / 没生效不占）
             if (landed) layerDraws++;
@@ -1008,11 +1063,13 @@ public partial class BattleManager
             // 【2026-10-29 主人拍板·裂隙每层三抽改版】无限裂隙抽满本层名额 → 收面板直接开打，
             // 这一层中间不再有任何抽奖入口（战斗中实时抽本就被 TryLiveDraw 的裂隙守卫拦着）；
             // 打通黑屏进下一层（AdvanceEndlessRiftStage）再弹新一层的三抽。
-            // 上限与免费额度同源（TotalFreeDraws() = ENDLESS_RIFT_FREE_DRAWS = 3），调节奏只改那一个数。
-            // 没抽满就想打：点「继续」照旧 break（choice != 1），不强求抽完。
-            if (IsEndlessRift && layerDraws >= SlotMachineSystem.TotalFreeDraws())
+            // 【2026-11-02】判定从「layerDraws ≥ TotalFreeDraws」换成「免费额度真的用完」
+            // （FreeDrawsLeft ≤ 0）—— 跳层补偿注进的是 bonus 额度，不计入 TotalFreeDraws，
+            // 用旧口径会在补偿抽完的那一刻立刻收面板，把模式给的免费抽一起吞掉。
+            // 另加 autoDrawLeft ≤ 0：自动连抽还没跑完时绝不收面板。
+            if (IsEndlessRift && autoDrawLeft <= 0 && SlotMachineSystem.FreeDrawsLeft() <= 0)
             {
-                Debug.Log($"[BattleManager] 无限裂隙第 {EndlessRiftStage} 层三抽已用完（layerDraws={layerDraws}），收面板开打");
+                Debug.Log($"[BattleManager] 无限裂隙第 {EndlessRiftStage} 层免费抽已用完（layerDraws={layerDraws}），收面板开打");
                 break;
             }
 
@@ -2291,34 +2348,74 @@ public partial class BattleManager
     ///   · 首通奖励（金币+天赋石）只在该层是本次首通时发，BOSS 层 ×3；
     ///   · 2026-10-19 主人拍板：不再弹「撤离结算 / 继续深入」双选 —— 每层打完都是
     ///     「宝箱 → 传送门 → 自动进下一层」，离开只认两条路：死了，或右上角设置里主动撤离。
+    ///   · 2026-11-02 晚主人拍板：**保存点层（每 10 层）**走「获得弹窗 → 出生点已保存 → 继续下一层」
+    ///     这条链，其余层保持一条 toast（每层都弹窗会把节奏打断）。两条路共用同一份奖励收集代码。
     /// </summary>
     public void SettleEndlessStageClear()
     {
         int stage = Mathf.Max(1, EndlessRiftStage);
         bool isBoss = GameConfig.IsEndlessBossStage(stage);
 
-        // —— 宝箱掉落：每次通关都发 ——
+        // —— 首通 / 复刷奖励分流（2026-11-02 主人拍板）——
+        // firstEver = **生涯**首次打通这层（bestStage 判定）；重置进度后重打旧层 → false → 只发 30% 金币。
+        // ⚠ 不能用 MarkCleared 的返回值：那个看的是「本轮进度」，重置后会重新变 true（等于又发一次全额）。
+        bool firstEver = EndlessRiftRules.NoteBestStage(stage);
+        EndlessRiftRules.MarkCleared(stage);   // 本轮进度照常推进（记录点/起始层靠它）
+
+        // 【2026-11-02 主人拍板「每 10 层一个保存点」】存档点 = 大 BOSS 层（10 的倍数），
+        // 小 BOSS（5 的倍数）只当节奏爆点、不存。条件用 IsEndlessSaveStage，不是 isBoss。
+        // 先存再播提示：提示说「已保存」就必须真的已经写盘。
+        bool savedHere = GameConfig.IsEndlessSaveStage(stage);
+        if (savedHere) EndlessRiftCheckpoint.Save(stage);
+
+        // ===== 本层奖励收集（唯一真源）=====
+        // 【2026-11-02 晚·主人原话】「每10层 的宝箱奖励获得弹获得弹窗 并把奖励都放到战斗背包里
+        //   然后再弹出生点已保存」→ 保存点层用 entries 走获得弹窗，其余层用 lines 走一条 toast。
+        //   两份都从这里同一处填，数值不会出现两套口径。
+        //   顺带修掉老问题：GlobalToastUI.Play 会 StopCoroutine 上一条 → 同一帧多条只剩最后一条，
+        //   所以非保存点层仍然必须**攒成一条**播。
+        // ⚠ 金币先全部累加、最后统一出一格：宝箱金币和首通金币同一层都会发，
+        //   弹窗里出现两个「金币」格玩家会以为是重复发。
+        var entries = new List<RewardPopupUI.Entry>();
+        var lines = new List<string> { $"第 {stage} 层通关" };
+        int totalGold = 0;
+        int totalTalent = 0;
+        bool gotScroll = false;
+
+        // ① 宝箱金币：每层都发（可重复小额）
         int chestGold = Mathf.RoundToInt(GameConfig.EndlessChestGold(stage) * GoldGainMul);
         if (chestGold > 0)
         {
             GrantRunGold(chestGold);
-            GlobalToastUI.Show($"宝箱开启，金币 +{chestGold}", true);
+            totalGold += chestGold;
+            lines[0] += $"，宝箱金币 +{chestGold}";
         }
 
-        // —— 每 10 层固定宝箱加发普通卷轴（2026-10-17 主人拍板）——
+        // ② 每 10 层固定宝箱加发普通招募卷（2026-10-17 主人拍板）
+        //    【2026-11-02 晚】主人要求「奖励都放到战斗背包里」→ 道具真正进 BattleBagSystem 战斗背包，
+        //    玩家在背包里摸得到；回城/死亡走 MoveItemsToTownBag 时折回 mercScrollCommon（两套账对齐）。
+        //    背包满 / 系统没起来 → 折进存档计数兜底，奖励绝不吞。
         if (stage % GameConfig.ENDLESS_CHEST_SCROLL_INTERVAL == 0)
         {
-            var data = SaveSystem.Instance?.Data;
-            if (data != null)
+            const string ScrollId = "item_scroll_merc_common";
+            var bag = BattleBagSystem.Instance;
+            bool toBag = bag != null && bag.TryAddItemStack(ScrollId, 1, out _, notify: false);
+            if (!toBag)
             {
-                data.mercScrollCommon++;
-                GlobalToastUI.Show($"第 {stage} 层固定宝箱：普通卷轴×1", true);
-                SaveSystem.Instance?.Save();
+                var data = SaveSystem.Instance?.Data;
+                if (data != null)
+                {
+                    data.mercScrollCommon++;
+                    SaveSystem.Instance?.Save();
+                }
+                Debug.LogWarning("[BattleManager] 裂隙宝箱卷轴没放进战斗背包（背包满/系统未就绪），已折进存档计数");
             }
+            gotScroll = true;
+            lines.Add("固定宝箱：普通招募卷 ×1（已放入背包）");
         }
 
-        // —— 首通奖励：只在真正推进进度（本次首通）时发 ——
-        if (EndlessRiftRules.MarkCleared(stage))
+        // ③ 首通 / 复刷奖励
+        if (firstEver)
         {
             int mul = isBoss ? GameConfig.ENDLESS_BOSS_FIRSTCLEAR_MUL : 1;
             int gold = Mathf.RoundToInt(GameConfig.EndlessFirstClearGold(stage) * mul * GoldGainMul);
@@ -2326,14 +2423,64 @@ public partial class BattleManager
             if (gold > 0)
             {
                 GrantRunGold(gold);
+                totalGold += gold;
             }
             if (talent > 0)
+            {
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talent, save: false, notify: true);
-            GlobalToastUI.Show(isBoss
-                ? $"首通第 {stage} 层记录点！金币 +{gold}，天赋石 +{talent}"
-                : $"首通第 {stage} 层：金币 +{gold}，天赋石 +{talent}", true);
+                totalTalent += talent;
+            }
+            lines.Add(talent > 0
+                ? $"{(isBoss ? "首通记录点" : "首通")}金币 +{gold}，天赋石 +{talent}"
+                : $"{(isBoss ? "首通记录点" : "首通")}金币 +{gold}");
             SaveSystem.Instance?.Save();
         }
+        else
+        {
+            // 复刷（生涯已通过）：只发首通金币的 30%，**天赋石不发**、BOSS 倍率也不吃。
+            // 主人原话「奖励是不是可以多少给点」—— 给反馈但不给第二条成长曲线。
+            int gold = Mathf.RoundToInt(
+                GameConfig.EndlessFirstClearGold(stage) * GameConfig.ENDLESS_REPEAT_GOLD_RATE * GoldGainMul);
+            if (gold > 0)
+            {
+                GrantRunGold(gold);
+                totalGold += gold;
+                lines.Add($"复刷金币 +{gold}（天赋石不重复发）");
+            }
+        }
+
+        // ④ 获得弹窗的条目（顺序：金币 → 卷轴 → 天赋石，与玩家最关心的东西对齐）
+        if (totalGold > 0)
+            entries.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_gold"), $"金币 ×{totalGold}"));
+        if (gotScroll)
+            entries.Add(new RewardPopupUI.Entry(ItemDefs.LoadIcon("item_scroll_merc_common"), "普通招募卷 ×1"));
+        if (totalTalent > 0)
+            entries.Add(new RewardPopupUI.Entry(CommonIconSprites.Load("icon_talent_stone"), $"天赋石 ×{totalTalent}"));
+
+        // ===== 收尾：保存点层走弹窗链，其余层走 toast =====
+        if (savedHere)
+        {
+            // 主人原话「每10层 的宝箱奖励获得弹获得弹窗 … 然后再弹出生点已保存」
+            // → 顺序严格：① 获得弹窗（点确定关掉）② 出生点已保存（点继续）③ 续层。
+            // 弹窗链全靠关窗回调往下走；RewardPopupUI / ShowNotice 在面板建不出来时都会兜底放行，
+            // 不会把「继续下一层」卡死。
+            int nextStage = stage + 1;
+            System.Action afterChest = () =>
+            {
+                StaminaConfirmPopup.ShowNotice(
+                    title: "出生点已保存",
+                    body: $"已记录第 {stage} 层\n下次进入无限裂隙可从第 {nextStage} 层继续",
+                    okLabel: "继续深入",
+                    onClose: AdvanceEndlessRiftStage);
+            };
+            if (entries.Count > 0)
+                RewardPopupUI.Show(entries, afterChest);
+            else
+                afterChest();   // 极端情况（宝箱金币为 0 且非首通）：直接弹保存点提示
+            return;
+        }
+
+        GlobalToastUI.Show(string.Join("\n", lines), true);
 
         // —— 直接续层（2026-10-19：BOSS 层也自动进下一层，无双选）——
         AdvanceEndlessRiftStage();

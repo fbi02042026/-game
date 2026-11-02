@@ -587,6 +587,9 @@ public partial class AdventureUI
     {
         if (_stageMarker == null || !_stageMarker.gameObject.activeSelf || _chestScroll == null) return;
         var viewport = _chestScroll.viewport;
+        // 【2026-11-02】裂隙页会把这颗标识「借」过去挂到 无限/关卡 下（AdventureUI.RiftMarker.cs）：
+        // 父节点不是本页滑动视口 → 说明当前归裂隙页管，主线不要抢位置。
+        if (viewport != null && _stageMarker.parent != viewport) return;
         var slotRt = _markerCurrentSlot >= 0 && _markerCurrentSlot < _slotNodes.Count
             ? _slotNodes[_markerCurrentSlot] : null;
         if (viewport == null || slotRt == null || !slotRt.gameObject.activeInHierarchy)

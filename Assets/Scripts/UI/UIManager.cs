@@ -28,14 +28,23 @@ public class UIManager : Singleton<UIManager>
     /// 【2026-10-06 主人拍板】物品变动（获得 / 分解 / 丢弃）走 <paramref name="force"/> = true，
     /// 不被对话 / 引导遮罩 / 气泡压制 —— 主人要求「操作玩家物品的都要弹提示，不管获得还是消失」。
     /// 普通提示仍走默认压制，避免盖住对话。底层仍只走 <see cref="GlobalToastUI.Show"/>。
+    /// 【2026-11-02 主人拍板·分类】默认口吻＝Plain：原文照发，不再自动接傲娇尾巴；
+    /// 只有「看板娘主动说话」的引导 / 闲聊文案才走 <see cref="ShowToastPersona"/>。
     /// </summary>
-    public void ShowToast(string msg, bool force)
+    public void ShowToast(string msg, bool force) => ShowToastInternal(msg, force, ToastTone.Plain);
+
+    /// <summary>看板娘口吻 toast：句尾可能接一句傲娇短语。只给引导 / 闲聊用，功能提示一律走 ShowToast。</summary>
+    public void ShowToastPersona(string msg) => ShowToastInternal(msg, false, ToastTone.Persona);
+
+    public void ShowToastPersona(string msg, bool force) => ShowToastInternal(msg, force, ToastTone.Persona);
+
+    void ShowToastInternal(string msg, bool force, ToastTone tone)
     {
         if (string.IsNullOrEmpty(msg)) return;
         if (!force && ShouldSuppressToastForBubble())
             return;
         Debug.Log("[Toast] " + msg);
-        GlobalToastUI.Show(msg, force);
+        GlobalToastUI.Show(msg, force, tone);
     }
 
     /// <summary>有对话/头顶气泡/看板娘气泡时，不叠屏幕 Toast。</summary>

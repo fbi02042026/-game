@@ -71,6 +71,15 @@ public class NewMailToast : MonoBehaviour
         Notify();
     }
 
+    /// <summary>
+    /// 【2026-11-02 · 清档统一复位】清掉「稍后再弹」登记：清档前的欢迎信不该把提示带进新档。
+    /// 不动正在播的提示（_inst 自己会走完 In→Hold→Out），也不销毁 DDOL 宿主。
+    /// </summary>
+    public static void ResetRuntimeStateForNewGame()
+    {
+        _pendingNotify = false;
+    }
+
     static void EnsureInstance()
     {
         if (_inst != null) return;

@@ -5,6 +5,11 @@ using UnityEngine.UI;
 /// <summary>
 /// 通用分享界面（2026-10-25 主人拍板 v2：不绑战斗数据，谁点都一样）。
 ///
+/// ⛔ 【2026-11-02 主人拍板「去掉分享的按钮和功能」——本界面已下线，全库无调用点】
+/// 原入口（胜利界面「分享按钮」）已整颗隐藏，BattleResultScreen.ShareFeatureEnabled=false；
+/// 预制体 Resources/Prefabs/Town/分享 与 ShareService 一并保留不删，恢复时改开关再接线即可。
+/// 体检报告：Docs/《分享功能可发性体检》_2026-11-02.md
+///
 /// 预制体：<c>Resources/Prefabs/Town/分享</c>（主人手工搭 2026-10-25 晚）：
 /// 分享(Canvas ScreenSpaceCamera + Scaler 720×1280 + Raycaster) → Root
 /// → Dim(全屏钮=关闭) / 界面(底图) / 按钮(Image+Button+子Text「立即分享」) / Info(提示文本)。

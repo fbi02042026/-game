@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: DHwasn/8VX5pPf+I8FgiTDnkx+qqptYcib1bmZWktuN9l10vOkeBcbA=
+guid: 35cc6fe7c8904f16b8f51571a06f24ef
 AudioImporter:
   externalObjects: {}
   serializedVersion: 7
@@ -12,8 +12,71 @@ AudioImporter:
     quality: 0.5
     conversionMode: 0
     preloadAudioData: 0
-  platformSettingOverrides: {}
-  forceToMono: 0
+  platformSettingOverrides:
+    4:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 0
+      sampleRateOverride: 44100
+      compressionFormat: 1
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    7:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 0
+      sampleRateOverride: 44100
+      compressionFormat: 1
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    13:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 2
+      sampleRateOverride: 44100
+      compressionFormat: 7
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    36:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 2
+      sampleRateOverride: 44100
+      compressionFormat: 7
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    37:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 0
+      sampleRateOverride: 44100
+      compressionFormat: 1
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    38:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 0
+      sampleRateOverride: 44100
+      compressionFormat: 1
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+    42:
+      serializedVersion: 2
+      loadType: 0
+      sampleRateSetting: 2
+      sampleRateOverride: 44100
+      compressionFormat: 7
+      quality: 0.5
+      conversionMode: 0
+      preloadAudioData: 0
+  forceToMono: 1
   normalize: 1
   loadInBackground: 0
   ambisonic: 0

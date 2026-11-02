@@ -65,6 +65,12 @@ public class OpeningIntroOverlay : MonoBehaviour
 
     public static OpeningIntroOverlay Show(string videoPath)
     {
+#if UNITY_WECHATMINIGAME
+        // 【2026-11-02 P3-A】微信小游戏 WebGL 下 VideoPlayer 不可用，直接跳过片头。
+        // 调用方 TutorialDirector.Town.PlayOpeningIntroIfNeeded 已对 null 返回做处理（yield break）。
+        Debug.Log("[OpeningIntro] 微信小游戏：跳过片头视频");
+        return null;
+#endif
         // 2026-09-28：Android 的 StreamingAssets 是 jar:// URL，File.Exists 对 URL 恒 false，
         // 会把真机片头静默跳掉 —— URL 一律视为存在，交给 VideoPlayer 自己报错。
         bool pathOk = !string.IsNullOrEmpty(videoPath)

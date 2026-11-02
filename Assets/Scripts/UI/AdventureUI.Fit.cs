@@ -95,6 +95,7 @@ public partial class AdventureUI
         _adventureUiApplying = true;
         try
         {
+            _topStripShiftResolved = false;   // 每次适配重算一次顶部让位量（主列重排与顶部两块共用）
             // 左列标签随手机宽度等比缩放（2026-10-24 主人拍板「左侧标签可以根据手机宽度等比缩放，
             // 否则在宽的手机上看的就太小了」）：宽屏逻辑宽>720，按可见逻辑宽/720 放大保持占屏宽比例；
             // 瘦屏/标准屏逻辑宽恒 720 → s=1 与现状零差别。挂在瘦屏闸门之前——宽屏也要生效；
@@ -223,8 +224,12 @@ public partial class AdventureUI
             // 2026-10-23 主人「右边列表瘦屏要跟着拉长，别跟下面关卡信息有大空隙」：
             // 主线列表（TitleBar / 槽位 / 支线岛 / 世界地图按钮）在带内重排。
             // 必须在 FitAdventureDetailPanel 之后（要拿它的最终顶边）。
+            // 【2026-11-02 修「正式关卡偏下、1-1 岛被信息框挡住」】先求顶部让位量再排主列：
+            // 旧顺序是主列先排进带内，之后顶部让位再把主线整列下移 dodge、带底（= 面板顶）没跟着让
+            // → 整列压进详情面板，滚到最底那格（1-1）就被盖住。现在 shift 吃进带顶，带底不动。
+            float topStripShift = ResolveTopStripShift();
             if (right != null && detail != null)
-                FitMainColumnStretch(right, detail);
+                FitMainColumnStretch(right, detail, topStripShift);
             // 活动副本横条等比放大（2026-10-23 主人「活动副本右侧这个标签应该随着宽度等比放大」）。
             FitActivityRowsScale(rootRt);
             // 左列模式按钮紧凑化（2026-10-23 晚主人「直接用我的预制体的数值」）：
@@ -820,7 +825,7 @@ public partial class AdventureUI
     }
 
     /// <summary>主线列表瘦屏重排总入口（ApplyAdventureFit 调，须在 FitAdventureDetailPanel 之后）。</summary>
-    void FitMainColumnStretch(RectTransform right, RectTransform detail)
+    void FitMainColumnStretch(RectTransform right, RectTransform detail, float topShift = 0f)
     {
         // Transform.Find 返回 Transform（不是 RectTransform）→ as 转一次给帮手传参用
         var mainNode = right.Find(MainNodeName) as RectTransform;
@@ -850,7 +855,8 @@ public partial class AdventureUI
             WarnMainColumnOnce("找不到 主线/TitleBar 或其锚型不是垂直单点锚");
             return;
         }
-        float tbPivotTarget = rcTopNow - (rcTopDesign - tbPivotDesign);
+        // topShift（负 = 下移）= 资源条让位量：标题栏跟着让，带顶随之下移，带底（面板顶）不动
+        float tbPivotTarget = rcTopNow - (rcTopDesign - tbPivotDesign) + topShift;
         float tbShift = tbPivotTarget - tbPivotNow;
         var tbBase = CaptureAdventureBase(titleBar);
         titleBar.offsetMin = new Vector2(tbBase.offsetMin.x, tbBase.offsetMin.y + tbShift);
@@ -1124,64 +1130,47 @@ public partial class AdventureUI
     }
 
     // ────────────────────────────────────────────────────
-    // 顶部两块让位资源条（2026-10-26 主人「冒险界面的资源条没有适配」）：
+    // 顶部让位资源条（2026-10-26 主人「冒险界面的资源条没有适配」）：
     // 病根：共享资源条（GuildHall 的 TopBar）挂 SafeAreaFitter.Offset，整条下移
-    // TotalTopInsetUnits（安全区顶 + 微信胶囊预留 + 固定 20）；而冒险页顶部的
-    // 「主线冒险」横幅（Top）与左列模式按钮容器（LeftSidebar）还是预制体贴顶位
-    // （横幅顶边距顶 19、首颗模式按钮 142）——瘦屏真机上资源条（≈safeTop+20 起）
-    // 正好压在模式按钮上，横幅孤零零吊在最顶（主人截图实锤）。
-    // 治法：量出资源条底边（世界四角 → 页根本地，与 ResolveBottomNavReserved 同口径），
-    // 把 Top + LeftSidebar 两块用【同一个位移量】下移到「资源条底 + 间距」之下——
-    // 两块共用一个 delta，预制体里横幅→按钮的相对节奏保持不变。
-    // 幂等：全部从 CaptureAdventureBase 的预制体 base 重算，不累积；
-    // 标准屏 / 关开关由 ApplyAdventureFit 的 restore 分支还原（本方法只在瘦屏路径调用）。
-    // 缺真值不兜底：资源条节点找不到 / 还没量出有效位置时不动页面，等补跑协程。
+    // TotalTopInsetUnits（安全区顶 + 微信胶囊预留 + 固定呼吸量）；冒险页顶部的
+    // 「主线冒险」横幅（Top）与左列模式按钮容器（LeftSidebar）还是预制体贴顶位。
+    // 治法：算出资源条本帧避让总量 dodge，顶部几块同步下移同一距离 —— 预制体手调节奏保持，
+    // 任何刘海机型都不会出现「资源条下去了、页面顶还吊在原位」。位移口径 = SafeAreaFitter
+    // 的 TotalTopInsetUnits，不量世界坐标（10-26 量世界坐标会把藏在条底透明区的横幅再推 ~140，
+    // 10-27 +688 抬出屏顶事故也源于这条路）。
+    // 【2026-11-02 改口径（主人「冒险界面右侧的正式关卡有点偏下，1-1 的岛被下面的信息框挡住了」）】
+    // 旧口径把「主线/无限/活动副本整列」一起下移，可主列在此之前已被 FitMainColumnStretch 排进
+    // 「标题栏 ~ 详情面板」带内，带底（= 面板顶）没跟着让位 → 整列再压下去 dodge，列底越过面板顶，
+    // 滚到最底那格（1-1）就被盖住。现改为：
+    //   · Top / LeftSidebar / 活动副本横条：仍整体下移（都在面板上方，不碰关卡列）；
+    //   · 主线 / 无限的关卡列：不再整体下移。瘦屏由 FitMainColumnStretch 把 shift 吃进带顶
+    //     （带底贴面板顶不动，列底不再侵入）；标准屏只下移 TitleBar，槽位保持预制体位。
+    // 幂等：全部从 CaptureAdventureBase 的 base 重算，不累积；一键回退见 EnableTopShiftBelowStrip。
     // ────────────────────────────────────────────────────
 
-    /// <summary>【2026-11-01 退役】旧口径「对齐到资源条底+此间距」已改为同步下移（见 EnableTopShiftBelowStrip 注释），常量保留防外部引用。</summary>
+    /// <summary>【2026-11-01 退役】旧口径「对齐到资源条底+此间距」已改为同步下移，常量保留防外部引用。</summary>
     const float TopStripGapUnits = 16f;
 
-    /// <summary>
-    /// 顶部让位位移总开关（2026-10-27 紧急回退，主人拍板口径「以前没事」→ 2026-11-01 重开）：
-    /// 本段位移（d926ba32 10-26 引入）在真机/编辑器实测把 Top 横幅、LeftSidebar 左列、
-    /// 主线/无限/活动副本整列齐刷刷抬高 +688 推出屏顶（[AdventureFit诊断] 横幅顶 2277 = 预制体 1589+688），
-    /// 病根是它按名字深找的 "TopBar" 量出的位置不在页顶（换算进页根局部落在顶边上方 685）。
-    /// 【2026-11-01 主人「编辑器当真机，冒险界面左边的标题没有下移」→ 重开本开关，配套三道防线】
-    /// ① TopBar 真源改走 TownSharedChrome.CachedTopBar（顶条实际显隐/避让用的同一节点，不再深找）；
-    /// ② 位移口径改为「同步下移」——shift = -TotalTopInsetUnits(资源条)，与资源条避让同一距离，
-    ///    不再量世界坐标对齐到「资源条底+间距」（会破预制体手调位）；
-    /// ③ 避让量 >300 设计单位 = 疑似找错节点，报错并放弃本次让位。
-    /// </summary>
+    /// <summary>顶部让位位移总开关（2026-10-27 紧急回退 → 2026-11-01 重开；口径见上方注释）。</summary>
     public static bool EnableTopShiftBelowStrip = true;
 
-    void FitAdventureTopBelowResourceStrip(RectTransform rootRt)
+    /// <summary>本帧顶部让位量（负 = 下移；无资源条 / 关开关 / 取值异常 = 0）。</summary>
+    float _topStripShift;
+    /// <summary>本帧是否已求解过让位量（主列重排与顶部两块共用同一个数，不重复量）。</summary>
+    bool _topStripShiftResolved;
+
+    /// <summary>
+    /// 顶部让位量求解：返回负值 = 整体下移的距离（0 = 不让位）。
+    /// 资源条真源 TownSharedChrome.CachedTopBar（顶条实际显隐/避让用的同一节点），深找只作回退
+    ///（深搜可能命中别页内层同名 "TopBar"，量出位置换算进页根会落在顶边上方 685）。
+    /// </summary>
+    float ResolveTopStripShift()
     {
-        if (rootRt == null || rootRt.rect.height <= 0f) return;
+        if (_topStripShiftResolved) return _topStripShift;
+        _topStripShiftResolved = true;
+        _topStripShift = 0f;
+        if (!EnableTopShiftBelowStrip) return 0f;
 
-        // 一键回退：停用位移并还原本段写过的偏移（未处理过 = no-op），整页回预制体位。
-        if (!EnableTopShiftBelowStrip)
-        {
-            var topRestore = transform.Find("Top") as RectTransform;
-            if (topRestore != null) RestoreAdventureBase(topRestore);
-            var sidebarRestore = transform.Find("LeftSidebar") as RectTransform;
-            if (sidebarRestore != null) RestoreAdventureBase(sidebarRestore);
-            var rcRestore = transform.Find("RightContent") as RectTransform;
-            if (rcRestore != null)
-            {
-                var mainRestore = rcRestore.Find(MainNodeName) as RectTransform;
-                if (mainRestore != null) RestoreAdventureBase(mainRestore);
-                var endlessRestore = rcRestore.Find(EndlessNodeName) as RectTransform;
-                if (endlessRestore != null) RestoreAdventureBase(endlessRestore);
-                var activityRestore = rcRestore.Find(ActivityNodeName) as RectTransform;
-                if (activityRestore != null) RestoreAdventureBase(activityRestore);
-            }
-            return;
-        }
-
-        // 资源条真源：主界面 TopBar；独立打开（无大厅）时是本页挂的 TopBar / SharedResourceBar。
-        // 【2026-11-01 修 10-27 +688 事故根因】优先取 TownSharedChrome.CachedTopBar ——
-        // 那是 RaiseSharedChrome 实际点亮/避让的那条顶条（权威）；深找只作回退
-        //（深搜可能命中别页内层同名 "TopBar"，量出位置换算进页根落在顶边上方 685）。
         Transform strip = TownSharedChrome.CachedTopBar;
         if (strip == null || !strip.gameObject.activeInHierarchy)
         {
@@ -1191,49 +1180,58 @@ public partial class AdventureUI
                 strip = FindDeepChild(transform, "TopBar") ?? FindDeepChild(transform, "SharedResourceBar");
         }
         var stripRt = strip as RectTransform;
-        if (stripRt == null) return;
+        if (stripRt == null) return 0f;
 
-        // 【2026-10-27 诊断】打出实际找到的 TopBar 全路径与落点，核对是不是真顶条（定位 +688 元凶用，查完删）。
-        {
-            var path = strip.name;
-            var t = strip.parent;
-            while (t != null) { path = t.name + "/" + path; t = t.parent; }
-            var c = new Vector3[4];
-            stripRt.GetWorldCorners(c);
-            Debug.Log($"[AdventureFit][让位] strip路径={path} aboveBottom={rootRt.InverseTransformPoint(c[0]).y - rootRt.rect.min.y:F0} " +
-                      $"active={strip.gameObject.activeInHierarchy} sib={strip.GetSiblingIndex()}");
-        }
-
-        // 【2026-11-01 改口径：同步下移，不再对齐到「资源条底+间距」】
-        // 位移量 = 资源条本帧的避让总量（安全区顶 + 胶囊预留 + 固定下移，与 SafeAreaFitter.Offset
-        // 施加给资源条的是同一个数），顶部两块 + 右列容器【同步下移同一距离】——
-        // 预制体里「横幅藏在资源条透明底衬下 / 首颗按钮比条底低 17」的手调相对节奏原样保持，
-        // 任何刘海机型都不会出现「资源条下去了、页面顶还吊在原位」的错位。
-        // 为什么不量世界坐标对齐（10-26 旧口径）：那会把藏在条底透明区里的横幅整块再推 ~140，
-        // 破坏手调布局；10-27 +688 抬出屏顶事故也源于量世界坐标这条路。
         float dodge = SafeAreaFitter.TotalTopInsetUnits(stripRt);
-        // 护栏：避让总量正常 ≤ 屏高 ~8%（刘海+胶囊+呼吸）；量出异常（找错节点/scaleFactor 失真）不动页面。
+        // 护栏：避让总量正常 ≤ 屏高 ~8%（刘海 + 胶囊 + 呼吸）；量出异常（找错节点 / scaleFactor 失真）不动页面。
         if (dodge > 300f)
         {
             Debug.LogError($"[AdventureFit] 让位量到异常避让量 {dodge:F0}（>300，疑似找错 TopBar），本次不让位。");
-            return;
+            return 0f;
         }
-        float shift = -dodge;
+        _topStripShift = -dodge;
+        return _topStripShift;
+    }
+
+    void FitAdventureTopBelowResourceStrip(RectTransform rootRt)
+    {
+        if (rootRt == null || rootRt.rect.height <= 0f) return;
 
         var topBanner = transform.Find("Top") as RectTransform;
-        if (topBanner == null) return;
+        var sidebar = transform.Find("LeftSidebar") as RectTransform;
+        var rc = transform.Find("RightContent") as RectTransform;
+        var mainNode = rc != null ? rc.Find(MainNodeName) as RectTransform : null;
+        var endlessNode = rc != null ? rc.Find(EndlessNodeName) as RectTransform : null;
+        var activityNode = rc != null ? rc.Find(ActivityNodeName) as RectTransform : null;
+        var titleBar = mainNode != null ? mainNode.Find("TitleBar") as RectTransform : null;
+        var riftTitle = endlessNode != null ? endlessNode.Find("TitleBar") as RectTransform : null;
+
+        // 一键回退：还原本段写过的偏移（未处理过 = no-op），整页回预制体位。
+        if (!EnableTopShiftBelowStrip)
+        {
+            if (topBanner != null) RestoreAdventureBase(topBanner);
+            if (sidebar != null) RestoreAdventureBase(sidebar);
+            if (mainNode != null) RestoreAdventureBase(mainNode);
+            if (endlessNode != null) RestoreAdventureBase(endlessNode);
+            if (activityNode != null) RestoreAdventureBase(activityNode);
+            if (titleBar != null) RestoreAdventureBase(titleBar);
+            if (riftTitle != null) RestoreAdventureBase(riftTitle);
+            return;
+        }
+
+        float shift = ResolveTopStripShift();
 
         ApplyTopNodeShift(topBanner, shift);
-        ApplyTopNodeShift(transform.Find("LeftSidebar") as RectTransform, shift);
-        // 【2026-10-27 主人「章节标题和资源条重叠」】主线/无限/活动副本整列内容随同一 shift 下移，避资源条。
-        // 整列容器下移后，FitMainColumnStretch 已算好的「标题↔槽位↔支线岛」内部节奏整体跟着走，相对不变；
-        // 这些容器不被其它 fit 改动自身 offset（FitMainColumnStretch 只动其子节点），套同一 shift 安全幂等。
-        var rcShift = transform.Find("RightContent") as RectTransform;
-        if (rcShift != null)
+        ApplyTopNodeShift(sidebar, shift);
+        // 活动副本横条在右列最上方，不在关卡列里，整体下移安全（不碰详情面板）。
+        ApplyTopNodeShift(activityNode, shift);
+
+        // 瘦屏：标题栏的让位已由 FitMainColumnStretch 算进 tbShift（带顶 / 视口顶一起走），
+        // 这里再写一次会把它覆盖回去 → 只在标准屏（不跑主列重排）补这一手。
+        if (!UiLayoutStretch.IsThinnerScreen())
         {
-            ApplyTopNodeShift(rcShift.Find(MainNodeName) as RectTransform, shift);
-            ApplyTopNodeShift(rcShift.Find(EndlessNodeName) as RectTransform, shift);
-            ApplyTopNodeShift(rcShift.Find(ActivityNodeName) as RectTransform, shift);
+            ApplyTopNodeShift(titleBar, shift);
+            ApplyTopNodeShift(riftTitle, shift);
         }
     }
 

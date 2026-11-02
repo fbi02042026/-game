@@ -32,6 +32,10 @@ public partial class TutorialDirector
     /// </summary>
     public static void PrewarmOpeningIntro()
     {
+#if UNITY_WECHATMINIGAME
+        // 【2026-11-02 P3-A】微信小游戏跳过片头（OpeningIntroOverlay.Show 会返回 null）。
+        return;
+#endif
         if (StoryProgress.OpeningIntroPlayed) return;
         OpeningIntroOverlay.Prewarm(ResolveOpeningIntroPath());
     }
@@ -397,20 +401,15 @@ public partial class TutorialDirector
         // —— V6 P4：回城引导点一次天赋（金币不够会自己跳过）——
         yield return CoGuideTalentUpgrade();
 
-        var nav = MainBottomNav.Instance;
-        RectTransform highlight = null;
-        if (nav != null && nav.characterButton != null)
-            highlight = nav.characterButton.GetComponent<RectTransform>();
-        // 软引导：指 BottomNav 角色入口。引导还在管这一步时让位，别两层一起指同一个按钮。
+        // 【2026-11-02 主人拍板】软引导「可以去角色界面看看自己的属性哟～」删除：
+        // 酒馆步自 2026-10-16 起自动跳过 → 引导从天赋一步就到 Done，走到这里基本已经收尾，
+        // 那句横幅只会压在紧跟着弹的每日登录上（横幅画布层级高于 TownPopup 900）。
+        // 「收天赋面板」这一步必须保留：面板开着时 DailyLoginUI.CoShowWhenMainUiIdle 会一直等
+        // 「回到主界面」，收尾链就卡在这里；但引导正管着天赋步时不能收（那一步靠玩家点节点），判据不变。
         if (!GuideCovers(FirstRunGuide.GuideStep.Talent))
         {
-            // 【2026-10-16 主人拍板】CoGuideTalentUpgrade 走完时玩家刚在天赋面板里点完节点，
-            // 面板还开着——先只收天赋面板（角色页不动），让 BottomNav 角色按钮露出来再发这条软引导；
-            // 否则面板+Dim 盖住底栏，提示指个看不见的按钮（主人实测「被天赋界面挡住」）。
             var talentUi = TalentUI.Instance;
             if (talentUi != null && talentUi.IsOpen) talentUi.Hide();
-            TutorialHintUI.Ensure().Show("可以去角色界面看看自己的属性哟～",
-                highlight, 12f);
         }
 
         StoryProgress.MarkTutorialDone();
@@ -441,7 +440,42 @@ public partial class TutorialDirector
             yield return new WaitForSeconds(0.25f);
         }
 
-        // 【2026-10-20 主人拍板】引导收完直接弹每日登录；装备小提示挪到整个收尾链最后（见下）。
+        // 【2026-11-02 修】收尾第一件事：把还挂在屏上的软引导横幅收掉（横幅层级高于 TownPopup，
+        // 留着就会压在每日登录面板上）。用 HideSoft 而不是 Hide —— 硬引导是引导流程自己的，
+        // 收了会把引导局卡死。
+        TutorialHintUI.Instance?.HideSoft();
+
+        // 【2026-11-02 修·主人报「最后没有回到主界面引导就结束了」】收尾必须先回公会主页：
+        // 玩家可能顺着引导进了角色页/酒馆/日志页，气泡和弹窗都会在那上面收尾。
+        // 与 :323 回城同款调用。
+        TownHubController.Instance?.OpenGuild();
+        // 切页是下一帧才生效（SwitchTab → CoSwitchNextFrame），等它真正落到公会页再往下走；
+        // 最多等 1s，玩家此刻乱点别的页也不至于把收尾链卡死。
+        float homeGuard = 0f;
+        while (homeGuard < 1f)
+        {
+            var navNow = MainBottomNav.Instance;
+            if (navNow == null || navNow.Current == MainNavTab.Guild) break;
+            homeGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // 【2026-10-20 主人拍板】「教完了」夸奖气泡：点任意处关闭。
+        // 只对本会话刚出师的新玩家弹（PlayOutro 内部以 FinishedThisSession 判定），老玩家 no-op。
+        FirstRunGuide.Instance?.PlayOutro("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。");
+
+        // 等夸奖气泡被点掉（120s 宽限）——引导气泡到此全部收完，屏幕上才轮到每日登录。
+        // 老玩家 / 没弹气泡时这里直接过。
+        float outroGuard = 0f;
+        while (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible && outroGuard < 120f)
+        {
+            outroGuard += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        // 【2026-11-02 主人拍板】每日登录挪到「回到公会主页 + 引导气泡全部点掉」之后才弹。
+        // 以前是引导一收尾就弹：玩家还停在角色页/天赋页，弹窗和气泡交叉抢屏
+        // （主人原话「每日登录出来的时机不对 还在引导中呢」）。
         TownSceneBootstrap.TryDailyLoginOnce();
 
         // 等登录弹窗真正弹出：弹窗是异步登记、等主界面空闲才开（CoShowWhenMainUiIdle 0.25s 一查），
@@ -460,18 +494,7 @@ public partial class TutorialDirector
             yield return null;
         }
 
-        // 【2026-10-20 主人拍板】「教完了」夸奖气泡：登录弹窗关掉后才弹，点任意处关闭。
-        // 只对本会话刚出师的新玩家弹（PlayOutro 内部以 FinishedThisSession 判定），老玩家 no-op。
-        FirstRunGuide.Instance?.PlayOutro("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。");
-
-        // 等夸奖气泡被点掉（120s 宽限）再弹装备小提示——收尾链压轴，屏幕上始终只有一件事。
-        // 老玩家 / 没弹气泡时这里直接过，行为＝紧跟着登录后弹，与原节奏一致。
-        float outroGuard = 0f;
-        while (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible && outroGuard < 120f)
-        {
-            outroGuard += Time.unscaledDeltaTime;
-            yield return null;
-        }
+        // 收尾链压轴：装备小提示（每日登录关掉之后，屏幕上始终只有一件事）
         TutorialHintUI.Ensure().Show("小提示：裂隙里捡的装备带不出来，金币和材料都可以带回去哦～", null, 6f);
 
         _townFlowBusy = false;

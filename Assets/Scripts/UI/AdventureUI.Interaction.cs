@@ -873,8 +873,11 @@ public partial class AdventureUI
 
         // 【2026-10-18 主人拍板】无限裂隙不弹职业选择、不限制职业 —— 刷图玩法用当前职业直接进本；
         // 职业三选一是引导局 / 正式关的仪式感，裂隙每次都弹一遍太拖节奏。
+        // 【2026-11-02 主人拍板】裂隙进本前先问「是否返回上回保存点继续」——
+        // 这个确认属于**进本入口**，不是死亡当场（死亡当场只有「返回」一条路，见 BattleManager.CanOfferRevive）；
+        // 「从头开始」不再是本弹窗的选项，改由无限页右下角的重置徽章负责（每周 1 次）。
         if (endless)
-            EnterAfterJobSelect();
+            AskEndlessStartChoice(EnterAfterJobSelect);
         else
             PlayerJobSelectUI.Show(EnterAfterJobSelect, opts);
     }

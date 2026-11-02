@@ -139,7 +139,10 @@ public class RunDraftDirector : MonoBehaviour
         if (markBm == null || markBm.Mode == null || markBm.Mode.Id == BattleModeId.Normal)
             RunLoadout.MarkBattleBegun();
 
-        if (resumed && RunLoadout.Data != null)
+        // 【2026-11-02 修正】裂隙「记录点快照」也是按续局接回来的，但它不是"继续上一局"——
+        // 章号对裂隙无意义（层号才是进度），弹出来是误导。裂隙不弹这条。
+        if (resumed && RunLoadout.Data != null
+            && !(markBm != null && markBm.IsEndlessRift))
         {
             // 续关：只说「续到哪了」，不再罗列 Lv/技能数/佣兵数（2026-10-11 主人拍板：
             // 主人原话「不要每次上来都写本次构筑什么什么的」—— 那些数字玩家看一眼就忘，还挡视线）。

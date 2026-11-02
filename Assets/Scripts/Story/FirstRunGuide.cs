@@ -266,6 +266,33 @@ public class FirstRunGuide : MonoBehaviour
         PlayerPrefs.Save();
     }
 
+    /// <summary>
+    /// 【2026-11-02 · 清档统一复位】把首次引导复位成「从没做过」。只清状态，不销毁 DDOL 单例。
+    /// 为什么必须有：引导完成标记有三份——存档 guideStep、PlayerPrefs PrefStep/PrefDone、
+    /// 本类单例的 _stepIndex。清档只清存档，另两份不动（清档走 GoLogin 不重启进程 →
+    /// 单例不重建、Awake/LoadProgress 不再跑），于是 IsFinished 恒真：
+    /// NotifyTownReady 早退、教程收尾链里等引导的所有等待全部秒过。
+    /// 2026-11-02 主人报「删数据重跑教程」三连问题的根因就在这。
+    /// </summary>
+    public static void ResetForNewGame()
+    {
+        PlayerPrefs.DeleteKey(PrefStep);
+        PlayerPrefs.DeleteKey(PrefDone);
+        PlayerPrefs.Save();
+        FinishedThisSession = false;
+
+        var ui = Instance;
+        if (ui == null) return;          // 还没建过实例：下次 Awake 按空档重新 LoadProgress
+        if (ui._drive != null)
+        {
+            ui.StopCoroutine(ui._drive);
+            ui._drive = null;
+        }
+        ui._stepIndex = 0;
+        ui._outroPlayed = false;
+        ui.Hide();
+    }
+
     /// <summary>城镇就绪 / 每次回城调用：启动或继续引导流程（重复调用安全）。</summary>
     public static void NotifyTownReady()
     {
@@ -456,7 +483,7 @@ public class FirstRunGuide : MonoBehaviour
         if (TalentUI.LeftUnlockedCount() > before)
         {
             Advance(GuideStep.Talent, null);
-            UIManager.Instance?.ShowToast("天赋点亮了，属性已更新。不错嘛。");
+            UIManager.Instance?.ShowToastPersona("天赋点亮了，属性已更新。不错嘛。");
 
             // 【2026-10-16 主人拍板】引导到天赋就到头了：先收掉还开着的天赋面板（让玩家看着主界面）。
             // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done 收引导。

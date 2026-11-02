@@ -209,6 +209,16 @@ public class TownSceneBootstrap : MonoBehaviour
 
     static bool _resumeChecked;
 
+    /// <summary>
+    /// 【2026-11-02 · 清档统一复位】清档后把「本进程只做一次」的两把闸放回初始：
+    /// 两个静态旗子都不随存档消失，不清的话清档后进镇既不再查每日登录、也不再结算中断战斗。
+    /// </summary>
+    public static void ResetRuntimeStateForNewGame()
+    {
+        _loginCheckedThisTownVisit = false;
+        _resumeChecked = false;
+    }
+
     /// <summary>每次进 Town 只检查一次中断结算（真结算了返回 true）</summary>
     static bool SettleInterruptedRunOnce()
     {

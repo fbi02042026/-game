@@ -112,7 +112,12 @@ public static class BattleResultScreen
     /// 【返回】→ onGiveUp()（死亡收尾 → 遗产结算）。
     /// 选择模式下 Dim 与失败大图不接「点击任意处跳过」（防误触放弃）；胜利界面照旧走 <see cref="Show"/>。
     /// </summary>
-    public static void ShowFailureChoice(int revivePrice, Func<bool> onRevive, Action onGiveUp, string reviveLabel = null)
+    /// <param name="useAdIcon">
+    /// true = 确认钮贴广告图（广告档）。【2026-11-02】原来靠 <paramref name="reviveLabel"/> 非空来判定，
+    /// 只要有自定义文案就贴广告图 —— 改成显式传参，避免以后加文案档位时误贴。
+    /// </param>
+    public static void ShowFailureChoice(int revivePrice, Func<bool> onRevive, Action onGiveUp,
+        string reviveLabel = null, bool useAdIcon = false)
     {
         if (!Application.isPlaying || !GameSceneGate.IsBattle)
         {
@@ -128,7 +133,7 @@ public static class BattleResultScreen
         }
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
-        ui.PlayChoice(revivePrice, onRevive, onGiveUp, reviveLabel);
+        ui.PlayChoice(revivePrice, onRevive, onGiveUp, reviveLabel, useAdIcon);
     }
 
     /// <summary>
@@ -249,10 +254,19 @@ public class BattleResultScreenUI : MonoBehaviour
     bool _confirmed;
 
     // —— 分享钮 v4（2026-10-29 主人拍板，预制体手摆版）专用状态 ——
+    /// <summary>
+    /// 【2026-11-02 主人拍板「去掉分享的按钮和功能」】分享入口总开关。
+    /// false = 胜利界面不显示「分享按钮」/「分享」说明/「+100钻石」行，确定钮<b>恒居中</b>，
+    /// 且不接点击（功能整体下线）；<see cref="ShareService"/> / <see cref="SharePanelUI"/> 文件保留不删，
+    /// 改 true 即恢复（恢复时同步看 GameConfig.SHARE_REWARD_DIAMOND 的文案口径）。
+    /// 下线原因：微信小游戏运营规范 2.5.1 禁止利益诱导分享（详见 Docs/《分享功能可发性体检》_2026-11-02.md）。
+    /// </summary>
+    const bool ShareFeatureEnabled = false;
+
     Transform _shareBtnT;      // 奖励 Panel 下「分享按钮」（主人手摆：Image+Button+子Text，图已拖好）
     Transform _shareTipT;      // 胜利节点下「分享」说明文字（主人手摆，跟随分享钮显隐）
     Transform _shareRewardRow; // 奖励 Panel 下动态建的「钻石图标 +100钻石」行（分享钮正下方，跟随显隐）
-    RectTransform _confirmRt;  // 确定钮（分享过后切 x 居中用；y/scale/尺寸一律不动）
+    RectTransform _confirmRt;  // 确定钮（分享下线后恒居中；y/scale/尺寸一律不动）
     float _confirmBaseX;       // 确定钮预制体原 x（= 主人摆的可分享位；打开时读值，不写死）
     bool _shareEntryReported;  // 分享入口曝光埋点只报一次（可分享态才算曝光）
 
@@ -445,7 +459,9 @@ public class BattleResultScreenUI : MonoBehaviour
             else
             {
                 btn.onClick.RemoveAllListeners();
-                btn.onClick.AddListener(OnShareClicked);
+                // 【2026-11-02 主人拍板「去掉分享的按钮和功能」】开关关着就不接线：节点由
+                // RefreshShareLayout 整颗隐藏，这里连点击都不挂，防别的路径误触。
+                if (ShareFeatureEnabled) btn.onClick.AddListener(OnShareClicked);
             }
         }
         if (_shareTipT == null)
@@ -455,8 +471,9 @@ public class BattleResultScreenUI : MonoBehaviour
         else
         {
             // 说明文案动态写（预制体里的字只是主人示例）：格式照主人示例「分享获得100钻石，每日一次」
+            // 【2026-11-02 分享下线】开关关着不再写「分享得钻」文案（节点整颗隐藏，但文案也别留诱导字样）
             var tipText = _shareTipT.GetComponent<Text>();
-            if (tipText != null)
+            if (tipText != null && ShareFeatureEnabled)
                 tipText.text = $"分享获得{GameConfig.SHARE_REWARD_DIAMOND}钻石，每日一次";
         }
     }
@@ -474,6 +491,8 @@ public class BattleResultScreenUI : MonoBehaviour
     /// </summary>
     void BuildShareRewardRow(Transform rewardPanel)
     {
+        // 【2026-11-02 分享下线】不建这一行了 —— 建出来也是隐藏，白搭一次动态节点。
+        if (!ShareFeatureEnabled) return;
         if (rewardPanel == null || _shareBtnT == null) return;
         var btnRt = _shareBtnT as RectTransform;
         if (btnRt == null) return;
@@ -532,17 +551,14 @@ public class BattleResultScreenUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-29 主人拍板 v4】按「可分享 / 分享过后」切排版：
-    /// · 可分享（非引导局 且 今日未领）＝主人摆的排版原样：分享按钮 + 说明显示，确定钮在预制体位（分享右）；
-    /// · 分享过后（今日已领）或引导局＝隐藏分享按钮与说明，确定钮 x 归 0 居中（y/scale/尺寸不动）。
-    /// 「今日已领」判定走 <see cref="ShareService.IsRewardClaimedToday"/> 唯一出口；本次点分享领奖回来由
-    /// <see cref="ShareService.ShareRewardGranted"/> 事件驱动再刷（实例订阅，OnDestroy 退订）。
-    /// 动 x 是拍板内容（「分享过后隐藏分享按钮 确定按钮居中」）；其余布局项照旧不碰（铁律 32）。
+    /// 【2026-11-02 主人拍板「去掉分享的按钮和功能」】分享整体下线：<see cref="ShareFeatureEnabled"/>=false 时
+    /// 分享按钮/说明/+100钻石行<b>一律隐藏</b>，确定钮 x 归 0 居中（y/scale/尺寸不动）。
+    /// 恢复分享只需把开关改 true —— 下面这套「可分享 / 分享过后」排版逻辑原样还在，不用重写。
     /// </summary>
     void RefreshShareLayout(bool isTutorial)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        bool shareable = !isTutorial && !ShareService.IsRewardClaimedToday(data);
+        bool shareable = ShareFeatureEnabled && !isTutorial && !ShareService.IsRewardClaimedToday(data);
 
         if (_shareBtnT != null) _shareBtnT.gameObject.SetActive(shareable);
         if (_shareTipT != null) _shareTipT.gameObject.SetActive(shareable);
@@ -568,9 +584,11 @@ public class BattleResultScreenUI : MonoBehaviour
 
     /// <summary>【分享】钮点击（v4 绑主人预制体手摆的「分享按钮」节点）：打开通用分享界面（SharePanelUI），
     /// 发钻/日键/埋点在分享界面内完成；发奖成功由 ShareService.ShareRewardGranted 事件驱动本界面
-    /// 切「分享过后」排版（隐藏分享钮、确定居中）。结果界面不关。</summary>
+    /// 切「分享过后」排版（隐藏分享钮、确定居中）。结果界面不关。
+    /// 【2026-11-02 分享下线】开关关着时这里直接 return —— 接线处已经不挂了，这道是防外部路径误调。</summary>
     void OnShareClicked()
     {
+        if (!ShareFeatureEnabled) return;
         SharePanelUI.Show();
     }
 
@@ -752,7 +770,8 @@ public class BattleResultScreenUI : MonoBehaviour
     /// 没挂 Button → 运行时补 Button（transition None 不改观感，先例 = SpeechBubbleTalker
     /// EnsureBoardPokeButton），只接线与同步价格文本，摆位/图标/字体一律以预制体为准（铁律 32）。
     /// </summary>
-    public void PlayChoice(int revivePrice, Func<bool> onRevive, Action onGiveUp, string reviveLabel = null)
+    public void PlayChoice(int revivePrice, Func<bool> onRevive, Action onGiveUp,
+        string reviveLabel = null, bool useAdIcon = false)
     {
         _choiceMode = true;
         _onRevive = onRevive;
@@ -809,8 +828,11 @@ public class BattleResultScreenUI : MonoBehaviour
         var priceLbl = confirmT.GetComponentInChildren<Text>(true);
         if (priceLbl != null)
             priceLbl.text = reviveLabel ?? $"{revivePrice}复活";
-        if (reviveLabel != null && !AdIconUI.Apply(confirmT))
-            Debug.LogError("[BattleResultScreen] 复活钮广告图贴不上（见上一条 Error），广告档维持文字态");
+        if (useAdIcon)
+        {
+            if (!AdIconUI.Apply(confirmT))
+                Debug.LogError("[BattleResultScreen] 复活钮广告图贴不上（见上一条 Error），广告档维持文字态");
+        }
 
         _cg = gameObject.AddComponent<CanvasGroup>();
         _cg.alpha = 0f;

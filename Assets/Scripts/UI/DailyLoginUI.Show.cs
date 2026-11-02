@@ -148,6 +148,21 @@ public partial class DailyLoginUI
     }
 
     /// <summary>
+    /// 【2026-11-02 · 清档统一复位】清掉本类的进程级旗子（都不随存档消失）：
+    /// _autoPopConsumed 会把「今天领过登录奖励」带进新档 → 登录弹窗整个进程再也弹不出来。
+    /// 只收画面不动宿主（宿主一 SetActive(false)，其上的 CoShowWhenMainUiIdle 当场死），
+    /// 也不走 Hide() 的副作用（收天赋页 / 冲刷邮件 / 弹艾拉面板）。
+    /// </summary>
+    public static void ResetRuntimeStateForNewGame()
+    {
+        _pendingShow = false;
+        _autoPopConsumed = false;
+        _guideConsumed = false;
+        var ui = Instance;
+        if (ui != null) ui.HideVisuals();
+    }
+
+    /// <summary>
     /// 弹窗画面此刻是否在屏上（2026-10-20 加）。宿主 GO 常驻激活（协程挂上面），显隐只动
     /// 子节点：完整预制体路径 HideVisuals 收全部直接子节点、兜底路径收 _root——所以
     /// 「有任一活着的直接子节点」＝画面在屏，两条路径都成立。TownIdleNudge 等闲置引导据此让位。

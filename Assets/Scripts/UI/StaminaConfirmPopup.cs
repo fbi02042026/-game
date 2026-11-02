@@ -26,6 +26,12 @@ public static class StaminaConfirmPopup
     static Button _cancelBtn;
     static Button _dimBtn;
     static Action _onOk;
+    /// <summary>
+    /// 【2026-11-02】副按钮（取消位）的回调。null = 老语义（点副按钮/点暗底只关窗，什么都不做）。
+    /// 只有 <see cref="ShowChoice"/> 会填它 —— 那种场景下两个按钮都是「前进选项」，
+    /// 比如裂隙进本时的「继续第 N 层 / 从头开始」。
+    /// </summary>
+    static Action _onCancel;
 
     // 单按钮告知模式的几何快照（第一次切单按钮前从预制体捕获，切回双按钮时原样还原）
     static RectTransform _okRt;
@@ -60,7 +66,49 @@ public static class StaminaConfirmPopup
         if (_cancelLabel != null) _cancelLabel.text = "取消";
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onConfirm;
+        _onCancel = null;           // 普通确认框：副按钮仍是「取消」语义（只关窗）
         _okGray = false;            // 每次开窗还原置灰钩子（竞技场商店按当次余额重新决定）
+        ApplyOkGray();
+        _rootPanel.SetActive(true);
+        ApplyPanelFit();
+        _host.transform.SetAsLastSibling();
+        var canvas = _host.GetComponent<Canvas>();
+        if (canvas != null)
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownConfirm);
+    }
+
+    /// <summary>
+    /// 【2026-11-02 主人拍板】通用**双选**框：主/副两个按钮各带一个回调，副按钮语义由调用方定。
+    /// <para>主人原话「下次进的时候可以选择是否从头开始还是继续上回的第 X 层开始」——
+    /// 这种场景下副按钮写「取消」会让人以为点了就不进本，所以文案必须由调用方给全。</para>
+    /// <para>【2026-11-02 晚改版】无限裂隙进本确认改成「是否返回上回保存点继续」，
+    /// 副按钮就是真「暂不进入」（onCancel 传 null 即可，只关窗）。</para>
+    /// <para>点暗底 = 视同放弃（只关窗，不触发 onCancel）：进本这类流程玩家点外面就是想退出，
+    /// 别替他做选择。</para>
+    /// </summary>
+    /// <param name="okLabel">主按钮（右侧）文案，如「继续第 11 层」。</param>
+    /// <param name="cancelLabel">副按钮（左侧）文案，如「暂不进入」。</param>
+    public static void ShowChoice(string title, string body, string okLabel, string cancelLabel,
+        Action onOk, Action onCancel)
+    {
+        Ensure();
+        if (_rootPanel == null)
+        {
+            // 弹窗不可用（预制体缺失，Ensure 里已 LogError）：**不能静默什么都不做** ——
+            // 进本流程靠这个回调往下走，吞掉就变成「点开始没反应」。退化成默认选项。
+            onOk?.Invoke();
+            return;
+        }
+        ApplySingleButton(false);   // 双钮
+        ApplyNoticeIcon(null);
+        if (_title != null) _title.text = title ?? "";
+        if (_body != null) _body.text = body ?? "";
+        if (_okLabel != null) _okLabel.text = okLabel ?? "确定";
+        if (_cancelLabel != null) _cancelLabel.text = cancelLabel ?? "取消";
+        ApplyUnifiedTextStyle(_title, _body);
+        _onOk = onOk;
+        _onCancel = onCancel;
+        _okGray = false;
         ApplyOkGray();
         _rootPanel.SetActive(true);
         ApplyPanelFit();
@@ -103,7 +151,14 @@ public static class StaminaConfirmPopup
     public static void ShowNotice(string title, string body, string okLabel, Action onClose, Sprite icon)
     {
         Ensure();
-        if (_rootPanel == null) return;
+        if (_rootPanel == null)
+        {
+            // 【2026-11-02】与 ShowChoice 同款兜底：告知窗也常被当成「流程中间的一站」
+            //（如「获得 → 出生点已保存 → 继续下一层」），吞掉回调就会卡住整条链。
+            Debug.LogError("[StaminaConfirmPopup] 告知窗建不出来，直接放行后续流程");
+            onClose?.Invoke();
+            return;
+        }
         ApplySingleButton(true);
         if (_title != null) _title.text = title ?? "";
         if (_body != null) _body.text = body ?? "";
@@ -111,6 +166,7 @@ public static class StaminaConfirmPopup
         ApplyNoticeIcon(icon);
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onClose;
+        _onCancel = null;           // 告知窗没有副按钮语义
         _okGray = false;            // 告知窗无置灰语义，开窗强制还原（防上次商店置灰残留）
         ApplyOkGray();
         _rootPanel.SetActive(true);
@@ -245,6 +301,7 @@ public static class StaminaConfirmPopup
         ApplyNoticeIcon(null);      // 收窗还原正文位 + 收图标（下次体力/清除数据等无图标告知不受污染）
         ApplySingleButton(false);   // 收窗即还原，下次撤离/体力确认仍是双按钮
         _onOk = null;
+        _onCancel = null;
     }
 
     static void Ensure()
@@ -302,18 +359,29 @@ public static class StaminaConfirmPopup
         if (_cancelBtn != null)
         {
             _cancelBtn.onClick.RemoveAllListeners();
-            _cancelBtn.onClick.AddListener(Close);
+            _cancelBtn.onClick.AddListener(OnCancelClicked);
         }
         if (_dimBtn != null)
         {
             _dimBtn.onClick.RemoveAllListeners();
-            _dimBtn.onClick.AddListener(Close);
+            _dimBtn.onClick.AddListener(Close);   // 暗底 = 放弃（不触发 onCancel）
         }
     }
 
     static void OnOkClicked()
     {
         var act = _onOk;
+        Close();
+        act?.Invoke();
+    }
+
+    /// <summary>
+    /// 副按钮点击：先关窗再回调（与 <see cref="OnOkClicked"/> 同序）。
+    /// <see cref="_onCancel"/> 为 null（普通确认框/告知窗）时退化成原来的「只关窗」。
+    /// </summary>
+    static void OnCancelClicked()
+    {
+        var act = _onCancel;
         Close();
         act?.Invoke();
     }

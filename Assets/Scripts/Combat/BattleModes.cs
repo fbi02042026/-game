@@ -777,9 +777,10 @@ public sealed class ArenaBattleMode : BattleMode
 /// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
 /// 玩法（2026-10-29 主人拍板）：每天 3 次 × 15 体力（体力档 10-29 二改 20→15，见 StaminaSystem.ENDLESS_RIFT_COST）；
 /// **每层开始抽 3 次奖**（免费额度层间重置，定向抽不开启）；抽奖价格按本局已抽数递增；
-/// 难度走锯齿曲线（每节 +6%、节内每层 +4%、精英层 ×1.10，见 GameConfig.EndlessDifficultyMul；旧线性 +7%/缓冲 9 折已废）；
-/// 每 5 层一个 BOSS 记录点；首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；
-/// 死亡/撤离当层不发、已通层保留；下次从记录点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）；
+/// 难度走分档陡坡（每节 ×1.18~1.20 + 节内每层 +8% 锯齿 + 精英层 ×1.45，见 GameConfig.EndlessDifficultyMul）；
+/// 每 5 层一个 BOSS、**每 10 层一个存档点**（大 BOSS 层，2026-11-02 主人拍板由 5 改 10）；
+/// 首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；重置进度后重打旧层只发 30% 金币（天赋石不发）；
+/// 死亡/撤离当层不发、已通层保留；下次从存档点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）；
 /// 层间黑屏过场字幕「第 N 层」。佣兵/技能跨层保留，直到死亡退出。
 /// 施工文档：Docs/无限裂隙副本_待办任务清单.md
 /// </summary>
@@ -789,8 +790,19 @@ public sealed class EndlessBattleMode : BattleMode
     public override string DisplayName => "无限裂隙";
     public override bool IsPlayable => true;
 
-    /// <summary>每层开始免费抽 3 次（走战斗内老虎机既有免费额度框架，层间重置，见 ENDLESS_RIFT_FREE_DRAWS）</summary>
-    public override int FreeEntryDraws => SlotMachineDefs.ENDLESS_RIFT_FREE_DRAWS;
+    /// <summary>
+    /// 每层开始免费抽 —— 两层口径（2026-11-02 主人拍板）：
+    /// ① 进本第一层 = 3 抽 + **按起始层补偿**（每 3 层 +1，封顶 +12）—— 解「构筑重置 + 深层难度」死锁；
+    /// ② 之后按本次连打层数递减：第 2-3 层 3 抽 → 第 4-6 层 2 抽 → 第 7 层起 1 抽。
+    /// 唯一出口 <see cref="SlotMachineDefs.EndlessFreeDrawsForRun"/>。
+    /// </summary>
+    public override int FreeEntryDraws => SlotMachineDefs.EndlessFreeDrawsForRun(
+        BattleManager.Instance != null
+            ? BattleManager.Instance.EndlessRiftStage - BattleManager.Instance.EndlessRiftEntryStage
+            : 0,
+        BattleManager.Instance != null
+            ? BattleManager.Instance.EndlessRiftEntryStage
+            : 1);
 
     /// <summary>局内金币照发：免费抽完后玩家用局内金币继续抽构筑</summary>
     public override bool GrantsRunCoins => true;
@@ -799,9 +811,10 @@ public sealed class EndlessBattleMode : BattleMode
     /// 过层直接走 <see cref="BattleManager.SettleEndlessStageClear"/> 的宝箱/首通/续层链；阵亡也直接进遗产结算。</summary>
     public override bool UsesBattleResultScreen => false;
 
-    /// <summary>【2026-10-29 主人拍板】裂隙死亡**要**弹复活选择窗（含看广告档，每日 2 广告+2 钻石总闸见
-    /// <see cref="ReviveQuota"/>）—— 与通关结算屏解耦；放弃复活才走裂隙遗产结算线。</summary>
-    public override bool OffersRevive => true;
+    /// <summary>【2026-11-02 主人拍板「死亡只能返回」】裂隙**不给**复活窗 —— 死了直接收局回城，
+    /// 下次进本由 <c>AdventureUI.AskEndlessStartChoice</c> 问「要不要从保存点继续」。
+    /// （2026-10-29 曾开过这道门，含看广告档；现在整条撤掉，ReviveQuota 额度不消耗。）</summary>
+    public override bool OffersRevive => false;
 
     public override void BuildChapter(ChapterManager cm, int chapter)
     {
@@ -828,7 +841,8 @@ public sealed class EndlessBattleMode : BattleMode
 
 /// <summary>
 /// 无限裂隙规则：每日次数、进度读写、层数推导。纯静态，不碰战斗核心。
-/// 进度真源 = SaveData.endlessRiftClearedStage（已首通最高层）；记录点 = 本值 / 5 × 5。
+/// 进度真源 = SaveData.endlessRiftClearedStage（**本轮**已通关最高层）；记录点 = 本值 / 10 × 10（每 10 层存档）。
+/// 生涯最高另存 SaveData.endlessRiftBestStage（重置进度不清它，排行榜/日志用）。
 /// </summary>
 public static class EndlessRiftRules
 {
@@ -880,17 +894,84 @@ public static class EndlessRiftRules
         return true;
     }
 
-    /// <summary>本次进本的起始层 = 记录点 + 1（主人拍板：不重打记录层）</summary>
+    /// <summary>
+    /// 本次进本的起始层 = 保存点 + 1（主人拍板：不重打保存层）。
+    /// 进度真源是 <see cref="SaveData.endlessRiftClearedStage"/>（**本轮**已通关最高层）；
+    /// 进本入口的「从头开始」直接把本轮进度归零（<see cref="TryResetProgress"/>），所以这里不用再看额外标记。
+    /// <para>【2026-11-02 一键直达】<see cref="SetStartStageOverride"/> 有值时优先用它
+    /// （玩家在进本确认里选了「直达最高出生点」）。覆盖值由进本确认写入，
+    /// 玩家改选「继续保存点」时当场清掉（见 AdventureUI.AskEndlessStartChoice 的 onOk）。</para>
+    /// </summary>
     public static int StartStage()
     {
+        if (_startStageOverride > 0) return _startStageOverride;
         var data = SaveSystem.Instance?.Data;
         return CheckpointOf(data?.endlessRiftClearedStage ?? 0) + 1;
     }
 
-    /// <summary>记录点 = 已首通最高层向下取整到 5 的倍数，只进不退</summary>
-    public static int CheckpointOf(int clearedStage) => Mathf.Max(0, clearedStage) / GameConfig.ENDLESS_CHECKPOINT_INTERVAL * GameConfig.ENDLESS_CHECKPOINT_INTERVAL;
+    // ============================================================
+    // 【2026-11-02 主人拍板】「一键到历史最高出生点，中间的抽奖全部自动抽」
+    //
+    // 痛点：本轮只推到 12 层、生涯最高 47 层时，每次进本都要从 11 层逐层爬回 47 层，几十层重复劳动。
+    // 解法：进本确认里多给一个「直达第 N 层」选项 ——
+    //   ① 起始层覆盖成「生涯最高出生点 + 1」（不重打保存层）；
+    //   ② 被跳过的层本该给的免费抽累加成一次性补偿（CatchUpDraws → GrantCatchUpDraws），
+    //      进本第一层自动连抽掉（见 BattleManager.CoStageEntryDraft 的自动抽段）。
+    // 两者都必须是**一次性**的：覆盖值只在这一次进本生效，补偿抽只在本次进本第一层注入。
+    // ============================================================
 
-    /// <summary>标记该层首通完成并落盘；返回是否真的推进了进度（= 是否本次首通）</summary>
+    /// <summary>起始层覆盖（0 = 不覆盖）。只在进本确认里写，一次性。</summary>
+    static int _startStageOverride;
+
+    /// <summary>写入本次进本的起始层覆盖（一键直达最高出生点用）。</summary>
+    public static void SetStartStageOverride(int stage) => _startStageOverride = Mathf.Max(0, stage);
+
+    /// <summary>清掉起始层覆盖（进本确认开头调，幂等：没点直达时就是空转）。</summary>
+    public static void ClearStartStageOverride() => _startStageOverride = 0;
+
+    /// <summary>生涯最高层对应的出生点（向下取整到保存点间隔）。0 = 还没打过。</summary>
+    public static int BestCheckpoint(SaveData data) => CheckpointOf(BestStage(data));
+
+    /// <summary>待注入的跳层补偿抽数（进本第一层读一次后清零）。</summary>
+    static int _catchUpDraws;
+
+    /// <summary>
+    /// 被跳过的层本该给的免费抽累加（口径与「本次进入内递减」同源，不另立一套公式）。
+    /// 封顶 <see cref="GameConfig.ENDLESS_CATCHUP_DRAW_CAP"/>。
+    /// </summary>
+    /// <param name="fromStage">本次原本会从这一层开始打（保存点 + 1）。</param>
+    /// <param name="toStage">要直达的那一层（不含）。</param>
+    public static int CatchUpDraws(int fromStage, int toStage)
+    {
+        int from = Mathf.Max(1, fromStage);
+        int to = Mathf.Max(from, toStage);
+        int cap = GameConfig.ENDLESS_CATCHUP_DRAW_CAP;
+        int total = 0;
+        // 到封顶就提前收手：深层跳层时 to - from 可能上百，没必要白算完
+        for (int s = from; s < to && total < cap; s++)
+            total += SlotMachineDefs.EndlessFreeDrawsForRun(s - from, from);
+        return Mathf.Min(total, cap);
+    }
+
+    /// <summary>登记跳层补偿抽数（进本确认里写）。</summary>
+    public static void GrantCatchUpDraws(int count) => _catchUpDraws = Mathf.Max(0, count);
+
+    /// <summary>取走并清零跳层补偿抽数（唯一出口 = 无限裂隙本次进本的第一层抽卡）。</summary>
+    public static int TakeCatchUpDraws()
+    {
+        int v = _catchUpDraws;
+        _catchUpDraws = 0;
+        return v;
+    }
+
+    /// <summary>
+    /// 记录点 = 已通关层向下取整到**存档点间隔**（10）的倍数，只进不退。
+    /// 【2026-11-02 主人拍板「每 10 层一个保存点」】由 5 改 10（真源 <see cref="GameConfig.ENDLESS_SAVE_INTERVAL"/>）。
+    /// </summary>
+    public static int CheckpointOf(int clearedStage)
+        => Mathf.Max(0, clearedStage) / GameConfig.ENDLESS_SAVE_INTERVAL * GameConfig.ENDLESS_SAVE_INTERVAL;
+
+    /// <summary>标记该层通关并落盘；返回是否真的推进了**本轮**进度（重置后重新爬会再次返回 true）</summary>
     public static bool MarkCleared(int riftStage)
     {
         var data = SaveSystem.Instance?.Data;
@@ -898,6 +979,75 @@ public static class EndlessRiftRules
         if (riftStage <= data.endlessRiftClearedStage) return false;
         data.endlessRiftClearedStage = riftStage;
         SaveSystem.Instance?.Save();
+        return true;
+    }
+
+    /// <summary>生涯最高层（重置进度不清它；排行榜/日志展示用这个）</summary>
+    public static int BestStage(SaveData data) => Mathf.Max(0, data?.endlessRiftBestStage ?? 0);
+
+    /// <summary>
+    /// 刷新生涯最高层；返回 true = 这次是**历史首次**打通这层（→ 发全额首通奖励）。
+    /// <para>【2026-11-02 主人拍板】重置后重打旧层时本方法返回 false → 只发 30% 金币、不发天赋石。
+    /// 这条判定不能用 <see cref="MarkCleared"/> 的返回值代替：那个看的是"本轮进度"，重置后会重新变 true。</para>
+    /// </summary>
+    public static bool NoteBestStage(int riftStage)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (riftStage <= data.endlessRiftBestStage) return false;
+        data.endlessRiftBestStage = riftStage;
+        SaveSystem.Instance?.Save();
+        return true;
+    }
+
+    // ============================================================
+    // 【2026-11-02 主人拍板】每周可主动重置进度 1 次
+    //
+    // 主人的三个要求：「还可以加一个重置按钮 让玩家可以从头来」「奖励是不是可以多少给点」
+    //   「每个星期可重置一次是不是好点」→ 结论：每周 1 次、重打旧层发 30% 金币（天赋石不发）。
+    // 重置语义：**当前这一轮**归零（clearedStage=0 + 清快照 + 清「从第 1 层」标记），
+    //   生涯最高 bestStage 不动 —— 排行榜和冒险日志不会因为重置而掉档。
+    // ============================================================
+
+    /// <summary>本周还能不能重置（每周 1 次，周一 0 点刷新）。</summary>
+    public static bool CanResetThisWeek(SaveData data)
+    {
+        if (data == null) return false;
+        return data.endlessRiftResetWeekKey != DayKeyUtil.WeekKey();
+    }
+
+    /// <summary>距离下次可重置还有几天（0 = 现在就能重置）。UI 文案用。</summary>
+    public static int DaysUntilReset(SaveData data)
+    {
+        if (CanResetThisWeek(data)) return 0;
+        var now = DateTime.Now;
+        int dowFromMonday = ((int)now.DayOfWeek + 6) % 7;   // 周一=0 … 周日=6
+        return 7 - dowFromMonday;
+    }
+
+    /// <summary>
+    /// 执行重置：本轮进度归零 + 清记录点快照 + 清「从第 1 层」标记，写本周键。
+    /// 生涯最高 <see cref="SaveData.endlessRiftBestStage"/> 与每日次数**不动**。
+    /// 返回 false = 本周已重置过（<paramref name="silent"/> = false 时已弹提示）。
+    /// </summary>
+    /// <param name="silent">
+    /// true = 不弹「本周已重置过」提示（调用方自己给更贴合上下文的文案，
+    /// 见 AdventureUI.AskEndlessStartChoice 的「从头开始」分支）。
+    /// </param>
+    public static bool TryResetProgress(bool silent = false)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (!CanResetThisWeek(data))
+        {
+            if (!silent) GlobalToastUI.Show($"本周已重置过，{DaysUntilReset(data)} 天后再来", true);
+            return false;
+        }
+        data.endlessRiftClearedStage = 0;
+        data.endlessRiftResetWeekKey = DayKeyUtil.WeekKey();
+        EndlessRiftCheckpoint.Clear();              // 旧构筑不该带进新一轮
+        SaveSystem.Instance?.Save();
+        Debug.Log($"[EndlessRiftRules] 进度已重置：本轮归零、从第 1 层起；生涯最高 {data.endlessRiftBestStage} 层保留");
         return true;
     }
 
@@ -930,7 +1080,8 @@ public static class EndlessRiftRules
     /// </summary>
     public static int RankPercentOf(SaveData data)
     {
-        int best = Mathf.Max(0, data?.endlessRiftClearedStage ?? 0);
+        // 【2026-11-02】用生涯最高（bestStage），不是本轮进度 —— 否则重置进度会把排名打回新手档
+        int best = BestStage(data);
         int eff = Mathf.Max(1, best - RankIdleFloorLossPerDay * IdleDaysOf(data));
         int pct = Mathf.RoundToInt((1f - Mathf.Exp(-eff / RankCurveScale)) * 100f);
         return Mathf.Clamp(pct, 1, 99);

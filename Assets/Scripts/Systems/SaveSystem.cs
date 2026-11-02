@@ -73,6 +73,8 @@ public class SaveSystem : Singleton<SaveSystem>
         }
 
         StoryProgress.ResetRuntimeFlags();
+        NewGameReset.ApplyAll();   // 【2026-11-02】清档统一复位：把进程级状态（引导游标/登录弹窗/进镇闸…）一起归零
+
         Debug.Log($"[SaveSystem] 检测到版本变化（{stored} → {current}），本地数据已清除，从新档开始");
     }
 
@@ -227,6 +229,10 @@ public class SaveSystem : Singleton<SaveSystem>
         ResourceAdRewards.EnsureDay(data);
         ReviveQuota.EnsureDay(data);        // 复活每日档位跨天清零（2026-10-25 主人拍板）
         EndlessRiftRules.EnsureDay(data);   // 无限裂隙每日次数跨天重置兜底
+        // 【2026-11-02】老档迁移：新增 endlessRiftBestStage（生涯最高）时它还是 0，
+        // 但 clearedStage 已经有值 —— 不抬上来，老玩家重打旧层会被判成"生涯首通"发全额奖励（等于白送一轮）。
+        if (data.endlessRiftBestStage < data.endlessRiftClearedStage)
+            data.endlessRiftBestStage = data.endlessRiftClearedStage;
         ArenaRules.EnsurePeriods(data);     // 竞技场：跨天清次数+机器人漂移，跨月赛季结算发奖（2026-10-29）
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
@@ -341,6 +347,8 @@ public class SaveSystem : Singleton<SaveSystem>
         StoryProgress.ResetRuntimeFlags();
         _data = CreateFreshSave();
         Save();
+        NewGameReset.ApplyAll();   // 【2026-11-02】清档统一复位：把进程级状态（引导游标/登录弹窗/进镇闸…）一起归零
+
         Debug.Log("[SaveSystem] 已清除存档，新档 tutorialDone=" + _data.tutorialDone);
     }
 }

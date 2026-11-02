@@ -428,7 +428,7 @@ public partial class AdventureUI
     /// <summary>排行榜文字与顶槽位的间距（纵向 y 排版属必要介入：y 跟顶槽位现算，不写死坐标）。</summary>
     const float RiftRankLabelGapY = 92f;
 
-    /// <summary>刷新无限页：4 张层数牌写「第N层」+ 虚拟排行榜一行字（RefreshAll 调，仅无限模式）。</summary>
+    /// <summary>刷新无限页：4 张层数牌写「第N层」+ 出生点头像指示 + 两点排行榜（RefreshAll 调，仅无限模式）。</summary>
     void RefreshRiftPage()
     {
         var right = transform.Find("RightContent");
@@ -457,42 +457,56 @@ public partial class AdventureUI
         // 虚拟排行榜：y 跟顶槽位走（瘦屏重排后 RefreshRiftPage 会重算，不脱节）
         var data = SaveSystem.Instance?.Data;
         var label = EnsureRiftRankLabel(guanka);
-        if (label == null) return;
-        int best = Mathf.Max(0, data?.endlessRiftClearedStage ?? 0);
-        label.text = best > 0
-            ? $"您当前层数已领先 {EndlessRiftRules.RankPercentOf(data)}% 的玩家"
-            : "挑战无限裂隙后生成您的排名";
-        if (slots.Count > 0)
+        if (label != null)
         {
-            var top = slots[slots.Count - 1];
-            var lrt = label.rectTransform;
-            lrt.anchoredPosition = new Vector2(top.anchoredPosition.x, top.anchoredPosition.y + RiftRankLabelGapY);
+            // 【2026-11-02 主人拍板】排行榜要「两点」：① 打的最高层是多少 ② 超过了多少人。
+            // 最高层走生涯最高（bestStage，只增不减）—— 重置进度也不清，永久保留。
+            int best = EndlessRiftRules.BestStage(data);
+            label.text = best > 0
+                ? $"最高层数：第 {best} 层\n已超过 {EndlessRiftRules.RankPercentOf(data)}% 的玩家"
+                : "最高层数：尚未挑战\n挑战无限裂隙后生成您的排名";
+            if (slots.Count > 0)
+            {
+                var top = slots[slots.Count - 1];
+                var lrt = label.rectTransform;
+                lrt.anchoredPosition = new Vector2(top.anchoredPosition.x, top.anchoredPosition.y + RiftRankLabelGapY);
+            }
         }
+
+        // 【2026-11-02 主人拍板】玩家头像指向所在的层（= 出生点 = 底槽 = 保存点 + 1）
+        UpdateRiftStageMarker(guanka, slots.Count > 0 ? slots[0] : null);
+        // 重置徽章跟着这一页刷（状态：本周能不能重置 / 冷却还剩几天）
+        RefreshEndlessResetButton(true);
     }
 
-    /// <summary>排行榜文字（运行时建一次；纯 Text 无新图，颜色对齐页内暖金奶油口径）。</summary>
+    /// <summary>排行榜文字（运行时建一次；纯 Text 无新图，颜色对齐页内暖金奶油口径）。
+    /// 【2026-11-02 两点改版】排版属性每次刷新都重写一遍（幂等）—— 老节点若是单行口径的旧尺寸，
+    /// 进页即被纠正成两行框，不用重启。</summary>
     Text EnsureRiftRankLabel(RectTransform guanka)
     {
         var found = guanka.Find(RiftRankLabelName);
-        if (found != null) return found.GetComponent<Text>();
-        if (guanka.GetComponentInParent<Canvas>() == null)
+        Text txt = found != null ? found.GetComponent<Text>() : null;
+        if (txt == null)
         {
-            Debug.LogError("[AdventureUI] 无限/关卡 容器不在 Canvas 下，虚拟排行榜建不出来（缺真值不兜底）");
-            return null;
+            if (guanka.GetComponentInParent<Canvas>() == null)
+            {
+                Debug.LogError("[AdventureUI] 无限/关卡 容器不在 Canvas 下，虚拟排行榜建不出来（缺真值不兜底）");
+                return null;
+            }
+            var go = new GameObject(RiftRankLabelName, typeof(RectTransform), typeof(Text));
+            go.transform.SetParent(guanka, false);
+            txt = go.GetComponent<Text>();
+            txt.font = GameFonts.GetChinese();
+            txt.color = new Color(1f, 0.92f, 0.7f, 1f);   // 与怪物信息弹窗标题同款暖金奶油色
+            txt.horizontalOverflow = HorizontalWrapMode.Overflow;
+            txt.raycastTarget = false;
         }
-        var go = new GameObject(RiftRankLabelName, typeof(RectTransform), typeof(Text));
-        go.transform.SetParent(guanka, false);
-        var rt = (RectTransform)go.transform;
+        var rt = txt.rectTransform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // 与槽位同一坐标参照（关卡容器中心）
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(460f, 44f);
-        var txt = go.GetComponent<Text>();
-        txt.font = GameFonts.GetChinese();
-        txt.fontSize = 26;
+        rt.pivot = new Vector2(0.5f, 0f);                        // 底边贴间距往上长，不压顶槽
+        rt.sizeDelta = new Vector2(460f, 84f);                   // 两行字的高度
+        txt.fontSize = 24;
         txt.alignment = TextAnchor.MiddleCenter;
-        txt.color = new Color(1f, 0.92f, 0.7f, 1f);   // 与怪物信息弹窗标题同款暖金奶油色
-        txt.horizontalOverflow = HorizontalWrapMode.Overflow;
-        txt.raycastTarget = false;
         return txt;
     }
 }

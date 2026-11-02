@@ -21,6 +21,20 @@ public static class ArenaEntryUI
 
     const string IconPath = "UI/Art/Main/对战";   // 主界面美术包里的对战图标（交叉双剑+蓝红火焰，2026-10-30 主人指定）
 
+    // ── 解锁门槛（2026-11-02 主人拍板）──────────────────────────────
+    // 显示关卡 2-5（第 1 章第 2 关 Boss 节）打完 = 3-1 开启后，入口才出现在主界面。
+    // 关卡号按 2026-11-01 跨章连续编号口径（ActProgressionDefs）；节下标只走数学层换算，禁止自己除/取模。
+    const int UnlockAct = 1;     // 第 1 章
+    const int UnlockGrand = 2;   // 第 2 关（全局关卡号 2；第 1 章每关 5 节 → Boss 节 sub0 = 9，存档 key "1_9"）
+
+    /// <summary>2-5（Boss 节）的章内节下标（0 起）＝ <see cref="ActProgressionDefs.Sub0Of"/> 换算，第 1 章下应为 9。</summary>
+    public static int UnlockSub0
+        => ActProgressionDefs.Sub0Of(UnlockAct, UnlockGrand, ActProgressionDefs.SubsPerGrandOf(UnlockAct) - 1);
+
+    /// <summary>试炼场是否已解锁（＝显示关卡 2-5 已通关）。入口显隐与冒险页 toast 共用这一个判断。</summary>
+    public static bool IsUnlocked(SaveData data)
+        => data != null && data.HasStageCleared(UnlockAct, UnlockSub0);
+
     /// <summary>在右列补「竞技场」入口。可重复调用（已有则只重新接线，不重建）。</summary>
     public static void EnsureInGuildHall(Button dailyLoginButton)
     {
@@ -36,11 +50,24 @@ public static class ArenaEntryUI
             return;
         }
 
+        // 【2026-11-02 主人拍板】显示关卡 2-5 打完（即 3-1 开启）后入口才出现：未达标整颗隐藏、不接线。
+        // 每次主界面打开都会走到这里（GuildHallUI.WireHallClicks），达标后自动重新点亮。
+        // 解锁判断单一真源 = IsUnlocked（冒险页 toast 同用一处）。
+        if (!IsUnlocked(SaveSystem.Instance?.Data))
+        {
+            var hiddenHand = parent.Find(HandPlacedName);
+            if (hiddenHand != null) hiddenHand.gameObject.SetActive(false);
+            var hiddenClone = parent.Find(NodeName);
+            if (hiddenClone != null) hiddenClone.gameObject.SetActive(false);
+            return;
+        }
+
         // 2026-10-30 主人拍板：主人已在预制体 RightBar 手摆入口（节点名「对战」），运行时【不再克隆第二颗】——
         // 找到就直接接线（原来那颗 onClick 是空的，所以点了没反应），找不到才走下面的克隆兜底。
         var hand = parent.Find(HandPlacedName);
         if (hand != null)
         {
+            hand.gameObject.SetActive(true);   // 之前未达标被藏过，达标后重新点亮
             Wire(hand.GetComponent<Button>());
             return;
         }
@@ -48,6 +75,7 @@ public static class ArenaEntryUI
         var exist = parent.Find(NodeName);
         if (exist != null)
         {
+            exist.gameObject.SetActive(true);   // 同上
             Wire(exist.GetComponent<Button>());
             return;
         }

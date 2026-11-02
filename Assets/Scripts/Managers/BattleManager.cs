@@ -216,11 +216,26 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 resumeRun = true;
         }
 
+        // 【2026-11-02 主人拍板·解「卡层死锁」】无限裂隙：把「记录点构筑快照」顶回可续局档。
+        // 必须夹在上面 parked 作废之后、下面 OnRunStart 之前 —— 这样 ResumeOrBegin 会把它当续局读回来，
+        // 技能/佣兵/势能自动生效（装备在进层抽卡前单独恢复，见 EndlessRiftCheckpoint.RestoreEquipsOnce）。
+        if (AdventureUI.PendingEndlessRift)
+            _endlessCheckpointRestored = EndlessRiftCheckpoint.RestoreToPrefs(EndlessRiftRules.StartStage());
+
         // === 局内构筑（肉鸽影子）：技能 + 佣兵全部走本局 loadout，不读城镇酒馆存档 ===
         // 新手引导局：V6 起也开构筑（走内存模式），让玩家在引导里就学会三选一与技能顺序
         // （放在 parked 判定之后：独立进本先弃旧局，这里 ResumeOrBegin 才开得出全新构筑）
         if (!Rules.Active || Rules.EnableRunDraft)
             RunDraftDirector.Ensure(this).OnRunStart();
+
+        // 【2026-11-02 主人拍板·记录点快照】快照按「续局」接回 → OnRunStart 走 resumed 分支不发启动金，
+        // 这里补回一份（口径与开新局一致），否则「回到记录点却一分抽奖币都没有」只能靠免费抽。
+        // 只补一次：_endlessCheckpointRestored 每次进本由 RestoreToPrefs 重算。
+        if (IsEndlessRift && _endlessCheckpointRestored)
+        {
+            SlotMachineSystem.GrantRunStarterGold(Rules.Active);
+            Debug.Log("[BattleManager] 裂隙记录点续局：补发启动金（续局口径不自动发）");
+        }
 
         // loadout 生效时不再走城镇酒馆雇佣；否则保留旧路径（异常/特殊规则兜底）
         if (!RunLoadout.IsActive && !GameConfig.SOLO_PLAYER_BATTLE && !Rules.SkipMercPrecall)
@@ -258,10 +273,13 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         ArenaChallengeRowIdx = AdventureUI.PendingArenaRowIdx;
         AdventureUI.PendingArenaRowIdx = -1;
 
-        // 无限裂隙：起始层 = 记录点 + 1（读完即清，防污染）；普通章号参数对它无意义
+        // 无限裂隙：起始层 = 保存点 + 1（普通章号参数对它无意义）
         if (AdventureUI.PendingEndlessRift)
         {
             EndlessRiftStage = EndlessRiftRules.StartStage();
+            // 【2026-11-02 主人拍板】记录本次进入的起始层：每层免费抽按「本次推进了几层」递减，
+            // 下次进本重新捕获 = 额度回满（不是按绝对层数永久降）。
+            EndlessRiftEntryStage = EndlessRiftStage;
             AdventureUI.PendingEndlessRift = false;
             targetChapter = GameConfig.EndlessChapterForStage(EndlessRiftStage);
         }

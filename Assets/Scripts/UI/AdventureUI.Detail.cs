@@ -65,11 +65,15 @@ public partial class AdventureUI
             }
             else if (endless)
             {
-                // 无限裂隙详情：剩余次数 / 记录点 / 下次起始层（2026-10-17 主人拍板）
+                // 无限裂隙详情：剩余次数 / 保存点 / 下次起始层（2026-10-17 主人拍板）
+                // 【2026-11-02 主人拍板「每 10 层一个保存点」】文案点明存档粒度，否则玩家打完 5 层 BOSS
+                // 会以为该存了却没存（小 BOSS 只当节奏爆点，不存档）。
                 var data = SaveSystem.Instance?.Data;
                 int left = EndlessRiftRules.TriesLeft(data);
                 int checkpoint = EndlessRiftRules.CheckpointOf(data?.endlessRiftClearedStage ?? 0);
-                stageDescLabel.text = $"今日剩余 {left}/{GameConfig.ENDLESS_DAILY_TRIES} 次，记录点第 {checkpoint} 层，下次从第 {checkpoint + 1} 层开始。";
+                stageDescLabel.text =
+                    $"今日剩余 {left}/{GameConfig.ENDLESS_DAILY_TRIES} 次，每 {GameConfig.ENDLESS_SAVE_INTERVAL} 层存档。\n" +
+                    $"保存点第 {checkpoint} 层，下次从第 {checkpoint + 1} 层开始。";
             }
             else if (main)
                 stageDescLabel.text = GetChapterIntro(_selectedChapter);
@@ -112,6 +116,8 @@ public partial class AdventureUI
         EnsureStaminaCostIcon();
         RefreshEnemyIcons();
         RefreshDropIcons();
+        // 【2026-11-02 主人拍板】重置进度钮（只在无限裂隙详情显示，每周 1 次）
+        RefreshEndlessResetButton(endless);
     }
 
     /// <summary>
