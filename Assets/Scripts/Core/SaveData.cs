@@ -608,6 +608,11 @@ public class SaveData
     [NonSerialized] public HashSet<string> logMileageGrantedKeys = new HashSet<string>();
     /// <summary>里程称号等占位（Lv6）</summary>
     public string logMileageTitleId = "";
+    /// <summary>里程奖励·猎手长弓补偿邮件是否已发（2026-11-02 测试版临时：领过里程弓 special:rare_bow、
+    /// 但因「开局不重发」bug 没实际享受到的玩家，补一封带弓的邮件；JsonUtility 直存，清档自动归 false）。
+    /// 🔴 测试版临时，正式上线删除：TownSceneBootstrap 调用行 + MailSystem.EnsureMileageBowCompensationMail
+    /// + 本字段一并删。</summary>
+    public bool mileageBowMailSent = false;
 
     /// <summary>
     /// 【2026-10-31 主人拍板「称号自动上头顶」】当前展示的称号 id（空 = 没称号）。

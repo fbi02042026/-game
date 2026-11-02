@@ -533,7 +533,22 @@ public static class PlayerJobDefs
                 Debug.LogWarning($"[PlayerJobDefs] 主手模板缺失: id={kit.MainTemplateId} spum={kit.MainSpumOverride}");
         }
 
-        if (!string.IsNullOrEmpty(kit.OffTemplateId))
+        // 【2026-11-02 主人拍板】里程奖励·稀有钢骨盾：已领取（logMileageGrantedKeys 含 special:rare_shield）
+        // 且当前职业=剑盾 → 开局直接发稀有盾替换初始副手（照暮火之杖口径：随机词条随局重掷，
+        // 生成与领取共用 AdventureLogMileage.CreateMilestoneInstance 同一出口，属性不分叉；
+        // 装备失败只报错不回退初始副手。盾只在剑盾职业生效，其他职业不发）。
+        bool mileageShieldReplaced = false;
+        if (job == PlayerJobId.SwordShield && AdventureLogMileage.HasShieldMilestoneOwned())
+        {
+            int shieldLv = Hero.Instance != null ? Hero.Instance.level : 1;
+            var shieldInst = AdventureLogMileage.CreateShieldBattleInstance(shieldLv);
+            if (shieldInst != null && bag.TryEquipDirect(shieldInst))
+                mileageShieldReplaced = true;
+            else
+                Debug.LogError("[PlayerJobDefs] 稀有·钢骨盾开局装备失败，本局副手为空（不回退初始副手）");
+        }
+
+        if (!mileageShieldReplaced && !string.IsNullOrEmpty(kit.OffTemplateId))
         {
             var offTpl = ResolveKitTemplate(kit.OffTemplateId, null);
             if (offTpl != null)

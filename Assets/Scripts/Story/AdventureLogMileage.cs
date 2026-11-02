@@ -195,11 +195,15 @@ public static class AdventureLogMileage
     }
 
     // =====================================================================
-    // 武器里程奖励（2026-10-26 主人拍板：盾/弓进里程奖励，与法师暮火之杖同款
-    // 「攒够累计点数领一次、直接穿上」；门槛跟法师 Lv2 的 100 点类似、微微不一样：
-    // 盾 100 / 弓 120）。与等级奖励并行：不走 claimedLogMileageLevels，
+    // 武器里程奖励（2026-10-26 主人拍板：与法师暮火之杖同款「攒够累计点数领一次、
+    // 直接穿上」；门槛微微不一样：盾 100）。与等级奖励并行：不走 claimedLogMileageLevels，
     // 防重发走 logMileageGrantedKeys（同暮火之杖 GrantKey 口径）。
+    // 【2026-11-02 主人拍板】里程奖励的弓（special:rare_bow / 猎手长弓）整条移除，只保留盾；
+    // 盾只在剑盾职业生效（开局重发见 PlayerJobDefs.ApplyForBattle）。
     // =====================================================================
+
+    /// <summary>稀有·钢骨盾的防重发 key（领取写入 logMileageGrantedKeys；剑盾职业开局据此重发）。</summary>
+    public const string ShieldGrantKey = "special:rare_shield";
 
     public struct WeaponMilestone
     {
@@ -217,11 +221,9 @@ public static class AdventureLogMileage
     {
         // 盾：模板防御+7（稀有版 ×1.15×星级 ≈ 8~9）+ 固定防御 5 → 总防御约 13~14
         //（2026-10-26 主人拍板：+10 太高压到 5，减 50%）
-        new WeaponMilestone { GrantKey = "special:rare_shield", TemplateId = "equip_new_shield_01", Label = "钢骨盾", NeedPoints = 100,
+        new WeaponMilestone { GrantKey = ShieldGrantKey, TemplateId = "equip_new_shield_01", Label = "钢骨盾", NeedPoints = 100,
             BonusAttr = AttrType.Defense, BonusAttrValue = 5f },
-        // 弓：模板攻击+12（稀有版 ≈ 14~15）+ 固定攻击 5 → 总攻击约 19~20
-        new WeaponMilestone { GrantKey = "special:rare_bow", TemplateId = "equip_bow_1", Label = "猎手长弓", NeedPoints = 120,
-            BonusAttr = AttrType.Attack, BonusAttrValue = 5f },
+        // 【2026-11-02 主人拍板】里程奖励的弓（special:rare_bow / equip_bow_1 / 猎手长弓）整条移除，只保留盾。
     };
 
     public static bool IsWeaponMilestoneClaimed(string grantKey)
@@ -230,10 +232,59 @@ public static class AdventureLogMileage
         return keys != null && keys.Contains(grantKey);
     }
 
+    /// <summary>是否已领稀有·钢骨盾（领取时写入；剑盾职业开局据此替换初始副手，同暮火之杖口径）。</summary>
+    public static bool HasShieldMilestoneOwned()
+    {
+        var keys = SaveSystem.Instance?.Data?.logMileageGrantedKeys;
+        return keys != null && keys.Contains(ShieldGrantKey);
+    }
+
     public static bool CanClaimWeaponMilestone(WeaponMilestone m)
     {
         if (string.IsNullOrEmpty(m.GrantKey) || IsWeaponMilestoneClaimed(m.GrantKey)) return false;
         return TotalEarned >= m.NeedPoints;
+    }
+
+    /// <summary>
+    /// 里程奖励稀有版实例的<b>唯一生成出口</b>（领取 / 剑盾职业开局重发共用，属性口径不分叉）：
+    /// 稀有版必须走 forcedRarity 生成 —— 模板底稀有度是 Uncommon，先生成后翻 rarity 的话
+    /// 属性仍按 Uncommon（×1.08）算、词条也按 Uncommon（0 条）滚，稀有名不符实；
+    /// forcedRarity=Rare：属性 ×1.15、按稀有滚 1 条武器词条（与掉落稀有装同一套生成链），
+    /// 再叠加奖励固定加成条，requireLevel 钳到生成等级必能穿上。模板缺失返回 null（LogError 不兜底）。
+    /// </summary>
+    public static EquipInstance CreateMilestoneInstance(WeaponMilestone m, int heroLevel)
+    {
+        var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(m.TemplateId) : null;
+        if (tpl == null)
+        {
+            Debug.LogError($"[Mileage] 武器里程奖励模板缺失：{m.TemplateId}");
+            return null;
+        }
+        var inst = EquipInstance.GenerateFromTemplate(tpl, 0, Mathf.Max(1, heroLevel), overrideRarity: true, forcedRarity: Rarity.Rare);
+        inst.equipName = WeaponAffixSystem.RarityPrefix(Rarity.Rare) + tpl.equipName;
+        inst.templateId = tpl.templateId;
+        // requireLevel 钳到生成等级，确保领取 / 开局必能穿上（同暮火之杖口径，防随机到 +1 穿不上）
+        inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, heroLevel));
+        // 固定加成条（2026-10-26 主人拍板：占格子移除后属性上调；叠加在模板基础值与随机词条之上）
+        inst.attrBonus.Add(new AttrBonusData { attrType = m.BonusAttr, value = m.BonusAttrValue, isPercent = false });
+        return inst;
+    }
+
+    /// <summary>
+    /// 生成出战用的稀有·钢骨盾（剑盾职业开局重发用，PlayerJobDefs.ApplyForBattle 调；
+    /// 与领取同一生成出口，随机词条随局重掷，照 SpecialWeapons.CreateTwilightStaff 先例）。
+    /// 未领取返回 null（不兜底）。
+    /// </summary>
+    public static EquipInstance CreateShieldBattleInstance(int heroLevel)
+    {
+        if (!HasShieldMilestoneOwned()) return null;
+        for (int i = 0; i < WeaponMilestones.Length; i++)
+        {
+            if (WeaponMilestones[i].GrantKey != ShieldGrantKey) continue;
+            return CreateMilestoneInstance(WeaponMilestones[i], heroLevel);
+        }
+        Debug.LogError($"[Mileage] ShieldGrantKey（{ShieldGrantKey}）在 WeaponMilestones 里找不到（表被改？）");
+        return null;
     }
 
     /// <summary>
@@ -248,14 +299,6 @@ public static class AdventureLogMileage
         if (!CanClaimWeaponMilestone(m)) return false;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
-
-        var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(m.TemplateId) : null;
-        if (tpl == null)
-        {
-            Debug.LogError($"[Mileage] 武器里程奖励模板缺失：{m.TemplateId}");
-            UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
-            return false;
-        }
         if (BattleBagSystem.Instance == null)
         {
             UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
@@ -263,17 +306,12 @@ public static class AdventureLogMileage
         }
 
         int lv = Hero.Instance != null ? Hero.Instance.level : 1;
-        // 稀有版必须走 forcedRarity 生成：模板底稀有度是 Uncommon，先生成后翻 rarity 的话
-        // 属性仍按 Uncommon（×1.08）算、词条也按 Uncommon（0 条）滚 —— 稀有名不符实。
-        // forcedRarity=Rare：属性 ×1.15、按稀有滚 1 条武器词条（与掉落稀有装同一套生成链）。
-        var inst = EquipInstance.GenerateFromTemplate(tpl, 0, Mathf.Max(1, lv), overrideRarity: true, forcedRarity: Rarity.Rare);
-        inst.equipName = WeaponAffixSystem.RarityPrefix(Rarity.Rare) + tpl.equipName;
-        inst.templateId = tpl.templateId;
-        // requireLevel 钳到生成等级，确保领取必能穿上（同暮火之杖口径，防随机到 +1 穿不上）
-        inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, lv));
-
-        // 固定加成条（2026-10-26 主人拍板：占格子移除后属性上调；叠加在模板基础值与随机词条之上）
-        inst.attrBonus.Add(new AttrBonusData { attrType = m.BonusAttr, value = m.BonusAttrValue, isPercent = false });
+        var inst = CreateMilestoneInstance(m, lv);
+        if (inst == null)
+        {
+            UIManager.Instance?.ShowToast("奖励发放失败，请稍后重试");
+            return false;
+        }
 
         if (!BattleBagSystem.Instance.TryEquipDirect(inst))
         {

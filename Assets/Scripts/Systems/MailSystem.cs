@@ -477,6 +477,50 @@ public static class MailSystem
         }, notifyToast);
     }
 
+    /// <summary>
+    /// 里程奖励·猎手长弓补偿邮件（2026-11-02 主人拍板「已经购买但没有装备上的 做下补偿…直接发个邮件给个弓得了」）：
+    /// 领过里程弓（logMileageGrantedKeys 含 special:rare_bow；该奖励条目已从 WeaponMilestones 下架）但因
+    /// 「开局不重发」bug 实际没享受到的玩家 → 补一封带 equip_bow_1（稀有档）附件的邮件，领取进随身仓库
+    /// （equip 附件口径同 ArenaRules 冠军武器邮件）。
+    /// 防重 = SaveData.mileageBowMailSent（已发过 → return；没领过弓 → return 且不写档）。
+    /// 触发点：TownSceneBootstrap.TryDailyLoginOnce（回主界面补发，与欢迎信/补偿信同链路）。
+    /// 🔴 测试版临时，正式上线删除：调用行 + 本方法 + SaveData.mileageBowMailSent 一并删。
+    /// </summary>
+    public static void EnsureMileageBowCompensationMail(bool notifyToast = true)
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null) return;
+        if (data.mileageBowMailSent) return;                                    // 已发过
+        var keys = data.logMileageGrantedKeys;
+        if (keys == null || !keys.Contains("special:rare_bow")) return;         // 没领过里程弓：不补（不写档）
+
+        Enqueue(new MailEntry
+        {
+            title = "猎手长弓补偿",
+            body = "亲爱的冒险者：\n\n" +
+                   "「猎手长弓」已从里程奖励中下架。\n" +
+                   "感谢你的支持，随信附上一把猎手长弓，请收下。\n\n" +
+                   "—— 像素冒险制作组",
+            sender = "制作组",
+            createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+            type = MailType.Reward,
+            attachments = new List<MailAttachment>
+            {
+                new MailAttachment
+                {
+                    type = "equip",
+                    amount = 1,
+                    defId = "equip_bow_1",
+                    rarity = 2,   // 邮件装备附件口径 0~4：2 = 稀有（与里程领取时 forcedRarity=Rare 同档）
+                    iconOverride = EquipIcons.ResourcesPath + "Bow_1",   // equip_bow_1.iconFileName（照 ArenaSeasonWeapons.MailIconPath 先例）
+                },
+            },
+        }, notifyToast);
+        data.mileageBowMailSent = true;
+        SaveSystem.Instance?.Save();
+        Debug.Log("[Mail] 里程·猎手长弓补偿邮件已发（测试版临时，正式上线删除）");
+    }
+
     /// <summary>打开详情即记已读（只标记，不动领取状态）。</summary>
     public static void MarkAsRead(string mailId)
     {

@@ -191,6 +191,7 @@ public class TownSceneBootstrap : MonoBehaviour
 
         MailSystem.EnsureWelcomeMail();   // 🆕 已通关老玩家回主界面补发欢迎信（幂等：已发过不再入邮、不再弹提示）
         MailSystem.EnsureCompensationMail();   // 🆕 全服补偿邮件（2026-10-17：500金币+卷轴，幂等同欢迎信链路）
+        MailSystem.EnsureMileageBowCompensationMail();   // 🔴 测试版临时：里程·猎手长弓下架补偿邮件（2026-11-02，幂等同上链路），正式上线删除本行
         DailyLoginSystem.OnEnterGame();
         // 【2026-10-20 修】OnEnterGame 跨天累加 LoginDays 后必须立刻同步红点：
         // GuildHallUI.Awake 的 RefreshCommon 跑在本协程之前，按的是昨天的天数；
