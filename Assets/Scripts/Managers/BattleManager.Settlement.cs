@@ -799,14 +799,33 @@ public partial class BattleManager
         // 引导硬提示只弹一次（重试那一圈不再重复弹遮罩）
         bool guideHintShown = false;
 
-        // 【2026-10-29 主人拍板·裂隙每层三抽】提示每层都弹（每层都送 3 次免费抽）；
+        // 【2026-11-02 主人拍板·裂隙每层三抽】提示每层都弹（每层都送 3 次免费抽）；
         // 定向抽裂隙不开启（面板已隐藏三定向按钮，见 BattleEntryDraftPanel.AddSlot）。
         // 旧字段 _endlessEntryHintShown（每局只提示一次）已随之删除。
+        // 【2026-11-02 晚·一键直达】跳层补偿的注入必须在这里（L771 的 ResetStageFreeDraws 每层清零，
+        // 注入必须在它后面才不会被清）；提示 toast 也**合并成一条** —— GlobalToastUI 后条顶前条，
+        // 同帧弹两条只有最后一条被看见，而且「本层免费抽 N 次」的 N 不含补偿，直达场景下数字是错的。
+        int autoDrawLeft = 0;
+        int catchUpGranted = 0;
+        if (IsEndlessRift)
+        {
+            catchUpGranted = EndlessRiftRules.TakeCatchUpDraws();
+            if (catchUpGranted > 0)
+            {
+                SlotMachineSystem.GrantBonusFreeDraw(catchUpGranted);
+                autoDrawLeft = catchUpGranted;
+                Debug.Log($"[BattleManager] 裂隙跳层补偿：本次进本注入 {catchUpGranted} 次免费抽并自动连抽");
+            }
+        }
         if (IsEndlessRift)
         {
             int freeTotal = SlotMachineSystem.TotalFreeDraws();
             if (freeTotal > 0)
-                GlobalToastUI.Show($"本层免费抽 {freeTotal} 次，抽完开打！", true);
+                GlobalToastUI.Show(catchUpGranted > 0
+                    ? $"跳层补偿 {catchUpGranted} 次 + 本层免费抽 {freeTotal} 次，先自动抽取补偿部分…"
+                    : $"本层免费抽 {freeTotal} 次，抽完开打！", true);
+            else if (catchUpGranted > 0)
+                GlobalToastUI.Show($"跳层补偿：额外 {catchUpGranted} 次免费抽，正在自动抽取…", true);
         }
 
         // 【2026-10-29 主人拍板·裂隙每层三抽改版】本层已抽到手的卡数（**只数出货**）：
@@ -814,24 +833,6 @@ public partial class BattleManager
         // 名额 = 玩家实际拿到的卡数，不跟点击走。抽满 TotalFreeDraws()（=3）收面板开打。
         int layerDraws = 0;
 
-        // 【2026-11-02 主人拍板「一键到历史最高出生点 中间的抽奖全部自动抽」】
-        // 跳层补偿：本次进本**第一层**把被跳过层的免费抽一次性注入（与「再来一次」同池：
-        // 不扣币、不推进抽数 → 后续抽奖价格不被顶高），下面 while 里再自动连抽。
-        // ⚠ TakeCatchUpDraws 读一次就清零；本方法每层都进，只有第一层拿得到。
-        // ⚠ 注入点必须在这里 —— RunDraftDirector.OnRunStart 的 ResetStageFreeDraws 已经跑完，
-        //   早一步注入会被那行清空。
-        int autoDrawLeft = 0;
-        if (IsEndlessRift)
-        {
-            int catchUp = EndlessRiftRules.TakeCatchUpDraws();
-            if (catchUp > 0)
-            {
-                SlotMachineSystem.GrantBonusFreeDraw(catchUp);
-                autoDrawLeft = catchUp;
-                GlobalToastUI.Show($"跳层补偿：额外 {catchUp} 次免费抽，正在自动抽取…", true);
-                Debug.Log($"[BattleManager] 裂隙跳层补偿：本次进本注入 {catchUp} 次免费抽并自动连抽");
-            }
-        }
         // 自动抽节奏（每张间隔，给玩家看清卡面的时间）
         const float AutoDrawIntervalSec = 0.22f;
         float autoDrawTimer = 0f;
@@ -958,10 +959,16 @@ public partial class BattleManager
             // 【2026-11-02】跳层补偿的自动抽**摘掉装备方向**：装备卡会弹「要不要替换」的确认窗
             // （CoApplyEquipCard 是异步的），那会把整条自动连抽打断成「点几十次弹窗」。
             // 技能 / 佣兵 / 金币三个方向都是同步生效，自动抽零打扰。
-            if (autoRound && cats.Count > 1 && cats.Contains(DraftCategory.Equip))
+            // ⚠ 摘完只剩装备（技能槽/佣兵位全满的极端局）→ 自动抽停手，换不换装备留给玩家自己决定，
+            //   剩余补偿额度保留在面板里（免费字样还在），玩家处理完弹窗后照常手动抽。
+            if (autoRound && cats.Contains(DraftCategory.Equip))
             {
-                cats = new List<DraftCategory>(cats);
-                cats.Remove(DraftCategory.Equip);
+                var autoFiltered = new List<DraftCategory>(cats);
+                autoFiltered.Remove(DraftCategory.Equip);
+                if (autoFiltered.Count > 0)
+                    cats = autoFiltered;
+                else
+                    autoDrawLeft = 0;
             }
 
             // null = 点的是随机；有值 = 点的是定向
