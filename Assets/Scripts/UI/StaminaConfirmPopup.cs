@@ -304,6 +304,12 @@ public static class StaminaConfirmPopup
         _onCancel = null;
     }
 
+    /// <summary>
+    /// 弹窗当前是否开着。点暗底走 <see cref="Close"/> 不带任何回调，外部流程（如裂隙进本确认的
+    /// 「直达预览」）没法在暗底路径上收尾 —— 只能靠轮询这个状态做对账（弹窗已关 = 预览失效）。
+    /// </summary>
+    public static bool IsOpen => _rootPanel != null && _rootPanel.activeSelf;
+
     static void Ensure()
     {
         // Unity 假 null：场景切换/域重载后 _host 被销毁会走重建

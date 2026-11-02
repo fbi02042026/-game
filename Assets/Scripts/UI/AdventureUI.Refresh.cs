@@ -441,18 +441,13 @@ public partial class AdventureUI
         }
 
         var slots = CollectNumberedSlots(guanka);
-        int start = EndlessRiftRules.StartStage();   // 下次起始层 = 记录点 + 1（唯一出口）
-        for (int i = 0; i < slots.Count; i++)
-        {
-            // prefab 实测：编号牌 = 槽位/bg/Text (Legacy)（fontSize 30、烤死「1-1」；
-            // 取法与主线槽位 ChestNodes.cs:202 同款路径）。只改文案，牌的图/位置不动
-            var plate = slots[i].Find("bg/Text (Legacy)")?.GetComponent<Text>();
-            if (plate == null) continue;
-            plate.text = $"第{start + i}层";   // 底槽=起始层，往上 +1；无限层永不封顶
-            // 层数无上限（三位数层号比烤死的「1-1」宽，牌面 125px 装不下会折行）→ 溢出展开防折行。
-            // 只改文字展示属性，不动排版（铁律 20 例外口径：文案/字体类）。
-            plate.horizontalOverflow = HorizontalWrapMode.Overflow;
-        }
+        // 【2026-11-02 晚·直达预览】进本确认里点了「直达第 N 层」后，层数牌窗口停在预览起点
+        //（N 层），让玩家在二次确认期间亲眼看到「自己要跳到哪」。弹窗已关（点暗底直接关掉、
+        // 或回城刷新）→ 预览失效，回到真实起始层窗口。真实路径都有主动 Restore，这里只兜暗底。
+        if (_riftPreviewStart > 0 && !StaminaConfirmPopup.IsOpen)
+            _riftPreviewStart = 0;
+        int start = _riftPreviewStart > 0 ? _riftPreviewStart : EndlessRiftRules.StartStage();
+        ApplyRiftPlateNumbers(slots, start);
 
         // 虚拟排行榜：y 跟顶槽位走（瘦屏重排后 RefreshRiftPage 会重算，不脱节）
         var data = SaveSystem.Instance?.Data;
@@ -462,9 +457,16 @@ public partial class AdventureUI
             // 【2026-11-02 主人拍板】排行榜要「两点」：① 打的最高层是多少 ② 超过了多少人。
             // 最高层走生涯最高（bestStage，只增不减）—— 重置进度也不清，永久保留。
             int best = EndlessRiftRules.BestStage(data);
+            // 【2026-11-02 晚·主人拍板「都可以」】百分比 ±1 微波动：固定数字显得假，虚拟榜每次进页
+            // 略有浮动更像活的榜单（纯展示，不动 RankPercentOf 真源）。
+            int pct = Mathf.Clamp(EndlessRiftRules.RankPercentOf(data) + UnityEngine.Random.Range(-1, 2), 0, 100);
             label.text = best > 0
-                ? $"最高层数：第 {best} 层\n已超过 {EndlessRiftRules.RankPercentOf(data)}% 的玩家"
+                ? $"最高层数：第 {best} 层\n已超过 {pct}% 的玩家"
                 : "最高层数：尚未挑战\n挑战无限裂隙后生成您的排名";
+            // 【2026-11-02 晚·主人拍板「都可以」】打破生涯纪录 → 追加一行「◆ 新纪录！」，
+            // 保留到下次进本（TryConsumeEnter 清账）。rich text 金色与 ◆ 用法同 DraftPool 对比箭头先例。
+            if (EndlessRiftRules.NewRecordPendingShow && best > 0)
+                label.text += "\n<size=26><color=#FFD97A>◆ 新纪录！</color></size>";
             if (slots.Count > 0)
             {
                 var top = slots[slots.Count - 1];
@@ -473,10 +475,48 @@ public partial class AdventureUI
             }
         }
 
-        // 【2026-11-02 主人拍板】玩家头像指向所在的层（= 出生点 = 底槽 = 保存点 + 1）
+        // 【2026-11-02 主人拍板】玩家头像指向所在的层（= 出生点 = 底槽 = 保存点 + 1）。
+        // 直达预览期间底槽位置不变（4 张牌是固定布局），箭头跟着预览窗口的底槽 —— 「一直指向」。
         UpdateRiftStageMarker(guanka, slots.Count > 0 ? slots[0] : null);
+        // 【2026-11-02 晚·主人拍板「都可以」】死亡回城 → 箭头连脉冲两下，把视线引到「你从这里继续」
+        //（主动撤离不置位）。读后即清：只在对账消费一次。
+        if (EndlessRiftRules.PulseMarkerOnDeathReturn)
+        {
+            EndlessRiftRules.PulseMarkerOnDeathReturn = false;
+            PlayDeathReturnPulse();
+        }
         // 重置徽章跟着这一页刷（状态：本周能不能重置 / 冷却还剩几天）
         RefreshEndlessResetButton(true);
+    }
+
+    /// <summary>存档点编号的金色（10 的倍数的层）；Rich gold 与排行榜角标同一颗暖金。</summary>
+    static readonly Color RiftSaveStageColor = new Color(1f, 0.85f, 0.42f, 1f);
+    /// <summary>非存档层用预制体原色 —— 颜色只捕获一次（首次刷新时牌还是预制体原值，之后只读不写）。</summary>
+    static Color? _riftPlateBaseColor;
+
+    /// <summary>
+    /// 4 张层数牌写编号（底槽 = start，往上 +1；从 RefreshRiftPage 抽出，直达预览翻滚也走这里，
+    /// 保证两条路写出的牌面完全一致）。
+    /// 【2026-11-02 晚·主人拍板「都可以」】10 的倍数（保存点）编号变金色 —— 翻滚扫过 20/30/40 时
+    /// 存档点一颗颗闪过，玩家对「打到这张牌就能存档」建立直觉。非存档层每次刷回预制体原色。
+    /// </summary>
+    void ApplyRiftPlateNumbers(List<RectTransform> slots, int start)
+    {
+        for (int i = 0; i < slots.Count; i++)
+        {
+            // prefab 实测：编号牌 = 槽位/bg/Text (Legacy)（fontSize 30、烤死「1-1」；
+            // 取法与主线槽位 ChestNodes.cs:202 同款路径）。只改文案，牌的图/位置不动
+            var plate = slots[i].Find("bg/Text (Legacy)")?.GetComponent<Text>();
+            if (plate == null) continue;
+            if (!_riftPlateBaseColor.HasValue) _riftPlateBaseColor = plate.color;   // 首次捕获预制体真值
+            plate.text = $"第{start + i}层";   // 底槽=起始层，往上 +1；无限层永不封顶
+            // 层数无上限（三位数层号比烤死的「1-1」宽，牌面 125px 装不下会折行）→ 溢出展开防折行。
+            // 只改文字展示属性，不动排版（铁律 20 例外口径：文案/字体类）。
+            plate.horizontalOverflow = HorizontalWrapMode.Overflow;
+            plate.color = (start + i) % GameConfig.ENDLESS_SAVE_INTERVAL == 0
+                ? RiftSaveStageColor
+                : _riftPlateBaseColor.Value;
+        }
     }
 
     /// <summary>排行榜文字（运行时建一次；纯 Text 无新图，颜色对齐页内暖金奶油口径）。

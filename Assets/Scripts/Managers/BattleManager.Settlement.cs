@@ -821,9 +821,13 @@ public partial class BattleManager
         {
             int freeTotal = SlotMachineSystem.TotalFreeDraws();
             if (freeTotal > 0)
+            {
+                // 【2026-11-02 晚·主人拍板「都可以」】直达进本的过场加一行激励：
+                // 目标层 = 生涯最高出生点 + 1，正是「重返巅峰战场」—— 一条 toast 两行，不互顶。
                 GlobalToastUI.Show(catchUpGranted > 0
-                    ? $"跳层补偿 {catchUpGranted} 次 + 本层免费抽 {freeTotal} 次，先自动抽取补偿部分…"
+                    ? $"跳层补偿 {catchUpGranted} 次 + 本层免费抽 {freeTotal} 次\n重返巅峰战场，继续冲刺！"
                     : $"本层免费抽 {freeTotal} 次，抽完开打！", true);
+            }
             else if (catchUpGranted > 0)
                 GlobalToastUI.Show($"跳层补偿：额外 {catchUpGranted} 次免费抽，正在自动抽取…", true);
         }
@@ -2437,6 +2441,9 @@ public partial class BattleManager
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talent, save: false, notify: true);
                 totalTalent += talent;
             }
+            // 【2026-11-02 晚·主人拍板「都可以」】打破生涯纪录 → 回城后裂隙页亮「◆ 新纪录！」
+            //（进本即清账，静态标记不落盘——角标是情绪反馈不是数据）
+            EndlessRiftRules.NewRecordPendingShow = true;
             lines.Add(talent > 0
                 ? $"{(isBoss ? "首通记录点" : "首通")}金币 +{gold}，天赋石 +{talent}"
                 : $"{(isBoss ? "首通记录点" : "首通")}金币 +{gold}");
@@ -2467,6 +2474,10 @@ public partial class BattleManager
         // ===== 收尾：保存点层走弹窗链，其余层走 toast =====
         if (savedHere)
         {
+            // 【2026-11-02 晚·主人拍板「都可以」】保存点里程碑金光：获得弹窗底下全屏亮一下（0.7s），
+            // 强化「每 10 层存一次档」的节奏感。金光不挡点击、低于获得弹窗，弹窗弹出时正好是亮峰。
+            StartCoroutine(CoCheckpointFlash());
+
             // 主人原话「每10层 的宝箱奖励获得弹获得弹窗 … 然后再弹出生点已保存」
             // → 顺序严格：① 获得弹窗（点确定关掉）② 出生点已保存（点继续）③ 续层。
             // 弹窗链全靠关窗回调往下走；RewardPopupUI / ShowNotice 在面板建不出来时都会兜底放行，
@@ -2491,6 +2502,41 @@ public partial class BattleManager
 
         // —— 直接续层（2026-10-19：BOSS 层也自动进下一层，无双选）——
         AdvanceEndlessRiftStage();
+    }
+
+    /// <summary>
+    /// 【2026-11-02 晚·主人拍板「都可以」】保存点通关的全屏金光（0.7s 半波：亮起 → 熄灭）。
+    /// 纯代码建树（铁律 3，不改预制体）：临时一棵 Canvas + 全屏 Image，播完整棵销毁。
+    /// 🔴 raycastTarget = false —— 全屏特效绝不挡点击；层级压在获得弹窗(905)之下，
+    /// 弹窗弹出时金光正好在亮峰，两层叠出「金光里领奖」的里程碑感。
+    /// </summary>
+    IEnumerator CoCheckpointFlash()
+    {
+        var go = new GameObject("CheckpointFlash", typeof(Canvas), typeof(UnityEngine.UI.CanvasScaler));
+        var canvas = go.GetComponent<Canvas>();
+        // 统一出口绑相机 + 适配（AGENTS.md §4.6）；order = RewardPopup - 6 = 899，压不到弹窗
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.RewardPopup - 6);
+
+        var imgGo = new GameObject("Flash", typeof(RectTransform), typeof(UnityEngine.UI.Image));
+        imgGo.transform.SetParent(go.transform, false);
+        var img = imgGo.GetComponent<UnityEngine.UI.Image>();
+        img.raycastTarget = false;                 // 🔴 特效层不接射线
+        var rt = (RectTransform)imgGo.transform;
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = rt.offsetMax = Vector2.zero;
+
+        const float DurationSec = 0.7f;
+        const float PeakAlpha = 0.5f;
+        float t = 0f;
+        while (t < DurationSec && img != null)
+        {
+            t += Time.unscaledDeltaTime;           // unscaled：结算链可能压 timeScale，演出不能被拖慢
+            float k = Mathf.Clamp01(t / DurationSec);
+            img.color = new Color(1f, 0.9f, 0.55f, Mathf.Sin(k * Mathf.PI) * PeakAlpha);
+            yield return null;
+        }
+        if (go != null) Destroy(go);
     }
 
     /// <summary>

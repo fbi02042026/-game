@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 // 冒险界面 partial —— 无限裂隙「出生点」头像指示（2026-11-02 主人拍板）
@@ -71,5 +73,111 @@ public partial class AdventureUI
         // 头像带 Button（主线里点它 = 滚回当前关）；裂隙页没有可滚的列 → 置 -1 让点击成为 no-op，
         // 免得拿着主线残留的槽位号去滚一张已经隐藏的列表。
         _markerCurrentSlot = -1;
+    }
+
+    // ============================================================
+    // 【2026-11-02 主人拍板】「选择重新打的时候，岛可以快速滑动到最高的保存点，
+    // 头像的箭头也一直指向那个保存点」
+    //
+    // 裂隙页是 4 张**固定布局**的层数牌（无 ScrollRect，底槽 = 起始层），没有真的可滚列表，
+    // 所以「滑动」实现为**编号快速翻滚**：点「直达第 N 层」的瞬间，4 张牌的编号从当前起始层
+    // 一路快速滚到 N，停住 —— 二次确认期间玩家亲眼看到「自己要跳到哪」。
+    // 箭头不用挪：底槽位置固定，翻滚全程它都指着底槽（= 目标窗口的出生点），天然「一直指向」。
+    // 收尾时箭头做一次缩放脉冲，把视线钉在目标保存点上。
+    // 还原走「瞬间刷回」（返回/确认/弹窗关闭），滑出去要仪式感、滑回来要快。
+    // ============================================================
+
+    /// <summary>编号翻滚总时长（20 层 ≈ 0.45s，主人要「快速」；要调手感只改这一个数）。</summary>
+    const float RiftPreviewSlideSec = 0.45f;
+    /// <summary>箭头收尾脉冲的放大倍率（基于预制体原始 scale 均匀缩放，不破坏 x=-1 镜像）。</summary>
+    const float RiftPreviewPulseScale = 1.22f;
+
+    /// <summary>预览窗口的起始层（0 = 无预览，层数牌按真实 StartStage 显示）。翻滚协程与 RefreshRiftPage 共写。</summary>
+    int _riftPreviewStart;
+    Coroutine _riftPreviewCo;
+
+    /// <summary>
+    /// 点「直达第 N 层」时调：层数牌编号从当前窗口快速翻滚到 targetStart 窗口并停住。
+    /// 重复点击/连续翻滚安全（先停上一条协程，从当前预览值接着滚）。
+    /// </summary>
+    void PreviewRiftSlideTo(int targetStart)
+    {
+        var guanka = FindRiftStageContainer();
+        if (guanka == null) return;
+        var slots = CollectNumberedSlots(guanka);
+        if (slots.Count == 0) return;
+        if (_riftPreviewCo != null) { StopCoroutine(_riftPreviewCo); _riftPreviewCo = null; }
+
+        int from = _riftPreviewStart > 0 ? _riftPreviewStart : EndlessRiftRules.StartStage();
+        _riftPreviewStart = targetStart;
+        if (targetStart == from)
+        {
+            ApplyRiftPlateNumbers(slots, targetStart);   // 同窗口重复点：直接对齐，不空转动画
+            return;
+        }
+        _riftPreviewCo = StartCoroutine(CoRiftPreviewSlide(slots, from, targetStart));
+    }
+
+    IEnumerator CoRiftPreviewSlide(System.Collections.Generic.List<RectTransform> slots, int from, int to)
+    {
+        float t = 0f;
+        while (t < RiftPreviewSlideSec)
+        {
+            t += Time.unscaledDeltaTime;
+            // 线性递增的编号翻滚（步长按剩余距离均摊，保证最后一帧正好落在 to）
+            float k = Mathf.Clamp01(t / RiftPreviewSlideSec);
+            ApplyRiftPlateNumbers(slots, Mathf.RoundToInt(Mathf.Lerp(from, to, k)));
+            yield return null;
+        }
+        ApplyRiftPlateNumbers(slots, to);
+        _riftPreviewCo = null;
+        yield return CoPulseStageMarker();
+    }
+
+    /// <summary>
+    /// 箭头缩放脉冲（捕获原始 scale 均匀缩放，结束原样还原；页面隐藏时直接跳过）。
+    /// <paramref name="pulses"/> = 连续脉冲几下（波形 |sin|，每半波一下，之间回到原大 ——
+    /// 死亡回城「箭头脉冲两下把视线引到出生点」走 2）。
+    /// </summary>
+    IEnumerator CoPulseStageMarker(int pulses = 1)
+    {
+        if (_stageMarker == null || !gameObject.activeInHierarchy) yield break;
+        Vector3 baseScale = _stageMarker.localScale;   // 预制体真值（含 x=-1 镜像），只乘系数不覆盖
+        const float PulseSec = 0.24f;
+        float total = PulseSec * Mathf.Max(1, pulses);
+        float t = 0f;
+        while (t < total && _stageMarker != null)
+        {
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / total);
+            // |sin(k·pulses·π)|：一下 = 一个半波（升到峰值回落），两下 = 两个半波（中间回 1 分隔）
+            float wave = Mathf.Abs(Mathf.Sin(k * pulses * Mathf.PI));
+            float s = 1f + (RiftPreviewPulseScale - 1f) * wave;
+            _stageMarker.localScale = baseScale * s;
+            yield return null;
+        }
+        if (_stageMarker != null) _stageMarker.localScale = baseScale;
+    }
+
+    /// <summary>
+    /// 【2026-11-02 晚主人拍板】死亡回城后的引导脉冲：箭头连脉冲两下，把视线引到出生点。
+    /// RefreshRiftPage 读到 <see cref="EndlessRiftRules.PulseMarkerOnDeathReturn"/> 时调（读后即清）。
+    /// </summary>
+    void PlayDeathReturnPulse()
+    {
+        if (_riftPreviewCo != null) return;   // 直达翻滚进行中不叠加（翻滚自己带收尾脉冲）
+        StartCoroutine(CoPulseStageMarker(2));
+    }
+
+    /// <summary>
+    /// 收掉直达预览、把层数牌刷回真实起始层窗口。走「瞬间还原」不播动画：
+    /// 返回上层选择/确认进本时玩家要的是继续操作，不是再看一遍翻滚。
+    /// </summary>
+    void RestoreRiftPreview()
+    {
+        if (_riftPreviewCo != null) { StopCoroutine(_riftPreviewCo); _riftPreviewCo = null; }
+        if (_riftPreviewStart <= 0) return;
+        _riftPreviewStart = 0;
+        RefreshRiftPage();   // 编号/排行榜/箭头一把刷回真实状态
     }
 }

@@ -890,6 +890,8 @@ public static class EndlessRiftRules
         data.endlessRiftTriesToday++;
         // 虚拟排行榜的闲置衰减锚点（2026-10-24）：只有真实进本才写，隔了几天没玩排名会回落
         data.endlessRiftLastPlayDayKey = DateTime.UtcNow.ToString("yyyyMMdd");
+        // 【2026-11-02 晚】「新纪录」角标的清账点：进本即视为玩家已看到（回城那波展示结束）
+        NewRecordPendingShow = false;
         SaveSystem.Instance?.Save();
         return true;
     }
@@ -963,6 +965,24 @@ public static class EndlessRiftRules
         _catchUpDraws = 0;
         return v;
     }
+
+    // ============================================================
+    // 【2026-11-02 晚主人拍板「都可以」】裂隙页情绪反馈的两个一次性标记（静态、不落盘）：
+    // 都是「发生 → 下次裂隙页刷新时消费」的会话内信号，跨重启丢失无害（情绪反馈不是数据）。
+    // ============================================================
+
+    /// <summary>
+    /// 本会话打破了生涯纪录、还没在裂隙页亮过「★ 新纪录」。
+    /// 置位 = 结算链 <c>SettleEndlessStageClear</c> 的 firstEver 分支；清账 = <see cref="TryConsumeEnter"/>
+    /// 成功（进本即视为玩家已看到）。重置进度不清它（bestStage 只增不减，重打旧层 firstEver=false）。
+    /// </summary>
+    public static bool NewRecordPendingShow;
+
+    /// <summary>
+    /// 裂隙死亡已回城：下次裂隙页刷新时箭头脉冲两下，把视线引到「你从这里继续」。
+    /// 置位 = <c>BattleManager.FinalizeHeroDeath</c>（仅死亡，主动撤离不置）；消费 = RefreshRiftPage 读后即清。
+    /// </summary>
+    public static bool PulseMarkerOnDeathReturn;
 
     /// <summary>
     /// 记录点 = 已通关层向下取整到**存档点间隔**（10）的倍数，只进不退。

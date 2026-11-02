@@ -105,13 +105,23 @@ public partial class AdventureUI
                 // 继续 = 什么都不用改：StartStage() 天然 = 保存点 + 1，构筑由 EndlessRiftCheckpoint 接回。
                 // ⚠ 必须顺手清掉「直达」的残留（上一次点直达因体力不足没进成时还会留着）——
                 //   否则这里选了「继续保存点」，StartStage() 却仍返回覆盖后的深层，静默把玩家带偏。
+                // ⚠ 同时收掉可能残留的直达预览（路径：点直达预览 → 二次确认点暗底全关 → 重弹后选继续）
+                //   —— 不收的话层数牌还停在预览窗口，与「继续第 11 层」的选择对不上。
                 EndlessRiftRules.ClearStartStageOverride();
                 EndlessRiftRules.GrantCatchUpDraws(0);
+                RestoreRiftPreview();
                 proceed();
             },
             // 不进本：弹窗自己关掉，玩家可再点「开始冒险」（点暗底同样是这条出口）
             onCancel: canJump
-                ? (Action)(() => ConfirmEndlessJump(startStage, bestStart, catchUp, proceed))
+                ? (Action)(() =>
+                {
+                    // 【2026-11-02 晚·主人拍板「选择重新打的时候岛快速滑动到最高的保存点」】
+                    // 点「直达」的瞬间层数牌编号翻滚到目标窗口停住，二次确认期间玩家亲眼看到
+                    // 自己要跳到哪；箭头全程指着底槽（目标窗口的出生点）不挪窝。
+                    PreviewRiftSlideTo(bestStart);
+                    ConfirmEndlessJump(startStage, bestStart, catchUp, proceed);
+                })
                 : null);
     }
 
@@ -139,12 +149,20 @@ public partial class AdventureUI
             cancelLabel: "返回",
             onOk: () =>
             {
+                // 预览收尾（瞬间刷回真实窗口）：同帧内 proceed → TryConsumeEnter → HidePage，
+                // 玩家看不到还原过程；若体力/次数不足弹窗拦截，页面也已回到真实状态不留预览残影。
+                RestoreRiftPreview();
                 EndlessRiftRules.SetStartStageOverride(bestStart);
                 EndlessRiftRules.GrantCatchUpDraws(catchUp);
                 Debug.Log($"[AdventureUI] 无限裂隙直达：起始层 {bestStart}，补偿免费抽 {catchUp} 次");
                 proceed();
             },
-            onCancel: () => AskEndlessStartChoice(proceed));   // 返回上一层选择
+            onCancel: () =>
+            {
+                // 返回上层选择：层数牌滑回真实起始层窗口（滑出去要仪式感、滑回来要快）
+                RestoreRiftPreview();
+                AskEndlessStartChoice(proceed);
+            });   // 点暗底不走这里 —— RefreshRiftPage 的「弹窗已关 → 预览失效」对账兜底
     }
 
     /// <summary>建/取重置徽章，并按当前状态刷文案与可点状态。每次刷新详情面板调一次（幂等）。</summary>

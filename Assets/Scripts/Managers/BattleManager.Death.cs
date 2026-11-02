@@ -172,6 +172,9 @@ public partial class BattleManager
         MercenaryManager.Instance?.ClearAllMercs();
         AdventureLogAchievements.OnDied();
         EndRunLoadout();
+        // 【2026-11-02 晚主人拍板】裂隙死亡回城：下次裂隙页刷新时箭头脉冲两下，
+        // 把视线引到出生点（「你从这里继续」）。主动撤离不置位 —— 撤离不是挫败时刻。
+        if (IsEndlessRift) EndlessRiftRules.PulseMarkerOnDeathReturn = true;
         // 引导关死亡：不走遗产，也不标记教程通关 —— 重进引导战斗（2026-09-27 主人拍板）
         if (Rules.Active || SkipLegacyOnEvacuate)
         {
