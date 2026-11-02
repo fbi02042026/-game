@@ -2709,7 +2709,12 @@ public partial class BattleManager
     ///   · <c>currentGold</c> 只是抽奖币池（启动金 / 通关补贴 / 抽中金币），**带不出本局**，
     ///     局末清账（resetPool=true）时重置回基线，通关进下一关则按现值结转。
     /// </summary>
-    void PersistBattleGold(bool resetPool = true)
+    /// <summary>
+    /// 【2026-11-02 改 public】支线岛等「通关结算里才发金币」的模式需要在 <see cref="EndRunAndReturnToTown"/>
+    /// 之前补一次落账：统一门（<see cref="FinishStageAfterPortalReached"/>）的 PersistBattleGold 走在
+    /// Mode.SettleStageClear <b>之前</b>，那之后 GrantRunGold 进 GoldEarned 的钱若不补写回，回城即丢。
+    /// </summary>
+    public void PersistBattleGold(bool resetPool = true)
     {
         var save = SaveSystem.Instance?.Data;
         if (save == null) return;

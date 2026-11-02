@@ -376,6 +376,11 @@ public sealed class SideIslandBattleMode : BattleMode
             return;
         }
         SettleIslandRewards(bm);
+        // 【2026-11-02 修「岛金不到账」】岛金是 SettleIslandRewards 里 GrantRunGold 进 GoldEarned 的，
+        // 而统一门 FinishStageAfterPortalReached 的 PersistBattleGold 走在本方法**之前**（Settlement.cs 2204 行），
+        // EndRunAndReturnToTown 自身不再落账 —— 不在这里补一次写回，+岛金随局丢弃、城镇钱包永远收不到。
+        // resetPool 默认 true = 局末清账口径；增量由 _earnedPaidGold 水位防重，不会双发。
+        bm.PersistBattleGold();
         // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
         bm.EndRunAndReturnToTown();
     }
@@ -394,8 +399,8 @@ public sealed class SideIslandBattleMode : BattleMode
             return;
         }
 
-        // 固定局外金币：走局内金币落账链（EndRunAndReturnToTown 的 PersistBattleGold 一次性写回城镇钱包，
-        // 与金币本通关金/裂隙首通金同一条链，会计口径已验证）
+        // 固定局外金币：进「本局获得金币」（GoldEarned），由 SettleStageClear 里的 bm.PersistBattleGold()
+        // 写回城镇钱包（统一门那次 Persist 走在发奖之前，覆盖不到这笔——2026-11-02 修「岛金不到账」）
         if (isl.goldReward > 0)
         {
             bm.GrantRunGold(isl.goldReward);

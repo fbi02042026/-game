@@ -78,7 +78,9 @@ public static class MercRosterDefs
         // 【2026-10-08 补记】引导局的那位佣兵已换成 H003 塔克，H011 不再自动入队，只走酒馆招募。
         D("H011", "路加", "路加", "naima101", "牧师", MercRarity.Common, 1.00f, 302.5f,34.4f,25.7f, 1.20f, 3.5f, "SK004", "SK011", 500, true, true),
         D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
-        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK013", null, 2000, false, false),
+        // 【2026-11-02 主人拍板】H013 升传奇：数值=传说公式（基准 206.0/36.7/24.1 ×1.70/×2.00/×1.85），
+        //   补被动 SK017 魔力涌动，价格 2000→8000 对齐伊芙。模型 naima201 战士相与法师职业不符，待换（只报告未动）。
+        D("H013", "莫娜", "紫晶", "naima201", "雷系法师", MercRarity.Legendary, 1.30f, 350.2f,73.4f,44.7f, 1.00f, 3.5f, "SK013", "SK017", 8000, false, false),
         D("H014", "伊芙", "火舞", "naima202", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
         // 【2026-10-31 主人拍板·看广告送佣兵活动】H015 艾拉改稀有档（原普通档）：
         // 攻 = 传奇最弱的凯恩 BaseAtk 58.2、血 = 普通档 244.8 不动、防补到稀有标准 34.6、攻速 1.60 不动。
@@ -92,6 +94,10 @@ public static class MercRosterDefs
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.30f, 3.5f, "SK018", null, 1800, false),
         D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 368.5f,37.8f,27.9f, 0.80f, 2.8f, null, "SK002", 800, false, true),
         D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 466.1f,54.8f,40.4f, 0.85f, 2.8f, "SK003", null, 2200, false, false),
+        // 【2026-11-02 主人拍板】H024 奥蕾莉亚：传奇圣骑（可抗可加血）。数值=传说公式
+        //   剑盾基准 335.5/34.6/39.1 × 血1.70/攻2.00/防1.85；SK010 全体治疗+无敌（可抗可加血）、SK011 自愈。
+        //   战斗模型 qita101 = 模型库唯一空闲 prefab（主人确认前先占用，若另有安排换 AssetId 只动本行+CSV）。
+        D("H024", "奥蕾莉亚", "圣辉", "qita101", "剑盾卫士", MercRarity.Legendary, 1.30f, 570.4f,69.2f,72.3f, 1.00f, 3.15f, "SK010", "SK011", 8000, false, false),
     };
 
     static Dictionary<string, Def> _byHire;
