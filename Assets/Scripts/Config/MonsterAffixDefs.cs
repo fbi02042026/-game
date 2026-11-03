@@ -27,6 +27,8 @@ public static class MonsterAffixDefs
         public string Name;
         /// <summary>后缀颜色</summary>
         public Color Tint;
+        /// <summary>【2026-11-03 主人拍板】词条一句话介绍：首次登场弹窗 / 冒险日志怪物Tip 共用。</summary>
+        public string Desc;
 
         public float AtkSpeedMul;
         public float MoveSpeedMul;
@@ -47,19 +49,26 @@ public static class MonsterAffixDefs
     public static readonly Def[] All =
     {
         new Def { Id = MonsterAffixId.Frenzy,  Name = "狂暴", Tint = new Color(1.00f, 0.42f, 0.32f),
+                  Desc = "攻击速度提升 30%",
                   AtkSpeedMul = 1.30f, MoveSpeedMul = 1f,   DamageTakenMul = 1f },
         new Def { Id = MonsterAffixId.Bulwark, Name = "铁壁", Tint = new Color(0.62f, 0.78f, 1.00f),
+                  Desc = "受到的伤害降低 25%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.75f },
         new Def { Id = MonsterAffixId.Thorns,  Name = "荆棘", Tint = new Color(0.55f, 0.95f, 0.55f),
+                  Desc = "近战攻击它会被反弹 15% 伤害",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f },
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
+                  Desc = "移动速度提升 40%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1.40f, DamageTakenMul = 1f },
         new Def { Id = MonsterAffixId.Leech,   Name = "吸血", Tint = new Color(0.85f, 0.45f, 0.90f),
+                  Desc = "造成伤害的 12% 转化为自身治疗",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.12f },
         new Def { Id = MonsterAffixId.Split,   Name = "分裂", Tint = new Color(0.75f, 0.75f, 0.80f),
+                  Desc = "死亡时分裂出 2 只小怪",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 2 },
         // 2026-10-26 词缀怪「暴击」：20% 概率 ×1.6，玩家侧看得见暴击飘字
         new Def { Id = MonsterAffixId.Crit,    Name = "暴击", Tint = new Color(1.00f, 0.55f, 0.10f),
+                  Desc = "攻击有 20% 概率造成 1.6 倍伤害",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f,
                   CritChance = 0.20f,  CritDamageMul = 1.6f },
     };
@@ -81,6 +90,24 @@ public static class MonsterAffixDefs
     public static string Name(MonsterAffixId id)
     {
         return _map.TryGetValue(id, out var v) ? v.Name : "";
+    }
+
+    /// <summary>
+    /// 【2026-11-03 主人拍板】把词缀列表拼成「狂暴：攻击速度提升 30%\n…」的展示文本。
+    /// 首次登场弹窗与冒险日志怪物 Tip 共用；空列表返回空串。
+    /// </summary>
+    public static string Describe(List<MonsterAffixId> list)
+    {
+        if (list == null || list.Count == 0) return "";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var d = Get(list[i]);
+            if (string.IsNullOrEmpty(d.Name)) continue;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(d.Name).Append("：").Append(d.Desc);
+        }
+        return sb.ToString();
     }
 
     /// <summary>

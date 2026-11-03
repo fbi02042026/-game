@@ -6,7 +6,7 @@ using UnityEditor;
 #endif
 
 /// <summary>
-/// 佣兵头像/立绘统一加载：H001~H022、C001~C004、player，以及剧情 NPC（前台/会长）。
+/// 佣兵头像/立绘统一加载：H001~H023、C001~C004、player，以及剧情 NPC（前台/会长）。
 /// 优先 Resources/Icons/MercHead|MercStand；Editor 可直读 Art 目录。
 /// </summary>
 public static class MercPortraitSprites

@@ -172,29 +172,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         FitPanelScale();
         TownSaveAlign.AlignAll();
         EnsureResBar();   // 顶条金币+钻石资源条（2026-10-24 主人拍板二次）：全局唯一 ResourceStrip，数字由其内部轮询刷
-        MercHireSession.EnsureDailyOfferRefresh();
-        var data = SaveSystem.Instance?.Data;
-        bool dayRefresh = data != null && data.mercOfferDirty;
-        if (dayRefresh || _offers == null || _offers.Count == 0)
-        {
-            // 【2026-10-19 主人拍板】招募候选只认 0 点和手动刷新，App 重启也不许换批：
-            // 非日切、且存档里有当前批次 → 原样恢复（不算刷新）；否则重掷并写回存档。
-            if (!dayRefresh && data != null && TryLoadOffersFromSave(data))
-            {
-                data.mercOfferDirty = false;
-            }
-            else
-            {
-                RerollOffers();
-                if (dayRefresh)
-                    MercHireSession.MarkRefreshed();
-                else if (data != null)
-                {
-                    data.mercOfferDirty = false;
-                    SaveSystem.Instance.Save();   // 首掷批次立刻落盘，杀进程也不丢
-                }
-            }
-        }
+        EnsureOffersFresh();
         RefreshAll();
         WireOnce();
         PlaceRefreshCostAboveButton();
@@ -204,6 +182,39 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         MaybeToastAppearBanter(force: false, avoidLast: false);
         ScheduleNextIdleBanter();
         StartRefreshCountdown();
+    }
+
+    /// <summary>
+    /// 候选批次保鲜（2026-11-03 补缺口①）：开窗与每秒倒计时协程共用。
+    /// 0 点日切 → 就地重掷三张卡（弹窗开着跨天也当场换批，不再要关开一次）；
+    /// 非日切且存档有当前批次 → 原样恢复（2026-10-19 主人拍板：重启不许换批）。
+    /// 返回是否发生了「日切换批」（首掷/恢复不算，用于协程里决定要不要提示）。
+    /// 免费冷却口径见 MercHireSession.MarkDayRerolled：日切重掷【不重置】3 小时冷却。
+    /// </summary>
+    bool EnsureOffersFresh()
+    {
+        MercHireSession.EnsureDailyOfferRefresh();
+        var data = SaveSystem.Instance?.Data;
+        bool dayRefresh = data != null && data.mercOfferDirty;
+        if (!(dayRefresh || _offers == null || _offers.Count == 0)) return false;
+        if (!dayRefresh && data != null && TryLoadOffersFromSave(data))
+        {
+            data.mercOfferDirty = false;
+            return false;
+        }
+        RerollOffers();
+        if (dayRefresh)
+        {
+            MercHireSession.MarkDayRerolled();
+            return true;
+        }
+        // 首掷（冷启动无批次）不算日切换批：照旧立刻落盘，杀进程也不丢
+        if (data != null)
+        {
+            data.mercOfferDirty = false;
+            SaveSystem.Instance.Save();
+        }
+        return false;
     }
 
     void RerollOffers()
@@ -360,6 +371,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         while (true)
         {
             UpdateRefreshCostText();
+            // 【2026-11-03 补缺口①】弹窗开着跨 0 点：就地换批 + 提示，不再等关开一次
+            if (EnsureOffersFresh())
+            {
+                RefreshAll();
+                UIManager.Instance?.ShowToast("已到 0 点，候选佣兵已刷新");
+            }
             yield return wait;
         }
     }

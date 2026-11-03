@@ -44,9 +44,13 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     GameObject _rewardRow;
     RectTransform _rewardRowRt;
+    /// <summary>top 头条节点（top/Name，「怪物信息/主线任务/支线任务」…）缓存；LayoutContent 里随面板高度归位（2026-11-03 排版修复）。</summary>
+    RectTransform _topNode;
     /// <summary>奖励胶图标边长 / 数量字字号 / 数量字颜色（跟正文深棕一致）。</summary>
     const float RewardIconSize = 40f;
     const int RewardLabelSize = 24;
+    /// <summary>top 头条中心到面板顶边的内边距：预制体按 720 面板调的（顶边 360 − 头条中心 291 = 69）；2026-11-03 排版修复后头条跟随面板高度，永远保持顶边下 69px。</summary>
+    const float TopTitleInset = 69f;
     static readonly Color RewardLabelColor = new Color(0.32f, 0.21f, 0.12f, 1f);
 
     Action _onUnlock;
@@ -336,7 +340,9 @@ public class CodexInfoPopupUI : MonoBehaviour
             var frameTf = portrait.transform.parent;
             if (frameTf != null && frameTf.name == "PortraitFrame")
                 frameTf.gameObject.SetActive(portraitSprite != null);
-            float textShift = portraitSprite != null ? 0f : 200f;   // 标题/简介上移量（补头像框空位）
+            // 【2026-11-03 排版修复】上移量 200→172：头条跟随面板后字底在顶边下 94（69+50/2），
+            // Title 上移 172 后框顶在顶边下 108，留 14px 间距；200 会叠到头条上。
+            float textShift = portraitSprite != null ? 0f : 172f;   // 标题/简介上移量（补头像框空位）
             if (titleText != null)
             {
                 var trt = titleText.rectTransform;
@@ -669,7 +675,10 @@ public class CodexInfoPopupUI : MonoBehaviour
         //（上限近满屏，参考高 1280 留 100 边）；顶栏内容锚顶、关闭/解锁钮锚底，跟着边走不压字。
         float need = descH + rewardBlock + loreGap + loreH;
         const float maxPanelH = 1180f;
-        const float minPanelH = 560f;
+        // 【2026-11-03 排版修复（主人报支线任务弹窗排版）】收高下限 560 写死 → 任务/世界类
+        // 3 行内容收不满，底部空一大块。改按内容动态算：内容起点距顶边(-top) + 内容 need
+        // + 底部避让 bottomPad + 24 呼吸；420 绝对下限兜底。
+        float minPanelH = Mathf.Max(420f, -top + need + bottomPad + 24f);
         if (need > avail)
         {
             float grow = Mathf.Min(need - avail, Mathf.Max(0f, maxPanelH - panelRt.rect.height));
@@ -692,6 +701,14 @@ public class CodexInfoPopupUI : MonoBehaviour
                 avail = top - bottomLimit;
             }
         }
+        // 【2026-11-03 排版修复】top 头条跟随面板高度：头条锚在面板中心上方固定 291（按 720
+        // 面板调的），面板收高后顶边升到 280 以上，头条字（高 50）骑出顶边框（截图实锤）。
+        // 改为永远保持「顶边下 69px」，与怪物信息弹窗（720 面板）观感一致；程序搭壳无 top 节点，判空跳过。
+        if (root != null && _topNode == null)
+            _topNode = FindDeep(root.transform, "top") as RectTransform;
+        if (_topNode != null)
+            _topNode.anchoredPosition = new Vector2(
+                _topNode.anchoredPosition.x, panelRt.sizeDelta.y * 0.5f - TopTitleInset);
         if (descH + rewardBlock + loreGap + loreH > avail)
         {
             // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）
@@ -708,6 +725,12 @@ public class CodexInfoPopupUI : MonoBehaviour
             if (descH + rewardBlock + loreGap + loreH > avail)
                 loreGap = Mathf.Max(4f, avail - descH - rewardBlock - loreH);
         }
+
+        // 【2026-11-03 排版修复】内容在可用区内垂直居中：内容少时上下留白对称，不再全挤
+        // 在上半截、底部空一大块。偏移后内容底 = bottomLimit + slack/2，永不越底部红线。
+        float slack = avail - (descH + rewardBlock + loreGap + loreH);
+        if (slack > 0f)
+            top -= slack * 0.5f;
 
         // 只动 y：宽度、x、sizeDelta 一律保留预制体原值
         descRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, top);

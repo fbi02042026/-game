@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 佣兵 H001~H022 与主动/被动技能对应表。
+/// 佣兵 H001~H024 与主动/被动技能对应表。
 /// </summary>
 public static class MercSkillMapping
 {

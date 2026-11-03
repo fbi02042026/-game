@@ -359,13 +359,14 @@ public static class DraftPool
     static Color QualityColor(DraftCard card)
     {
         // 2026-10-13 #4：金币色转发 RarityPalette.Gold（与开奖卡金币分支同源，别再抄一份）
+        // 2026-11-03 主人拍板全项目统一：品质色同样转发 RarityPalette，色值唯一来源，不在本文件抄第二份
         if (card.Kind == DraftCardKind.Gold) return RarityPalette.Gold;
         switch (card.Rarity)
         {
-            case SkillRarity.Legendary: return new Color(1f, 0.62f, 0.25f);
-            case SkillRarity.Epic: return new Color(1f, 0.62f, 0.25f);
-            case SkillRarity.Rare: return new Color(0.42f, 0.72f, 0.98f);
-            default: return new Color(0.88f, 0.88f, 0.90f);
+            case SkillRarity.Legendary: return RarityPalette.Legendary;   // 橙金 #FFB833
+            case SkillRarity.Epic: return RarityPalette.Legendary;   // 2026-10-05 拍板史诗并入传说档：Epic 与 Legendary 同色（保持原口径）
+            case SkillRarity.Rare: return RarityPalette.Rare;   // 蓝 #59ADFA
+            default: return RarityPalette.Common;   // 灰白 #CCD1DB
         }
     }
 

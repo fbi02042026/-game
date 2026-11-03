@@ -4,12 +4,13 @@ using UnityEngine;
 /// 玩家头像槽位定义（2026-10-25 主人需求：头像选择框弹窗 + 主界面名牌头像）。
 /// 图源 = Resources/Art/UI/Main/头像/（主人 2026-10-25 拖入）；56 字符 guid 资源一律路径加载（AGENTS.md §2.3）。
 /// 槽位号与头像选择框预制体节点「头像N」一一对应；6 号位主人预制体没摆节点、也没出图，留空。
+/// 【2026-11-03 主人拍板】9 号 = 伊芙 H014（预制体没摆「头像9」节点，弹窗运行时克隆补格，图 = MercHead/H014 缩放派生 117×109）。
 /// 解锁规则：1 号默认解锁；其余槽位拥有对应佣兵（真源 SaveData.unlockedMercIds）即解锁。
 /// </summary>
 public static class AvatarDefs
 {
     public const int MinSlot = 1;
-    public const int MaxSlot = 8;
+    public const int MaxSlot = 9;   // 2026-11-03 主人拍板：加 9 号伊芙（H013 莫娜本就在 4 号位）
     /// <summary>默认（未选择时）头像槽位 = 玩家头像。</summary>
     public const int DefaultSlot = 1;
 
@@ -26,6 +27,7 @@ public static class AvatarDefs
         null,          // 6 无节点无图，保留空位
         Dir + "H016",  // 7 杜娅·怒角（稀有狂战）
         Dir + "H019",  // 8 艾琳·星火（普通法师）
+        Dir + "H014",  // 9 伊芙·火舞（传奇火法，2026-11-03 主人拍板加入）
     };
 
     /// <summary>槽位 → 解锁所需佣兵 HireId。null = 默认解锁。</summary>
@@ -39,6 +41,7 @@ public static class AvatarDefs
         null,          // 6 无图
         "H016",        // 7 杜娅
         "H019",        // 8 艾琳
+        "H014",        // 9 伊芙（2026-11-03 主人拍板加入）
     };
 
     /// <summary>该槽位是否配了图（6 号位 false）。</summary>

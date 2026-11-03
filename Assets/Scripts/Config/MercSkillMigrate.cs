@@ -37,6 +37,7 @@ public static class MercSkillMigrate
         if (m == null || string.IsNullOrEmpty(m.mercId)) return;
 
         MigrateLaoDunAssetId(m);
+        MigrateRenamedAssetIds(m);
         if (threeWay)
             RemapThreeWayLegacyIds(m);
         RemapSlotMismatchIds(m);
@@ -100,6 +101,23 @@ public static class MercSkillMigrate
             && MercSkillMapping.TryGetByHireId(m.hireId, out var map)
             && map.PassiveSkillId == "SK011")
             m.passiveSkillId = "SK011";
+    }
+
+    /// <summary>
+    /// 2026-11-03 主人拍板：三名佣兵战斗模型换装（H013 naima201→fashi202、
+    /// H014 naima202→fashi201、H024 qita101→dunbing204）。老档 mercId 存的是入库时的
+    /// 旧 AssetId（MercenaryOfferGenerator 入库即 def.AssetId），不迁移则归属判定
+    /// （HasMerc / IsAlreadyHired 防重复招募）按新 ID 查不到；三个旧 ID 历史上各只属于
+    /// 一名佣兵，按旧 ID 直接改写安全且幂等。
+    /// </summary>
+    static void MigrateRenamedAssetIds(MercenaryData m)
+    {
+        switch (m.mercId)
+        {
+            case "naima201": m.mercId = "fashi202"; break;   // H013 莫娜
+            case "naima202": m.mercId = "fashi201"; break;   // H014 伊芙
+            case "qita101": m.mercId = "dunbing204"; break;  // H024 奥蕾莉亚
+        }
     }
 
     /// <summary>101/102 对调后：老盾（H001）存档统一为 dunbing101。</summary>

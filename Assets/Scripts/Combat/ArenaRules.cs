@@ -18,7 +18,7 @@ using UnityEngine;
 ///   列表下标 i ≥ arenaPlayerPos 的机器人排名 = i+2（在玩家下方）；
 ///   玩家排名 = arenaPlayerPos + 1。
 /// · 跨天：机器人积分漂移（数值味道）+ 机器人之间随机相邻换位（排名会动，不跨玩家位）；
-/// · 跨月（自然月赛季）：按最终排名发结算邮件 → 积分清零 → 机器人重新生成。
+/// · 跨周（自然周赛季，2026-11-03 测试用改）：按最终排名发结算邮件 → 积分清零 → 机器人重新生成。
 /// · 每天 5 次免费挑战 + 每天最多 2 次广告、每次 +3 次（2026-10-31 主人拍板：10→5、+2→+3）。
 ///
 /// 纯静态 Rules 类（照 EndlessRiftRules 口径：只操作 SaveData + Toast，不碰战斗核心）。
@@ -187,14 +187,14 @@ public static class ArenaRules
 
     static SaveData D => SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
 
-    // ───────────────────────── 周期结算（每日 + 每月） ─────────────────────────
+    // ───────────────────────── 周期结算（每日 + 每周） ─────────────────────────
 
-    /// <summary>每日 + 每月 + 换位链自检（读档收口 / 弹窗打开 / 入口点击都会调，幂等）。</summary>
+    /// <summary>每日 + 每周 + 换位链自检（读档收口 / 弹窗打开 / 入口点击都会调，幂等）。</summary>
     public static void EnsurePeriods(SaveData data)
     {
         ArenaSeasonWeapons.EnsureRegistered();   // 冠军武器模板注册（幂等；邮件领取/出战选装都依赖查表）
         ArenaShopGoods.EnsureRegistered();   // 竞技场商店限定武器（逐风长弓）运行时注册（幂等；Resources 掉落池扫不到）
-        EnsureMonth(data);
+        EnsureWeek(data);
         EnsureDay(data);
         EnsureLadder(data);
     }
@@ -229,25 +229,27 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 跨月（自然月赛季）：结算上赛季 → 发奖励邮件 → 积分清零 → 机器人重新生成 → 换位链重建。
+    /// 跨周（自然周赛季，2026-11-03 测试用改）：结算上赛季 → 发奖励邮件 → 积分清零 → 机器人重新生成 → 换位链重建。
+    /// 赛季键 = 本周周一的 yyyyMMdd（复用 SaveData.WeekMondayKey 口径，周一 0 点跨周）。
     /// 首次（无机器人）只做初始化，不发结算。
     /// </summary>
-    public static void EnsureMonth(SaveData data)
+    public static void EnsureWeek(SaveData data)
     {
         if (data == null) return;
-        string month = DateTime.Now.ToString("yyyyMM");
-        if (data.arenaMonthKey == month) return;
+        string week = SaveData.WeekMondayKey().ToString();
+        if (data.arenaMonthKey == week) return;
 
         bool hadSeason = data.arenaBots != null && data.arenaBots.Count > 0;
         if (hadSeason)
         {
             int finalRank = PlayerRank(data);
             var rw = RewardFor(finalRank);
-            string lastMonth = DateTime.Now.AddMonths(-1).ToString("M月");
+            string lastWeek = "上周";
             var mail = new MailEntry
             {
-                title = $"竞技场·{lastMonth}赛季结算",
-                body = $"上赛季最终排名：第 {finalRank} 名\n奖励已附上，新赛季再冲！",
+                title = $"竞技场·{lastWeek}赛季结算",
+                body = $"上周战绩出炉，你最终排在第 {finalRank} 名！奖励已随信附上，签收开冲～\n\n" +
+                       "新一周榜单已重开，这回冲个更猛的！",
                 sender = "竞技场组委会",
                 type = MailType.Reward,
                 gold = rw.gold,
@@ -259,9 +261,9 @@ public static class ArenaRules
             {
                 string weaponId = ArenaSeasonWeapons.CurrentSeasonWeaponId();
                 string wname = ArenaSeasonWeapons.WeaponName(weaponId);
-                mail.body = $"上赛季最终排名：第 {finalRank} 名——恭喜夺冠！\n" +
-                            $"冠军限定武器「{wname}」已随信附上（仅竞技场赛季冠军可获得，每月轮换），\n" +
-                            "出战该职业时将自动替换初始武器。新赛季再冲！";
+                mail.title = $"竞技场·{lastWeek}冠军是你？！";
+                mail.body = $"上周最终排名：第 {finalRank} 名！我勒个豆，冠军真给你拿下了？\n\n" +
+                            $"限定传奇武器「{wname}」已随信附上（赛季冠军限定，每月换一把），出战对应职业会自动替换初始武器。新一周继续守擂！";
                 mail.attachments = new List<MailAttachment>
                 {
                     new MailAttachment
@@ -276,10 +278,10 @@ public static class ArenaRules
             }
             if (rw.gold > 0 || rw.diamond > 0 || mail.attachments != null)
                 MailSystem.Enqueue(mail, notifyToast: false);   // 读档期不发提示，进竞技场时看结算横幅
-            data.arenaSeasonNotice = $"上月赛季结算：第 {finalRank} 名" +
+            data.arenaSeasonNotice = $"上周赛季结算：第 {finalRank} 名" +
                 (rw.gold > 0 || rw.diamond > 0 ? "，奖励已发到邮箱。" : "。");
         }
-        data.arenaMonthKey = month;
+        data.arenaMonthKey = week;
         data.arenaPoints = 0;
         // 新赛季开局：新手必赢重置（「刚进来的玩家可以赢几次」），低分保底清零
         data.arenaFreshWinsLeft = NewbieWinsPerSeason;
@@ -293,7 +295,7 @@ public static class ArenaRules
 
     /// <summary>赛季结算奖励档（按最终排名）：第 1 / 2 / 3 / 4~10 / 11~50 名，50 名开外不发奖。
     /// 数值 2026-10-29 晚上调（主人拍板「每月奖励给的有点少」）、深夜按预制体面板档位细分；
-    /// 第 1 名另有月轮换限定传奇武器（见 EnsureMonth）。</summary>
+    /// 第 1 名另有月轮换限定传奇武器（见 EnsureWeek）。</summary>
     static SeasonReward RewardFor(int rank)
     {
         if (rank <= 1) return new SeasonReward { from = 1, gold = SeasonGoldRank1, diamond = SeasonDiamondRank1 };
@@ -313,7 +315,7 @@ public static class ArenaRules
     public static string SeasonRewardInfoText()
     {
         var now = DateTime.Now;
-        return $"每月 1 日按最终排名发奖（当前 {now.Year}年{now.Month}月赛季）：\n" +
+        return $"每周一 0 点按最终排名发奖并清零积分重开（当前 {now.Year}年{now.Month}月，冠军武器按月轮换）：\n" +
                $"第 1 名　金币×{SeasonGoldRank1} + 钻石×{SeasonDiamondRank1} + 冠军限定武器\n" +
                $"第 2 名　金币×{SeasonGoldRank2} + 钻石×{SeasonDiamondRank2}\n" +
                $"第 3 名　金币×{SeasonGoldRank3} + 钻石×{SeasonDiamondRank3}\n" +
@@ -438,11 +440,11 @@ public static class ArenaRules
         return Mathf.RoundToInt(v / step) * step;
     }
 
-    /// <summary>头像袋：H001~H022 洗牌，循环取避免相邻重图。</summary>
+    /// <summary>头像袋：H001~H024 洗牌，循环取避免相邻重图（2026-11-03 主人拍板扩容，加入 H023/H024）。</summary>
     static List<int> ShuffledAvatarBag()
     {
         var bag = new List<int>();
-        for (int i = 1; i <= 22; i++) bag.Add(i);
+        for (int i = 1; i <= 24; i++) bag.Add(i);
         for (int i = bag.Count - 1; i > 0; i--)
         {
             int j = UnityEngine.Random.Range(0, i + 1);
@@ -542,7 +544,7 @@ public static class ArenaRules
     public static readonly BotTeamTemplate[] BotTeamTemplates =
     {
         new BotTeamTemplate { name = "剑盾守心", heroAssetId = "dunbing101",  mercAssetIds = new[] { "dunbing201",  "naima101" } },
-        new BotTeamTemplate { name = "法师轰击", heroAssetId = "fashi101",    mercAssetIds = new[] { "naima201",    "dunbing202" } },
+        new BotTeamTemplate { name = "法师轰击", heroAssetId = "fashi101",    mercAssetIds = new[] { "fashi202",    "dunbing202" } },
         new BotTeamTemplate { name = "游侠风筝", heroAssetId = "gongshou101", mercAssetIds = new[] { "gongshou201", "dunbing101" } },
         new BotTeamTemplate { name = "剑盾护卫", heroAssetId = "dunbing101",  mercAssetIds = new[] { "dunbing102",  "gongshou201" } },
         new BotTeamTemplate { name = "法师续航", heroAssetId = "fashi101",    mercAssetIds = new[] { "naima102",    "dunbing201" } },
@@ -1083,7 +1085,7 @@ public static class ArenaRules
         public bool Valid;      // 是否有进行中的挑战上下文
         public int LadderIdx;   // 榜单行号（= 机器人列表下标，与 BattleManager.ArenaChallengeRowIdx 同值）
         public string BotName;  // 对手名字（敌方佣兵名字牌用）
-        public int Avatar;      // 对手头像编号（H001~H022 的数字段）
+        public int Avatar;      // 对手头像编号（H001~H024 的数字段）
         public int Power;       // 对手战力
         public int Seed;        // 对手阵容种子（确定性）
     }

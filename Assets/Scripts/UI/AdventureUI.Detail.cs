@@ -246,7 +246,8 @@ public partial class AdventureUI
         prt.localScale = new Vector3(scale, scale, 1f);
     }
 
-    static Sprite LoadMonsterSprite(MonsterConfig cfg)
+    /// <summary>怪物头像加载唯一出口（2026-11-03 改 public：战斗内词条怪首次登场提示 UI 复用，不再另抄路径表）。</summary>
+    public static Sprite LoadMonsterSprite(MonsterConfig cfg)
     {
         if (cfg == null) return null;
         int gameChapter = 1;
@@ -295,27 +296,29 @@ public partial class AdventureUI
 
     void ShowMonsterTip(MonsterConfig cfg, RectTransform iconAnchor = null)
     {
-        EnsureTip();
-        if (_tipRoot == null || cfg == null) return;
-        _tipRoot.SetActive(true);
-        PlaceTipAbove(iconAnchor);
-        if (_tipTitle != null) _tipTitle.text = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
+        if (cfg == null) return;
+        string title = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
         int mch = GameConfig.GetMonsterChapter(_selectedChapter);
         var style = MonsterAttackStyleTable.Get(mch, cfg.spriteIndex);
         string styleName = style == MonsterAttackStyle.Ranged ? "远程" : "近战";
-        if (_tipBody != null)
-        {
-            // 图鉴要显示「实战血量」而非裸配置值：Monster.Init 会把 baseHp
-            // 乘上章节系数与 MONSTER_HP_GLOBAL_MUL，这里跟着乘回来，避免面板写 78、实战只有 46。
-            // 2026-10-05：难度新增「章内爬坡」后，图鉴是静态展示、没有"当前第几关"的概念，
-            // 统一按**章首（章内第 1 关）**算 —— 也就是该章的基准血量。
-            // ⚠ 倍率仍走唯一出口 GetStatScale，只是 stage 固定传 0，不在别处另算一遍。
-            float hpScale = GameConfig.GetStatScale(_selectedChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL;
-            float shownHp = cfg.baseHp * hpScale;
-            _tipBody.text = cfg.isBoss
-                ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}"
-                : $"攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}";
-        }
+        // 图鉴要显示「实战血量」而非裸配置值：Monster.Init 会把 baseHp
+        // 乘上章节系数与 MONSTER_HP_GLOBAL_MUL，这里跟着乘回来，避免面板写 78、实战只有 46。
+        // 2026-10-05：难度新增「章内爬坡」后，图鉴是静态展示、没有"当前第几关"的概念，
+        // 统一按**章首（章内第 1 关）**算 —— 也就是该章的基准血量。
+        // ⚠ 倍率仍走唯一出口 GetStatScale，只是 stage 固定传 0，不在别处另算一遍。
+        float hpScale = GameConfig.GetStatScale(_selectedChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL;
+        float shownHp = cfg.baseHp * hpScale;
+        // 【2026-11-03 主人拍板】冒险日志同步词条信息：表定词条怪（monster_stats.affix）在 Tip 里
+        // 追加词条名 + 一句话介绍（与首次登场提示共用 MonsterAffixDefs.Describe，口径一致）。
+        string affixText = MonsterAffixDefs.Describe(MonsterAffixDefs.ParseAffixList(cfg.tableAffix));
+        string baseText = cfg.isBoss
+            ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}"
+            : $"攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}";
+        string body = string.IsNullOrEmpty(affixText) ? baseText : $"{baseText}\n词条：{affixText}";
+        // 排版：词条行会让正文到 6 行，默认 140 高装不下 → 有词条时加高到 196。
+        float h = string.IsNullOrEmpty(affixText) ? 140f : 196f;
+        MonsterTipPanel.Show(transform, title, body, new Vector2(280f, h));
+        PlaceTipAbove(iconAnchor);
     }
 
     /// <summary>弹窗下沿离图标中心的距离（图标 52 见方，一半 26 + 8 的呼吸空隙）。</summary>
@@ -328,10 +331,9 @@ public partial class AdventureUI
     /// </summary>
     void PlaceTipAbove(RectTransform iconAnchor)
     {
-        if (_tipRoot == null || iconAnchor == null) return;
         var rootRt = transform as RectTransform;
-        var tipRt = _tipRoot.transform as RectTransform;
-        if (rootRt == null || tipRt == null) return;
+        var tipRt = MonsterTipPanel.RootRt;
+        if (rootRt == null || tipRt == null || iconAnchor == null) return;
 
         Vector3 world = iconAnchor.TransformPoint(iconAnchor.rect.center);
         Vector2 local = rootRt.InverseTransformPoint(world);
@@ -357,58 +359,7 @@ public partial class AdventureUI
 
     void HideTip()
     {
-        if (_tipRoot != null) _tipRoot.SetActive(false);
-    }
-
-    void EnsureTip()
-    {
-        if (_tipRoot != null) return;
-        // 【2026-10-11 主人拍板】弹窗要显示在「当前点击的敌人上面」——位置会落在 DetailPanel 之外，
-        // 所以挂在界面根节点上（面板内会被面板边界/装饰压住）。页面整体隐藏时它会跟着隐藏。
-        var host = transform;
-        var go = new GameObject("MonsterTip", typeof(RectTransform), typeof(Image));
-        go.transform.SetParent(host, false);
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.55f);
-        rt.anchorMax = new Vector2(0.5f, 0.55f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(280f, 140f);
-        rt.anchoredPosition = Vector2.zero;
-        go.GetComponent<Image>().color = new Color(0.08f, 0.06f, 0.04f, 0.92f);
-
-        var titleGo = new GameObject("TipTitle", typeof(RectTransform), typeof(Text));
-        titleGo.transform.SetParent(go.transform, false);
-        var tr = titleGo.GetComponent<RectTransform>();
-        tr.anchorMin = new Vector2(0, 1);
-        tr.anchorMax = new Vector2(1, 1);
-        tr.pivot = new Vector2(0.5f, 1);
-        tr.anchoredPosition = new Vector2(0, -8);
-        tr.sizeDelta = new Vector2(-16, 32);
-        _tipTitle = titleGo.GetComponent<Text>();
-        _tipTitle.fontSize = 22;
-        _tipTitle.alignment = TextAnchor.MiddleCenter;
-        _tipTitle.color = new Color(1f, 0.92f, 0.7f);
-        _tipTitle.font = GameFonts.GetChinese();
-
-        var bodyGo = new GameObject("TipBody", typeof(RectTransform), typeof(Text));
-        bodyGo.transform.SetParent(go.transform, false);
-        var br = bodyGo.GetComponent<RectTransform>();
-        br.anchorMin = new Vector2(0, 0);
-        br.anchorMax = new Vector2(1, 1);
-        br.offsetMin = new Vector2(12, 10);
-        br.offsetMax = new Vector2(-12, -42);
-        _tipBody = bodyGo.GetComponent<Text>();
-        _tipBody.fontSize = 18;
-        _tipBody.alignment = TextAnchor.UpperCenter;
-        _tipBody.color = new Color(0.9f, 0.85f, 0.75f);
-        _tipBody.font = GameFonts.GetChinese();
-
-        var closeBtn = go.AddComponent<Button>();
-        closeBtn.targetGraphic = go.GetComponent<Image>();
-        closeBtn.onClick.AddListener(HideTip);
-
-        _tipRoot = go;
-        GameFonts.ApplyToHierarchy(go.transform);
-        go.SetActive(false);
+        // 【2026-11-03】弹窗构建/关闭统一走共享组件 MonsterTipPanel（与战斗内词条提示共用同一个）
+        MonsterTipPanel.Hide();
     }
 }

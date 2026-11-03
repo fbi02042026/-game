@@ -53,7 +53,7 @@ public class ArenaBotEntry
 {
     /// <summary>机器人昵称（PlayerNameGen 生成）。</summary>
     public string name;
-    /// <summary>头像编号 1~22 → 佣兵头像 H001~H022（MercPortraitSprites.GetHead）。</summary>
+    /// <summary>头像编号 1~24 → 佣兵头像 H001~H024（MercPortraitSprites.GetHead）。</summary>
     public int avatar;
     /// <summary>当前积分（赛季战绩；榜单行显示的是战力，积分在详情里看）。</summary>
     public int points;
@@ -72,7 +72,7 @@ public class ArenaBattleRecord
 {
     /// <summary>对手机器人昵称。</summary>
     public string name;
-    /// <summary>对手头像编号 1~22 → 佣兵头像 H001~H022。</summary>
+    /// <summary>对手头像编号 1~24 → 佣兵头像 H001~H024。</summary>
     public int avatar;
     /// <summary>true=我赢（胜）/ false=我输（败）。</summary>
     public bool won;
@@ -113,6 +113,9 @@ public class SaveData
     public int stamina = 100;
     /// <summary>体力上次结算 Unix 秒（用于回复）</summary>
     public long lastStaminaUtc = 0;
+    /// <summary>体力日结算日键 yyyyMMdd（本地日，DayKeyUtil.TodayKey 口径）：StaminaSystem.Tick 跨天补满用
+    /// 【2026-11-03 主人拍板「体力每天 0 点补满，秒回保持 600 不变」】。旧档缺省空串 → 首次 Tick 视同跨天补满一次，属预期。</summary>
+    public string staminaDayKey = "";
     /// <summary>广告奖励日键 yyyyMMdd（本地日，2026-10-28 由 UTC 改本地，0 点刷新与每日登录同口径）</summary>
     public string adRewardDayKey = "";
     /// <summary>当日已领体力广告次数</summary>
@@ -198,7 +201,7 @@ public class SaveData
     // === 竞技场（2026-10-29）：机器人排行榜对战，规则见 ArenaRules ===
     /// <summary>竞技场每日次数日键 yyyyMMdd（本地日，照 endlessRift 口径），跨天清零次数并掷机器人积分漂移</summary>
     public string arenaDayKey = "";
-    /// <summary>竞技场赛季（自然月）键 yyyyMM，跨月按最终名次发奖→清零→重新生成机器人</summary>
+    /// <summary>竞技场赛季键（2026-11-03 测试用改自然周：存本周周一 yyyyMMdd，周一 0 点跨周结算；字段名沿用旧月键名，旧档存过 yyyyMM 升级后首进按当前排名结一次奖重开）</summary>
     public string arenaMonthKey = "";
     /// <summary>今日已用挑战次数（每天 10 次 + 广告 2 次×每次 +2）</summary>
     public int arenaTriesToday = 0;
@@ -320,7 +323,7 @@ public class SaveData
     public string dailyMercRecruitDayKey = "";
     /// <summary>酒馆三选一候选日键（本地日历日，0 点刷新）</summary>
     public string mercOfferDayKey = "";
-    /// <summary>上次手动/自动刷新 Unix 秒（UTC）</summary>
+    /// <summary>上次真实刷新（手动免费/钻石）Unix 秒（UTC）；0 点自动重掷不写此字段（2026-11-03 起，避免日切重置 3 小时免费冷却）</summary>
     public long mercOfferRefreshUtc = 0;
     /// <summary>日切后需重抽候选</summary>
     public bool mercOfferDirty = true;
@@ -489,6 +492,26 @@ public class SaveData
         grandProgress ??= new List<int>();
         while (grandProgress.Count < ActProgressionDefs.ActCount) grandProgress.Add(0);
     }
+
+    // === 词条怪首次登场提示已读（2026-11-03 主人拍板，读写只走这两个出口）===
+    /// <summary>该表定词条怪的左缘提示弹窗是否已看过并确认（看过 → 永久不再提示）。</summary>
+    public bool HasSeenAffixMonster(string monsterId)
+    {
+        if (string.IsNullOrEmpty(monsterId)) return false;
+        seenAffixMonsterIds ??= new HashSet<string>();
+        return seenAffixMonsterIds.Contains(monsterId);
+    }
+
+    /// <summary>标记该词条怪提示已读（幂等；落盘由调用方随后 SaveSystem.Instance.Save() 负责）。</summary>
+    public void MarkAffixMonsterSeen(string monsterId)
+    {
+        if (string.IsNullOrEmpty(monsterId)) return;
+        seenAffixMonsterIds ??= new HashSet<string>();
+        if (!seenAffixMonsterIds.Add(monsterId)) return;
+        seenAffixMonsterEntries ??= new List<StringIdEntry>();
+        seenAffixMonsterEntries.Add(new StringIdEntry { id = monsterId });
+    }
+
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
     public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
     /// <summary>已通关章节集合（权威；章节分叉后 maxUnlockedChapter 的减法不再成立，一律读这里）</summary>
@@ -647,6 +670,12 @@ public class SaveData
     // 已领取宝箱奖励的关卡 key（格式同 clearedStages：chapter_stageIndex）。JsonUtility 镜像同款。
     [NonSerialized] public HashSet<string> chestClaimedStages = new HashSet<string>();
     public List<StringIdEntry> chestClaimedStageEntries = new List<StringIdEntry>();
+
+    // === 词条怪首次登场提示已读记录（2026-11-03 主人拍板）===
+    // key = monster_stats 表怪物 id（如 m2_03）。看过左缘提示弹窗并点「确认」后永久消失；
+    // 没看过则每次进战斗该怪第一次出现时再提示（不强制观看）。
+    [NonSerialized] public HashSet<string> seenAffixMonsterIds = new HashSet<string>();
+    public List<StringIdEntry> seenAffixMonsterEntries = new List<StringIdEntry>();
 
     // === 主线任务进度（2026-09-20 迁移：从 PlayerPrefs mq_v1_* 迁入云存档）===
     // 已完成集合：id = questId（如 C1_Q2）
@@ -1010,6 +1039,7 @@ public class SaveData
         }
         clearedStages = ToIdSet(clearedStageEntries);
         chestClaimedStages = ToIdSet(chestClaimedStageEntries);
+        seenAffixMonsterIds = ToIdSet(seenAffixMonsterEntries);
         clearedChapterDiffKeys = ToIdSet(clearedChapterDiffEntries);
 
         mainQuestDone = ToIdSet(mainQuestDoneEntries);
@@ -1207,21 +1237,65 @@ public class SaveData
     }
 
     /// <summary>
-    /// 【2026-10-31 B2 落地】老档大关进度迁移（幂等）：
-    /// · 已通关的篇 → 大关进度直接记满（老档没有大关概念，通关即视为整篇通关）；
-    /// · 未通关的篇 → 保持 0（老档 clearedStages 的 0~4 正好是第 1 座大关的 5 小关，无需换算）。
-    /// 新档 grandProgress 全 0，走同一入口无副作用。
+    /// 【2026-10-31 B2 落地】老档大关进度迁移（幂等）。
+    /// 🔴【2026-11-03 修「3-4 打完进 3-5 变 1-1」】大关进度一律以 clearedStages 覆盖推导值
+    /// <see cref="DerivedGrandProgressFromClearedStages"/> 直接落值（双向纠偏）：
+    /// · 坏档（打过任意大关 Boss 被 count&gt;0 兜底误标整章通关，grandProgress 被顶成 10）→ 压回真实值，
+    ///   玩家下次冷启动从真实进度续打（3-4 打完 → 从 3-5 续），不再永远回 1-1；
+    /// · 旧 10 关制老档（没有 grandProgress 字段，key 0~9）→ 抬到推导值 2（主人 2026-11-03 拍板
+    ///   「老档按前两座大关已通、从 3-1 续打」，不再整章重打）；
+    /// · 合法新档推导值恒等于现值（线性解锁：打过大关 Boss = 该大关小关全通），幂等零影响。
+    /// 注意：clearedChapterIds / clearedChapterEntries（章节解锁判据，ChapterRouteTable.CanEnter 用）
+    /// 这里一个字不动——老档 10 关制的「已通关章」覆盖不全但解锁必须保留。
     /// </summary>
     void MigrateGrandProgress()
     {
         EnsureGrandProgress();
         for (int ch = 1; ch <= ActProgressionDefs.ActCount; ch++)
         {
-            if (!HasClearedChapter(ch)) continue;
-            int full = ActProgressionDefs.GrandCountOf(ch);
-            if (ch - 1 < grandProgress.Count && grandProgress[ch - 1] < full)
-                grandProgress[ch - 1] = full;
+            int i = ch - 1;
+            if (i < grandProgress.Count)
+                grandProgress[i] = DerivedGrandProgressFromClearedStages(ch);
         }
+    }
+
+    /// <summary>
+    /// 该章 clearedStages 是否覆盖全部小关 key（"章_0".."章_{StageCountOf-1}"）。
+    /// 「整章真通关」的判据（2026-11-03 修坏标用）；空档/新档自然返回 false。
+    /// </summary>
+    public bool ChapterSubsAllCleared(int chapter)
+    {
+        if (chapter < 1 || chapter > ActProgressionDefs.ActCount) return false;
+        if (clearedStages == null || clearedStages.Count == 0) return false;
+        int total = ActProgressionDefs.StageCountOf(chapter);
+        for (int s0 = 0; s0 < total; s0++)
+            if (!clearedStages.Contains(chapter + "_" + s0)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// 按 clearedStages 推导该篇「已连续通关的大关数」（0 起）：从第 1 座大关起逐座检查小关 key 是否齐全，
+    /// 遇到第一座不齐的即停（与 UI/进本「第一个未通关」同口径，跳关留下的洞天然截断）。
+    /// 旧 10 关制老档（key 0~9）在第 1 篇推导出 2（前两座大关），主人 2026-11-03 确认按此续打。
+    /// </summary>
+    public int DerivedGrandProgressFromClearedStages(int chapter)
+    {
+        if (chapter < 1 || chapter > ActProgressionDefs.ActCount) return 0;
+        if (clearedStages == null || clearedStages.Count == 0) return 0;
+        int subs = ActProgressionDefs.SubsPerGrandOf(chapter);
+        int grandTotal = ActProgressionDefs.GrandCountOf(chapter);
+        int grans = 0;
+        for (int g = 0; g < grandTotal; g++)
+        {
+            bool full = true;
+            for (int s = 0; s < subs; s++)
+            {
+                if (!clearedStages.Contains(chapter + "_" + (g * subs + s))) { full = false; break; }
+            }
+            if (!full) break;
+            grans++;
+        }
+        return grans;
     }
 
     /// <summary>
@@ -1946,6 +2020,7 @@ public class SaveData
         unlockedMercIds ??= new HashSet<string>();
         mercDrawPool ??= new List<string>();
         clearedChapterIds ??= new HashSet<int>();
+        seenAffixMonsterIds ??= new HashSet<string>();
         claimedCodexRewardIds ??= new HashSet<string>();
         defeatedMonsterIds ??= new HashSet<string>();
         claimedLogMileageLevels ??= new HashSet<int>();
@@ -2009,6 +2084,7 @@ public class SaveData
 
         seenMonsterEntries = FromIdSet(seenMonsterIds);
         viewedMonsterEntries = FromIdSet(viewedMonsterIds);
+        seenAffixMonsterEntries = FromIdSet(seenAffixMonsterIds);   // 【2026-11-03】词条怪提示已读镜像
         seenMercEntries = FromIdSet(seenMercIds);
         viewedMercEntries = FromIdSet(viewedMercIds);
         unlockedMercEntries = FromIdSet(unlockedMercIds);

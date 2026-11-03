@@ -125,7 +125,7 @@ public static class ArenaSeasonWeapons
         return tpl;
     }
 
-    /// <summary>当前月份的冠军武器 id（自然月轮换；EnsureMonth 发结算邮件用）。</summary>
+    /// <summary>当前月份的冠军武器 id（自然月轮换；EnsureWeek 发结算邮件用）。</summary>
     public static string CurrentSeasonWeaponId()
     {
         return Roster[Mathf.Clamp(System.DateTime.Now.Month, 1, 12) - 1].id;

@@ -522,15 +522,16 @@ public class BattleSettlementUI : MonoBehaviour
         };
     }
 
+    // 2026-11-03 主人拍板全项目统一：稀有度框色唯一来源 = RarityPalette，本方法只做转发不抄色值
     static Color RarityFrameColor(Rarity r)
     {
         switch (r)
         {
-            case Rarity.Legendary: return new Color(0.85f, 0.55f, 0.15f);
-            case Rarity.Epic: return new Color(0.65f, 0.35f, 0.85f);
-            case Rarity.Rare: return new Color(0.3f, 0.5f, 0.9f);
-            case Rarity.Uncommon: return new Color(0.3f, 0.7f, 0.35f);
-            default: return new Color(0.55f, 0.55f, 0.55f);
+            case Rarity.Legendary: return RarityPalette.Legendary;   // 橙金 #FFB833
+            case Rarity.Epic: return RarityPalette.Epic;
+            case Rarity.Rare: return RarityPalette.Rare;   // 蓝 #59ADFA
+            case Rarity.Uncommon: return RarityPalette.Uncommon;
+            default: return RarityPalette.Common;   // 灰白 #CCD1DB
         }
     }
 

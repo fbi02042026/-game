@@ -175,7 +175,7 @@ public class ArenaPopupUI : MonoBehaviour
     {
         if (_bindFailed) return;
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        ArenaRules.EnsurePeriods(data);   // 跨天清次数+机器人漂移换位；跨月赛季结算（懒触发）
+        ArenaRules.EnsurePeriods(data);   // 跨天清次数+机器人漂移换位；跨周赛季结算（懒触发；2026-11-03 测试用改一周一结）
         ArenaRules.SettlePendingQuitLoss();   // 中途退出判负补账（2026-10-31 主人拍板「直接算输」）：有未落账挑战先补 -10 再刷榜
         ArenaRules.RefreshBotScoresIfDue(data);   // 游玩中到点刷机器人分（2026-10-30 20:10 主人拍板「一个时间刷一下，不要不变」）
         string notice = ArenaRules.TakeSeasonNotice(data);
@@ -740,9 +740,9 @@ public class ArenaPopupUI : MonoBehaviour
         if (_myPtsText != null) _myPtsText.text = data.arenaPoints.ToString();   // 显示赛季积分（原误填战力估计，2026-10-30 主人拍板）
         if (_myHead != null)
         {
-            var sp = MercPortraitSprites.GetHead("player");
+            var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
             _myHead.sprite = sp;
-            if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：player");
+            if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
         }
 
         // 前三领奖台：排名 r 的实体 =（r-1 == pos ? 玩家 : 机器人[r-1]）；2026-10-30 修复：旧判断 idx<pos 把玩家刷满前三
@@ -764,9 +764,9 @@ public class ArenaPopupUI : MonoBehaviour
                 if (_podPts[i] != null) _podPts[i].text = data.arenaPoints.ToString();
                 if (_podHead[i] != null)
                 {
-                    var sp = MercPortraitSprites.GetHead("player");
+                    var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
                     _podHead[i].sprite = sp;
-                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：player");
+                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
                 }
             }
             else if (bot != null)
@@ -808,9 +808,9 @@ public class ArenaPopupUI : MonoBehaviour
                 if (_rowPts[i] != null) _rowPts[i].text = data.arenaPoints.ToString();
                 if (_rowHead[i] != null)
                 {
-                    var sp = MercPortraitSprites.GetHead("player");
+                    var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
                     _rowHead[i].sprite = sp;
-                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：player");
+                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
                 }
             }
             else

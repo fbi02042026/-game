@@ -442,7 +442,12 @@ public partial class Monster
         var tableAffixes = MonsterAffixDefs.ParseAffixList(template != null ? template.tableAffix : null);
         bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
         if (!(_isBossUnit || _eliteWave) && tableAffixes.Count > 0 && formalMainRun)
+        {
             MonsterAffix.AttachFixed(this, tableAffixes);
+            // 【2026-11-03 主人拍板】表定词条怪首次登场提示：屏幕左缘头像 + 黄叹号，
+            // 点击弹窗看词条介绍，确认后存档标记永久消失（不强制观看）。
+            AffixMonsterNoticeUI.Notify(template, tableAffixes);
+        }
         else
             MonsterAffix.RollAndAttach(this, _chapter, _isBossUnit || _eliteWave);
         _bossPhaseShiftBusy = false;

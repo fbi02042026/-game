@@ -116,6 +116,7 @@ mem-log/
 
 # Local AI agent working data (memory / plans / cache) — not for repo
 .workbuddy/
+.workbuddy-ai/
 
 # local video backups
 Tools/backups/

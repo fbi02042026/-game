@@ -214,9 +214,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     List<Button> _stageNodeBtns = new List<Button>();
     readonly List<MonsterConfig> _previewMonsters = new List<MonsterConfig>();
     Text _bossTag;
-    GameObject _tipRoot;
-    Text _tipTitle;
-    Text _tipBody;
+    // 【2026-11-03】怪物 Tip 弹窗字段（_tipRoot/_tipTitle/_tipBody）已并入共享组件 MonsterTipPanel
     Text _floatToast;
     RectTransform _floatToastRt;
     Coroutine _floatToastCo;

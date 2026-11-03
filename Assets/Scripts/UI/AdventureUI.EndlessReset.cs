@@ -10,6 +10,12 @@ using UnityEngine.UI;
 // ② 重置徽章：主人原话「我把重置按钮放到无限关卡右边的地方…放到无限关卡右下角 不跟随关卡移动」
 //    → 用主人给的「魔法重置徽章」图，钉在 无限/关卡 容器右下角外侧；点击弹确认窗，重置后从第 1 层起。
 //    每周 1 次（周一 0 点刷新，DayKeyUtil.WeekKey）。
+//    【2026-11-03 主人拍板「就按原来世界地图的位置往上100」→ 同日晚澄清】徽章**仍在无限页**，
+//    只是位置参考主线那颗世界地图按钮的 spot 再往上抬 100（主人原话「不是让你放到主线标签
+//    只是告诉你位置跟主线那个位置类似 只是往上了100 还是在无限标签」）。
+//    → 挂「无限」节点下（跟随无限页签显隐），每次刷新按世界地图按钮的 rect 中心换算到无限页
+//    局部坐标再 +100；世界地图入口 2026-11-01 起整体隐藏，主线/无限两页签同域，位置正好空着。
+//    找不到世界地图按钮（预制体被改）才回退锚「关卡」容器右下角的老挂点。
 // ③ 一键直达（2026-11-02 晚）：主人原话「是不是可以加一个一键到历史最高出生点 中间的抽奖全部自动抽」
 //    → 生涯最高出生点比本轮保存点更远时，① 的副按钮变成「直达第 N 层」，二次确认后
 //    覆盖起始层 + 补偿中间各层的免费抽（ConfirmEndlessJump）。
@@ -26,7 +32,8 @@ public partial class AdventureUI
     const string EndlessResetSpritePath = "UI/Art/Adventure/重置徽章";
     /// <summary>徽章显示边长（原图 131 见方，缩到 96 与层数牌（125 宽）同一量级）。</summary>
     const float EndlessResetBadgeSize = 96f;
-    /// <summary>徽章中心距「关卡」容器右下角的外扩距离。
+    /// <summary>徽章中心距「关卡」容器右下角的外扩距离（【2026-11-03 起】仅回退路径用——
+    /// 正常路径徽章已改按世界地图按钮位置对位 + 上抬 100，见 <see cref="PositionEndlessResetBadge"/>）。
     /// 算得开：容器半宽 50 + 48 = 98 &gt; 层数牌右缘 75.5 → 徽章（半边长 48）左缘落在 50+48+48−48 = 98，
     /// 离牌面还有 22 的缝，不会压住「第N层」的牌。</summary>
     const float EndlessResetBadgeMargin = 48f;
@@ -182,6 +189,9 @@ public partial class AdventureUI
             _endlessResetBtn.gameObject.SetActive(worthShowing);
         if (!worthShowing) return;
 
+        // 每次刷新重摆一次：主线列被 FitMainColumnStretch 重排后，徽章仍跟得住世界地图位置
+        PositionEndlessResetBadge();
+
         bool canReset = EndlessRiftRules.CanResetThisWeek(data);
         // 图标本身没字，下面挂一行小字说明「这是重置」，顺便承载「本周用过了」的冷却信息
         if (_endlessResetLbl != null)
@@ -209,28 +219,85 @@ public partial class AdventureUI
         return endless != null ? endless.Find("关卡") as RectTransform : null;
     }
 
+    /// <summary>
+    /// 把徽章摆到「世界地图按钮的 spot」再往上抬 100（2026-11-03 主人拍板 + 同日晚澄清：
+    /// 徽章仍在无限页，只是位置参考主线那颗世界地图按钮，不挪去主线标签）。
+    /// <para>对位用世界地图按钮的 rect 中心换算成父节点（「无限」节点）局部坐标
+    /// （TransformPoint/InverseTransformPoint，自动吃掉页签容器差异与 Canvas 缩放），
+    /// 锚点固定 (0.5,0.5) 以中心对中心，再 +100 设计像素。
+    /// 世界地图按钮在 主线 页签下、无限模式里整个 主线 是隐藏的，但 Transform 的层级矩阵
+    /// 不受 activeSelf 影响，位置照常取得到。</para>
+    /// </summary>
+    void PositionEndlessResetBadge()
+    {
+        if (_endlessResetBtn == null) return;
+        var wmRt = FindWorldMapBtnRt();
+        if (wmRt == null) return;   // 找不到世界地图按钮（预制体被改）→ 保持建树时的回退挂点，不猜位置
+        var parent = _endlessResetBtn.transform.parent as RectTransform;
+        if (parent == null) return;
+
+        Vector3 targetWorld = wmRt.TransformPoint(wmRt.rect.center);
+        Vector3 local = parent.InverseTransformPoint(targetWorld);
+        // 锚 (0.5,0.5) 的锚参考点 = rect 中心（相对 pivot 的局部坐标）；local 同样相对 pivot
+        Vector2 anchorRef = new Vector2(
+            Mathf.LerpUnclamped(parent.rect.xMin, parent.rect.xMax, 0.5f),
+            Mathf.LerpUnclamped(parent.rect.yMin, parent.rect.yMax, 0.5f));
+        var rt = (RectTransform)_endlessResetBtn.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = (Vector2)local - anchorRef + new Vector2(0f, 100f);
+    }
+
     bool BuildEndlessResetButton()
     {
-        var guanka = FindRiftStageContainer();
-        if (guanka == null)
+        // 2026-11-03 挂点：徽章**留在无限页**（挂「无限」节点，跟随无限页签显隐），只是位置参考
+        // 主线那颗世界地图按钮的 spot + 100（见 PositionEndlessResetBadge）。
+        // 「无限」节点缺失时依次回退 RightContent → 「关卡」容器，并把错误喊出来不静默。
+        var right = transform.Find("RightContent") as RectTransform;
+        var endlessNode = right != null ? right.Find(EndlessNodeName) as RectTransform : null;
+        RectTransform home;
+        bool fellBackToGuanka = false;
+        if (endlessNode != null)
         {
-            Debug.LogError("[AdventureUI] 重置徽章建不出来：RightContent/无限/关卡 节点缺失（预制体结构被改过？）");
-            return false;
+            home = endlessNode;
+        }
+        else if (right != null)
+        {
+            home = right;
+            Debug.LogWarning("[AdventureUI] 重置徽章：RightContent/无限 节点缺失，暂挂 RightContent（预制体结构被改过？）");
+        }
+        else
+        {
+            var guanka = FindRiftStageContainer();
+            if (guanka == null)
+            {
+                Debug.LogError("[AdventureUI] 重置徽章建不出来：RightContent 与 RightContent/无限 节点都缺失（预制体结构被改过？）");
+                return false;
+            }
+            home = guanka;
+            fellBackToGuanka = true;
         }
         var spr = LoadChestSprite(EndlessResetSpritePath);
         if (spr == null)
             Debug.LogError($"[AdventureUI] 重置徽章图缺失：Resources/{EndlessResetSpritePath}（按钮会留白块，不静默不造图）");
 
         var go = new GameObject("EndlessResetBtn", typeof(RectTransform), typeof(Image), typeof(Button));
-        go.transform.SetParent(guanka, false);
+        go.transform.SetParent(home, false);
         var rt = (RectTransform)go.transform;
-        // 锚在「关卡」容器右下角 + 往外让一段：容器不会被适配/重排移动 → 徽章不跟着层数牌跑
-        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+        // 初始挂点几何：锚中心（PositionEndlessResetBadge 随后按世界地图位置覆盖）；
+        // 回退路径（无 RightContent）时退化为锚「关卡」容器右下角 + 往外让一段的老挂法
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(EndlessResetBadgeSize, EndlessResetBadgeSize);
-        rt.anchoredPosition = new Vector2(
-            EndlessResetBadgeSize * 0.5f + EndlessResetBadgeMargin,
-            -(EndlessResetBadgeSize * 0.5f + EndlessResetBadgeMargin));
+        if (fellBackToGuanka)
+        {
+            // 回退老挂法：锚「关卡」容器右下角 + 往外让一段（此路径 PositionEndlessResetBadge 找不到
+            // 世界地图按钮时也不会动它，两条路互不干扰）
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+            rt.anchoredPosition = new Vector2(
+                EndlessResetBadgeSize * 0.5f + EndlessResetBadgeMargin,
+                -(EndlessResetBadgeSize * 0.5f + EndlessResetBadgeMargin));
+        }
 
         var img = go.GetComponent<Image>();
         img.sprite = spr;

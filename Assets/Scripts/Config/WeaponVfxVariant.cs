@@ -4,7 +4,9 @@ using System.Collections.Generic;
 /// 攻击特效档位解析（1/2/3）—— 档位解析的【唯一出口】。
 /// <para>【2026-10-24 主人拍板】高级别武器的近战刀光分别固定用 刀光2/刀光3：禁随机、同一武器每次出手同一款。
 /// 【2026-10-24 主人拍板】敌人远程物理（弓）/魔法（法球）攻击飞行体也分档：普通怪 fly1、精英/Boss fly2。
-/// 只有近战刀光与 Enemy 远程飞行体换档；Ally 弓/法球/治疗不适用（Ally 远程未换素材，固定 Base）。
+/// 只有近战刀光与 Enemy 远程飞行体换档；Ally 弓/治疗不适用（未换素材，固定 Base）。
+/// 【2026-11-03 主人拍板】Ally 法球例外：按佣兵换专属弹/命中（H014 伊芙=orb1、H013 莫娜=orb2），
+/// 出口见 <see cref="ResolveAllyOrb"/>，其余未点名单位仍走旧名 Base。
 /// 远程以后可能要细分：本期先把「档位 variant」当参数贯穿加载链路（BattleVFXSystem.LoadSharedKit /
 /// GetSharedKitFileNames 的 variant 形参），但不提前写未使用的分支。</para>
 /// <para>项目铁律：① 解析不到档位回 <see cref="Base"/> 是「设计最低档」，不是兜底另一套值；
@@ -90,5 +92,25 @@ public static class WeaponVfxVariant
             return High;
 
         return Base; // 其它单位
+    }
+
+    /// <summary>
+    /// 我方法球专属套文件编号（2026-11-03 主人拍板，唯一出口）：
+    /// 0=旧名 Base（vfx_ally_orb_fly / vfx_ally_orb_hit，未点名佣兵、主角与其他单位走这套）；
+    /// 1=H014 伊芙（vfx_ally_orb_fly1 / vfx_ally_orb_hit1）；
+    /// 2=H013 莫娜（vfx_ally_orb_fly2 / vfx_ally_orb_hit2）。
+    /// 同一佣兵每次出手必得同一套；调用方不许自己 if mercId。
+    /// </summary>
+    public static int ResolveAllyOrb(UnitBase caster)
+    {
+        if (caster is Mercenary merc && !string.IsNullOrEmpty(merc.mercId))
+        {
+            switch (merc.mercId)
+            {
+                case "H014": return 1; // 伊芙（火法 fashi201）
+                case "H013": return 2; // 莫娜（雷法 fashi202）
+            }
+        }
+        return 0;
     }
 }

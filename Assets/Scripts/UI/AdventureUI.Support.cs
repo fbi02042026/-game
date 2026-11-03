@@ -251,6 +251,8 @@ public partial class AdventureUI
 
             // 模式标签字号统一出口（2026-10-22 主人拍板，见 ApplyModeLabelStyle）
             ApplyModeLabelStyle();
+            // 模式标签图标按路径钉死（2026-11-03 主人拍板，见 ApplyModeButtonIconSprites）
+            ApplyModeButtonIconSprites();
         }
 
         var right = transform.Find("RightContent");
@@ -372,7 +374,38 @@ public partial class AdventureUI
             var lbl = modeButtonLabels[i];
             if (lbl == null) continue;
             lbl.fontSize = ModeLabelFontSize;
-            lbl.horizontalOverflow = HorizontalWrapMode.Overflow;
+        }
+    }
+
+    // ── 模式标签图标按路径钉死（2026-11-03 主人拍板「按预制体里的效果来」）──
+    // 这批切图 2026-10-22 搬进 Resources/UI/Art/Adventure 时被团结重签成 56 字符 guid，
+    // 拖进 prefab 的 m_Sprite 永远不落盘（AGENTS.md §1.6 老坑）——预制体里存的还是旧引用：
+    // 活动副本=旧 BOSS 骷髅图、BOSS挑战=活动宝箱图（当年两个槽位就互相拖反），
+    // 真机忠实显示旧值 → 手机上「活动副本」成了骷髅头。按 2026-10-23 拍板
+    // （56 字符不修 guid、一律 Resources 路径加载），这里给五个标签按路径设图，
+    // 编辑器与真机同源，不再依赖 prefab 里的 sprite guid 引用。
+    static readonly string[] ModeIconResourcePaths =
+    {
+        "UI/Art/Adventure/冒险_0000s_0010_主线",   // ModeBtn_0 主线冒险
+        "UI/Art/Adventure/冒险_0000s_0007_每日",   // ModeBtn_1 每日副本（运行时隐藏占位）
+        "UI/Art/Adventure/冒险_0000s_0008_迷宫",   // ModeBtn_2 无限裂隙
+        "UI/Art/Adventure/冒险_0000s_0006_BOSS",   // ModeBtn_3 BOSS挑战（运行时隐藏占位）
+        "UI/Art/Adventure/冒险_0000s_0009_活动",   // ModeBtn_4 活动副本（主人拍板用宝箱图）
+    };
+
+    void ApplyModeButtonIconSprites()
+    {
+        for (int i = 0; i < modeButtonIcons.Length && i < ModeIconResourcePaths.Length; i++)
+        {
+            var img = modeButtonIcons[i];
+            if (img == null) continue;
+            var sp = Resources.Load<Sprite>(ModeIconResourcePaths[i]);
+            if (sp == null)
+            {
+                Debug.LogError($"[AdventureUI] 模式标签图标加载失败：Resources/{ModeIconResourcePaths[i]}（缺真值不兜底）");
+                continue;
+            }
+            if (img.sprite != sp) img.sprite = sp;
         }
     }
 

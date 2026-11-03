@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// 头像选择弹窗（2026-10-25 主人需求）。
 /// 预制体：Resources/Prefabs/Town/头像选择框（主人手摆；meta 是 56 字符 guid，只走路径加载）。
 /// 结构：根（带 Canvas，prefab scale=0 需运行时扶正）→ Dim（全屏黑底+按钮=点空白关）
-///       + panl（Tile 标题 / 头像1-5、7、8 七格（6 号位主人没摆）/ 确定钮（scale 0.4））。
+///       + panl（Tile 标题 / 头像1-5、7、8 预制体七格（6 号位主人没摆）+ 缺节点槽位运行时克隆（9 号 H014）/ 确定钮（scale 0.4））。
 /// 行为：点头像选中（金框高亮；未解锁置灰不可选）→ 点确定换头像并存档 → 主界面名牌 Icon 同步刷新。
 /// 排版：预制体里 7 格全叠在同一个位置（主人原样），本类 Build 时按下述网格铺开；
 ///       只动 anchoredPosition / localScale，不改 sizeDelta。要调间距/缩放只改本文件常量。
@@ -103,11 +103,27 @@ public class AvatarSelectPopup : MonoBehaviour
         // 两行均分（上行 ceil(n/2)、下行其余），按槽位顺序居中铺开——
         // 以后主人增删头像节点，网格自动跟随不用改代码（7 格时 = 行1 四列 + 行2 三列，与原版一致）。
         var layoutSlots = new List<int>();
+        // 【2026-11-03 主人拍板加 H014 槽位9】预制体只摆到 头像8（6 号位设计缺口）；
+        // 有图但缺节点的槽位运行时克隆上一格补节点（UI 运行时补节点，不改预制体），
+        // 两行均分网格自适应跟随（9 格 = 上 5 下 4），排版常量不用动。
+        Transform tailCell = null;
         for (int slot = AvatarDefs.MinSlot; slot <= AvatarDefs.MaxSlot; slot++)
         {
-            if (FindDeep(panl, "头像" + slot) != null) layoutSlots.Add(slot);
-            else if (AvatarDefs.HasSprite(slot))
-                Debug.LogError(LogTag + "预制体缺节点 头像" + slot + "，该头像不显示（不兜底）");
+            var node = FindDeep(panl, "头像" + slot);
+            if (node == null)
+            {
+                if (!AvatarDefs.HasSprite(slot)) continue;   // 无图无节点（6 号位设计缺口），跳过
+                if (tailCell == null)
+                {
+                    Debug.LogError(LogTag + "槽位 " + slot + " 有图但预制体一个头像节点都没有，克隆不了（不兜底）");
+                    continue;
+                }
+                var clone = Instantiate(tailCell, panl, false);
+                clone.name = "头像" + slot;
+                node = clone;
+            }
+            tailCell = node;
+            layoutSlots.Add(slot);
         }
         int row1Count = (layoutSlots.Count + 1) / 2;
 

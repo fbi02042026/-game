@@ -2,7 +2,8 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 体力恢复：不满时按秒回复，主界面显示回满倒计时。
+/// 体力恢复：不满时按秒回复（600 秒/点），主界面显示回满倒计时；
+/// 每天 0 点（本地日，DayKeyUtil.TodayKey 口径）跨天补满到上限【2026-11-03 主人拍板「0 点补满、秒回按原来的时间」】，见 Tick()。
 /// </summary>
 public static class StaminaSystem
 {
@@ -99,6 +100,19 @@ public static class StaminaSystem
 
         if (data.lastStaminaUtc <= 0)
             data.lastStaminaUtc = Now();
+
+        // 【2026-11-03 主人拍板「体力每天 0 点补满，秒回保持 600 不变」】跨天补满结算：
+        // 日键 ≠ 本地今日（DayKeyUtil.TodayKey 口径）→ 补满到上限（不足则补、已满/超满不动）+ 重置恢复时钟 + 强制存一次盘。
+        // 写键后当日短路，后续高频 Tick（Current/IsFull/SecondsTo* 全走这里）不再重复落盘；禁止另写轮询/协程。
+        // 补满用 Max(当前, 上限)，不压回超上限部分；结算必须放在按秒恢复之前——跨天瞬间读 Current 就应是满管。
+        if (data.staminaDayKey != DayKeyUtil.TodayKey())
+        {
+            data.stamina = Mathf.Max(data.stamina, Max);
+            data.staminaDayKey = DayKeyUtil.TodayKey();
+            data.lastStaminaUtc = Now();
+            sys.Save();
+            return;   // 补满即满管（时钟已重置），与下方满管分支同口径，直接返回
+        }
 
         if (data.stamina >= Max)
         {

@@ -233,7 +233,7 @@ public class SaveSystem : Singleton<SaveSystem>
         // 但 clearedStage 已经有值 —— 不抬上来，老玩家重打旧层会被判成"生涯首通"发全额奖励（等于白送一轮）。
         if (data.endlessRiftBestStage < data.endlessRiftClearedStage)
             data.endlessRiftBestStage = data.endlessRiftClearedStage;
-        ArenaRules.EnsurePeriods(data);     // 竞技场：跨天清次数+机器人漂移，跨月赛季结算发奖（2026-10-29）
+        ArenaRules.EnsurePeriods(data);     // 竞技场：跨天清次数+机器人漂移，跨周赛季结算发奖（2026-11-03 测试用：赛季改一周一结）
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
     }

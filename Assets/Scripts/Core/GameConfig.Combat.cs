@@ -662,18 +662,17 @@ public static partial class GameConfig
         return ChapterStatScaleTable.Get(gameChapter);
     }
 
-    /// <summary>5 小关 → 10 档的等距映射（单一出口，别处不许再写第二份映射）。</summary>
+    /// <summary>5 小关 → 10 档的等距映射（旧写死版，仅剩无章上下文的存量调用在用）。
+    /// 【2026-11-03 方案A】有章上下文的调用一律走 <see cref="GetStageStatScale(int,int)"/> 按节数摊档
+    /// —— B3 改节数 5/8/10 后旧表只盖 5 节，第 2 章小关 6-8、第 3 章起小关 6-10 全吃尾档 1.50 无缓坡。</summary>
     static readonly int[] StageSubToRampRow = { 0, 2, 4, 7, 9 };
 
     /// <summary>
     /// 按「章内第几关」取章内爬坡倍率（读 stage_stat_scale；缺表回退 Fallback）。
     /// 2026-10-05 新增：主人要求「每章里面的关卡也是如此」递增。
-    /// <para>【2026-10-24 主人拍板「后期爬坡按报告方案」】B1 重构后<b>一章 = 一座大关 = 5 小关</b>
-    /// （ChapterManager 批 B1），调用方传来的域只有 0~4 —— 直查 10 档表只吃到 1.00~1.18，
-    /// 表里第 9/10 关两个卡点台阶（1.41/1.50）永不触发、Boss 关只有 1.18。这里把 5 小关
-    /// 等距摊到 10 档：小关 1/2/3/4/5(Boss) → 档 0/2/4/7/9 = 1.00/1.06/1.11/1.33/1.50，
-    /// 恢复「章内 1.00→1.50、Boss 前两个台阶」的原始设计（含 10-09 拍板的阶梯式卡点）。
-    /// ⚠ 超出 0~4 的序号（B2 多座大关/篇落地前的历史调用）按尾档 1.50 结算。</para>
+    /// <para>【2026-10-24 主人拍板「后期爬坡按报告方案」】把 5 小关等距摊到 10 档。
+    /// ⚠ 超出 0~4 的序号按尾档 1.50 结算 —— B3 后 8/10 节章的 6+ 节都会命中此分支，
+    /// 有章上下文的调用请改走 <see cref="GetStageStatScale(int,int)"/>。</para>
     /// </summary>
     /// <param name="stageIndex0Based">章内第几小关（0 起，0~4）。</param>
     public static float GetStageStatScale(int stageIndex0Based)
@@ -682,6 +681,24 @@ public static partial class GameConfig
         if (stageIndex0Based < StageSubToRampRow.Length)
             return StageStatScaleTable.Get0Based(StageSubToRampRow[stageIndex0Based]);
         return StageStatScaleTable.Get0Based(StageSubToRampRow.Length - 1);
+    }
+
+    /// <summary>
+    /// 按「章内第几节（0 起）+ 本章节数」取章内爬坡倍率（【2026-11-03 方案A】B3 遗留修复）。
+    /// 节数 5/8/10 都摊满 10 档：首节恒行0（1.00）、末节 Boss 恒行9（1.50 卡点3），
+    /// 中间节等距取样（Mathf.RoundToInt 半偶舍入，subs=5 时结果与旧 {0,2,4,7,9} 完全一致，第 1 章零变化）。
+    /// </summary>
+    public static float GetStageStatScale(int stageIndex0Based, int subsPerGrand)
+    {
+        if (stageIndex0Based < 0) stageIndex0Based = 0;
+        if (subsPerGrand < 1) subsPerGrand = 1;
+        if (stageIndex0Based >= subsPerGrand) stageIndex0Based = subsPerGrand - 1;
+        // ⚠ 尾行号必须取 stage_stat_scale 表的行数（10 档，行9 = 1.50）——
+        // 不能拿 StageSubToRampRow.Length（那是 5 元素旧映射）当行数，否则全部钳到 1.18。
+        int lastRow = StageStatScaleTable.Fallback.Length - 1;
+        int row = Mathf.RoundToInt((float)stageIndex0Based * lastRow / (subsPerGrand - 1));
+        row = Mathf.Clamp(row, 0, lastRow);
+        return StageStatScaleTable.Get0Based(row);
     }
 
     /// <summary>
@@ -715,15 +732,35 @@ public static partial class GameConfig
         return Mathf.Min(GRAND_STAT_MAX, 1f + GRAND_STAT_STEP * (grandIndex1Based - 1));
     }
 
+    // ===== 【2026-11-03 主人拍板「每章最少 2 关卡玩家」】章级卡点关 =====
     /// <summary>
-    /// <b>怪物属性总倍率的唯一出口（带大关）</b> = 章倍率 × 大关爬坡 × 大关内小关倍率。
+    /// 卡点关额外倍率：每章两关 —— <b>半程大关（第 5 座）末节 Boss</b> 与
+    /// <b>章末大关（第 10 座）末节 Boss</b>，在正常爬坡之上再 +10%，做成「要多试几次」的明显墙。
+    /// 只加成末节 Boss 本身（该大关其余节照常爬坡）；非主线（大关号=1，副本/裂隙/竞技场）不触发。
+    /// 想调手感只改 GRAND_WALL_STEP；设 0 = 关闭章级卡点，回到纯线性爬坡。
+    /// </summary>
+    public const float GRAND_WALL_STEP = 0.10f;
+
+    public static float GetGrandWallBonus(int gameChapter, int grandIndex1Based, int stageIndex0Based)
+    {
+        if (grandIndex1Based != 5 && grandIndex1Based != ActProgressionDefs.GRANDS_PER_ACT) return 1f;
+        if (stageIndex0Based != ActProgressionDefs.SubsPerGrandOf(gameChapter) - 1) return 1f;
+        return 1f + GRAND_WALL_STEP;
+    }
+
+    /// <summary>
+    /// <b>怪物属性总倍率的唯一出口（带大关）</b> = 章倍率 × 大关爬坡 × 章内节台阶 × 章级卡点关。
     /// B2 落地后主线正式关一律走这个重载；副本/裂隙/支线岛传 grand=1（零影响）。
+    /// 【2026-11-03 方案A】章内节台阶改按本章节数摊满 10 档（8/10 节章第 6 节起不再吃尾档）；
+    /// 【2026-11-03 主人拍板】叠加每章 2 个卡点关（半程 Boss + 章末 Boss，各 +10%）。
     /// </summary>
     public static float GetStatScale(int gameChapter, int grandIndex1Based, int stageIndex0Based)
     {
+        int subs = ActProgressionDefs.SubsPerGrandOf(gameChapter);
         return GetChapterStatScale(gameChapter)
              * GetGrandStatScale(grandIndex1Based)
-             * GetStageStatScale(stageIndex0Based);
+             * GetStageStatScale(stageIndex0Based, subs)
+             * GetGrandWallBonus(gameChapter, grandIndex1Based, stageIndex0Based);
     }
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>

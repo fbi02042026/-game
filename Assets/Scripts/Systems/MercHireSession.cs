@@ -244,8 +244,24 @@ public static class MercHireSession
         string today = DateTime.Now.ToString("yyyyMMdd");
         if (data.mercOfferDayKey == today) return;
         data.mercOfferDayKey = today;
-        data.mercOfferRefreshUtc = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        // 【2026-11-03 修复玩家反馈「3 小时自动刷新没刷，只能钻石刷」】
+        // 日切不再重置 mercOfferRefreshUtc：该字段只记「真实刷新」（手动免费 / 钻石），
+        // 0 点自动重掷不算刷新。旧行为 = 每天首开酒馆必锁 3 小时免费冷却，
+        // 每日只开一次酒馆且会话短于 3 小时的玩家永远见不到免费刷新。
         data.mercOfferDirty = true;
+    }
+
+    /// <summary>
+    /// 0 点自动重掷后的落账（2026-11-03）：只清 dirty 并落盘，【不动】手动刷新冷却
+    /// （mercOfferRefreshUtc 保持上次真实刷新时刻，到点免费刷新照常出现）。
+    /// 手动免费刷新 / 钻石刷新仍走 <see cref="MarkRefreshed"/>（那才要重置 3 小时冷却）。
+    /// </summary>
+    public static void MarkDayRerolled()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        data.mercOfferDirty = false;
+        SaveSystem.Instance.Save();
     }
 
     public static bool CanManualRefresh(out int remainSec)

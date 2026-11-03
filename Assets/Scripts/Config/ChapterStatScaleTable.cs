@@ -12,10 +12,11 @@ using UnityEngine;
 /// </summary>
 public static class ChapterStatScaleTable
 {
-    /// <summary>与表 1:1：森林0.88 / 墓园1.10 / 雨林1.55(支线) / 草原1.72(支线) / 海岛1.24 / 洞穴1.50 / 熔岩1.72 / 冰川2.12</summary>
+    /// <summary>与表 1:1：森林0.88 / 墓园1.10 / 雨林1.55(支线) / 草原1.72(支线) / 海岛1.24 / 洞穴1.50 / 熔岩1.86 / 冰川2.55
+    /// （【2026-11-03 主人拍板「第七第八也要加难度」】熔岩/冰川上调，主线最陡两级）</summary>
     public static readonly float[] Fallback =
     {
-        0.88f, 1.10f, 1.55f, 1.72f, 1.24f, 1.50f, 1.72f, 2.12f
+        0.88f, 1.10f, 1.55f, 1.72f, 1.24f, 1.50f, 1.86f, 2.55f
     };
 
     static readonly Dictionary<int, float> _byChapter = new Dictionary<int, float>();

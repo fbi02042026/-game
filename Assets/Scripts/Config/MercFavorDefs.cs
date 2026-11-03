@@ -198,11 +198,11 @@ public static class MercFavorDefs
     public static string QualityName(GiftQuality q)
         => q == GiftQuality.Legendary ? "传奇" : q == GiftQuality.Rare ? "稀有" : "普通";
 
-    /// <summary>品质配色（16 进制 RGB，送礼界面标签着色用，单一出口；不在此抄第二份）。</summary>
+    /// <summary>品质配色（16 进制 RGB，送礼界面标签着色用；色值唯一来源 = RarityPalette，2026-11-03 主人拍板全项目统一，本方法只做转发、不抄色值）。</summary>
     public static string QualityColorHex(GiftQuality q)
-        => q == GiftQuality.Legendary ? "FFB547"   // 金橙
-         : q == GiftQuality.Rare ? "6FA8FF"        // 蓝
-         : "C8C8C8";                               // 灰
+        => q == GiftQuality.Legendary ? UnityEngine.ColorUtility.ToHtmlStringRGB(RarityPalette.Legendary)   // 橙金 #FFB833
+         : q == GiftQuality.Rare ? UnityEngine.ColorUtility.ToHtmlStringRGB(RarityPalette.Rare)        // 蓝 #59ADFA
+         : UnityEngine.ColorUtility.ToHtmlStringRGB(RarityPalette.Common);   // 灰白 #CCD1DB
 
     // —— 羁绊地图 ——
 

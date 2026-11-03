@@ -115,14 +115,22 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
                 break;
             case AttackVfxKit.Orb:
                 {
-                    // 2026-10-24 主人拍板：敌人远程魔法（法球）飞行体按档位 fly1/2（普通怪=1，精英/Boss=2）；Ally 未换素材固定 Base
-                    int flyVariant = (faction == VfxFaction.Enemy && attacker != null)
+                    // 2026-10-24 主人拍板：敌人远程魔法（法球）飞行体按档位 fly1/2（普通怪=1，精英/Boss=2）
+                    // 2026-11-03 主人拍板：我方法球按佣兵换专属弹/命中（H014 伊芙=orb1、H013 莫娜=orb2，其余走旧名 Base）
+                    bool enemyFaction = faction == VfxFaction.Enemy;
+                    int flyVariant = (enemyFaction && attacker != null)
                         ? WeaponVfxVariant.Resolve(attacker) : WeaponVfxVariant.Base;
-                    GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
-                    GameObject hit = LoadSharedKit(kit, faction, "hit");
+                    int allyOrbFileNo = (!enemyFaction && attacker != null)
+                        ? WeaponVfxVariant.ResolveAllyOrb(attacker) : 0;
+                    GameObject fly = enemyFaction
+                        ? LoadSharedKit(kit, faction, "fly", flyVariant)
+                        : LoadAllyOrbKit("fly", allyOrbFileNo);
+                    GameObject hit = enemyFaction
+                        ? LoadSharedKit(kit, faction, "hit")
+                        : LoadAllyOrbKit("hit", allyOrbFileNo);
                     if (fly == null)
                     {
-                        if (flyVariant > WeaponVfxVariant.Base)
+                        if (enemyFaction && flyVariant > WeaponVfxVariant.Base)
                         {
                             Debug.LogError($"[BattleVFXSystem] 缺少敌人远程飞行体: Resources/VFX/Shared/Enemy/Orb/vfx_enemy_orb_fly{flyVariant}");
                             return;
@@ -433,7 +441,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// 远程怪放技能必须走这里，否则伤害瞬发、玩家看不到子弹。
     /// 飞行体缺失时不能把伤害吞掉，直接立刻回调。
     /// <para>【2026-10-24 主人拍板】Enemy 阵营且传了 caster：飞行体按档位 fly1/2（精英/Boss=fly2）；
-    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 恒 Base。</para>
+    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 弓恒 Base。
+    /// 【2026-11-03 主人拍板】Ally 法球且传了 caster：按佣兵换专属弹/命中
+    /// （H014 伊芙=orb1、H013 莫娜=orb2，其余走旧名 Base），出口 WeaponVfxVariant.ResolveAllyOrb。</para>
     /// </summary>
     public void PlaySkillProjectile(VfxFaction faction, Vector3 fromPos, Vector3 toPos,
         int facingDir, Transform target, AttackVfxKit kit = AttackVfxKit.Orb,
@@ -443,11 +453,18 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
 
-        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径），Ally 固定 Base
+        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径）
+        // 2026-11-03 主人拍板：我方法球按佣兵分专属弹/命中（H014=orb1、H013=orb2，其余走旧名 Base）
+        bool allyOrb = faction == VfxFaction.Ally && kit == AttackVfxKit.Orb;
+        int allyOrbFileNo = (allyOrb && caster != null) ? WeaponVfxVariant.ResolveAllyOrb(caster) : 0;
         int flyVariant = (faction == VfxFaction.Enemy && caster != null)
             ? WeaponVfxVariant.Resolve(caster) : WeaponVfxVariant.Base;
-        GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
-        GameObject impact = impactOverride != null ? impactOverride : LoadSharedKit(kit, faction, "hit");
+        GameObject fly = allyOrb
+            ? LoadAllyOrbKit("fly", allyOrbFileNo)
+            : LoadSharedKit(kit, faction, "fly", flyVariant);
+        GameObject impact = impactOverride != null
+            ? impactOverride
+            : allyOrb ? LoadAllyOrbKit("hit", allyOrbFileNo) : LoadSharedKit(kit, faction, "hit");
 
         if (fly == null)
         {
@@ -470,7 +487,9 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     /// 目标中途死亡则飞向其最后已知位置落地消散（onImpact 内部自行判目标存亡）。
     /// 【2026-10-20 主人拍板】远程精英/Boss「追踪弹幕」专用飞行链路。
     /// 【2026-10-24 主人拍板】Enemy 阵营且传了 caster：飞行体按档位 fly1/2（精英/Boss=fly2）；
-    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 恒 Base。
+    /// 高档缺失 LogError 且伤害照常结算（不闪回 fly1）；Ally 弓恒 Base。
+    /// 【2026-11-03 主人拍板】Ally 法球且传了 caster：按佣兵换专属弹/命中
+    /// （H014 伊芙=orb1、H013 莫娜=orb2，其余走旧名 Base），出口 WeaponVfxVariant.ResolveAllyOrb。
     /// </summary>
     public void PlayHomingProjectile(VfxFaction faction, Vector3 fromPos, UnitBase target, AttackVfxKit kit,
         float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null, UnitBase caster = null)
@@ -478,11 +497,18 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
 
-        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径），Ally 固定 Base
+        // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径）
+        // 2026-11-03 主人拍板：我方法球按佣兵分专属弹/命中（H014=orb1、H013=orb2，其余走旧名 Base）
+        bool allyOrb = faction == VfxFaction.Ally && kit == AttackVfxKit.Orb;
+        int allyOrbFileNo = (allyOrb && caster != null) ? WeaponVfxVariant.ResolveAllyOrb(caster) : 0;
         int flyVariant = (faction == VfxFaction.Enemy && caster != null)
             ? WeaponVfxVariant.Resolve(caster) : WeaponVfxVariant.Base;
-        GameObject fly = LoadSharedKit(kit, faction, "fly", flyVariant);
-        GameObject impact = LoadSharedKit(kit, faction, "hit");
+        GameObject fly = allyOrb
+            ? LoadAllyOrbKit("fly", allyOrbFileNo)
+            : LoadSharedKit(kit, faction, "fly", flyVariant);
+        GameObject impact = allyOrb
+            ? LoadAllyOrbKit("hit", allyOrbFileNo)
+            : LoadSharedKit(kit, faction, "hit");
         if (fly == null)
         {
             if (flyVariant > WeaponVfxVariant.Base)
@@ -1118,6 +1144,33 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         // 敌方缺失：不再静默回退我方；新名与旧名都失败时只打一条警告
         Debug.LogWarning($"[BattleVFXSystem] 共用套加载失败: Resources/VFX/Shared/{factionFolder}/{kitFolder}/ 试过 [{string.Join(", ", fileNames)}]（using defaults / 跳过该特效）");
         return null;
+    }
+
+    /// <summary>
+    /// 我方法球专属套加载（2026-11-03 主人拍板，文件编号唯一出口 WeaponVfxVariant.ResolveAllyOrb）：
+    /// fileNo 0=旧名 Base（vfx_ally_orb_fly / vfx_ally_orb_hit，未点名佣兵与主角）；
+    /// 1=H014 伊芙（vfx_ally_orb_fly1 / vfx_ally_orb_hit1）；
+    /// 2=H013 莫娜（vfx_ally_orb_fly2 / vfx_ally_orb_hit2）。
+    /// 专属文件缺失 LogError 不闪回旧名（铁律 15：不兜底，出错要能看见）。
+    /// </summary>
+    public GameObject LoadAllyOrbKit(string stage, int fileNo)
+    {
+        if (fileNo <= 0)
+            return LoadSharedKit(AttackVfxKit.Orb, VfxFaction.Ally, stage);
+
+        string cacheKey = $"Ally/Orb/{stage}/m{fileNo}";
+        if (_sharedKitCache.TryGetValue(cacheKey, out GameObject cached) && cached != null)
+            return cached;
+
+        string path = $"VFX/Shared/Ally/Orb/vfx_ally_orb_{stage}{fileNo}";
+        GameObject prefab = Resources.Load<GameObject>(path);
+        if (prefab == null)
+        {
+            Debug.LogError($"[BattleVFXSystem] 缺我方法球专属特效: {path}");
+            return null;
+        }
+        _sharedKitCache[cacheKey] = prefab;
+        return prefab;
     }
 
     static string GetKitFolderName(AttackVfxKit kit)
