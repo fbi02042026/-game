@@ -46,6 +46,7 @@ public static class AdMercEventEntryUI
             var legacyFolded = parent.Find(LegacyCloneName);
             if (legacyFolded != null) legacyFolded.gameObject.SetActive(false);
             FoldUpBelowButtons(parent, dailyLoginButton.transform as RectTransform, handFolded);
+            GuildHallUI.Instance?.FitRightBarBgToButtons();   // 【2026-11-03 主人】折叠后黑底跟着缩短
             return;
         }
 
@@ -56,6 +57,7 @@ public static class AdMercEventEntryUI
             hand.gameObject.SetActive(true);
             Wire(hand.GetComponent<Button>());
             RedDot.Bind(hand, RedDot.AdMercEvent, new Vector2(-8f, -8f), 26f);
+            GuildHallUI.Instance?.FitRightBarBgToButtons();   // 【2026-11-03 主人】按钮在列黑底按按钮拉长
             return;
         }
 

@@ -166,7 +166,11 @@ public class SpeechBubbleTalker : MonoBehaviour
         BuildLinePool();
         if (bubbleRoot != null) bubbleRoot.SetActive(false);
         if (receptionistButton != null)
+        {
             receptionistButton.onClick.AddListener(OnReceptionistClicked);
+            // 【2026-11-03 主人拍板「点击的时候不要一闪一闪的」】前台小姐点击无按压反馈
+            UiButtonPressFeedback.Suppress(receptionistButton.gameObject);
+        }
         EnsureBoardPokeButton();
     }
 
@@ -200,6 +204,9 @@ public class SpeechBubbleTalker : MonoBehaviour
         }
         btn.onClick.RemoveListener(OnReceptionistClicked);
         btn.onClick.AddListener(OnReceptionistClicked);
+        // 【2026-11-03 主人拍板「点击的时候不要一闪一闪的」】看板立绘点击无按压反馈
+        // （表情只按戳一戳计数换：次数够了换害羞/生气，点击过程画面保持原样）
+        UiButtonPressFeedback.Suppress(img.gameObject);
     }
 
     void OnEnable()
@@ -318,6 +325,10 @@ public class SpeechBubbleTalker : MonoBehaviour
     /// <summary>咨询台：优先说「今日可做 / 功能介绍」；【2026-10-18 彩蛋批次】加情境分支与稀有台词。</summary>
     void OnReceptionistClicked()
     {
+        // 【2026-11-03 主人报「点击弹窗直接点到了后面的前台小姐」】头像选择弹窗开着时，
+        // 看板点击一律忽略（弹窗 Dim 在 UGUI 层已挡射线，这里再掐一道逻辑，双保险防穿透）。
+        if (AvatarSelectPopup.Instance != null) return;
+
         // 【2026-10-26 主人拍板】看板被换成玩家/佣兵后，点 TA 会说话（专属台词优先）——
         // 「特定的话只有换了才知道」的发现入口。原 2026-10-20「佣兵态无响应」口径由本条替代。
         // 此分支同时覆盖热点按钮与看板立绘本体（EnsureBoardPokeButton）两条入口。

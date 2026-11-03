@@ -255,7 +255,8 @@ public static class ArenaRules
                 gold = rw.gold,
                 diamond = rw.diamond,
             };
-            // 【2026-10-29 晚主人拍板】冠军限定武器：第 1 名随邮件发当月轮换传奇武器（仅竞技场可获得）；
+            // 【2026-10-29 晚主人拍板】冠军限定武器：第 1 名随邮件发当周轮换传奇武器（仅竞技场可获得）；
+            // 【2026-11-03 赛季改自然周】武器同步改按周轮换（同一周恒定同一把，周一 0 点切换）。
             // equip 附件领取时进随身仓库，出战时若职业匹配自动替换初始主手（ArenaSeasonWeapons 口径）。
             if (finalRank <= 1)
             {
@@ -263,7 +264,7 @@ public static class ArenaRules
                 string wname = ArenaSeasonWeapons.WeaponName(weaponId);
                 mail.title = $"竞技场·{lastWeek}冠军是你？！";
                 mail.body = $"上周最终排名：第 {finalRank} 名！我勒个豆，冠军真给你拿下了？\n\n" +
-                            $"限定传奇武器「{wname}」已随信附上（赛季冠军限定，每月换一把），出战对应职业会自动替换初始武器。新一周继续守擂！";
+                            $"限定传奇武器「{wname}」已随信附上（赛季冠军限定，每周换一把），出战对应职业会自动替换初始武器。新一周继续守擂！";
                 mail.attachments = new List<MailAttachment>
                 {
                     new MailAttachment

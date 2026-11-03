@@ -352,9 +352,12 @@ public class SaveData
     /// <summary>玩家冒险者显示名（引导签名后设定）</summary>
     public string playerDisplayName = "";
     public bool playerNameChosen;
-    /// <summary>玩家选择的头像槽位（1=默认玩家头像，2..8=佣兵头像；6 号位无图）。
-    /// 真源唯一出口 = <see cref="AvatarDefs.CurrentSlot"/>，解锁规则见 <see cref="AvatarDefs"/>。</summary>
+    /// <summary>玩家选择的头像号（2026-11-03 佣兵头像模式：1=玩家(player)，2~25=佣兵头像 H001~H024，
+    /// 真源唯一出口 = <see cref="AvatarDefs.CurrentSlot"/>，默认玩家、随意切换不按佣兵解锁）。</summary>
     public int playerAvatar = 1;
+    /// <summary>【2026-11-03 旧档迁移标记】false = playerAvatar 还是旧槽位语义（1~9，1=玩家图 2=H004…），
+    /// AvatarDefs.CurrentSlot 读取时按 LegacySlotToAvatar 一次性换算并置 true。</summary>
+    public bool avatarMercModeV2 = false;
 
     // === 玩家永久等级账本（2026-10-25 矫正：等级跨关卡/跨章累计，真源在存档）===
     // 【矫正原因】账本原挂 RunLoadout（局内），但 10-24 拍板「只要打完就清」后每关都是新局，
@@ -1240,11 +1243,12 @@ public class SaveData
     /// 【2026-10-31 B2 落地】老档大关进度迁移（幂等）。
     /// 🔴【2026-11-03 修「3-4 打完进 3-5 变 1-1」】大关进度一律以 clearedStages 覆盖推导值
     /// <see cref="DerivedGrandProgressFromClearedStages"/> 直接落值（双向纠偏）：
-    /// · 坏档（打过任意大关 Boss 被 count&gt;0 兜底误标整章通关，grandProgress 被顶成 10）→ 压回真实值，
-    ///   玩家下次冷启动从真实进度续打（3-4 打完 → 从 3-5 续），不再永远回 1-1；
+    /// · 坏档（打过任意大关 Boss 被 count&gt;0 兜底误标整章通关，grandProgress 被顶成 10）→ 本次不再自动压回，
+    ///   只打 Warning 保留原值交人工核对（2026-11-03 主人拍板「不要静默回滚」）；
     /// · 旧 10 关制老档（没有 grandProgress 字段，key 0~9）→ 抬到推导值 2（主人 2026-11-03 拍板
     ///   「老档按前两座大关已通、从 3-1 续打」，不再整章重打）；
     /// · 合法新档推导值恒等于现值（线性解锁：打过大关 Boss = 该大关小关全通），幂等零影响。
+    /// 【2026-11-03 补】推导值 < 存档值时不再覆盖，只打 Warning 保留旧值——防分叉/跳关的洞把玩家进度回滚。
     /// 注意：clearedChapterIds / clearedChapterEntries（章节解锁判据，ChapterRouteTable.CanEnter 用）
     /// 这里一个字不动——老档 10 关制的「已通关章」覆盖不全但解锁必须保留。
     /// </summary>
@@ -1255,7 +1259,20 @@ public class SaveData
         {
             int i = ch - 1;
             if (i < grandProgress.Count)
-                grandProgress[i] = DerivedGrandProgressFromClearedStages(ch);
+            {
+                int derived = DerivedGrandProgressFromClearedStages(ch);
+                int old = grandProgress[i];
+                // 【2026-11-03 主人拍板】推导值小于存档值 → 保留旧值并告警，绝不静默回滚玩家进度。
+                // 触发场景：分叉章/跳关在 clearedStages 留下空洞，或坏档；交人工核对，不自动压缩。
+                if (derived < old)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        "[SaveData] 大关进度异常：第 " + ch + " 篇由 clearedStages 推导得 " + derived
+                        + "，小于存档值 " + old + "，已保留存档值（不自动回滚）。请人工核对 clearedStages。");
+                    continue;
+                }
+                grandProgress[i] = derived;
+            }
         }
     }
 

@@ -19,6 +19,13 @@ public static class DiamondAdEntryUI
     /// <summary>运行时生成的入口节点名（RightBar 下，与每日登录同父）。</summary>
     public const string NodeName = "DiamondAdButton";
 
+    /// <summary>
+    /// 【2026-11-03 主人拍板「把领钻那个先隐藏 现在不能看广告」】入口总开关。
+    /// false = 不生成新入口、已生成的也藏起来；发奖逻辑（ResourceAdRewards.TryClaimDiamond）与广告接入
+    /// 全部保留不动 —— 与 MiniGameEntryUI.EntryEnabled 同口径，置回 true 即恢复显示。
+    /// </summary>
+    public const bool EntryEnabled = false;
+
     /// <summary>列内标准格距（与 ArenaEntryUI / MiniGameEntryUI 同档）。</summary>
     const float OffsetY = -140f;
 
@@ -40,6 +47,18 @@ public static class DiamondAdEntryUI
         if (parent == null)
         {
             Debug.LogError("[DiamondAdEntry] 每日登录按钮没有父节点，领钻入口未生成");
+            return;
+        }
+
+        // 开关关掉：不光拦新建，已经生成过的那颗也要收起来（否则主界面上还杵着），黑底跟着缩回去
+        if (!EntryEnabled)
+        {
+            var built = parent.Find(NodeName);
+            if (built != null)
+            {
+                built.gameObject.SetActive(false);
+                GuildHallUI.Instance?.FitRightBarBgToButtons();
+            }
             return;
         }
 
@@ -99,7 +118,38 @@ public static class DiamondAdEntryUI
         rt.anchorMax = src.anchorMax;
         rt.pivot = src.pivot;
         rt.sizeDelta = src.sizeDelta;
-        rt.anchoredPosition = new Vector2(src.anchoredPosition.x, lowestY + OffsetY);
+
+        // 【2026-11-03 主人「看广告给钻石和竞技场图标重叠了」】上面只认「带 Button」的节点，
+        // 主人手摆的竞技场入口「对战」的 Button 是 ArenaEntryUI 运行时才补的 —— 补晚了就被漏统计，
+        // 领钻按钮正好算到它头上（y 只差 5，两颗 72×72 直接叠）。这里再补一道通用防重叠：
+        // 候选位置只要压到列里任何可见入口，就整体往下让一格。
+        float x = src.anchoredPosition.x;
+        float y = lowestY + OffsetY;
+        int guard = 0;
+        while (OverlapsAny(parent, rt, x, y) && guard++ < 8) y += OffsetY;
+        rt.anchoredPosition = new Vector2(x, y);
+    }
+
+    /// <summary>候选位置是否压到列内其它可见入口（按矩形相交算，不认名字/组件 —— 谁漏统计都躲得开）。</summary>
+    static bool OverlapsAny(Transform parent, RectTransform self, float x, float y)
+    {
+        float sw = self.sizeDelta.x * self.localScale.x;
+        float sh = self.sizeDelta.y * self.localScale.y;
+        for (int i = 0; i < parent.childCount; i++)
+        {
+            var child = parent.GetChild(i);
+            if (child == self.transform || !child.gameObject.activeSelf) continue;
+            if (child.name == "bg") continue;                  // 黑底条不是入口
+            var crt = child as RectTransform;
+            if (crt == null) continue;
+            float cw = crt.sizeDelta.x * crt.localScale.x;
+            float ch = crt.sizeDelta.y * crt.localScale.y;
+            if (cw < 8f || ch < 8f) continue;                  // 装饰细条跳过
+            if (Mathf.Abs(crt.anchoredPosition.x - x) < (cw + sw) * 0.5f &&
+                Mathf.Abs(crt.anchoredPosition.y - y) < (ch + sh) * 0.5f)
+                return true;
+        }
+        return false;
     }
 
     /// <summary>换图标（取不到 LogError 不静默，铁律 14）。</summary>

@@ -561,6 +561,17 @@ public class ArenaPopupUI : MonoBehaviour
         return sp;
     }
 
+    /// <summary>玩家当前头像（跟随头像选择框）；缺图 LogError 不兜底（2026-11-03 主人要求「缺图不要静默空白」）。
+    /// where = 出错位置标签，三处复用同一张头像时便于定位。</summary>
+    static Sprite PlayerHeadSprite(string where)
+    {
+        string hireId = AvatarDefs.HireIdOf(AvatarDefs.CurrentSlot());
+        var sp = MercPortraitSprites.GetHead(hireId);
+        if (sp == null)
+            Debug.LogError($"[Arena] 玩家头像加载失败：{hireId}（{where}，检查 Resources/UI/Icons/MercHead/{hireId}.png 与 .meta；头像留空不兜底）");
+        return sp;
+    }
+
     /// <summary>图标精灵（Sprite 导入类型直取）。缺图 LogError 不兜底。</summary>
     static Sprite LoadIcon(string file)
     {
@@ -739,11 +750,7 @@ public class ArenaPopupUI : MonoBehaviour
         if (_myName != null) _myName.text = myName;
         if (_myPtsText != null) _myPtsText.text = data.arenaPoints.ToString();   // 显示赛季积分（原误填战力估计，2026-10-30 主人拍板）
         if (_myHead != null)
-        {
-            var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
-            _myHead.sprite = sp;
-            if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
-        }
+            _myHead.sprite = PlayerHeadSprite("弹窗我的头像");   // 跟随玩家当前头像（2026-11-03 主人拍板「竞技场不替换节点，头像根据玩家换的头像来换」）
 
         // 前三领奖台：排名 r 的实体 =（r-1 == pos ? 玩家 : 机器人[r-1]）；2026-10-30 修复：旧判断 idx<pos 把玩家刷满前三
         var cardColors = new[] { Color.white, Color.white, Color.white };   // 卡图自带金银铜（2026-10-29 换图后不再 tint）
@@ -763,11 +770,7 @@ public class ArenaPopupUI : MonoBehaviour
                 if (_podName[i] != null) _podName[i].text = myName;
                 if (_podPts[i] != null) _podPts[i].text = data.arenaPoints.ToString();
                 if (_podHead[i] != null)
-                {
-                    var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
-                    _podHead[i].sprite = sp;
-                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
-                }
+                    _podHead[i].sprite = PlayerHeadSprite("领奖台头像");   // 跟随玩家当前头像（2026-11-03 主人拍板「竞技场不替换节点，头像根据玩家换的头像来换」）
             }
             else if (bot != null)
             {
@@ -807,11 +810,7 @@ public class ArenaPopupUI : MonoBehaviour
                 if (_rowName[i] != null) _rowName[i].text = myName;
                 if (_rowPts[i] != null) _rowPts[i].text = data.arenaPoints.ToString();
                 if (_rowHead[i] != null)
-                {
-                    var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 2026-11-03 主人拍板：非战斗界面跟随头像选择框（战斗内仍固定玩家立绘）
-                    _rowHead[i].sprite = sp;
-                    if (sp == null) Debug.LogError("[Arena] 玩家头像加载失败：槽位 " + AvatarDefs.CurrentSlot());
-                }
+                    _rowHead[i].sprite = PlayerHeadSprite("对战行头像");   // 跟随玩家当前头像（2026-11-03 主人拍板「竞技场不替换节点，头像根据玩家换的头像来换」）
             }
             else
             {
@@ -1509,7 +1508,10 @@ public class ArenaPopupUI : MonoBehaviour
             return;
         }
 
-        var rowStrip = LoadArt("_0008_条2", 10f);   // 深蓝圆角条（对战美术包）；条1 是素材拼图大图不可用作行底
+        // 2026-11-03 主人拍板「记录界面条变形，用跟排行榜一样的条」：换 _0009_条1（排行榜行同款，切片照 meta
+        // 68/38/79/36，与 BuildRows 完全一致）。原 _0008_条2 用均匀 10f 建切片，与 meta 实际 28/10/32/12 不符，
+        // 左右两端圆角弧面被划进拉伸区 → 条一拉就变形（旧注「条1 是拼图大图不可用」已过时，BuildRows 已在用）。
+        var rowStrip = LoadArt("_0009_条1", new Vector4(68f, 38f, 79f, 36f));
         for (int i = 0; i < n; i++)
         {
             var rec = list[i];

@@ -26,11 +26,11 @@ public class GuildHallUI : MonoBehaviour
     public Text playerNameText;   // 玩家名牌/Name：玩家起的名字
     public Text playerLevelText;  // 玩家名牌/Level：玩家等级
     public Image playerAvatarIcon; // 玩家名牌/Icon：当前头像（点击打开头像选择框，确认后这里同步换图）
+    Transform _avatarRoot;         // 【2026-11-03 修】名牌「头像1」根节点（该节点没有 Image，只能存 Transform 去绑 mask/icon/kuang）
     // 【2026-10-28 更正】10-27 的需求是「角色页」头像去掉，本文件（主界面名牌）头像被那次提交误伤隐藏，当日恢复——主界面头像保留。
     // 【2026-10-25 主人反馈「左上角的头像有点小」】名牌 Icon 本体放大倍率：
     // 只乘在 Icon 的 localScale 上（预制体作者刻度 0.9 之上 ×1.3），名牌底板/文字一律不动；
     // 绑定时做一次，幂等；要再调大小只改这一个常量。
-    const float NameplateIconScale = 1.3f;
 
     [Header("左侧")]
     public Button mailButton;
@@ -332,17 +332,26 @@ public class GuildHallUI : MonoBehaviour
             playerNameText.text = StoryProgress.GetPlayerName();
         if (playerLevelText != null)
             playerLevelText.text = Mathf.Max(1, LevelSystem.CurrentLevel).ToString();
-        // 名牌头像：按存档槽位设图（真源 AvatarDefs；头像选择框确认后走 RefreshAllHud 到这里换图）
-        if (playerAvatarIcon != null)
-        {
-            var avatarSp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());
-            if (avatarSp != null) playerAvatarIcon.sprite = avatarSp;
-            else Debug.LogError("[GuildHall] 名牌头像图取不到：槽位 " + AvatarDefs.CurrentSlot() + "（不兜底）");
-        }
+        // 【2026-11-03 主人拍板「换成头像1节点 + 重新绑下脚本」】绑定手摆 mask/icon/kuang 只设图，尺寸位置零操作（硬规矩：以主人预制体效果为准）
+        // 图源 AvatarDefs = 1 玩家(player) / 2~25 佣兵 H001~H024；弹窗确认后走 RefreshAllHud 到这里换脸
+        // 【2026-11-03 踩坑修】「头像1」根节点【没有 Image 组件】（纯布局节点，mask/icon/kuang 挂在它下面）——
+        // 旧代码只认 playerAvatarIcon（=GetComponent<Image>()，恒为 null）→ 整段被跳过 → 头像永远停在
+        // 预制体里手摆的那张图（主人「根本就没有那个佣兵」）。现在按 Transform 绑三件套，尺寸位置仍零操作。
+        if (_avatarRoot != null)
+            AvatarNodeUI.BindPrefabNode(_avatarRoot, AvatarDefs.HireIdOf(AvatarDefs.CurrentSlot()));
+        else if (playerAvatarIcon != null)
+            playerAvatarIcon.sprite = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());   // 旧叶子 Icon 口径
+        else
+            Debug.LogError("[GuildHall] 名牌头像节点取不到（玩家名牌下无 头像1/Icon），头像刷新不了（不兜底）");
     }
 
     /// <summary>名牌头像点击入口：打开头像选择弹窗（2026-10-25 主人需求；2026-10-28 随主界面头像一并恢复）。</summary>
-    void OpenAvatarSelect() => AvatarSelectPopup.Open();
+    void OpenAvatarSelect()
+    {
+        // 【2026-11-03 链路诊断】主人报弹窗异常但日志零条，先亮灯这一步
+        Debug.Log("[GuildHall] 名牌头像被点击 → 打开头像选择弹窗");
+        AvatarSelectPopup.Open();
+    }
 
     /// <summary>顶条钻石余额显示（T14）：只读 ResourceWallet 的 Diamond，不做任何扣费/加号点击逻辑。</summary>
     void RefreshDiamond()
@@ -518,23 +527,28 @@ public class GuildHallUI : MonoBehaviour
         // 运行时补 Button 接线（预制体只有 Image），点击打开头像选择框。缺节点 LogError 不兜底。
         // 【2026-10-28 恢复】10-27 需求是「角色页」头像去掉，主界面名牌头像被 8c43649c 误伤隐藏，
         // 当日按 8c43649c^ 原样还原（Icon 放大 1.3 + Button 接线）；名字/等级不受影响。
-        if (playerAvatarIcon == null)
+        if (_avatarRoot == null && playerAvatarIcon == null)
         {
             Transform plateForIcon = FindDeepChild(transform, "玩家名牌");
-            Transform iconT = plateForIcon != null ? FindDeepChild(plateForIcon, "Icon") : null;
+            // 【2026-11-03 主人把名牌 Icon 重做成「头像1」节点】优先找头像1，兼容旧命名 Icon
+            Transform iconT = plateForIcon != null ? FindDeepChild(plateForIcon, "头像1") : null;
+            bool isHeadNode = iconT != null;   // true = 三件套容器（无 Image）；false = 旧叶子 Icon
+            if (iconT == null) iconT = plateForIcon != null ? FindDeepChild(plateForIcon, "Icon") : null;
             if (iconT != null)
             {
-                playerAvatarIcon = iconT.GetComponent<Image>();
-                // 【2026-10-25 主人反馈「左上角的头像有点小」】Icon 本体放大（Awake 只跑一次，幂等）
-                iconT.localScale *= NameplateIconScale;
+                if (isHeadNode) _avatarRoot = iconT;   // 根节点无 Image：存 Transform 才绑得上三件套
+                playerAvatarIcon = iconT.GetComponent<Image>();   // 头像1 场景下为 null，属正常
+                // 【2026-11-03 主人拍板「用预制体里的」】Icon 尺寸完全以 prefab 为准，代码不碰大小（历史 1.3 倍放大已作废）
                 var openBtn = iconT.GetComponent<Button>();
                 if (openBtn == null) openBtn = iconT.gameObject.AddComponent<Button>();
                 openBtn.transition = Selectable.Transition.None;
                 openBtn.onClick.RemoveAllListeners();
                 openBtn.onClick.AddListener(OpenAvatarSelect);
+                Debug.Log("[GuildHall] 名牌头像 Button 已接线（点击开头像选择弹窗），节点=" + iconT.name
+                    + " 三件套模式=" + isHeadNode);
             }
             else
-                Debug.LogError("[GuildHall] 玩家名牌下缺 Icon 节点，头像不显示也无法点开头像选择框");
+                Debug.LogError("[GuildHall] 玩家名牌下缺 头像1/Icon 节点，头像不显示也无法点开头像选择框");
         }
 
         // 【2026-10-24 主人拍板「提取顶条资源条」】金/钻引用绑完后再提取（迁移保留引用，主界面刷新照常生效）；
@@ -701,6 +715,10 @@ public class GuildHallUI : MonoBehaviour
             staminaPlusButton.onClick.RemoveAllListeners();
             staminaPlusButton.onClick.AddListener(ResourceAdRewards.TryClaimStamina);
         }
+
+        // 【2026-11-03 主人报「竞技场隐藏后黑底仍拉长」】所有入口接完/藏完后统一再算一次黑底：
+        // 防止 RestoreRightBarBg 的 270、或某个入口「先拉长后隐藏」把最终结果覆盖回去。
+        FitRightBarBgToButtons();
     }
 
     /// <summary>每日登录按钮：使用主界面预制体右列的 DailyLoginButton 节点（不运行时生成）。点击打开每日登录面板。</summary>
@@ -754,16 +772,23 @@ public class GuildHallUI : MonoBehaviour
 
     /// <summary>
     /// 【2026-11-02 主人拍板「主界面加个领钻按钮」】右列黑底按「列里实际有几颗可见按钮」拉长。
-    /// 只在 <see cref="RestoreRightBarBg"/> 的 270 基础上做**跟随**：宽度/图/pivot 一律不动，
-    /// 顶边也保持原位（2026-11-01 主人明确「黑底不要移」），只把底边往下延到最后一颗按钮下面。
-    /// 边距 <see cref="RightBarBgPadding"/> 由「原 270 高罩住每日登录+对战两颗」反推（两钮间距 140 + 钮高 + 30）。
+    /// 宽度/图/pivot/顶边一律不动，只改高度（底边跟着最低一颗可见按钮走）。
+    /// 【2026-11-03 主人报「竞技场隐藏后黑底仍拉长」】三个根因：
+    /// ① 旧实现只看 activeSelf —— 父级关闭 / 入口被折叠的按钮仍被算进来；
+    /// ② 按钮的锚点是 (0.5,1)、bg 的锚点是 (0.5,0.5)，旧实现直接拿两边 anchoredPosition 当同一套坐标相加，
+    ///    天然差 50（RightBar 高 100 的一半），算出来的顶/底都偏；
+    /// ③ RestoreRightBarBg 每次把黑底写回 270，且它在 ArenaEntryUI 隐藏按钮之后执行 → 覆盖掉缩回的结果。
+    /// 现在：只统计【activeInHierarchy 且实际有高度】的按钮，用世界四角换算到 RightBar 本地坐标取最低底边，
+    /// 顶边保持原位（2026-11-01「黑底不要移」），底边 = 最低按钮底边 + <see cref="RightBarBgPadding"/>。
+    /// 于是多一颗图标 = 多「它的实际高度 + 列内实际格距」，隐藏一颗 = 同步收回，不写死常量。
     /// 拉伸锚点（anchorMin.y != anchorMax.y）时 sizeDelta 语义不同 → 报错跳过，不硬算。
     /// </summary>
     public void FitRightBarBgToButtons()
     {
         var rightBar = dailyLoginButton != null ? dailyLoginButton.transform.parent : null;
+        var rightBarRt = rightBar as RectTransform;
         var bgT = rightBar != null ? rightBar.Find("bg") as RectTransform : null;
-        if (bgT == null) return;   // RestoreRightBarBg 已报过错，这里静默跳过
+        if (bgT == null || rightBarRt == null) return;   // RestoreRightBarBg 已报过错，这里静默跳过
 
         if (!Mathf.Approximately(bgT.anchorMin.y, bgT.anchorMax.y))
         {
@@ -771,27 +796,59 @@ public class GuildHallUI : MonoBehaviour
             return;
         }
 
-        float top = float.MinValue, bottom = float.MaxValue;
+        // 黑底当前的真实矩形（世界四角 → RightBar 本地坐标）：只取顶边，顶边不动是 2026-11-01 主人定的约定
+        var corners = new Vector3[4];
+        bgT.GetWorldCorners(corners);   // 0=左下 1=左上 2=右上 3=右下
+        float bgTop = rightBarRt.InverseTransformPoint(corners[1]).y;
+        float bgBottom = rightBarRt.InverseTransformPoint(corners[0]).y;
+        if (bgTop < bgBottom) { float tmp = bgTop; bgTop = bgBottom; bgBottom = tmp; }
+        float oldH = bgT.rect.height;
+
+        // 只统计【当前真正可见、且有实际布局高度】的入口按钮：隐藏/折叠/父级关闭的一律不算
+        float lowest = float.MaxValue;
         int counted = 0;
         for (int i = 0; i < rightBar.childCount; i++)
         {
             var child = rightBar.GetChild(i);
-            if (child == bgT || !child.gameObject.activeSelf) continue;
+            // 必须用 activeInHierarchy：父级被关 / 入口被折叠（竞技场未开放、广告佣兵折叠）都不该算进黑底范围
+            if (child == bgT || !child.gameObject.activeInHierarchy) continue;
             if (child.GetComponent<Button>() == null) continue;   // 只算入口按钮，bg/装饰跳过
             var rt = child as RectTransform;
             if (rt == null) continue;
-            float half = rt.rect.height * Mathf.Abs(rt.localScale.y) * 0.5f;
-            top = Mathf.Max(top, rt.anchoredPosition.y + half);
-            bottom = Mathf.Min(bottom, rt.anchoredPosition.y - half);
+
+            // 真实矩形（世界四角 → RightBar 本地坐标），兼容按钮的 pivot/锚点/缩放差异
+            rt.GetWorldCorners(corners);   // 0=左下 1=左上 2=右上 3=右下
+            float childTop = rightBarRt.InverseTransformPoint(corners[1]).y;
+            float childBottom = rightBarRt.InverseTransformPoint(corners[0]).y;
+            if (childTop < childBottom) { float tmp = childTop; childTop = childBottom; childBottom = tmp; }
+            if (childTop - childBottom < 0.01f) continue;   // 高度为 0 = 还没布局，不参与计算
+
+            lowest = Mathf.Min(lowest, childBottom);
             counted++;
         }
         if (counted == 0) return;
 
-        float h = (top - bottom) + RightBarBgPadding;
-        float pivotY = bgT.pivot.y;
-        float topEdge = bgT.anchoredPosition.y + (1f - pivotY) * bgT.sizeDelta.y;   // 拉长前顶边（要保持不动）
-        bgT.sizeDelta = new Vector2(bgT.sizeDelta.x, h);
-        bgT.anchoredPosition = new Vector2(bgT.anchoredPosition.x, topEdge - (1f - pivotY) * h);
+        // 底边 = 最低一颗可见按钮的底边 + 留白；顶边固定不动。
+        // 多一颗图标 = 正好多「它的实际高度 + 列内实际格距」（矩形求并集，不按数量×高度估算）
+        float targetBottom = lowest - RightBarBgPadding;
+        float newH = bgTop - targetBottom;
+        if (newH < 1f) return;   // 按钮全跑到顶边以上（异常摆位）→ 不硬算
+
+        // bg 的 localScale.y = -1（预制体是镜像的），顶边偏移随 pivot/朝向不同 → 用同一个换算函数求差值，
+        // 只改高度、再补偿 anchoredPosition，保证顶边在屏幕上的位置一动不动
+        float sy = bgT.localScale.y < 0f ? -1f : 1f;
+        float oldTopOff = TopOffsetOf(bgT.pivot.y, oldH, sy);
+        float newTopOff = TopOffsetOf(bgT.pivot.y, newH, sy);
+        bgT.sizeDelta = new Vector2(bgT.sizeDelta.x, newH);
+        bgT.anchoredPosition = new Vector2(bgT.anchoredPosition.x, bgT.anchoredPosition.y + oldTopOff - newTopOff);
+    }
+
+    /// <summary>矩形（局部 y 范围 [-pivot*h, (1-pivot)*h] 乘 localScale.y）的上边偏移量。</summary>
+    static float TopOffsetOf(float pivotY, float h, float sign)
+    {
+        float a = -pivotY * h * sign;
+        float b = (1f - pivotY) * h * sign;
+        return Mathf.Max(a, b);
     }
 
     /// <summary>右列黑底上下留白（原 270 高罩住两颗按钮反推出来的 30）。</summary>

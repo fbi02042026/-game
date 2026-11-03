@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// 竞技场赛季冠军限定武器（2026-10-29 晚主人拍板）：
-/// · 每月结算第 1 名随结算邮件发一把「当月限定传奇武器」，12 个月轮换，只有竞技场能给；
+/// · 每个赛季结算第 1 名随结算邮件发一把「赛季限定传奇武器」，12 把轮换，只有竞技场能给；
+///   【2026-11-03】赛季已由自然月改为自然周 → 轮换同步改为按周（同一周恒定同一把，周一 0 点切下一把）。
 /// · 模板纯运行时注册（<see cref="ConfigManager.RegisterRuntimeEquip"/>），不落 Resources 目录
 ///   —— 掉落/抽奖的模板池走 Resources.LoadAll，永远扫不到这批 id，天然「竞技场独占」；
 /// · 拥有判定真源 = 随身仓库 legacyEquipPool 里有没有这批 id（邮件 equip 附件领取时写入，
@@ -14,10 +15,10 @@ using UnityEngine;
 /// </summary>
 public static class ArenaSeasonWeapons
 {
-    /// <summary>单把冠军武器定义（月轮换表的一行）。</summary>
+    /// <summary>单把冠军武器定义（轮换表的一行）。</summary>
     public struct Def
     {
-        public int month;            // 1~12，哪个月的赛季冠军发这把
+        public int month;            // 轮换槽位号 1~12（原按自然月；2026-11-03 赛季改周后按周序号取模，字段名沿用不改存档结构）
         public string id;            // 模板 id（运行时注册，Resources 里没有 → 掉落池不可见）
         public string name;          // 武器纯名（显示名由词条系统统一加「传奇·」前缀）
         public PlayerJobId job;      // 归属职业（出战时只替换该职业的初始主手）
@@ -30,7 +31,8 @@ public static class ArenaSeasonWeapons
         public AttrBonusData passive;      // 传奇专属被动一条
     }
 
-    // ── 12 个月轮换表（数值档位对齐现网传奇武器：守誓长枪 ATK55/MaxHp160/Defense13+global86+被动32%爆伤）──
+    // ── 12 把轮换表（2026-11-03 赛季改自然周后按周序号取模，同一周恒同一把）──
+    // 数值档位对齐现网传奇武器（守誓长枪 ATK55/MaxHp160/Defense13+global86+被动32%爆伤）──
     // 职业轮转 1剑盾 2法牧 3游侠 循环，保证每个职业每季度轮到一把；
     // 外观全用现役模板同款对（剑盾=刀剑/枪/斧，法牧=法杖 New_Weapon_03，游侠=弓）。
     static readonly Def[] Roster =
@@ -125,11 +127,22 @@ public static class ArenaSeasonWeapons
         return tpl;
     }
 
-    /// <summary>当前月份的冠军武器 id（自然月轮换；EnsureWeek 发结算邮件用）。</summary>
+    /// <summary>当前赛季（自然周，本周周一 0 点切换）的冠军武器 id（ArenaRules.EnsureWeek 发结算邮件用）。
+    /// 【2026-11-03 赛季改自然周后同步改周轮换】同一周内恒定同一把，跨周切下一把；周序号与存档赛季键
+    /// SaveData.WeekMondayKey() 同源，保证「邮件发的武器」与「弹窗展示的当周武器」始终一致。</summary>
     public static string CurrentSeasonWeaponId()
     {
-        return Roster[Mathf.Clamp(System.DateTime.Now.Month, 1, 12) - 1].id;
+        // 基准 = 2026-01-05（周一）；按整周取模轮换 12 把，跨周自动 +1 槽。
+        int wk = SaveData.WeekMondayKey();               // 本周一 yyyyMMdd（与赛季键同源）
+        var thisMonday = new System.DateTime(wk / 10000, (wk / 100) % 100, wk % 100);
+        int weeks = (int)System.Math.Floor((thisMonday - WeekRotationOrigin).TotalDays / 7);
+        int idx = weeks % Roster.Length;
+        if (idx < 0) idx += Roster.Length;               // 基准之前的周也安全回绕，杜绝负索引
+        return Roster[idx].id;
     }
+
+    /// <summary>周轮换基准（必须是周一；2026-01-05）。改它会整体平移所有周的武器，非必要不动。</summary>
+    static readonly System.DateTime WeekRotationOrigin = new System.DateTime(2026, 1, 5);
 
     /// <summary>邮件附件图标路径（EquipIcons 的 Resources 路径，MailDetailUI iconOverride 用）。</summary>
     public static string MailIconPath(string weaponId)

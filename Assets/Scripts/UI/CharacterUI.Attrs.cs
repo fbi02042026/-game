@@ -26,23 +26,11 @@ public partial class CharacterUI
             titleSubText.text = Mathf.Max(1, LevelSystem.CurrentLevel).ToString();
 
         // 【2026-10-26 主人反馈「这个界面头像名称没有替换成主界面的」】头像与主界面名牌同源：
-        // 每次刷新按存档头像槽位（AvatarDefs.CurrentSlot）主动设图（换头像后进本页即跟随）。
-        // 图的真源 = Resources/Art/UI/Main/头像/（与 AvatarSelectPopup 同一口径），取不到报错不兜底。
+        // 【2026-11-03 主人拍板「整节点替换」】走 AvatarNodeUI（底框+头像），真源 AvatarDefs = 1 玩家 / 2~25 佣兵 H001~H024。
         if (headerAvatar == null)
             headerAvatar = transform.Find("Content/Header/icon")?.GetComponent<Image>();
         if (headerAvatar != null)
-        {
-            var sp = AvatarDefs.LoadSprite(AvatarDefs.CurrentSlot());
-            if (sp != null)
-            {
-                headerAvatar.sprite = sp;
-                headerAvatar.preserveAspect = true;
-                headerAvatar.color = Color.white;
-            }
-            else
-                Debug.LogError("[CharacterUI] 主界面同款头像图取不到：槽位 " + AvatarDefs.CurrentSlot() +
-                               "（应在 Resources/Art/UI/Main/头像/ 下），角色页头像显示不了（不兜底）");
-        }
+            AvatarNodeUI.Apply(headerAvatar, AvatarDefs.HireIdOf(AvatarDefs.CurrentSlot()));   // 整节点模式：底框+头像
     }
 
     /// <summary>

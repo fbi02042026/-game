@@ -59,6 +59,7 @@ public static class ArenaEntryUI
             if (hiddenHand != null) hiddenHand.gameObject.SetActive(false);
             var hiddenClone = parent.Find(NodeName);
             if (hiddenClone != null) hiddenClone.gameObject.SetActive(false);
+            GuildHallUI.Instance?.FitRightBarBgToButtons();   // 【2026-11-03 主人】藏按钮后半透黑底跟着缩短
             return;
         }
 
@@ -69,6 +70,7 @@ public static class ArenaEntryUI
         {
             hand.gameObject.SetActive(true);   // 之前未达标被藏过，达标后重新点亮
             Wire(hand.GetComponent<Button>());
+            GuildHallUI.Instance?.FitRightBarBgToButtons();   // 【2026-11-03 主人】按钮回来黑底跟着拉长
             return;
         }
 
@@ -77,6 +79,7 @@ public static class ArenaEntryUI
         {
             exist.gameObject.SetActive(true);   // 同上
             Wire(exist.GetComponent<Button>());
+            GuildHallUI.Instance?.FitRightBarBgToButtons();   // 同上，黑底跟随
             return;
         }
 
