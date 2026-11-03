@@ -75,7 +75,7 @@ public static class MercFavorSystem
 
     /// <summary>
     /// 执行一次对话：加好感 + 记一次（2026-10-26 晚口径：每天 3 次、一次选一个）。
-    /// 返回实际加的好感；-1 = 今天次数已用完（不可执行）。
+    /// 返回本次实际增量（加完后的总好感 - 加之前的总好感）；-1 = 今天次数已用完（不可执行）。
     /// 【2026-10-26 主人拍板「对话完可以随机获得」】当日第 3 次聊完时随机回 1 个礼物
     /// （grantedGiftId 带出，Toast 由 GrantRandomGift 自己弹；无回礼 = null）。
     /// 调用方负责存档（SaveSystem.Instance.Save()）与刷新 UI。
@@ -86,12 +86,14 @@ public static class MercFavorSystem
         if (!CanTalk(d, hireId)) return -1;
         if (slot < 0 || slot >= MercFavorDefs.DialogueOptionCount) return -1;
 
+        int before = d.GetMercTrust(hireId);
+
         d.favorTalkedToday.Add(TalkKey(hireId, TalkedCount(d, hireId)));
-        int gain = d.AddMercTrust(hireId, FavorOfSlot(d, hireId, slot));
+        int after = d.AddMercTrust(hireId, FavorOfSlot(d, hireId, slot));
 
         // 今日 3 次全部聊完 → 随机回礼 1 个（发放口 = GrantRandomGift 唯一出口）
         if (TalkedCount(d, hireId) >= MercFavorDefs.TalksPerDay) grantedGiftId = GrantRandomGift();
-        return gain;
+        return after - before;
     }
 
     static string TalkKey(string hireId, int ordinal) => hireId + ":" + ordinal;
@@ -159,7 +161,7 @@ public static class MercFavorSystem
 
     /// <summary>
     /// 送礼给指定佣兵：扣 1 个礼物加对应好感（礼物表查不到 id = false，fail closed）。
-    /// 返回实际加的好感；-1 = 没有礼物 / 非法 id。
+    /// 返回本次实际增量（加完后的总好感 - 加之前的总好感）；-1 = 没有礼物 / 非法 id。
     /// 调用方负责存档与刷新 UI。
     /// </summary>
     public static int GiveGift(SaveData d, string hireId, string giftId)
@@ -167,7 +169,9 @@ public static class MercFavorSystem
         if (d == null || string.IsNullOrEmpty(hireId)) return -1;
         if (!MercFavorDefs.TryGetGift(giftId, out var def)) return -1;
         if (!d.ConsumeFavorGift(giftId)) return -1;
-        return d.AddMercTrust(hireId, def.Favor);
+        int before = d.GetMercTrust(hireId);
+        int after = d.AddMercTrust(hireId, def.Favor);
+        return after - before;
     }
 
     static int TodayKey() => int.Parse(DateTime.Now.ToString("yyyyMMdd"));

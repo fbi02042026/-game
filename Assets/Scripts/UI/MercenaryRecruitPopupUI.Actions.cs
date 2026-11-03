@@ -244,26 +244,23 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             return false;
         }
 
-        // 转本命碎片（统一发碎片入口：入背包优先、放不下转邮件；内部已落盘并 force Toast「获得 XX 的本命碎片 ×N」）
+        // 转本命碎片（统一发碎片入口：一律进城镇背包；内部已落盘并 force Toast「获得 XX 的本命碎片 ×N」）
         var frag = MercGrowInventory.ConvertDuplicateMerc(def);
-        if (frag.bagCount <= 0 && frag.mailCount <= 0)
+        if (frag.bagCount <= 0)
         {
             Debug.LogError("[MercRecruit] 重复购买转碎片失败：ConvertDuplicateMerc 零发放（hireId=" + hid + "，钱已扣，需主人确认是否补发）");
             UIManager.Instance?.ShowToast("购买失败");
             return false;
         }
-        Debug.Log($"[MercRecruit] 重复购买 {hid} {def.Name} → 本命碎片 入包{frag.bagCount}/邮件{frag.mailCount}");
+        Debug.Log($"[MercRecruit] 重复购买 {hid} {def.Name} → 本命碎片 入包{frag.bagCount}");
         // 【2026-10-31 主人拍板「同样的佣兵每次抽加500」】重复购买也算一次招募 → 该佣兵下次价格 +500
         MercHireSession.NoteRecruit(offer);
         SaveSystem.Instance.Save();
 
-        // 【2026-10-25 主人拍板】重复购买要明确提示「该佣兵已拥有，已转换成碎片+X进到背包里」——
-        // 文案口径对齐名册解锁 TavernUnlockUI.TryUnlock 的 2026-10-22 拍板（走邮件补「已放入邮箱」）。
+        // 【2026-10-25 主人拍板】重复购买要明确提示「该佣兵已拥有，已转换成碎片+X进到背包里」。
+        // 碎片一律进城镇背包（无邮件溢出）；2026-11-03 起只保留这一种真实口径，不再写「已放入邮箱」。
         // force:true 替换 GrantFragments 内部的通用碎片 toast（GlobalToastUI 单例后弹覆盖前弹）。
-        int fragTotal = frag.bagCount + frag.mailCount;
-        UIManager.Instance?.ShowToast(frag.mailCount > 0
-            ? $"该佣兵已拥有，已转换成碎片+{fragTotal}进到背包里，放不下的已放入邮箱"
-            : $"该佣兵已拥有，已转换成碎片+{fragTotal}进到背包里", force: true);
+        UIManager.Instance?.ShowToast($"该佣兵已拥有，已转换成碎片+{frag.bagCount}进到背包里", force: true);
 
         ShowMercBubble(index, MercLineTable.Pick(OfferBanterKey(offer), MercLineTable.Scene.HireSuccess));
         RefreshAll();

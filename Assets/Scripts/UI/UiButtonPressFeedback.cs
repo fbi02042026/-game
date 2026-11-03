@@ -24,6 +24,14 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
     /// </summary>
     public bool suppress;
 
+    /// <summary>
+    /// 【2026-11-03 修「前台小姐点击还是一闪一闪」】Suppress 调用早于 AttachUnder 挂载时的登记名单。
+    /// 根因：原 Suppress 在组件未挂上（f==null）时直接 return，抑制指令被丢弃；
+    /// 之后 UICanvasSetup 场景收尾补扫 AttachUnder 又把反馈挂回去 → 按下缩放变暗 = 闪。
+    /// 现在无论组件在不在，先记名单，AttachUnder 挂载时查名单跳过（时序无关）。
+    /// </summary>
+    static readonly System.Collections.Generic.HashSet<GameObject> _suppressed = new System.Collections.Generic.HashSet<GameObject>();
+
     void Awake()
     {
         CaptureBaseline();
@@ -62,10 +70,11 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
             _rt.localScale = _baseScale;
     }
 
-    /// <summary>运行时把某个按钮的按压反馈关掉（含已经挂上的）。</summary>
+    /// <summary>运行时把某个按钮的按压反馈关掉（含已经挂上的；还没挂上的记入名单，之后 AttachUnder 不再挂）。</summary>
     public static void Suppress(GameObject go)
     {
         if (go == null) return;
+        _suppressed.Add(go);
         var f = go.GetComponent<UiButtonPressFeedback>();
         if (f == null) return;
         f.suppress = true;
@@ -105,15 +114,17 @@ public class UiButtonPressFeedback : MonoBehaviour, IPointerDownHandler, IPointe
             _graphic.color = _baseColor;
     }
 
-    /// <summary>给 Canvas 子树里的 Button 自动挂反馈（跳过遮罩/透明点穿层）。</summary>
+    /// <summary>给 Canvas 子树里的 Button 自动挂反馈（跳过遮罩/透明点穿层；Suppress 名单内的跳过）。</summary>
     public static void AttachUnder(Transform root)
     {
         if (root == null) return;
+        _suppressed.RemoveWhere(g => g == null);   // 清掉已销毁对象的残留引用
         var buttons = root.GetComponentsInChildren<Button>(true);
         for (int i = 0; i < buttons.Length; i++)
         {
             var btn = buttons[i];
             if (btn == null || ShouldSkip(btn)) continue;
+            if (_suppressed.Contains(btn.gameObject)) continue;
             if (btn.GetComponent<UiButtonPressFeedback>() != null) continue;
             btn.gameObject.AddComponent<UiButtonPressFeedback>();
         }

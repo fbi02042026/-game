@@ -89,8 +89,25 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 if (_slotDefaultNameColors.TryGetValue(slot, out var defColor))
                     nameT.color = defColor;
             }
-            // 空格/锁格还原预制体原框/原名字底牌
-            if (slotImg != null) slotImg.sprite = defaultFrame;
+            // 【2026-11-03 主人拍板】空格/锁格不带稀有度边框：统一压成白色素框（酒馆三档里的
+            // 「普通头像框」= 银白素色，与传奇金/稀有蓝同目录同款），不再还原预制体里的
+            // 稀有度色演示框；上阵佣兵后由下方 filled 分支按该佣兵稀有度换框。
+            // 名字底牌仍还原预制体原样（主人只点了边框）。
+            if (slotImg != null)
+            {
+                var plainFrame = MercHireSession.LoadTavernCardFrame(MercRosterDefs.MercRarity.Common);
+                if (plainFrame != null)
+                {
+                    slotImg.sprite = plainFrame;
+                    slotImg.type = Image.Type.Sliced;
+                    slotImg.color = Color.white;
+                }
+                else
+                {
+                    slotImg.sprite = defaultFrame;   // 取不到白框退回预制体原样（不静默）
+                    Debug.LogError("[MercDrawPoolUI] 白色（普通）框加载为空，空格/锁格退回预制体原框");
+                }
+            }
             if (nameBgImg != null) nameBgImg.sprite = defaultNamePlate;
             HideRoleIcon(slot.transform);
             if (qxTr != null) qxTr.gameObject.SetActive(false);

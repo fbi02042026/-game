@@ -49,8 +49,21 @@ public static class MercFavorDefs
     /// <summary>羁绊副本固定难度：0=普通 / 1=困难 / 2=噩梦（BattleManager 会把 PendingBattleDifficulty 钳到 0~2）。</summary>
     public const int BondDungeonDifficulty = 2;
 
-    /// <summary>羁绊副本一次性通关奖励钻石数（可调）。</summary>
-    public const int BondClearDiamond = 200;
+    /// <summary>羁绊副本一次性通关奖励钻石数：普通 50 / 稀有 100 / 传奇 200（2026-11-03 主人拍板按稀有度发放）。</summary>
+    public const int BondClearDiamondCommon = 50;
+    public const int BondClearDiamondRare = 100;
+    public const int BondClearDiamondLegendary = 200;
+
+    /// <summary>按佣兵稀有度取首通钻石；稀有度真源 = MercRosterDefs.Def.Rarity，不另造判断。</summary>
+    public static int BondClearDiamondOf(MercRosterDefs.MercRarity rarity)
+    {
+        switch (rarity)
+        {
+            case MercRosterDefs.MercRarity.Rare: return BondClearDiamondRare;
+            case MercRosterDefs.MercRarity.Legendary: return BondClearDiamondLegendary;
+            default: return BondClearDiamondCommon;
+        }
+    }
 
     // —— 对话文案（占位，主人终审）——
 

@@ -20,6 +20,12 @@ public class RunMercEntry
     public string nickname;
     public int level = 1;
     public int star = 1;
+    /// <summary>
+    /// 【2026-11-03】局外养成等级（仅承载展示/追溯，0 = 未携带）。
+    /// 🔴 禁止喂给 <see cref="level"/>：养成收益唯一生效口 = Mercenary.ApplyGrowBonus（按 hireId 读存档累计资质），
+    /// 再进 level 会造成「等级基底 + 资质乘区」双吃（施工单 T7 红线：不复用 level）。
+    /// </summary>
+    public int trainLevel;
     public string skillId;
     public string passiveSkillId;
     /// <summary>

@@ -1232,6 +1232,39 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
+    /// 主线弹窗详情文案（2026-11-03 主人「详情太短不好看」）：
+    /// 目标句沿用 <see cref="MainQuestDefs.AutoDesc"/>（任务表唯一真源，不复制机制判定），
+    /// 后面补一句完成方式，让详情有 2 行、不再是孤零零 4 个字。
+    /// </summary>
+    static string QuestPopupDetail(MainQuestDef def, string objective)
+    {
+        string hint;
+        switch (def.type)
+        {
+            case MainQuestType.ClearStage:
+            case MainQuestType.ClearStages:
+                hint = "击败关卡内全部敌人即可完成";
+                break;
+            case MainQuestType.TalkNpc:
+                hint = "对话结束后自动完成";
+                break;
+            case MainQuestType.WatchStory:
+                hint = "在剧情回顾中重看一遍即可完成";
+                break;
+            case MainQuestType.RecruitMerc:
+                hint = "任意品质的佣兵都计入";
+                break;
+            case MainQuestType.UpgradeTalent:
+                hint = "任意一次加点都计入";
+                break;
+            default:
+                hint = "完成后自动发放奖励";
+                break;
+        }
+        return string.IsNullOrEmpty(objective) ? hint : objective + "\n" + hint;
+    }
+
+    /// <summary>
     /// 2026-11-01 主人拍板「不能有两套主线支线」：主线/支线行数据已与任务栏同源，
     /// 点击弹 CodexInfoPopupUI（世界页同款）：达成方式/进度/奖励写全。
     /// 【同日晚主人要求】排版优化＋奖励的字用图标代替：奖励不再写「奖励：金币×N」文字行，
@@ -1245,6 +1278,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             if (!MainQuestDefs.TryFind(questId, out var def)) return;
             bool done = MainQuestSystem.IsDone(def);
             string how = MainQuestDefs.AutoDesc(def);
+            // 【2026-11-03 主人「详情太短不好看」】弹窗详情 = 目标句（AutoDesc 单一真源）+ 一句完成方式。
+            // 只补弹窗文案，任务栏/日志行仍用 AutoDesc 原句，别处一个字不变。
+            string detail = QuestPopupDetail(def, how);
             string name = string.IsNullOrEmpty(def.title) ? how : def.title;
             var views = MainQuestSystem.ChapterViews(def.chapter);
             MainQuestView v = null;
@@ -1263,9 +1299,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (def.chapter > MainQuestSystem.CurrentChapter()) lines.Add("先完成当前章节的任务");
                 lore = string.Join("\n", lines);
             }
-            CodexInfoPopupUI.Show(name, "", how, lore, null,
+            CodexInfoPopupUI.Show(name, "", detail, lore, null,
                 codexKind: null, topTitleOverride: "主线任务", topIconPath: "",
-                rewards: BuildRewardChips(def.rewardGold, def.rewardStones));
+                rewards: BuildRewardChips(def.rewardGold, def.rewardStones), rewardsAtBottom: true);
         }
         else
         {
@@ -1293,9 +1329,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (!current)
                     lore += "\n通关对应篇章后开启";
             }
-            CodexInfoPopupUI.Show(isl.name, "", "通关" + isl.name, lore, null,
+            // 【2026-11-03 主人「详情太短不好看」】支线详情加长：补上所属篇章，再补一句完成方式
+            string sideDesc = "通关第" + isl.act + "篇的支线岛「" + isl.name + "」\n进入岛内打通即可完成";
+            CodexInfoPopupUI.Show(isl.name, "", sideDesc, lore, null,
                 codexKind: null, topTitleOverride: "支线任务", topIconPath: "",
-                rewards: BuildRewardChips(isl.goldReward, isl.talentReward));
+                rewards: BuildRewardChips(isl.goldReward, isl.talentReward), rewardsAtBottom: true);
         }
     }
 

@@ -12,7 +12,8 @@
 ///   · 随机属性（升级时掷，攻/防/血三项）：
 ///       ① 三项各加保底 FloorPctFor(currentLevel)：≤10 → +2%；11~25 → +1.5%；26~50 → +1%
 ///         【2026-10-23 主人拍板 C2=A 保底分段递减】（升到 Lv2 时按 currentLevel=1 取值）。
-///       ② 再等权抽 1 项，额外 +3%~5%（随机浮点，三档统一，v4 原值不动）。
+///       ② 再等权抽 1 项，额外加成按稀有度分档：普通 5.6~6.6% / 稀有 5.9~6.9% / 传奇 6.4~7.5%
+///         （2026-11-03 反推补足，使满级期望命中 1.90 / 2.24 / 2.80；旧的 +3~5% 已删除，只留这一套）。
 ///       ③ 保底轨道：记录 lastRolled；当 newLevel % 5 == 0 时，额外项先从「非上轮项」里抽（防一路全落同一项）。
 ///   · 升阶节点：newLevel ∈ {10,20,30,40,50}，节点额外消耗 = 该级当段徽记 ×5（只有徽记，没有碎片，
 ///     2026-10-23 拍板 Q9 定稿；Lv20/Lv40 节点**不发任何技能**【C3=A 一期不做技能槽】，节点只是消耗加码 + 阶位 +1）。
@@ -122,11 +123,33 @@ public static class MercGrowDefs
         return 0.01f;
     }
 
-    /// <summary>额外掷骰那单项的加成下限（+3%，三档统一，v4 原值）。</summary>
-    public const float ExtraRollPctMin = 0.03f;
+    /// <summary>
+    /// 额外掷骰那单项的加成下限/上限（2026-11-03 按稀有度分档，全项目只留这一套口径）：
+    /// 普通 5.6~6.6%（均值 6.1） / 稀有 5.9~6.9%（均值 6.4） / 传奇 6.4~7.5%（均值 6.95）。
+    /// 缘由：C2=A 保底分段递减后，v4 的 +3~5% 只能到 1.73 / 1.97 / 2.32，够不到施工单验收
+    /// 1.90 / 2.24 / 2.80；这里按目标反推补足额外项，旧的 +3~5% 常量已删除，禁止两套范围并存。
+    /// 校验（均值）：普通 41% + 24×6.1%/3 = 90%；稀有 51.5% + 34×6.4%/3 = 124%；传奇 66.5% + 49×6.95%/3 = 180%。
+    /// </summary>
+    public static float ExtraRollPctMin(MercRosterDefs.MercRarity rarity)
+    {
+        switch (rarity)
+        {
+            case MercRosterDefs.MercRarity.Rare: return 0.059f;
+            case MercRosterDefs.MercRarity.Legendary: return 0.064f;
+            default: return 0.056f;
+        }
+    }
 
-    /// <summary>额外掷骰那单项的加成上限（+5%，三档统一，v4 原值）。</summary>
-    public const float ExtraRollPctMax = 0.05f;
+    /// <summary>额外掷骰单项加成上限（分档口径见 <see cref="ExtraRollPctMin"/>）。</summary>
+    public static float ExtraRollPctMax(MercRosterDefs.MercRarity rarity)
+    {
+        switch (rarity)
+        {
+            case MercRosterDefs.MercRarity.Rare: return 0.069f;
+            case MercRosterDefs.MercRarity.Legendary: return 0.075f;
+            default: return 0.066f;
+        }
+    }
 
     /// <summary>随机属性项数：0=攻 1=防 2=血。</summary>
     public const int AptitudeKindCount = 3;

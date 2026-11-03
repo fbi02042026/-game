@@ -804,6 +804,9 @@ PlayerSettings:
   - m_BuildTarget: WeixinMiniGameSupport
     m_APIs: 08000000
     m_Automatic: 0
+  - m_BuildTarget: WebGLSupport
+    m_APIs: 08000000
+    m_Automatic: 0
   m_BuildTargetVRSettings: []
   m_DefaultShaderChunkSizeInMB: 16
   m_DefaultShaderChunkCount: 0
@@ -1225,7 +1228,9 @@ PlayerSettings:
   webGLShowDiagnostics: 0
   webGLDataCaching: 1
   webGLDebugSymbols: 0
-  webGLEmscriptenArgs: 
+  webGLEmscriptenArgs: ' -s EXPORTED_FUNCTIONS=_sbrk,_emscripten_stack_get_base,_emscripten_stack_get_end
+    -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s TOTAL_MEMORY=256MB -s EXPORTED_RUNTIME_METHODS=''["ccall","cwrap","stackTrace","addRunDependency","removeRunDependency","FS_createPath","FS_createDataFile","stackTrace","writeStackCookie","checkStackCookie","lengthBytesUTF8","stringToUTF8"]''
+    --profiling-funcs '
   webGLModulesDirectory: 
   webGLTemplate: APPLICATION:Default
   webGLAnalyzeBuildSize: 0
@@ -1251,6 +1256,7 @@ PlayerSettings:
   il2cppCompilerConfiguration:
     Android: 2
   il2cppCodeGeneration:
+    WebGL: 1
     WeixinMiniGame: 1
   managedStrippingLevel: {}
   incrementalIl2cppBuild: {}
@@ -1375,7 +1381,7 @@ PlayerSettings:
     -s ERROR_ON_UNDEFINED_SYMBOLS=0 -s TOTAL_MEMORY=256MB -s EXPORTED_RUNTIME_METHODS=''["ccall","cwrap","stackTrace","addRunDependency","removeRunDependency","FS_createPath","FS_createDataFile","stackTrace","writeStackCookie","checkStackCookie","lengthBytesUTF8","stringToUTF8"]''
     --profiling-funcs '
   weixinMiniGameModulesDirectory: 
-  weixinMiniGameTemplate: PATH:Y:\PixelAdventureTown\Library\PackageCache\com.qq.weixin.minigame@915d4bf4f6\WebGLTemplates\WXTemplate2022TJ
+  weixinMiniGameTemplate: PATH:E:\xiangsumaoxian\Library\PackageCache\com.qq.weixin.minigame@915d4bf4f6\WebGLTemplates\WXTemplate2022TJ
   weixinMiniGameAnalyzeBuildSize: 0
   weixinMiniGameUseEmbeddedResources: 0
   weixinMiniGameCompressionFormat: 2

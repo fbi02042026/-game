@@ -819,6 +819,8 @@ public class MercFavorUI : MonoBehaviour
         {
             _giftTemplate.gameObject.SetActive(false);   // 没有礼物：整排隐藏（来源 = 每日回礼 + 礼物副本掉落，见 SaveData.favorGifts）
         }
+        // 模板本体一律不参与显示：prefab 里 panl 可能是激活态，新结构分支不隐藏会露出「好感+99」占位卡
+        if (useScroll && _giftTemplate != null) _giftTemplate.gameObject.SetActive(false);
 
         // 空行提示（2026-10-31 主人拍板：行框 Tile/bg 留着，框上写提示文案）
         var tip = EnsureGiftEmptyTip();

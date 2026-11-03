@@ -39,6 +39,8 @@ public class AvatarSelectPopup : MonoBehaviour
     //   之间的可用区 —— 主人改 prefab 尺寸或位置，布局自动跟随（硬规矩：以主人预制体为准）。
     const float GapX = 12f;              // 列缝隙（实测 134.4 + 12 = 146.4 → panl 450 宽每排 3 格）
     const float GapY = 10f;              // 行缝隙（实测 126 + 10 = 136 → 两排 272 高）
+    /// <summary>【2026-11-03 主人需求「滑动的左边边框往右移20」】滑动窗口左边缘相对 panl 左边框内缩 20（右边缘不动）。</summary>
+    const float ViewLeftInset = 20f;
     const float FallbackCellW = 134.4f;  // 量不到 mask 时的兜底值（192×0.7；不兜底口径，仅记 LogError）
     const float FallbackCellH = 126f;
     /// <summary>【2026-11-03 主人拍板「选择头像框放的太大了 缩小30%」】整体等比缩放再打七折。</summary>
@@ -226,7 +228,9 @@ public class AvatarSelectPopup : MonoBehaviour
 
         // 视口：宽 = panl 实测宽；高 = 两排；中心 = Tile 底边到确定钮顶边这段可用区的中点
         var panlRt = (RectTransform)panl;
-        float viewW = panlRt.rect.width;
+        // 【2026-11-03 主人需求「滑动的左边边框往右移20」】视口左边缘内缩 20、右边缘不动：
+        // 宽减 20，中心右移 10（pivot 居中 → 左边缘 = 中心 - 宽/2 = -panlW/2 + 20）
+        float viewW = panlRt.rect.width - ViewLeftInset;
         float top = UsableTop(panl);
         float bottom = UsableBottom(panl);
         float viewH = rowStep * 2f;
@@ -242,7 +246,7 @@ public class AvatarSelectPopup : MonoBehaviour
         viewRt.anchorMin = new Vector2(0.5f, 0.5f);
         viewRt.anchorMax = new Vector2(0.5f, 0.5f);
         viewRt.pivot = new Vector2(0.5f, 0.5f);
-        viewRt.anchoredPosition = new Vector2(0f, viewY);
+        viewRt.anchoredPosition = new Vector2(ViewLeftInset * 0.5f, viewY);   // 中心右移 10 = 左边缘右移 20
         viewRt.sizeDelta = new Vector2(viewW, viewH);
         scrollGo.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0f);
 
@@ -253,7 +257,7 @@ public class AvatarSelectPopup : MonoBehaviour
         contentRt.anchorMin = new Vector2(0f, 0.5f);
         contentRt.anchorMax = new Vector2(0f, 0.5f);
         contentRt.pivot = new Vector2(0f, 0.5f);
-        int perRow = PerRowOf(count, viewW, colStep);
+        int perRow = PerRowOf(count, panlRt.rect.width, colStep);   // 每排格数仍按 panl 原宽算（本次只移左边框，不改排布）
         float contentW = perRow * colStep;
         contentRt.sizeDelta = new Vector2(contentW, viewH);
         // 【2026-11-03 主人截图「右边的空隙多」】居中不能靠 anchoredPosition 偏移 —— ScrollRect 首帧布局

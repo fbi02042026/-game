@@ -151,8 +151,8 @@ public static class FeatureUnlock
     public static string DungeonLockHint(ActivityDungeonKind kind)
         => $"通关第 {DungeonGateChapter(kind)} 章后开启{ActivityDungeonRules.DungeonName(kind)}";
 
-    /// <summary>佣兵招募未开放提示。</summary>
-    public static string MercRecruitLockHint() => $"通关第 {MERC_RECRUIT_GRAND_GATE} 座大关后开启佣兵招募";
+    /// <summary>佣兵招募未开放提示。【2026-11-03 主人拍板】文案改「通关 X-X 后开启」格式（X-X = 大关-小关卡号），不说「第 N 座大关」。</summary>
+    public static string MercRecruitLockHint() => $"通关 {MercRecruitGateStageNo()} 后开启佣兵招募";
 
     /// <summary>佣兵队列未开放提示。</summary>
     public static string MercQueueLockHint() => "完成新手引导后开启佣兵队列";
@@ -166,8 +166,9 @@ public static class FeatureUnlock
     /// <summary>羁绊 / 闲话未开放提示。</summary>
     public static string MercBondLockHint() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章后开启佣兵羁绊";
 
-    /// <summary>卡面副标题用的短锁文案（酒馆功能卡 Desc 直接吃这个）。</summary>
-    public static string MercRecruitLockDesc() => $"通关第 {MERC_RECRUIT_GRAND_GATE} 座大关开启";
+    /// <summary>卡面副标题用的短锁文案（酒馆功能卡 Desc 直接吃这个）。
+    /// 【2026-11-03 主人拍板】佣兵招募改「通关 X-X 后开启」，不说「第 N 座大关」。</summary>
+    public static string MercRecruitLockDesc() => $"通关 {MercRecruitGateStageNo()} 后开启";
     public static string MercQueueLockDesc() => "完成新手引导开启";
     public static string MercIntelLockDesc() => $"通关第 {MERC_INTEL_CHAPTER_GATE} 章开启";
     public static string MercBondLockDesc() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章开启";
@@ -184,4 +185,13 @@ public static class FeatureUnlock
     /// <summary>第 chapter 章是否已通关（招募 / 情报 / 进阶 / 羁绊共用）。</summary>
     static bool ChapterCleared(SaveData data, int chapter)
         => data != null && data.HasClearedChapter(chapter);
+
+    /// <summary>
+    /// 佣兵招募门槛的关卡号「大关-小关」（如 2-5）：门槛 = 第 1 篇第 <see cref="MERC_RECRUIT_GRAND_GATE"/>
+    /// 座大关通关，即该大关最后一节打完（2026-11-01 拍板「通 2-5、可打 3-1 时开启」）。
+    /// 【2026-11-03 主人拍板】提示文案改显这个号；末节号按第 1 章每大关节数取（真源
+    /// GameConfig.StagesPerGrandOf），不写死 5。文案唯一出口，锁提示 / 卡面副标题共用。
+    /// </summary>
+    static string MercRecruitGateStageNo()
+        => $"{MERC_RECRUIT_GRAND_GATE}-{GameConfig.StagesPerGrandOf(1)}";
 }

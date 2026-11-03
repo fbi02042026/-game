@@ -327,8 +327,14 @@ public sealed class BondDungeonBattleMode : BattleMode
         if (!string.IsNullOrEmpty(hid) && data != null && !data.IsMercBondCleared(hid))
         {
             data.MarkMercBondCleared(hid);
-            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, MercFavorDefs.BondClearDiamond, save: true, notify: true);
-            Debug.Log($"[BondDungeon] 羁绊通关：{hid} 已标记 + 钻石{MercFavorDefs.BondClearDiamond}");
+            MercRosterDefs.MercRarity rarity = MercRosterDefs.MercRarity.Common;
+            if (!MercRosterDefs.TryGetByHireId(hid, out var mdef))
+                Debug.LogError($"[BondDungeon] 花名册查不到 {hid}，钻石按普通档发放");
+            else
+                rarity = mdef.Rarity;
+            int diamond = MercFavorDefs.BondClearDiamondOf(rarity);
+            ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, diamond, save: true, notify: true);
+            Debug.Log($"[BondDungeon] 羁绊通关：{hid}（{rarity}）已标记 + 钻石{diamond}");
         }
         // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
         bm.EndRunAndReturnToTown();

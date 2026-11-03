@@ -377,7 +377,14 @@ public partial class MercDrawPoolUI : MonoBehaviour
         RecycleCards(_lockedCards, _lockedCardPool);
         var data = SaveSystem.Instance?.Data;
         IReadOnlyList<MercRosterDefs.Def> all = MercRosterDefs.All;
-        var ids = new List<string>();
+        // 【2026-11-03 主人拍板】未获得佣兵按稀有度单开一行：分三组（传奇/稀有/普通）各自独立建卡，
+        // 组内照旧 5 列流式（超过 5 个自然折到本组第二行），组间强制另起新行，不再连排混排。
+        var byRarity = new List<List<string>>
+        {
+            new List<string>(),   // 传奇
+            new List<string>(),   // 稀有
+            new List<string>(),   // 普通
+        };
         for (int i = 0; i < all.Count; i++)
         {
             var def = all[i];
@@ -385,12 +392,20 @@ public partial class MercDrawPoolUI : MonoBehaviour
             if (data != null && data.unlockedMercIds != null && data.unlockedMercIds.Contains(def.HireId)) continue;
             // 剧情 NPC 不进图鉴视野（与局内池同口径）
             if (GameConfig.GetMercTier(def.AssetId) == MercTier.Npc) continue;
-            ids.Add(def.HireId);
+            int group = def.Rarity == MercRosterDefs.MercRarity.Legendary ? 0
+                : def.Rarity == MercRosterDefs.MercRarity.Rare ? 1
+                : 2;
+            byRarity[group].Add(def.HireId);
         }
 
-        var ordered = SortByRarity(new HashSet<string>(ids));
         var content = _masterContent != null ? _masterContent : _ownedContent;
-        float end = BuildTemplateCards(content, ordered, false, _flowLockedCardsY);
+        float end = _flowLockedCardsY;
+        for (int g = 0; g < byRarity.Count; g++)
+        {
+            // 组内排序沿用 SortByRarity 同口径（表序），组间由分段建卡保证各起新行
+            var ordered = SortByRarity(new HashSet<string>(byRarity[g]));
+            end = BuildTemplateCards(content, ordered, false, end);
+        }
         LayoutContent(content, end);
     }
 

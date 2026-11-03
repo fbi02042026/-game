@@ -21,12 +21,11 @@ public static class MercGrowInventory
 
     // 【2026-10-22 施工单 T3】旧 DUP_FRAG_*（8/20/50）已被 MercStarDefs.DupFragCount（10/5/1）替代，原常量删除。
 
-    /// <summary>统一发碎片入口的结果：进了背包多少、溢出转邮件多少（碎片不许作废）。</summary>
+    /// <summary>统一发碎片入口的结果：进城镇背包多少（碎片一律进背包，字典无上限、不存在邮件溢出）。</summary>
     public struct FragGrantResult
     {
         public int bagCount;
-        public int mailCount;
-        public int Total => bagCount + mailCount;
+        public int Total => bagCount;
     }
 
     public static string BadgeId(string jobKey, string tier)
@@ -313,7 +312,7 @@ public static class MercGrowInventory
     }
 
     /// <summary>
-    /// 买重复佣兵 → 转本命碎片（2026-10-22 新口径：走统一发碎片入口，背包优先→邮件；满星不给，调用方先拦）。
+    /// 买重复佣兵 → 转本命碎片（2026-10-22 新口径：走统一发碎片入口，一律进城镇背包；满星不给，调用方先拦）。
     /// 在 TavernUnlockUI.TryUnlock 里命中「已解锁」时调用。
     /// </summary>
     public static FragGrantResult ConvertDuplicateMerc(MercRosterDefs.Def def)
@@ -325,7 +324,7 @@ public static class MercGrowInventory
 
     /// <summary>
     /// 旧存档迁移（2026-10-22 施工单 T6）：mercGrowItems 里的 frag:{hireId} 存量一次性换算成
-    /// 背包碎片（溢出走邮件）；badge: 徽记条目不动。迁移标记 = SaveData.mercFragMigrated（防重复执行）。
+    /// 城镇背包碎片（不进邮件）；badge: 徽记条目不动。迁移标记 = SaveData.mercFragMigrated（防重复执行）。
     /// 进城镇后调（TownSceneBootstrap），此时背包系统已就绪、碎片能真正落格。
     /// </summary>
     public static void MigrateLegacyFragmentsToBag()
@@ -334,7 +333,7 @@ public static class MercGrowInventory
         if (data == null || data.mercFragMigrated) return;
 
         var items = data.mercGrowItems;
-        int migrated = 0, mails = 0;
+        int migrated = 0;
         if (items != null && items.Count > 0)
         {
             // 先收集再删，避免遍历中改字典
@@ -349,14 +348,13 @@ public static class MercGrowInventory
             {
                 var r = GrantFragments(kv.Key, kv.Value, "legacy-migrate");
                 migrated += r.bagCount;
-                mails += r.mailCount;
                 items.Remove(FragPrefix + kv.Key);
             }
         }
         data.mercFragMigrated = true;   // 只跑一次：即使本次一条存量都没有也置位
         SaveSystem.Instance.Save();
-        if (migrated > 0 || mails > 0)
-            Debug.Log($"[MercGrow] 旧存档碎片迁移完成：入包 {migrated} / 转邮件 {mails}（标记 mercFragMigrated=true）");
+        if (migrated > 0)
+            Debug.Log($"[MercGrow] 旧存档碎片迁移完成：入包 {migrated}（标记 mercFragMigrated=true）");
         else
             Debug.Log("[MercGrow] 旧存档碎片迁移：无 frag: 存量，仅置迁移标记");
     }

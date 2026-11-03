@@ -209,7 +209,7 @@ public static class MercGrowSystem
 
         // ④ 升级 + 掷资质（保底三项 + 额外一项，lastRolled 保底轨道；掷定即存防 SL 刷）
         e.level = newLevel;
-        RollAptitudes(e, cur, newLevel);
+        RollAptitudes(e, cur, newLevel, def.Rarity);
         if (isNode) e.ascended++;   // 过节点 +1 阶（一期不发技能，Lv20/Lv40 只加码消耗，C3=A）
 
         SaveSystem.Instance.Save();
@@ -284,7 +284,7 @@ public static class MercGrowSystem
         // 返还：金币 50%（向下取整）；徽记 100%。save:false 统一最后存
         long goldBack = totalGold / 2;
         if (goldBack > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, goldBack, save: false, notify: true, overflowToMail: false);
+            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, goldBack, save: false, notify: true, overflowToMail: true);
         foreach (var kv in badgeRefund)
             MercGrowInventory.Add(kv.Key, kv.Value);
 
@@ -297,11 +297,12 @@ public static class MercGrowSystem
     // ============================ 内部 ============================
 
     /// <summary>
-    /// 掷资质（升级时调用）：三项各加保底 FloorPctFor(cur)；再等权抽 1 项额外 +3~5%；
+    /// 掷资质（升级时调用）：三项各加保底 FloorPctFor(cur)；再等权抽 1 项额外加成
+    /// （区间按稀有度取 MercGrowDefs.ExtraRollPctMin/Max，均值命中满级验收 1.90 / 2.24 / 2.80）；
     /// newLevel 是 5 的倍数时，额外项先从「非上轮项」里抽（lastRolled 保底轨道，防一路全落同一项）。
     /// 掷定即存（防 SL 刷）。数值口径全在 MercGrowDefs。
     /// </summary>
-    static void RollAptitudes(MercGrowEntry e, int currentLevel, int newLevel)
+    static void RollAptitudes(MercGrowEntry e, int currentLevel, int newLevel, MercRosterDefs.MercRarity rarity)
     {
         float floorPct = MercGrowDefs.FloorPctFor(currentLevel);
         e.aptAtk += floorPct;
@@ -328,7 +329,7 @@ public static class MercGrowSystem
             pick = Random.Range(0, MercGrowDefs.AptitudeKindCount);
         }
 
-        float extra = Random.Range(MercGrowDefs.ExtraRollPctMin, MercGrowDefs.ExtraRollPctMax);
+        float extra = Random.Range(MercGrowDefs.ExtraRollPctMin(rarity), MercGrowDefs.ExtraRollPctMax(rarity));
         switch (pick)
         {
             case 0: e.aptAtk += extra; break;

@@ -19,8 +19,8 @@ MonoBehaviour:
     assetLoadType: 0
     compressDataPackage: 0
     VideoUrl: 
-    relativeDST: Y:/PixelAdventureTown/Builds/wechat
-    DST: Y:/PixelAdventureTown/Builds/wechat
+    relativeDST: E:/xiangsumaoxian/Builds/wechat
+    DST: E:/xiangsumaoxian/Builds/wechat
     StreamCDN: 
     bundleHashLength: 32
     bundlePathIdentifier: StreamingAssets;

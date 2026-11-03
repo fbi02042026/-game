@@ -729,15 +729,18 @@ public class RunDraftDirector : MonoBehaviour
         if (string.IsNullOrEmpty(hid) || !MercRosterDefs.TryGetByHireId(hid, out var def)) return;
         if (RunLoadout.HasMerc(hid)) return;   // 玩家本就带着 → 不动
 
-        int level = Mathf.Max(1, MercGrowSystem.LevelOf(hid));
-        int outStar = MercStarSystem.OutStarOf(hid);
-        int star = outStar < 0 ? 1 : Mathf.Clamp(outStar, 1, 5);
-        var md = BuildMercData(def.AssetId, hid, level, star);
+        // 【2026-11-03 修正】养成等级不再塞进局内 level：局内基底恒 Lv1，养成等级只由 trainLevel 承载；
+        // 养成收益唯一生效口 = Mercenary.ApplyGrowBonus（按 hireId 读存档累计资质），避免等级基底与资质乘区双吃。
+        int trainLevel = Mathf.Max(1, MercGrowSystem.LevelOf(hid));
+        // 星级与战斗抽卡同一出口（MercStarSystem.InRunStarOf）：0 星/未拥有按 ★1 档，项目统一口径；
+        // 局外星级带来的攻防加成另由 Mercenary.ApplyOutStarBonus 按存档 outStar 乘（0 星 = 不加成）。
+        int star = MercStarSystem.InRunStarOf(hid);
+        var md = BuildMercData(def.AssetId, hid, 1, star);
         if (md == null) return;
         var entry = new RunMercEntry
         {
             hireId = md.hireId, mercId = md.mercId, displayName = md.displayName,
-            nickname = md.nickname, level = md.level, star = md.star,
+            nickname = md.nickname, level = md.level, star = md.star, trainLevel = trainLevel,
             skillId = md.skillId, passiveSkillId = md.passiveSkillId
         };
 
@@ -876,7 +879,8 @@ public class RunDraftDirector : MonoBehaviour
         merc.OnDead += bm.OnMercenaryDead;
         merc.Face(1);
 
-        Debug.Log($"[RunDraft] 局内佣兵出场：{e.displayName}({e.mercId}) Lv{e.level} ★{e.star}");
+        Debug.Log($"[RunDraft] 局内佣兵出场：{e.displayName}({e.mercId}) Lv{e.level} ★{e.star}"
+            + (e.trainLevel > 1 ? $"（局外养成 Lv{e.trainLevel}，仅记录，不参与 level 基底）" : ""));
     }
 
     /// <summary>

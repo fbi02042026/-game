@@ -46,9 +46,23 @@ public class CodexInfoPopupUI : MonoBehaviour
     RectTransform _rewardRowRt;
     /// <summary>top 头条节点（top/Name，「怪物信息/主线任务/支线任务」…）缓存；LayoutContent 里随面板高度归位（2026-11-03 排版修复）。</summary>
     RectTransform _topNode;
-    /// <summary>奖励胶图标边长 / 数量字字号 / 数量字颜色（跟正文深棕一致）。</summary>
-    const float RewardIconSize = 40f;
-    const int RewardLabelSize = 24;
+    /// <summary>
+    /// 奖励胶图标边长 / 数量字字号 / 数量字颜色（跟正文深棕一致）。
+    /// 【2026-11-03 主人「奖励图标和数字对齐并放大一点」】图标 40→52、数字 24→28；
+    /// 数字补 LayoutElement 与图标同高（52）并 MiddleLeft 居中 → 图标与数字共用一条中线，不再一高一低。
+    /// </summary>
+    const float RewardIconSize = 52f;
+    const int RewardLabelSize = 28;
+    /// <summary>
+    /// 任务弹窗排版（2026-11-03 主人拍板「任务名称下面是详情+进度，最下面是任务奖励」）：
+    /// true 时奖励行沉底贴红线，详情/进度紧挨成一组；只有主线/支线弹窗传 true。
+    /// </summary>
+    bool _rewardsAtBottom;
+    /// <summary>top/Name 在预制体里的原始 x（18，为左侧小图标做的补偿）；无图标时归中、有图标时还原。</summary>
+    float? _baseTopNameX;
+    /// <summary>Desc/Lore 预制体原对齐（首次打开记录）；任务弹窗居中、其他弹窗还原，避免串味。</summary>
+    TextAnchor? _baseDescAlign;
+    TextAnchor? _baseLoreAlign;
     /// <summary>top 头条中心到面板顶边的内边距：预制体按 720 面板调的（顶边 360 − 头条中心 291 = 69）；2026-11-03 排版修复后头条跟随面板高度，永远保持顶边下 69px。</summary>
     const float TopTitleInset = 69f;
     static readonly Color RewardLabelColor = new Color(0.32f, 0.21f, 0.12f, 1f);
@@ -80,10 +94,10 @@ public class CodexInfoPopupUI : MonoBehaviour
     public bool IsOpen => root != null && root.activeSelf;
 
     public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool rewardsAtBottom = false)
     {
         Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind,
-            topTitleOverride: topTitleOverride, topIconPath: topIconPath, rewards: rewards);
+            topTitleOverride: topTitleOverride, topIconPath: topIconPath, rewards: rewards, rewardsAtBottom: rewardsAtBottom);
     }
 
     /// <summary>
@@ -275,10 +289,11 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
         string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool rewardsAtBottom = false)
     {
         BindRefs();
         Wire();
+        _rewardsAtBottom = rewardsAtBottom;
         // DDOL 弹窗每次 Show 先重绑相机 + 重算适配（AGENTS 4.6 拍板，幂等）
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
@@ -325,6 +340,18 @@ public class CodexInfoPopupUI : MonoBehaviour
                 topIcon.gameObject.SetActive(true);
                 topIcon.sprite = Resources.Load<Sprite>(topIconPath);
             }
+        }
+        // 【2026-11-03 主人报「主线任务/支线任务/世界图鉴标题歪了」】预制体 top/Name 的 x=18 是给
+        // 「怪物信息/佣兵图鉴」左侧小图标（icon x=-97）做的视觉补偿；主线/支线/世界这些弹窗把图标
+        // 收起了，文字仍按 18 右偏 → 整条标题看着歪。这里按图标是否显示归位：有图标保持预制体值，
+        // 没图标归中 x=0。只动这一个 x，宽度/字号/两条装饰线一律不碰。
+        if (topTitleText != null)
+        {
+            var nrt = topTitleText.rectTransform;
+            if (!_baseTopNameX.HasValue) _baseTopNameX = nrt.anchoredPosition.x;
+            bool iconShown = topIcon != null && topIcon.gameObject.activeSelf;
+            nrt.anchoredPosition = new Vector2(
+                iconShown ? _baseTopNameX.Value : 0f, nrt.anchoredPosition.y);
         }
         if (metaText != null) metaText.text = meta ?? "";
         if (descText != null) descText.text = desc ?? "";
@@ -578,7 +605,12 @@ public class CodexInfoPopupUI : MonoBehaviour
             le.preferredWidth = RewardIconSize;
             le.preferredHeight = RewardIconSize;
 
-            CreateChipText(chipRt, "Num", chip.Label ?? "", RewardLabelSize, RewardLabelColor);
+            var num = CreateChipText(chipRt, "Num", chip.Label ?? "", RewardLabelSize, RewardLabelColor);
+            // 【2026-11-03 对齐】数字框与图标同高（52）+ MiddleLeft → 图标和数字共用中线。
+            // 宽度不写，交给 Text 自己算（LayoutElement 只压高度，宽度留 -1）。
+            var numLe = num.gameObject.AddComponent<LayoutElement>();
+            numLe.preferredHeight = RewardIconSize;
+            num.verticalOverflow = VerticalWrapMode.Overflow;
         }
         _rewardRow.SetActive(true);
         LayoutRebuilder.ForceRebuildLayoutImmediate(_rewardRowRt);
@@ -624,10 +656,20 @@ public class CodexInfoPopupUI : MonoBehaviour
 
         // 2026-10-31 主人报「怪物信息排版优化」：Meta 与正文、描述与趣闻两段间距拉开
         // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
+        // 【2026-11-03 任务弹窗排版（主人报主线弹窗乱 + 拍板「任务名下是详情+进度，最下面是奖励」）】
+        // 任务类弹窗（主线/支线，rewardsAtBottom=true 且有奖励行）：详情与进度紧挨成一组（12），
+        // 奖励行沉底贴底部红线（与进度组最小间距 24），不再夹在描述中间错位。
         float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
-        const float metaGap = 12f;      // Meta 与 Desc 的间距
-        const float rewardGapAbove = 10f;   // Desc 与奖励行间距
-        const float rewardGapBelow = 20f;   // 奖励行与 Lore 间距
+        float metaGap = 12f;            // Meta 与 Desc 的间距
+        float rewardGapAbove = 10f;     // Desc 与奖励行间距
+        float rewardGapBelow = 20f;     // 奖励行与 Lore 间距
+        bool questSink = _rewardsAtBottom && _rewardRow != null && _rewardRow.activeSelf && _rewardRowRt != null;
+        if (questSink)
+        {
+            loreGap = 12f;
+            rewardGapAbove = 24f;   // 语义变为「进度组与沉底奖励行」的最小间距
+            rewardGapBelow = 0f;
+        }
 
         // 顶部起点 = Meta 框底 + 间距（预制体原值 -360 与 Meta 框底 -366 有 6px 重叠）
         float top = -372f;
@@ -635,8 +677,10 @@ public class CodexInfoPopupUI : MonoBehaviour
         if (metaRt != null)
         {
             // 2026-11-01 排版优化：Meta 空（任务/世界弹窗）时不再占整格，desc 贴 meta 框顶下 8px
+            // 【2026-11-03 主人「任务名字和详情分开一点」】任务弹窗标题到详情原本只隔 21px，太挤；
+            // 改 34px（标题底到详情顶 ≈ 47px），标题与正文分成两块。
             top = string.IsNullOrEmpty(metaText.text)
-                ? metaRt.anchoredPosition.y - 8f
+                ? metaRt.anchoredPosition.y - (questSink ? 34f : 8f)
                 : metaRt.anchoredPosition.y - metaRt.sizeDelta.y - metaGap;
         }
 
@@ -646,13 +690,18 @@ public class CodexInfoPopupUI : MonoBehaviour
 
         // 首次记录基准字号；之后每次先恢复，避免上一次降档残留。
         // 【2026-10-31 主人报「这个字可以再大点」】基准在预制体字号上各 +4（22→26 / 20→24）。
+        // 【2026-11-03 主人报「有的字大小要统一」】预制体 Desc=22、Lore=20，+4 后变成 26/24 两个号，
+        // 同一块正文大小不一 → 基准统一取两者较大值 +4（26），Desc/Lore 从此同号。
         if (_baseDescSize <= 0)
         {
-            _baseDescSize = descText.fontSize + 4;
-            _baseLoreSize = loreText.fontSize + 4;
+            _baseDescSize = Mathf.Max(descText.fontSize, loreText.fontSize) + 4;
+            _baseLoreSize = _baseDescSize;
         }
         descText.fontSize = _baseDescSize;
         loreText.fontSize = _baseLoreSize;
+        // 【2026-11-03 字号层级统一】副信息 Meta 预制体 20 比正文小一圈显得突兀，统一到 22
+        //（层级：头条 35 → 名称 32 → 正文 26 → 副信息 22）。只改字号，颜色/框/对齐不动。
+        if (metaText != null) metaText.fontSize = 22;
         // 2026-10-31 排版优化：正文行距放宽（每次打开重设，无需恢复基准）
         descText.lineSpacing = 1.12f;
         loreText.lineSpacing = 1.12f;
@@ -660,6 +709,14 @@ public class CodexInfoPopupUI : MonoBehaviour
         // 文本高度按预制体给的宽度算（preferredHeight 自动取 rect 宽，代码不写宽度）
         float descH = descText.preferredHeight;
         float loreH = loreText.preferredHeight;
+
+        // 【2026-11-03 对齐规则统一（主人问「是不是应该有的居中」）】任务弹窗内容都是短句
+        //（任务名/详情/进度各一行），统一走居中竖轴；世界图鉴这类长正文保持预制体左对齐（长段落居中难读）。
+        // 只切对齐方式，不碰宽度/位置。
+        if (!_baseDescAlign.HasValue) _baseDescAlign = descText.alignment;
+        if (!_baseLoreAlign.HasValue) _baseLoreAlign = loreText.alignment;
+        descText.alignment = questSink ? TextAnchor.UpperCenter : _baseDescAlign.Value;
+        loreText.alignment = questSink ? TextAnchor.UpperCenter : _baseLoreAlign.Value;
 
         // 奖励图标行高度（active 才占位）
         float rewardH = 0f;
@@ -711,13 +768,14 @@ public class CodexInfoPopupUI : MonoBehaviour
                 _topNode.anchoredPosition.x, panelRt.sizeDelta.y * 0.5f - TopTitleInset);
         if (descH + rewardBlock + loreGap + loreH > avail)
         {
-            // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）
-            int[] ds = { 23, 21, 19 };
-            int[] ls = { 21, 19, 17 };
-            for (int i = 0; i < ds.Length; i++)
+            // 降档阶梯随新基准同步上移（原 19/17/16、18/16/15）。
+            // 【2026-11-03 字号统一】Desc/Lore 原本两套阶梯（23/21/19 vs 21/19/17），降档后又会
+            // 差一号；改为一套阶梯同时套两个节点，任何档位都同号。
+            int[] steps = { 23, 21, 19 };
+            for (int i = 0; i < steps.Length; i++)
             {
-                descText.fontSize = ds[i];
-                loreText.fontSize = ls[i];
+                descText.fontSize = steps[i];
+                loreText.fontSize = steps[i];
                 descH = descText.preferredHeight;
                 loreH = loreText.preferredHeight;
                 if (descH + rewardBlock + loreGap + loreH <= avail) break;
@@ -728,16 +786,26 @@ public class CodexInfoPopupUI : MonoBehaviour
 
         // 【2026-11-03 排版修复】内容在可用区内垂直居中：内容少时上下留白对称，不再全挤
         // 在上半截、底部空一大块。偏移后内容底 = bottomLimit + slack/2，永不越底部红线。
+        // 任务弹窗（questSink）不居中：详情/进度顶排，奖励沉底，中间留白是版式的一部分。
         float slack = avail - (descH + rewardBlock + loreGap + loreH);
-        if (slack > 0f)
+        if (slack > 0f && !questSink)
             top -= slack * 0.5f;
 
         // 只动 y：宽度、x、sizeDelta 一律保留预制体原值
         descRt.anchoredPosition = new Vector2(descRt.anchoredPosition.x, top);
         if (_rewardRowRt != null && _rewardRow != null && _rewardRow.activeSelf)
-            _rewardRowRt.anchoredPosition = new Vector2(
-                _rewardRowRt.anchoredPosition.x, top - descH - rewardGapAbove);
-        loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, top - descH - rewardBlock - loreGap);
+        {
+            // 任务弹窗：奖励行沉底——行底贴内容红线（关闭/解锁钮上方），其余内容永不与它重叠
+            float rewardY = questSink
+                ? bottomLimit + rewardH
+                : top - descH - rewardGapAbove;
+            _rewardRowRt.anchoredPosition = new Vector2(_rewardRowRt.anchoredPosition.x, rewardY);
+        }
+        // 任务弹窗奖励不夹在中间：进度组紧跟描述；普通弹窗维持「Desc→奖励→Lore」流式
+        float loreY = questSink
+            ? top - descH - loreGap
+            : top - descH - rewardBlock - loreGap;
+        loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, loreY);
     }
 
     /// <summary>编辑器生成 / 运行时兜底共用。</summary>

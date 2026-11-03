@@ -16,8 +16,15 @@ public static class CommonIconSprites
 {
     /// <summary>Art 源目录（编辑器回退用，缺 Resources 副本时也能立刻看到效果）。</summary>
     const string ArtRoot = "Assets/Art/UI/Icons/Common/";
-    /// <summary>Resources 目录（打包后直连，但当前无副本，主要走编辑器回退）。</summary>
-    const string ResRoot = "UI/Icons/Common/";
+    /// <summary>
+    /// Resources 目录（打包后直连）。
+    /// 【2026-11-03 主人报「冒险日志奖励图标还是旧的、跟主界面对不上」】原路径 UI/Icons/Common 是
+    /// 10-04 的老图（调色板版），主界面/战斗界面一直走 UI/Art/Icons/Common（10-27 新图 RGBA）。
+    /// 本类调用方只用 icon_gold / icon_talent_stone / icon_enchant_stone / icon_decompose_mat /
+    /// icon_diamond_blue / icon_draft_coin / icon_hire_scroll 七个名字，新目录全部齐备 → 统一改指新图，
+    /// 一处改完全工程同步，不再各界面打补丁。
+    /// </summary>
+    const string ResRoot = "UI/Art/Icons/Common/";
 
     static readonly Dictionary<string, Sprite> Cache = new Dictionary<string, Sprite>();
 

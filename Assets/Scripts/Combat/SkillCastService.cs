@@ -348,21 +348,6 @@ public sealed class SkillCastService
     }
 
 
-    SkillSystem.ActiveSkill ResolveMercSkill(Mercenary merc)
-    {
-        string id = SkillRegistry.Instance != null
-            ? SkillRegistry.Instance.GetMercSkillId(merc != null ? merc.mercId : null,
-                merc != null ? merc.equippedSkillId : null)
-            : SkillRegistry.DefaultMercMeleeSkillId;
-        return ResolveSkill(id);
-    }
-
-
-    // 旧签名保留注释，避免外部误调编译失败时再恢复：
-    // SkillSystem.ActiveSkill ResolveMercSkill(string mercId) => ResolveSkill(
-    //     SkillRegistry.Instance != null ? SkillRegistry.Instance.GetMercDefaultSkillId(mercId)
-    //     : SkillRegistry.DefaultMercMeleeSkillId);
-
     public SkillSystem.ActiveSkill ResolveSkill(string skillId, Mercenary merc = null)
     {
         var fromReg = SkillRegistry.Instance?.GetActiveSkill(skillId);
