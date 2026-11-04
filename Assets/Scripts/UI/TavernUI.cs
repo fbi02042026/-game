@@ -596,6 +596,12 @@ public class TavernUI : MonoBehaviour, ITownPage
             UIManager.Instance?.ShowToast("酒馆里还没有能聊天的佣兵，先去招募一位吧。");
             return;
         }
+        // 【2026-11-04 主人拍板】好感已满的佣兵不再吃闲话次数：全员满值时直接拦下，避免白耗一次闲话
+        if (string.IsNullOrEmpty(PickRandomOwnedMercWithRoom(data)))
+        {
+            UIManager.Instance?.ShowToast("所有佣兵好感已满");
+            return;
+        }
         if (data.TavernGossipLeft() <= 0)
         {
             UIManager.Instance?.ShowToast("今天的闲话聊完了，明天再来！");
@@ -645,7 +651,8 @@ public class TavernUI : MonoBehaviour, ITownPage
             return;
         }
 
-        string hireId = PickRandomOwnedMerc(data);
+        string hireId = PickRandomOwnedMercWithRoom(data);
+        if (string.IsNullOrEmpty(hireId)) hireId = PickRandomOwnedMerc(data);
         int after = data.AddMercTrust(hireId, 1);
         string name = hireId;
         if (MercRosterDefs.TryGetByHireId(hireId, out var def) && !string.IsNullOrEmpty(def.Name))
@@ -705,6 +712,20 @@ public class TavernUI : MonoBehaviour, ITownPage
         string[] pool = new string[data.unlockedMercIds.Count];
         data.unlockedMercIds.CopyTo(pool);
         return pool[Random.Range(0, pool.Length)];
+    }
+
+    /// <summary>
+    /// 【2026-11-04 主人拍板】随机一名「好感未满」的已拥有佣兵（闲话 +1 不能把好感顶到 60 以上）；
+    /// 全员满值返回 null（调用方据此拦下，不白耗闲话次数）。
+    /// </summary>
+    static string PickRandomOwnedMercWithRoom(SaveData data)
+    {
+        if (data.unlockedMercIds == null || data.unlockedMercIds.Count == 0) return null;
+        var pool = new List<string>(data.unlockedMercIds.Count);
+        foreach (var id in data.unlockedMercIds)
+            if (!MercFavorSystem.IsBondOpen(data, id)) pool.Add(id);
+        if (pool.Count == 0) return null;
+        return pool[Random.Range(0, pool.Count)];
     }
 
     /// <summary>

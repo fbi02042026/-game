@@ -937,6 +937,12 @@ public class MercFavorUI : MonoBehaviour
     {
         var d = Data;
         if (d == null || string.IsNullOrEmpty(_currentHireId)) return;
+        // 【2026-11-04 主人拍板】好感到顶后不再接受对话：明确提示，不静默
+        if (MercFavorSystem.IsBondOpen(d, _currentHireId))
+        {
+            GlobalToastUI.Show("好感已满");
+            return;
+        }
         int gain = MercFavorSystem.Talk(d, _currentHireId, slot, out var grantedGiftId);
         if (gain < 0) return;   // 今日已聊（按钮已禁点，这里再拦一道）
 
@@ -954,6 +960,12 @@ public class MercFavorUI : MonoBehaviour
     {
         var d = Data;
         if (d == null || string.IsNullOrEmpty(_currentHireId)) return;
+        // 【2026-11-04 主人拍板】好感到顶后不再收礼：明确提示且不扣礼物（与系统层判满同源）
+        if (MercFavorSystem.IsBondOpen(d, _currentHireId))
+        {
+            GlobalToastUI.Show("好感已满");
+            return;
+        }
         int gain = MercFavorSystem.GiveGift(d, _currentHireId, giftId);
         if (gain < 0) { RefreshGifts(d); return; }   // 礼物没了等异常：静默刷一遍，下次必显示正确状态
 

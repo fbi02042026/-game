@@ -217,6 +217,18 @@ public static class MercHireSession
         return HasScrollFor(rarity);
     }
 
+    /// <summary>
+    /// 【2026-11-04 主人拍板】卷轴退款唯一出口（招募扣费后到账失败时回补）：
+    /// 稀有=普通卷（mercScrollCommon）、传奇=稀有卷（mercScrollLegendary），与 TrySpendScroll 镜像。
+    /// </summary>
+    public static void RefundScroll(MercRosterDefs.MercRarity rarity)
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        if (rarity == MercRosterDefs.MercRarity.Legendary) data.mercScrollLegendary++;
+        else if (rarity == MercRosterDefs.MercRarity.Rare) data.mercScrollCommon++;
+    }
+
     public static bool TrySpendScroll(MercRosterDefs.MercRarity rarity)
     {
         var data = SaveSystem.Instance?.Data;

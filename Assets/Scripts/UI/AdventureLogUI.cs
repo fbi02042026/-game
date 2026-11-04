@@ -1301,7 +1301,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             }
             CodexInfoPopupUI.Show(name, "", detail, lore, null,
                 codexKind: null, topTitleOverride: "主线任务", topIconPath: "",
-                rewards: BuildRewardChips(def.rewardGold, def.rewardStones), rewardsAtBottom: true);
+                rewards: BuildRewardChips(def.rewardGold, def.rewardStones), taskLayout: true);
         }
         else
         {
@@ -1333,7 +1333,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string sideDesc = "通关第" + isl.act + "篇的支线岛「" + isl.name + "」\n进入岛内打通即可完成";
             CodexInfoPopupUI.Show(isl.name, "", sideDesc, lore, null,
                 codexKind: null, topTitleOverride: "支线任务", topIconPath: "",
-                rewards: BuildRewardChips(isl.goldReward, isl.talentReward), rewardsAtBottom: true);
+                rewards: BuildRewardChips(isl.goldReward, isl.talentReward), taskLayout: true);
         }
     }
 

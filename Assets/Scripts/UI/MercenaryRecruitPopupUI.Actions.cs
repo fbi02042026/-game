@@ -142,11 +142,25 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (MercHireSession.IsMercOwned(offer))
             return TryBuyDuplicateOffer(offer, index);
 
+        // 【2026-11-04 主人拍板「先校验后扣费」】解锁前置（存档/hireId）先验，不通过不扣钱
+        var data = SaveSystem.Instance?.Data;
+        string hid = offer.hireId;
+        if (string.IsNullOrEmpty(hid) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var def0))
+            hid = def0.HireId;
+        if (data == null || string.IsNullOrEmpty(hid))
+        {
+            Debug.LogError("[MercRecruit] 解锁前置不通过：hireId=" + hid
+                + "（data=" + (data != null) + "），未扣费");
+            UIManager.Instance?.ShowToast("购买失败");
+            return false;
+        }
+
         var rarity = MercHireSession.OfferRarity(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        int gold = 0;
         if (isCommon)
         {
-            int gold = MercHireSession.GoldCost(offer);
+            gold = MercHireSession.GoldCost(offer);
             if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true))
             {
                 UIManager.Instance?.ShowToast("金币不足");
@@ -164,14 +178,14 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         }
 
         // 永久解锁（进「已拥有」，下次开酒馆自动按既有口径补进三选一池资格）
-        var data = SaveSystem.Instance?.Data;
-        string hid = offer.hireId;
-        if (string.IsNullOrEmpty(hid) && MercRosterDefs.TryGetByAssetId(offer.mercId, out var def0))
-            hid = def0.HireId;
-        if (data == null || string.IsNullOrEmpty(hid) || !data.UnlockMerc(hid))
+        if (!data.UnlockMerc(hid))
         {
-            Debug.LogError("[MercRecruit] 解锁佣兵失败：hireId=" + hid
-                + "（data=" + (data != null) + "，钱已扣，需主人确认是否补发）");
+            // 【2026-11-04 主人拍板】解锁失败必须退款：扣费与到账同生共死，不许白扣
+            if (isCommon)
+                ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: false, notify: false);
+            else
+                MercHireSession.RefundScroll(rarity);
+            Debug.LogError("[MercRecruit] 解锁佣兵失败：hireId=" + hid + "，已退款（gold=" + gold + "）");
             UIManager.Instance?.ShowToast("购买失败");
             return false;
         }
@@ -227,9 +241,10 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         // 扣费（与首次招募同口径）
         var rarity = MercHireSession.OfferRarity(offer);
         bool isCommon = rarity == MercRosterDefs.MercRarity.Common;
+        int gold = 0;
         if (isCommon)
         {
-            int gold = MercHireSession.GoldCost(offer);
+            gold = MercHireSession.GoldCost(offer);
             if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, gold, save: false, notify: true))
             {
                 UIManager.Instance?.ShowToast("金币不足");
@@ -248,7 +263,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         var frag = MercGrowInventory.ConvertDuplicateMerc(def);
         if (frag.bagCount <= 0)
         {
-            Debug.LogError("[MercRecruit] 重复购买转碎片失败：ConvertDuplicateMerc 零发放（hireId=" + hid + "，钱已扣，需主人确认是否补发）");
+            // 【2026-11-04 主人拍板】零发放必须退款：扣费与到账同生共死，不许白扣
+            if (isCommon)
+                ResourceWallet.Add(ResourceWallet.ResourceType.Gold, gold, save: false, notify: false);
+            else
+                MercHireSession.RefundScroll(rarity);
+            Debug.LogError("[MercRecruit] 重复购买转碎片失败：ConvertDuplicateMerc 零发放（hireId=" + hid + "），已退款（gold=" + gold + "）");
             UIManager.Instance?.ShowToast("购买失败");
             return false;
         }

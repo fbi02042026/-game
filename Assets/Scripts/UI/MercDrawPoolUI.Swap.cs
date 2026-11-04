@@ -121,6 +121,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             Debug.LogError("[MercDrawPoolUI] 入队未成且池未满：hireId=" + hireId
                 + "（查 AddToDrawPool 返回 false 的原因）");
+            // 【2026-11-04 主人拍板】静默失败要给玩家可见提示，不许点了没反应
+            UIManager.Instance?.ShowToast("入队失败，请重开界面再试");
             return;
         }
 
