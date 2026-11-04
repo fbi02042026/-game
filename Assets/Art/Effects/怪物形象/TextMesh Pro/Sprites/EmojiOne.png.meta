@@ -117,7 +117,7 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 3
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 512
+    maxTextureSize: 2048
     maxPlaceholderSize: 32
     resizeAlgorithm: 0
     textureFormat: -1
@@ -131,7 +131,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 1
   - serializedVersion: 3
     buildTarget: Standalone
-    maxTextureSize: 512
+    maxTextureSize: 2048
     maxPlaceholderSize: 32
     resizeAlgorithm: 0
     textureFormat: -1

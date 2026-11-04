@@ -56,7 +56,7 @@ MonoBehaviour:
           Appid: 
           CDN: 
           assetLoadType: 0
-          compressDataPackage: 0
+          compressDataPackage: 1
           VideoUrl: 
           relativeDST: 
           DST: Y:\PixelAdventureTown\

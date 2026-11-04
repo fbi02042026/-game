@@ -6,6 +6,10 @@ using UnityEngine;
 
 /// <summary>
 /// 将 Art/UI/Icons/佣兵头像、佣兵立绘 同步到 Resources/Icons/MercHead、MercStand。
+/// 【2026-11-04 瘦身口径】立绘唯一出口是 Resources/UI/Icons/MercStand；
+/// 本工具不再生成/写入 Resources/UI/Icons/佣兵立绘（该目录旧副本已删除，
+/// 仅保留前台小姐害羞/生气两张表情，见 SpeechBubbleTalker），
+/// 因此重跑本工具不会把删掉的 30 张立绘副本重建回来。
 /// </summary>
 public static class MercPortraitSyncTool
 {
@@ -13,6 +17,8 @@ public static class MercPortraitSyncTool
     const string ArtStandDir = "Assets/Art/UI/Icons/佣兵立绘";
     const string ResHeadDir = "Assets/Resources/UI/Icons/MercHead";
     const string ResStandDir = "Assets/Resources/UI/Icons/MercStand";
+    // 禁止写入的旧立绘副本目录（唯一用途是前台表情两张图，由主人手工维护）
+    const string LegacyResStandDir = "Assets/Resources/UI/Icons/佣兵立绘";
 
     [MenuItem("Tools/UI/同步佣兵头像立绘到 Resources")]
     public static void SyncAll()
@@ -25,7 +31,7 @@ public static class MercPortraitSyncTool
         int standCount = SyncStands();
         AssetDatabase.Refresh();
         EditorUtility.DisplayDialog("佣兵头像立绘",
-            $"已同步到 Resources。\n头像：{headCount} 张\n立绘：{standCount} 张",
+            $"已同步到 Resources（头像→MercHead，立绘→MercStand；不动 UI/Icons/佣兵立绘）。\n头像：{headCount} 张\n立绘：{standCount} 张",
             "OK");
         Debug.Log($"[MercPortraitSyncTool] head={headCount} stand={standCount}");
     }
@@ -84,6 +90,7 @@ public static class MercPortraitSyncTool
 
     static int SyncStands()
     {
+        // 【2026-11-04】立绘只写 ResStandDir（MercStand），不写旧副本目录 Resources/UI/Icons/佣兵立绘
         if (!Directory.Exists(ArtStandDir)) return 0;
         int n = 0;
         foreach (string file in Directory.GetFiles(ArtStandDir, "*.png"))
@@ -107,6 +114,13 @@ public static class MercPortraitSyncTool
 
     static bool CopySprite(string src, string dest)
     {
+        // 立绘只允许落到 MercStand；旧副本目录一律拒绝写入（防止重建已删除的 30 张）
+        string destNorm = dest.Replace('\\', '/');
+        if (destNorm.StartsWith(LegacyResStandDir + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogError("[MercPortraitSyncTool] 拒绝写入旧立绘目录：" + dest);
+            return false;
+        }
         if (!File.Exists(src)) return false;
         string destDir = Path.GetDirectoryName(dest);
         if (!Directory.Exists(destDir))

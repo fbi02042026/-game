@@ -114,7 +114,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: WebGL
-    maxTextureSize: 128
+    maxTextureSize: 2048
     maxPlaceholderSize: 32
     resizeAlgorithm: 0
     textureFormat: -1
@@ -170,7 +170,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: WeixinMiniGame
-    maxTextureSize: 128
+    maxTextureSize: 2048
     maxPlaceholderSize: 32
     resizeAlgorithm: 0
     textureFormat: -1
