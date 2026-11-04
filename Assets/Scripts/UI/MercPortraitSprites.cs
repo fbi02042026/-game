@@ -114,9 +114,9 @@ public static class MercPortraitSprites
         // 老板娘专属立绘（2026-10-15）：只在 Resources/Art/UI/Tavern/，不复制进美术源目录
         if (hireId == "landlady")
             return LoadEditorSprite("Assets/Resources/UI/Art/Tavern/酒吧老板娘.png");
-        if (hireId == "receptionist")
+        if (hireId == "receptionist_sitting")   // 【2026-11-04 站姿改造】坐姿源图挂 sitting；站姿(receptionist)走 Resources 本名
             return LoadEditorSprite(ArtStandDir + "/前台小姐.png");
-        if (hireId == "guildmaster")
+        if (hireId == "guildmaster_sitting")    // 【2026-11-04 站姿改造】同上
             return LoadEditorSprite(ArtStandDir + "/会长——大众.png");
         if (hireId == "guildmaster_hidden")
             return LoadEditorSprite(ArtStandDir + "/会长——阴暗.png");

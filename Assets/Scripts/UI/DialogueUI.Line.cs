@@ -39,7 +39,7 @@ public partial class DialogueUI
         bool soloCentered = false,
         string initiatorPortraitId = null,
         string otherPortraitId = null,
-        bool normalizePortraitSize = false)
+        bool normalizePortraitSize = true)   // 【2026-11-04 主人拍板「剧情立绘统一 968」】默认改 true：主线剧情与情报对话同样归一化；显式传参者（情报对话=true）行为不变
     {
         _initiatorName = initiatorName ?? "";
         _otherName = otherName ?? "";

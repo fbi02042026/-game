@@ -298,10 +298,17 @@ public class MercGainCinematicUI : MonoBehaviour
         var anim = GetComponentInChildren<Animator>();
         if (anim != null && anim.runtimeAnimatorController != null)
         {
+            // 【2026-11-04 主人拍板「动画连续播完不冻住」】抽奖/进关阶段 Time.timeScale=0，
+            // Animator 默认 Normal 按缩放时间推进 → 整段 chuchang 卡在 t=0 的 scale=4，
+            // 12s 保护超时后 anim.enabled=false 又把它永久冻在 4 倍（截图里那个巨大立绘）。
+            // 改按真实时间连续推进：4.85s 完整播完，4.5→4.85 连续缩到 1，不跳不冻。
+            // 只改运行时更新模式，预制体与 chuchang.anim 都不动。
+            anim.updateMode = AnimatorUpdateMode.UnscaledTime;
             // 【2026-11-03 主人拍板「按我的动画来」】动画期间代码不再每帧改写 Stand y
             // （旧 LateUpdate ×k 贴台已删），位置/缩放全程以预制体动画轨道为准。
             yield return CoWaitEntranceDone(anim);
-            // chuchang 是非循环片段，播完姿态冻结；关掉 Animator 前最后一帧姿态即最终落点。
+            // chuchang 是非循环片段，播完停在末帧（落定 scale=1）；禁用 Animator 只是不再覆写属性，
+            // 不是把画面冻在中途——最后一帧姿态即最终落点。
             anim.enabled = false;
         }
         else
@@ -327,6 +334,8 @@ public class MercGainCinematicUI : MonoBehaviour
     /// <summary>
     /// 等 panl 上的出场动画播完（chuchang 非循环片段，normalizedTime ≥ 1 即结束）。
     /// 12s 真实时间保护： Animator 被异常关掉/状态机卡死时不至于把整个演出卡死。
+    /// 【2026-11-04 主人拍板「动画连续播完不冻住」】超时也不能把立绘冻在中途 4 倍姿态：
+    /// 先把当前状态推到末帧（落定 scale=1）再退出，避免任何异常下出现「卡住 + 硬跳」。
     /// </summary>
     IEnumerator CoWaitEntranceDone(Animator anim)
     {
@@ -338,6 +347,12 @@ public class MercGainCinematicUI : MonoBehaviour
             var st = anim.GetCurrentAnimatorStateInfo(0);
             if (st.length > 0f && st.normalizedTime >= 1f) yield break;
             yield return null;
+        }
+        var end = anim.GetCurrentAnimatorStateInfo(0);
+        if (end.length > 0f)
+        {
+            anim.Play(end.shortNameHash, 0, 1f);
+            anim.Update(0f);
         }
     }
 

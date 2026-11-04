@@ -67,11 +67,11 @@ public static class WeChatAd
     static void DoShow()
     {
         _ad.Show(
-            onSuccess: _ =>
+            success: _ =>
             {
                 // 拉起成功；收口只认 OnClose(res.isEnded)，此处不做任何回调。
             },
-            onFail: _ =>
+            failed: _ =>
             {
                 // show 失败按官方建议重试一次：重新 load 再 show。
                 if (++_showAttempt < MaxShowAttempts)

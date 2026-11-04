@@ -656,7 +656,14 @@ public class BambooBasketGame : MonoBehaviour
         }
         if (count == 0) return;
 
-        SaveSystem.Instance?.Data?.AddFavorGift(picked.Id, 1);   // 唯一发放出口（不存盘，结算统一存）
+        // 唯一发放出口（不存盘，Close/Settle 统一存）；【2026-11-04】存档未就绪不许静默吞礼物
+        var saveData = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (saveData == null)
+        {
+            Debug.LogError("[竹篓纳福] 接到礼物但存档未就绪，未发放（丢失 1 件：" + picked.Name + "）");
+            return;
+        }
+        saveData.AddFavorGift(picked.Id, 1);
         switch (q)
         {
             case MercFavorDefs.GiftQuality.Legendary: _giftLegend++; break;

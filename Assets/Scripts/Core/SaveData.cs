@@ -1945,6 +1945,13 @@ public class SaveData
         dailyArenaBattle++;
     }
 
+    /// <summary>
+    /// 天赋点击累计数（2026-11-04 主人拍板「可以独立计数」）：每次成功花费天赋石点亮/升级右列 +1，
+    /// 累计不清零。主线 upgrade_talent 任务改按此计数（旧口径=天赋石消耗量，一次点击花多石会
+    /// 一次完成任务，与文案「点 N 次」不符）。左列是金币购买，不计。
+    /// </summary>
+    public long talentClickTotal = 0;
+
     /// <summary>本周升星佣兵（TryStarUp 成功时调）。</summary>
     public void CountMercStarUp()
     {
@@ -1964,6 +1971,7 @@ public class SaveData
             case "daily_recruit_merc": return dailyRecruitMerc;
             case "daily_arena_battle": return dailyArenaBattle;
             case "weekly_merc_starup": return weeklyMercStarUp;
+            case "talent_click_total": return (int)Math.Min(talentClickTotal, int.MaxValue);   // 主线 upgrade_talent 独立点击计数（累计）
             case "daily_login": return loginLastDay == DayKeyUtil.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
             default: return 0;
         }

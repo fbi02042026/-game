@@ -239,6 +239,7 @@ public static class TalentSystem
         { reason = ReasonNoStones; return false; }
 
         data.talents[id] = 1;
+        data.talentClickTotal++;   // 【2026-11-04 主人拍板】主线「点 N 次天赋」独立计数：每次成功花天赋石 +1
         SyncBackpackRows(data);   // R_BAG 解锁 → SaveData.backpackRows 按等级 +行
         RefreshTalentEntryRedDot(data);   // 点了右侧新天赋 → 「新」消失，没有其它新节点就灭红点
         SaveSystem.Instance.Save();
@@ -282,6 +283,7 @@ public static class TalentSystem
         { reason = ReasonNoStones; return false; }
 
         data.talents[id] = level + 1;
+        data.talentClickTotal++;   // 【2026-11-04 主人拍板】主线「点 N 次天赋」独立计数
         SyncBackpackRows(data);
         RefreshTalentEntryRedDot(data);
         SaveSystem.Instance.Save();

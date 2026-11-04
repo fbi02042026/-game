@@ -891,8 +891,20 @@ public class GuildHallUI : MonoBehaviour
     void RestoreBoardCharacter()
     {
         // 捕获预制体默认看板图（=前台小姐），轮换"回到前台"时复用；必须在任何 SetBoardCharacter 之前捕获。
+        // 【2026-11-04 修】prefab 的看板/show 节点 sprite guid 悬空（团结 56 字符重签后断链），
+        //   按 AGENTS.md §2.3 口径走路径加载 Resources/UI/Icons/MercStand/receptionist。
         if (boardCharacterImage != null && _defaultBoardSprite == null)
+        {
             _defaultBoardSprite = boardCharacterImage.sprite;
+            if (_defaultBoardSprite == null)
+            {
+                _defaultBoardSprite = Resources.Load<Sprite>("UI/Icons/MercStand/receptionist");
+                if (_defaultBoardSprite != null)
+                    boardCharacterImage.sprite = _defaultBoardSprite;
+                else
+                    Debug.LogError("[GuildHall] 看板默认图（前台小姐）路径加载失败：Resources/UI/Icons/MercStand/receptionist");
+            }
+        }
         string id = SaveSystem.Instance?.Data?.lastBoardCharacterId;
         if (string.IsNullOrEmpty(id)) return;
         if (boardCharacterImage == null)

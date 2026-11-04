@@ -290,8 +290,8 @@ public class MercJoinBannerUI : MonoBehaviour
             return Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f);
 
         Debug.LogError("[MercJoinBanner] 取不到立绘 " + path +
-                       " —— 请把 Assets/Art/UI/Icons/佣兵立绘/佣兵立绘_" + hireId +
-                       ".png 复制到 Resources/UI/Icons/佣兵立绘/");
+                       " —— 请确认 Assets/Resources/UI/Icons/MercStand/" + hireId +
+                       ".png 是否存在（立绘唯一出口是 MercStand，不再使用 UI/Icons/佣兵立绘）");
         return null;
     }
 

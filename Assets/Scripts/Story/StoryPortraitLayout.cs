@@ -35,8 +35,8 @@ public static class StoryPortraitLayout
     /// <summary>引导期主要 NPC（全身立绘）。</summary>
     public static readonly string[] TutorialCastIds =
     {
-        StoryPortraits.GuildMaster,
-        StoryPortraits.Receptionist,
+        StoryPortraits.GuildMasterSitting,
+        StoryPortraits.ReceptionistSitting,
         StoryPortraits.Player,
         StoryPortraits.LaoDun,
     };
@@ -49,7 +49,7 @@ public static class StoryPortraitLayout
         slotClipWidthFrac = 0.52f,
         centerClipWidthFrac = 0.92f,
         bottomScreenFrac = 0.17f,
-        bottomOffsetPx = -88f,
+        bottomOffsetPx = -48f,   // 【2026-11-04 主人报「全身立绘剧情时人物偏下」】-88→-48，全体立绘基准上移 40 设计像素；坐姿 +100 修正表未动，坐姿净位置同步上移 40
         dialogueTopGapPx = 2f
     };
 
@@ -64,8 +64,8 @@ public static class StoryPortraitLayout
     /// </summary>
     public static readonly Dictionary<string, float> DeskPortraitBottomOffsetPx = new Dictionary<string, float>
     {
-        { StoryPortraits.GuildMaster, 100f },
-        { StoryPortraits.Receptionist, 100f },
+        { StoryPortraits.GuildMasterSitting, 100f },
+        { StoryPortraits.ReceptionistSitting, 100f },
     };
 
     /// <summary>查某个立绘 ID 的专属下移量；不在表内返回 0（其他角色照旧）。</summary>
@@ -161,6 +161,17 @@ public static class StoryPortraitLayout
         { "npc_duyan", 25f },
         { "player", 213f },
         { "landlady", 0f },
+        // 【2026-11-04】随内容表补齐的头顶留白实测（原始像素）；hunter/guildmaster_sitting/receptionist_sitting top=0 与兜底 48 等效不列
+        { "laodun", 147f },
+        { "xiaomei", 241f },
+        { "npc_xiaomei", 241f },
+        { "altor", 147f },
+        { "grey", 107f },
+        { "npc_grey", 107f },
+        { "melissa", 143f },
+        { "guildmaster_hidden", 45f },
+        { "guildmaster", 74f },       // 【2026-11-04 站姿改造】站姿图 top=74（原 guildmaster_open）
+        { "receptionist", 170f },     // 【2026-11-04 站姿改造】站姿图 top=170
     };
 
     /// <summary>
@@ -176,9 +187,27 @@ public static class StoryPortraitLayout
 
     public static readonly Dictionary<string, PortraitContentFit> PortraitContentFits = new Dictionary<string, PortraitContentFit>
     {
-        { "npc_duyan", new PortraitContentFit { charHeightFrac = 968f / 1035f, belowFrac = 42f / 1035f } },
+        { "npc_duyan", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },   // 【2026-11-04 校正】C004 现图已裁成整图无留白（旧实测 y[25..993] 过期），与 hunter 同图同值
         { "landlady", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },
         { "player", new PortraitContentFit { charHeightFrac = 1064f / 1345f, belowFrac = 68f / 1345f } },
+        // 【2026-11-04 主人拍板「剧情立绘统一 968 + 主线也归一化」】以下按 PIL 实测 alpha 包围盒补齐：
+        // laodun=H001、xiaomei=C001、altor=C002、grey=C003、hunter=C004（现图 687×1035 整图无留白）、
+        // melissa、guildmaster_hidden 均为 1171×1345 标准图；guildmaster/receptionist 为 2026-11-04 站姿改造后的
+        // 站姿图（同 1171×1345 规格），guildmaster_sitting 579×522 / receptionist_sitting 496×456 为引导期坐姿整图
+        // 整图即内容（bbox 无留白）——两图此前不在表内且主线不走归一化，是「会长前台剧情偏小且互不一致」的根因。
+        { "laodun", new PortraitContentFit { charHeightFrac = 1149f / 1345f, belowFrac = 49f / 1345f } },
+        { "xiaomei", new PortraitContentFit { charHeightFrac = 1031f / 1345f, belowFrac = 73f / 1345f } },
+        { "npc_xiaomei", new PortraitContentFit { charHeightFrac = 1031f / 1345f, belowFrac = 73f / 1345f } },
+        { "altor", new PortraitContentFit { charHeightFrac = 1154f / 1345f, belowFrac = 44f / 1345f } },
+        { "grey", new PortraitContentFit { charHeightFrac = 1191f / 1345f, belowFrac = 47f / 1345f } },
+        { "npc_grey", new PortraitContentFit { charHeightFrac = 1191f / 1345f, belowFrac = 47f / 1345f } },
+        { "hunter", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },
+        { "melissa", new PortraitContentFit { charHeightFrac = 1176f / 1345f, belowFrac = 26f / 1345f } },
+        { "guildmaster_hidden", new PortraitContentFit { charHeightFrac = 1262f / 1345f, belowFrac = 38f / 1345f } },
+        { "guildmaster", new PortraitContentFit { charHeightFrac = 1233f / 1345f, belowFrac = 38f / 1345f } },   // 站姿实测 y[74..1307]（原 guildmaster_open）
+        { "receptionist", new PortraitContentFit { charHeightFrac = 1149f / 1345f, belowFrac = 26f / 1345f } },  // 站姿实测 y[170..1319]（Art portrait_receptionist）
+        { "guildmaster_sitting", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },   // 579×522 坐姿整图（引导期）
+        { "receptionist_sitting", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },  // 496×456 坐姿整图（引导期）
     };
 
     /// <summary>查某个立绘 ID 的内容包围盒比例；不在表内返回 false（该立绘不做归一化）。</summary>

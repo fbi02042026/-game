@@ -55,10 +55,9 @@ public static class DailyTaskSystem
             if (row.rewardExp > 0)
                 LevelSystem.AddDirectExp(row.rewardExp);
 
-            var rewardParts = new System.Collections.Generic.List<string>(2);
-            if (row.rewardStones > 0) rewardParts.Add((daily ? "天赋石×" : "钻石×") + row.rewardStones);
-            if (row.rewardExp > 0) rewardParts.Add("经验×" + row.rewardExp);
-            GlobalToastUI.Show((daily ? "日常任务完成：" : "周任务完成：") + row.title + "　获得 " + string.Join("、", rewardParts));
+            // 【2026-11-04 主人拍板】任务完成提示统一左侧滑入横幅（仿新邮件模式）：
+            // 文案只说「XXX任务已完成」，奖励明细不再写（原 GlobalToastUI 的「获得 …」移除）。
+            QuestDoneToast.Show(row.title);
 
             Debug.Log("[DailyTask] settle: " + row.id + " +" + row.rewardStones + (daily ? " 石" : " 钻")
                 + (row.rewardExp > 0 ? " +" + row.rewardExp + " exp" : ""));

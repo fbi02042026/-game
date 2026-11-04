@@ -10,6 +10,8 @@ public static class StoryPortraits
     public const string Player = "player";
     public const string Receptionist = "receptionist";
     public const string GuildMaster = "guildmaster";
+    public const string GuildMasterSitting = "guildmaster_sitting";    // 【2026-11-04 站姿改造】引导期会长坐姿图；站姿占 GuildMaster 本名
+    public const string ReceptionistSitting = "receptionist_sitting";  // 【2026-11-04 站姿改造】引导期前台坐姿图；站姿占 Receptionist 本名
     public const string GuildMasterHidden = "guildmaster_hidden";
     public const string Hunter = "hunter";
     public const string Xiaomei = "xiaomei";

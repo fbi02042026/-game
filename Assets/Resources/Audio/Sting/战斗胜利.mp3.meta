@@ -7,7 +7,7 @@ AudioImporter:
     serializedVersion: 2
     loadType: 0
     sampleRateSetting: 0
-    sampleRateOverride: 44100
+    sampleRateOverride: 32000
     compressionFormat: 1
     quality: 0.5
     conversionMode: 0
@@ -17,7 +17,7 @@ AudioImporter:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 0
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 1
       quality: 0.5
       conversionMode: 0
@@ -26,7 +26,7 @@ AudioImporter:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 0
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 1
       quality: 0.5
       conversionMode: 0
@@ -35,25 +35,25 @@ AudioImporter:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 2
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 7
-      quality: 0.5
+      quality: 0.6
       conversionMode: 0
       preloadAudioData: 0
     36:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 2
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 7
-      quality: 0.5
+      quality: 0.6
       conversionMode: 0
       preloadAudioData: 0
     37:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 0
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 1
       quality: 0.5
       conversionMode: 0
@@ -62,7 +62,7 @@ AudioImporter:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 0
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 1
       quality: 0.5
       conversionMode: 0
@@ -71,9 +71,9 @@ AudioImporter:
       serializedVersion: 2
       loadType: 0
       sampleRateSetting: 2
-      sampleRateOverride: 44100
+      sampleRateOverride: 32000
       compressionFormat: 7
-      quality: 0.5
+      quality: 0.6
       conversionMode: 0
       preloadAudioData: 0
   forceToMono: 1

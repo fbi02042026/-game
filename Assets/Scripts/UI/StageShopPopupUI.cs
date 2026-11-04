@@ -234,6 +234,11 @@ public class StageShopPopupUI : MonoBehaviour
         if (item.onBuy == null || !item.onBuy()) return;
 
         item.sold = true;
+        // 【2026-11-04 修复】同步 UI 余额副本：onBuy 内 SpendBattleGold 扣的是战斗池真值，
+        // 这里不减的话 RefreshAll 显示旧余额、下一件预检 item.price > _gold 也用旧值误判，
+        // 真池不足时 SpendBattleGold 只打 LogError，玩家点了没反应。
+        // 退款分支（装备穿不上）onBuy 返回 false，走不到这，_gold 不会误扣。
+        _gold -= item.price;
         UIManager.Instance?.ShowToast($"已购买「{item.title}」");
         RefreshAll();
     }

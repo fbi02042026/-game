@@ -274,9 +274,11 @@ public static class MainQuestSystem
 
             case MainQuestType.UpgradeTalent:
             {
-                long cur = ResourceWallet.Get(d, ResourceWallet.ResourceType.TalentPoint);
-                int curInt = (int)Math.Min(cur, int.MaxValue);
-                return Math.Max(0, Baseline(def.id, curInt) - curInt);
+                // 【2026-11-04 主人拍板「可以独立计数」】改按天赋点击次数（talentClickTotal，累计），
+                // 不再用天赋石消耗量——旧口径一次点击花多石会一次完成任务。基线键加 "_click" 后缀换轨，
+                // 旧石数基线不迁移：老档从改版后第一次点击起算（ReadBase 首见记当前值，接手前的点击不计）。
+                int cur = (int)Math.Min(d.talentClickTotal, int.MaxValue);
+                return Math.Max(0, cur - Baseline(def.id + "_click", cur));
             }
         }
         return 0;
@@ -339,21 +341,18 @@ public static class MainQuestSystem
 
         MarkDone(def.id);
 
-        // 2026-11-01 主人拍板：主线每条都给点奖励（哪怕几十金币），金币 + 天赋石都发、toast 写明
-        string gains = "";
+        // 2026-11-01 主人拍板：主线每条都给点奖励（哪怕几十金币），金币 + 天赋石都发；
+        // 【2026-11-04 主人拍板】完成提示统一左侧滑入横幅（只说任务完成，不再写奖励明细）
         if (def.rewardGold > 0)
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.rewardGold, save: true, notify: true);
-            gains += " 金币\u00d7" + def.rewardGold;
         }
         if (def.rewardStones > 0)
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.rewardStones,
                 save: true, notify: true);
-            gains += " \u5929\u8d4b\u77f3\u00d7" + def.rewardStones;
         }
-        GlobalToastUI.Show("\u4e3b\u7ebf\u4efb\u52a1\u5b8c\u6210\uff1a" + def.title
-                           + (gains.Length > 0 ? "  \u83b7\u5f97" + gains : ""));
+        QuestDoneToast.Show(def.title);
 
         Debug.Log("[MainQuest] done: " + def.id);
         Analytics.QuestComplete(def.id); // 埋点：主线任务完成

@@ -291,6 +291,8 @@ public static class MercRosterDefs
         { "receptionist", "receptionist" },
         { "guildmaster", "guildmaster" },
         { "guildmaster_hidden", "guildmaster_hidden" },
+        { "guildmaster_sitting", "guildmaster_sitting" },   // 【2026-11-04 站姿改造】引导期会长坐姿
+        { "receptionist_sitting", "receptionist_sitting" }, // 【2026-11-04 站姿改造】引导期前台坐姿
         { "hunter", "C004" },
         { "duyan", "C004" },
         { "npc_duyan", "C004" },

@@ -75,7 +75,9 @@ public class FirstRunGuide : MonoBehaviour
     const float TypeCharsPerSecond = 28f;
 
     // ============================================================
-    // 流程参数（超时一律放行 + 记日志，绝不卡死）
+    // 流程参数（【2026-11-04 主人拍板「引导不自动走」】所有等待步骤 timeout=0 一直等玩家，
+    //  绑定失败仍跳过防死锁；下列超时常量全部停用保留备查；看门狗由 CoPoint 每帧喂狗，
+    //  协程异常死亡时 90s 强收兜底不变）
     // ============================================================
     const float BindTimeout = 8f;
     const float BindTimeoutBattle = 25f;
@@ -414,7 +416,7 @@ public class FirstRunGuide : MonoBehaviour
         // 【2026-10-18 主人拍板】引导全程换前台小姐口吻；【同日再拍板】人设定稿＝御姐傲娇（原可爱版口径作废）
         const string text = "欢迎来到《像素冒险：裂隙之刃》。我是赛琳——第一次来？没关系，跟着本小姐走就行。";
 
-        yield return CoPoint(text, null, null, true, TapStepTimeout);
+        yield return CoPoint(text, null, null, true, 0f);   // 【2026-11-04】不自动走，等玩家点
         FinishStep(GuideStep.Welcome, "欢迎页");
     }
 
@@ -426,7 +428,7 @@ public class FirstRunGuide : MonoBehaviour
         yield return CoPoint("点下面的「冒险」。第一关很短……有我在，放心走。",
             () => NavRect(MainNavTab.Adventure),
             AdventurePageOpen,
-            false, NavTimeout);
+            false, 0f);   // 【2026-11-04】不自动走
         FinishStep(GuideStep.Adventure, "打开冒险页");
     }
 
@@ -437,7 +439,7 @@ public class FirstRunGuide : MonoBehaviour
         yield return CoPoint("选个顺眼的职业，点「开始冒险」。进了裂隙，这步就算你过关了。",
             () => AdventurePageOpen() ? ButtonRect(AdventureStartBtn()) : NavRect(MainNavTab.Adventure),
             InBattleOrLeaving,
-            false, 90f,
+            false, 0f,   // 【2026-11-04】不自动走
             bindTimeoutOverride: BindTimeoutBattle);
         FinishStep(GuideStep.FirstBattle, "进入首场战斗");
     }
@@ -458,14 +460,14 @@ public class FirstRunGuide : MonoBehaviour
             // 防抖只防「进镇预热闪现一帧」的假阳性，玩家亲手点中洞时不存在该场景，
             // 原样等防抖会让「点天赋」的下一条引导框晚半秒才弹（主人报「有延迟」）。
             yield return CoPoint("这么快就结束了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
-                () => NavRect(MainNavTab.Character), () => _holeTriggered || CharacterPageOpen(), false, NavTimeout);
+                () => NavRect(MainNavTab.Character), () => _holeTriggered || CharacterPageOpen(), false, 0f);   // 【2026-11-04】不自动走
         }
 
         if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
         {
             // ② 角色页里的「天赋」按钮
             yield return CoPoint("点「天赋」。属性点上去马上生效——想变强就别磨蹭。",
-                TalentButtonRect, TalentPageOpen, false, NavTimeout);
+                TalentButtonRect, TalentPageOpen, false, 0f);   // 【2026-11-04】不自动走
         }
 
         if (TalentUI.Instance != null && TalentUI.Instance.IsOpen)
@@ -497,7 +499,7 @@ public class FirstRunGuide : MonoBehaviour
                 () => NavRect(MainNavTab.Guild),
                 () => MainBottomNav.Instance != null
                     && MainBottomNav.Instance.Current == MainNavTab.Guild,
-                false, TapStepTimeout);
+                false, 0f);   // 【2026-11-04】不自动走
         }
         else
         {
@@ -513,7 +515,7 @@ public class FirstRunGuide : MonoBehaviour
         // 也不去查找它的 Rect（找不到会 null）。只弹一行纯文字气泡讲清「顶部任务条」的用途。
         // target 传 null → CoPoint 走「无目标」分支：全屏半透遮罩 + 居中气泡，代码可容忍 null，不会空引用崩。
         yield return CoPoint("屏幕顶部会出现一条「任务条」，写着你现在该做什么——点一下就能直接跳过去。记住了？",
-            null, null, true, TapStepTimeout);
+            null, null, true, 0f);   // 【2026-11-04】不自动走
         FinishStep(GuideStep.QuestBar, "任务条说明");
     }
 
@@ -524,7 +526,7 @@ public class FirstRunGuide : MonoBehaviour
         if (TavernUI.Instance == null || !IsVisibleHierarchy(TavernUI.Instance.gameObject))
         {
             yield return CoPoint("最后一站，酒馆。去见见老板娘——招募佣兵也在那儿。",
-                () => NavRect(MainNavTab.Tavern), TavernPageOpen, false, TavernTimeout);
+                () => NavRect(MainNavTab.Tavern), TavernPageOpen, false, 0f);   // 【2026-11-04】不自动走
         }
 
         bool entered = TavernPageOpen();
