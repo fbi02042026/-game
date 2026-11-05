@@ -17,6 +17,18 @@ public static class SaveDataRoundtripSelfCheck
         data.claimedMilestoneIds.Add(1);
         data.totalGold = 12345;
 
+        // 【2026-11-05 建议修】补齐章节 / 难度字段断言（原来只覆盖 6 个字段）：
+        // 普通真源（clearedStages）+ 两套章节集合（已解锁 / 真通关）+ 难度真源（clearedStageDiffKeys）
+        // + 难度派生（clearedChapterDiffKeys）+ 两个章节标量（maxUnlockedChapter / endingChoice）。
+        data.clearedStages.Add("1_0");
+        data.clearedStages.Add("1_1");
+        data.clearedChapterIds.Add(1);
+        data.trulyClearedChapterIds.Add(1);
+        data.clearedChapterDiffKeys.Add("1_1");
+        data.clearedStageDiffKeys.Add(SaveData.DiffStageKey(1, 1, 0));
+        data.maxUnlockedChapter = 3;
+        data.endingChoice = 2;
+
         data.SyncListsFromRuntime();
         string json = JsonUtility.ToJson(data, true);
 
@@ -32,7 +44,21 @@ public static class SaveDataRoundtripSelfCheck
             && loaded.completedAchievements.Contains("first_clear")
             && loaded.claimedMilestoneIds.Contains(1)
             && loaded.totalGold == 12345
+            // 章节 / 难度字段（普通真源、两套集合、难度真源与派生、标量）
+            && loaded.HasStageCleared(1, 0)
+            && loaded.HasStageCleared(1, 1)
+            && loaded.IsChapterUnlocked(1)
+            && loaded.HasTrulyClearedChapter(1)
+            && loaded.HasStageClearedAtDiff(1, 0, 1)
+            && loaded.HasClearedChapterAtDiff(1, 1)
+            && loaded.maxUnlockedChapter == 3
+            && loaded.endingChoice == 2
             && json.Contains("talentEntries")
+            && json.Contains("clearedStageEntries")
+            && json.Contains("clearedChapterEntries")
+            && json.Contains("trulyClearedChapterEntries")
+            && json.Contains("clearedStageDiffEntries")
+            && json.Contains("clearedChapterDiffEntries")
             && !json.Contains("\"talents\":{");
 
         string msg = ok

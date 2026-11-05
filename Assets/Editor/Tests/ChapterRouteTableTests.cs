@@ -151,7 +151,13 @@ public class ChapterRouteTableTests
         foreach (int diff in new[] { 0, 1, 2 })
         {
             var d = new SaveData();
-            if (diff > 0) GrantDiffGlobalGate(d, diff);   // 该难度全局门槛凑够（困难=1 章、噩梦=3 章）
+            int normalStages = 0, normalUnlocked = 0;
+            if (diff > 0)
+            {
+                GrantDiffGlobalGate(d, diff);   // 该难度全局门槛凑够（困难=1 章、噩梦=3 章；按普通真通关）
+                normalStages = d.clearedStages.Count;
+                normalUnlocked = d.clearedChapterIds.Count;
+            }
 
             // 第 1 篇该难度整篇通关（解锁第 2 篇）
             if (diff == 0) FillStages(d, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);
@@ -187,9 +193,8 @@ public class ChapterRouteTableTests
             if (diff > 0)
             {
                 int other = diff == 1 ? 2 : 1;
-                Assert.IsFalse(d.HasStageCleared(2, 0), $"难度{diff}：不得把 11-1 记进普通真源");
-                Assert.AreEqual(0, d.clearedStages.Count, $"难度{diff}：普通 clearedStages 一行不动");
-                Assert.IsFalse(d.IsChapterUnlocked(1), $"难度{diff}：不得解锁普通第 1 篇");
+                Assert.AreEqual(normalStages, d.clearedStages.Count, $"难度{diff}：普通 clearedStages 不新增");
+                Assert.AreEqual(normalUnlocked, d.clearedChapterIds.Count, $"难度{diff}：不得新增普通解锁");
                 Assert.IsFalse(d.HasStageClearedAtDiff(2, 0, other), $"难度{diff}：不得串到难度{other}");
             }
         }
@@ -217,16 +222,17 @@ public class ChapterRouteTableTests
         Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(1, 2, fresh), "噩梦：0 章 → 第1章也锁");
 
         var one = new SaveData();
-        one.clearedChapterIds.Add(1);
-        Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(1, 1, one), "困难：通 1 章 → 第1章开");
-        Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(1, 2, one), "噩梦：通 1 章 < 3 → 锁");
+        FillStages(one, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 第 1 篇**真通关**
+        Assert.AreEqual(1, one.TrulyClearedChapterCount());
+        Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(1, 1, one), "困难：真通关 1 章 → 第1章开");
+        Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(1, 2, one), "噩梦：真通关 1 章 < 3 → 锁");
     }
 
     [Test]
     public void CanEnterAtDiff_ChapterByChapter()
     {
         var data = new SaveData();
-        data.clearedChapterIds.Add(1);   // 全局门槛过（困难）
+        FillStages(data, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 真通关 1 章 → 困难全局门槛过
         data.clearedChapterDiffKeys.Add("1_1");   // 第1章困难已通
         Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(1, 1, data));
         Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(2, 1, data), "上一章困难通了 → 第2章困难开");
@@ -260,17 +266,15 @@ public class ChapterRouteTableTests
     }
 
     /// <summary>
-    /// 只给该难度凑够「全局门槛」（已解锁章数），刻意用第 3 篇起的章号 ——
-    /// 不用第 1 篇，避免顺手把普通第 1 篇也解锁，干扰「难度不得解锁普通」的断言。
-    /// 🔴 副作用（2026-11-05 定性用）：它写的是**普通** <c>clearedChapterIds</c>，
-    /// 困难 → 塞第 3 篇后 <c>CanEnter(4)</c> 成立，普通可选会变成 [1,4]（非连续合法）；
-    /// 噩梦 → 塞 3/4/5 后普通可选变成 [1,6]。
-    /// **只能用于「难度侧解锁」用例**，凡断言普通 AvailableChapters / 普通落位 的用例一律不许调用它。
+    /// 给该难度凑够「全局门槛」：按 2026-11-05 新口径 = 普通**真通关**篇数（<see cref="SaveData.TrulyClearedChapterCount"/>）。
+    /// 用 FillStages 真实推进前 need 篇，保证 setup 状态与现实一致（不再伪造 clearedChapterIds）。
+    /// 调用方在调用后自行记录普通基线，再断言「难度写入不得改变普通任何字段」。
     /// </summary>
     static void GrantDiffGlobalGate(SaveData d, int difficulty)
     {
         int need = difficulty == 1 ? GameConfig.DIFF_HARD_NEED_CLEARS : GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
-        for (int i = 0; i < need; i++) d.clearedChapterIds.Add(3 + i);
+        for (int ch = 1; ch <= need; ch++)
+            FillStages(d, ch, 0, ActProgressionDefs.StageCountOf(ch) - 1);
     }
 
     [Test]
@@ -280,13 +284,19 @@ public class ChapterRouteTableTests
         {
             var d = new SaveData();
             GrantDiffGlobalGate(d, diff);   // 该难度的全局门槛凑够（困难=1 章、噩梦=3 章）
+            // setup 基线：门槛是按普通真通关凑的，难度写入不得再改动普通任何字段
+            int normalStages = d.clearedStages.Count;
+            int normalUnlocked = d.clearedChapterIds.Count;
+            int normalTruly = d.trulyClearedChapterIds.Count;
 
             FillStagesAtDiff(d, diff, 1, 0, ActProgressionDefs.SubsPerGrandOf(1) - 1);   // 只通第 1 座大关
 
             Assert.IsFalse(d.HasTrulyClearedChapterAtDiff(1, diff), $"难度{diff}：只通 1 座大关 ≠ 整篇通关");
             Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(2, diff, d), $"难度{diff}：第 2 篇必须仍锁");
             Assert.AreEqual(1, ChapterRouteTable.CurrentChapterToAdvanceAtDiff(diff, d), $"难度{diff}：应推进仍在第 1 篇");
-            Assert.AreEqual(0, d.clearedStages.Count, $"难度{diff}：不得写普通 clearedStages（跨难度污染）");
+            Assert.AreEqual(normalStages, d.clearedStages.Count, $"难度{diff}：不得写普通 clearedStages（跨难度污染）");
+            Assert.AreEqual(normalUnlocked, d.clearedChapterIds.Count, $"难度{diff}：不得新增普通解锁");
+            Assert.AreEqual(normalTruly, d.trulyClearedChapterIds.Count, $"难度{diff}：不得新增普通真通关");
         }
     }
 
@@ -297,6 +307,9 @@ public class ChapterRouteTableTests
         {
             var d = new SaveData();
             GrantDiffGlobalGate(d, diff);
+            int normalStages = d.clearedStages.Count;
+            int normalUnlocked = d.clearedChapterIds.Count;
+            int normalTruly = d.trulyClearedChapterIds.Count;
 
             FillStagesAtDiff(d, diff, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 整篇通关
 
@@ -304,9 +317,10 @@ public class ChapterRouteTableTests
             Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(2, diff, d), $"难度{diff}：第 2 篇解锁");
             Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(3, diff, d), $"难度{diff}：线性按序，第 3 篇仍锁");
             Assert.AreEqual(2, ChapterRouteTable.CurrentChapterToAdvanceAtDiff(diff, d), $"难度{diff}：落位到第 2 篇");
-            // 难度通关不得替普通解锁
-            Assert.IsFalse(d.IsChapterUnlocked(1), $"难度{diff}：不得解锁普通第 1 篇");
-            Assert.IsFalse(ChapterRouteTable.CanEnter(2, d), $"难度{diff}：不得解锁普通第 2 篇");
+            // 难度通关不得改动普通任何字段（基线 = 门槛凑够后的普通状态）
+            Assert.AreEqual(normalStages, d.clearedStages.Count, $"难度{diff}：普通 clearedStages 一行不动");
+            Assert.AreEqual(normalUnlocked, d.clearedChapterIds.Count, $"难度{diff}：不得新增普通解锁");
+            Assert.AreEqual(normalTruly, d.trulyClearedChapterIds.Count, $"难度{diff}：不得新增普通真通关");
         }
     }
 
@@ -314,7 +328,10 @@ public class ChapterRouteTableTests
     public void Regression_E_DifficultiesIsolated()
     {
         var d = new SaveData();
-        for (int ch = 1; ch <= 3; ch++) d.clearedChapterIds.Add(ch);   // 让困难/噩梦门槛都过
+        for (int ch = 1; ch <= 3; ch++)   // 让困难/噩梦门槛都过（新口径 = 普通真通关 3 篇）
+            FillStages(d, ch, 0, ActProgressionDefs.StageCountOf(ch) - 1);
+        int normalStages = d.clearedStages.Count;
+        int normalUnlocked = d.clearedChapterIds.Count;
 
         FillStagesAtDiff(d, 1, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 困难第 1 篇通
 
@@ -322,7 +339,8 @@ public class ChapterRouteTableTests
         Assert.IsFalse(d.HasTrulyClearedChapterAtDiff(1, 2), "困难通关 ≠ 噩梦通关（互不串味）");
         Assert.IsTrue(d.HasStageClearedAtDiff(1, 0, 1), "困难 1-1 已通");
         Assert.IsFalse(d.HasStageClearedAtDiff(1, 0, 2), "噩梦 1-1 仍空白");
-        Assert.IsFalse(d.HasStageCleared(1, 0), "普通真源不被难度写入污染");
+        Assert.AreEqual(normalStages, d.clearedStages.Count, "普通真源不被难度写入污染");
+        Assert.AreEqual(normalUnlocked, d.clearedChapterIds.Count, "普通解锁集合不被难度写入污染");
 
         // 普通通关同样不替难度解锁
         FillStages(d, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 普通第 1 篇真通关
@@ -462,6 +480,82 @@ public class ChapterRouteTableTests
             "困难可选 = 1、2、3（按困难自己的进度解锁）");
         CollectionAssert.AreEqual(new int[0], ChapterRouteTable.AvailableChaptersAtDiff(2, d),
             "噩梦全局门槛（3 章）未到 → 空集合");
+    }
+
+    /// <summary>
+    /// 【2026-11-05 必修·回归】难度全局门槛必须按「真通关」计数，不能用「已解锁」镜像：
+    /// 老档误标 3 篇已解锁但从未整篇打穿 → 噩梦不得提前开门。
+    /// </summary>
+    [Test]
+    public void Regression_J_DiffGateUsesTrulyCleared_NotUnlocked()
+    {
+        var d = new SaveData();
+        d.clearedChapterIds.Add(1);
+        d.clearedChapterIds.Add(2);
+        d.clearedChapterIds.Add(3);   // 只增不减的已解锁镜像（可能来自老档误标）
+
+        Assert.AreEqual(3, d.ClearedChapterCount(), "setup：已解锁 3 篇");
+        Assert.AreEqual(0, d.TrulyClearedChapterCount(), "setup：真通关 0 篇");
+        Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(1, 2, d), "已解锁镜像不算门槛 → 噩梦必须仍锁");
+
+        FillStages(d, 1, 0, ActProgressionDefs.StageCountOf(1) - 1);   // 真通关 1 篇
+        Assert.AreEqual(1, d.TrulyClearedChapterCount());
+        Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(1, 2, d), "真通关 1 篇 < 噩梦门槛 3 → 仍锁");
+        Assert.IsTrue(ChapterRouteTable.CanEnterAtDiff(1, 1, d), "真通关 1 篇 ≥ 困难门槛 1 → 开");
+    }
+
+    /// <summary>
+    /// 【2026-11-05 必修·回归】老档把第 1 篇误标成「已解锁」后打 11-1：
+    /// 落位必须是第 2 篇，且第 1 篇**不得**因此被重新确认为真通关。
+    /// </summary>
+    [Test]
+    public void Regression_K_OldMislabel_11_1_LandsChapter2_NotRetrulyCleared()
+    {
+        var d = new SaveData();
+        d.clearedChapterIds.Add(1);   // 老档错误标记：「第 1 篇已解锁/已通」
+        Assert.IsFalse(d.HasTrulyClearedChapter(1), "误标只是解锁镜像，不是真通关");
+
+        FillStages(d, 2, 0, 0);       // 打完 11-1
+        Assert.AreEqual(2, ChapterRouteTable.CurrentChapterToAdvance(d),
+            "打完 11-1 必须落在第 2 篇（不得回跳）");
+
+        d.MarkChapterCleared(2);      // 章节推进记账
+        Assert.IsFalse(d.HasTrulyClearedChapter(1), "第 1 篇误标不得被重新标成真通关");
+        Assert.IsTrue(d.IsChapterUnlocked(2), "第 2 篇已解锁");
+    }
+
+    /// <summary>
+    /// 【2026-11-05 必修·回归】chapterClearCounts 残留（旧口径的通关次数）**不得**用来补解锁：
+    /// 解锁真源只能是 clearedStages / clearedChapterIds 的整篇判定。
+    /// </summary>
+    [Test]
+    public void Regression_L_ChapterClearCountsResidue_NoUnlock()
+    {
+        var d = new SaveData();
+        d.chapterClearCounts.Add(new ChapterClearCountEntry { chapter = 1, clearCount = 5 });
+
+        Assert.AreEqual(0, d.ClearedChapterCount(), "残留次数不得补解锁");
+        Assert.IsFalse(ChapterRouteTable.CanEnter(2, d), "第 2 篇仍锁");
+        Assert.AreEqual(1, ChapterRouteTable.CurrentChapterToAdvance(d), "落位仍在第 1 篇");
+    }
+
+    /// <summary>
+    /// 【2026-11-05 必修·回归】难度局不写普通主线内容的唯一口径：
+    /// · NormalOnlyContentAllowed(0)=true，1/2=false（剧情 / 线索 / 日志 / 普通成就全部走这一出口）；
+    /// · 成就难度分档 ID 必须可区分（普通原 ID 不变，困难 #d1、噩梦 #d2）。
+    /// </summary>
+    [Test]
+    public void Regression_M_DifficultyContent_ScopedByDifficulty()
+    {
+        Assert.IsTrue(BattleManager.NormalOnlyContentAllowed(0), "普通局允许写主线内容");
+        Assert.IsFalse(BattleManager.NormalOnlyContentAllowed(1), "困难局不写普通主线内容（剧情/线索/日志）");
+        Assert.IsFalse(BattleManager.NormalOnlyContentAllowed(2), "噩梦局不写普通主线内容（剧情/线索/日志）");
+
+        Assert.AreEqual("clear_ch3", AchievementSystem.DiffAchievementId("clear_ch3", 0), "普通成就 ID 原样不变");
+        Assert.AreEqual("clear_ch3#d1", AchievementSystem.DiffAchievementId("clear_ch3", 1), "困难独立 ID");
+        Assert.AreEqual("clear_ch3#d2", AchievementSystem.DiffAchievementId("clear_ch3", 2), "噩梦独立 ID");
+        Assert.AreNotEqual(AchievementSystem.DiffAchievementId("clear_ch3", 1),
+            AchievementSystem.DiffAchievementId("clear_ch3", 2), "困难/噩梦互不覆盖");
     }
 
     // ---------- 支线岛派定：幂等短路分支（不触 SaveSystem） ----------
