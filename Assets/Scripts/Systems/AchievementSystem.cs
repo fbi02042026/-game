@@ -81,6 +81,65 @@ public class AchievementSystem : Singleton<AchievementSystem>
             { "survive_stage8", new AchievementDef("survive_stage8", "极限求生", "单局到达第8关", AchievementType.Survive, 1, new AchievementReward(30, 0, 20)) },
             { "survive_clear", new AchievementDef("survive_clear", "完美通关", "单局通关一章", AchievementType.Survive, 1, new AchievementReward(50, 0, 30)) },
         };
+
+        // 【2026-11-05 主人拍板「难度局可以进成就，但必须按难度分档」】
+        // 普通（难度 0）保留上面原样的成就项，**一个字不改**（普通成就毫发无损）；
+        // 困难/噩梦各生成一套「章节通关 / 单局通关」成就，ID 统一加后缀 "#d1" / "#d2"，
+        // 复用现有 achievementProgress / completedAchievements 存储，**不新增任何 SaveData 字段、不新增表**。
+        // 进度真源仍是 clearedStageDiffKeys（见 OnChapterClearAtDiff 的真源校验），成就自身只存「是否达成」的 0/1。
+        AddDifficultyTierDefs(1, "困难", GameConfig.GetDifficultyGoldMul(1));
+        AddDifficultyTierDefs(2, "噩梦", GameConfig.GetDifficultyGoldMul(2));
+    }
+
+    /// <summary>
+    /// 难度成就 ID 统一出口：普通返回原 ID；困难/噩梦追加 "#d1"/"#d2"（UI / 查询 / 写入都走这里，禁止手拼）。
+    /// </summary>
+    public static string DiffAchievementId(string baseId, int difficulty)
+        => difficulty <= 0 ? baseId : baseId + "#d" + difficulty;
+
+    /// <summary>是否为「难度分档」成就（ID 带 "#d"）。难度成就只发金币，不进冒险日志里程。</summary>
+    public static bool IsDifficultyAchievementId(string achievementId)
+        => !string.IsNullOrEmpty(achievementId) && achievementId.Contains("#d");
+
+    /// <summary>
+    /// 为一个难度生成章节通关类成就（章粒度；如需细到「第 X 关」再扩，键仍从 clearedStageDiffKeys 推）。
+    /// 奖励配平：金币按现有难度倍率 1/1.8/3.5 缩放（与关卡金币同口径）；
+    /// 成就点数固定 0、不进冒险日志里程 —— 点数/里程是普通主线的兑现曲线，难度成就只加金币，
+    /// 这样普通玩家的里程节奏完全不被难度进度改变（普通成就毫发无损）。
+    /// </summary>
+    void AddDifficultyTierDefs(int difficulty, string label, float goldMul)
+    {
+        AddDiffClearDef("clear_ch1", 1, "初出茅庐", 20, difficulty, label, goldMul);
+        AddDiffClearDef("clear_ch3", 3, "渐入佳境", 50, difficulty, label, goldMul);
+        AddDiffClearDef("clear_ch5", 5, "冒险大师", 100, difficulty, label, goldMul);
+        AddDiffClearDef("clear_ch8", 8, "传奇冒险家", 200, difficulty, label, goldMul);
+        AddDiffClearDef("survive_clear", 0, "完美通关", 50, difficulty, label, goldMul);
+        // 生存类：难度局到达第 3 / 第 4 小关（与 OnReachStage 的折算阈值一致）
+        AddDiffSurviveDef("survive_stage5", "深入险境", $"到达{label}难度第3小关", 10, difficulty, goldMul);
+        AddDiffSurviveDef("survive_stage8", "极限求生", $"到达{label}难度第4小关", 30, difficulty, goldMul);
+    }
+
+    void AddDiffSurviveDef(string baseId, string baseName, string desc, int baseGold,
+                           int difficulty, float goldMul)
+    {
+        string id = DiffAchievementId(baseId, difficulty);
+        // 成就点数记 0：点数会进 totalAchievementPoints / 里程兑现，难度成就若给点会打乱普通玩家的里程曲线。
+        _achievementDefs[id] = new AchievementDef(
+            id, baseName + "·" + (difficulty == 1 ? "困难" : "噩梦"), desc, AchievementType.Survive, 1,
+            new AchievementReward(Mathf.RoundToInt(baseGold * goldMul), 0, 0));
+    }
+
+    void AddDiffClearDef(string baseId, int chapter, string baseName, int baseGold,
+                         int difficulty, string label, float goldMul)
+    {
+        string id = DiffAchievementId(baseId, difficulty);
+        string desc = chapter > 0
+            ? $"完成{label}难度第{chapter}章"
+            : $"单局通关{label}难度一章";
+        // 金币按难度倍率缩放；成就点数 0 —— 不碰 totalAchievementPoints/里程曲线（与「普通成就毫发无损」一致）。
+        _achievementDefs[id] = new AchievementDef(
+            id, baseName + "·" + label, desc, AchievementType.Dungeon, 1,
+            new AchievementReward(Mathf.RoundToInt(baseGold * goldMul), 0, 0));
     }
 
     void InitMilestoneDefs()
@@ -188,7 +247,9 @@ public class AchievementSystem : Singleton<AchievementSystem>
         SaveSystem.Instance.Save();
 
         // 折算进日志里程（防重）；战斗成就点数仍保留供旧查询
-        AdventureLogMileage.GrantAchievement(achievementId, def.reward.achievementPoints);
+        // 【2026-11-05 难度分档】难度成就（ID 带 "#d1"/"#d2"）不进冒险日志里程：日志/里程属普通主线收集内容。
+        if (!IsDifficultyAchievementId(achievementId))
+            AdventureLogMileage.GrantAchievement(achievementId, def.reward.achievementPoints);
 
         // 成就奖励：解锁玩家技能（2026-09-15 分层解锁）
         int unlockedSkillCount = PlayerSkillDefs.UnlockSkillsByAchievement(achievementId, data);
@@ -306,17 +367,37 @@ public class AchievementSystem : Singleton<AchievementSystem>
     }
 
     /// <summary>
-    /// 到达某关时调用。
+    /// 【2026-11-05 成就按难度分档】难度局整篇通关时调用（困难/噩梦）。
+    /// 🔴 与真源一致：先校验该难度**真通关**（HasTrulyClearedChapterAtDiff，真源 clearedStageDiffKeys），
+    ///    不满足直接返回，绝不靠成就自己记一套章数。
+    /// 🔴 只写该难度后缀 ID，普通成就（clear_ch* / survive_clear）一律不碰。
+    /// </summary>
+    public void OnChapterClearAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) { OnChapterClear(chapter); return; }
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || !data.HasTrulyClearedChapterAtDiff(chapter, difficulty)) return;
+
+        if (chapter >= 1) SetProgress(DiffAchievementId("clear_ch1", difficulty), 1);
+        if (chapter >= 3) SetProgress(DiffAchievementId("clear_ch3", difficulty), 1);
+        if (chapter >= 5) SetProgress(DiffAchievementId("clear_ch5", difficulty), 1);
+        if (chapter >= 8) SetProgress(DiffAchievementId("clear_ch8", difficulty), 1);
+        SetProgress(DiffAchievementId("survive_clear", difficulty), 1);
+    }
+
+    /// <summary>
+    /// 到达某关时调用（<paramref name="difficulty"/> 0=普通，1=困难，2=噩梦）。
     /// ⚠️ 调用点 `ChapterManager.OnStageComplete` 在「章通关」分支**提前 return**，
     /// 所以本方法只在非末关触发：5 小关制下 stageIndex ∈ 0..3（Boss 小关不进这里）。
     /// 【2026-10-23 批 E6】10 关制旧阈值在 5 小关制下**双双恒假**（原 idx 域 0..8，现 0..3）：
     /// `>=4`（survive_stage5）与 `>=7`（survive_stage8）都永远拿不到 → 按章内相对位置折算：
     /// 4/9×4≈1.78 → 2（第 3 小关）、7/9×4≈3.11 → 3（第 4 小关）。
+    /// 【2026-11-05 成就按难度分档】难度局只写 "#dN" 后缀项，普通项一律不碰。
     /// </summary>
-    public void OnReachStage(int stageIndex)
+    public void OnReachStage(int stageIndex, int difficulty = 0)
     {
-        if (stageIndex >= 2) AddProgress("survive_stage5"); // 原 >=4（第5关）折算到第3小关
-        if (stageIndex >= 3) AddProgress("survive_stage8"); // 原 >=7（第8关）折算到第4小关
+        if (stageIndex >= 2) SetProgress(DiffAchievementId("survive_stage5", difficulty), 1); // 原 >=4（第5关）折算到第3小关
+        if (stageIndex >= 3) SetProgress(DiffAchievementId("survive_stage8", difficulty), 1); // 原 >=7（第8关）折算到第4小关
     }
 
     /// <summary>

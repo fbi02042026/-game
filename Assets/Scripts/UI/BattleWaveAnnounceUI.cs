@@ -187,7 +187,7 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         _image.sprite = sp;
         _image.enabled = true;
         SetSubtitle(subtitle);
-        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, GameConfig.DESIGN_WIDTH);
+        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, GameConfig.DESIGN_WIDTH * 1.1f);   // 【2026-11-05 主人拍板「下一波/首领来袭图标再放大10%」】目标宽 720 → ×1.1=792；NextWave/Boss 两图共用此入口一起放大，开场横幅（StageStartBannerUI）不传宽度不受影响
 
         _image.enabled = false;
         SetSubtitle(null);

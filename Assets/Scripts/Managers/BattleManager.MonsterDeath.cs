@@ -76,7 +76,9 @@ public partial class BattleManager
         else _physicalKills++;
         if (m.LastDamageSource != null && m.LastDamageSource.isAlly)
             RecordAllyKill(m.LastDamageSource);
-        AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
+        // 【2026-11-05 难度隔离】冒险日志属普通主线收集内容，难度局不写（唯一出口 NormalOnlyContentAllowed）
+        if (NormalOnlyContentAllowed(BattleDifficulty))
+            AdventureLogAchievements.OnMonsterKilled(m, CurrentChapter);
         // 隐藏经验照旧只管裂缝掉落稀有度；【2026-10-25 主人拍板「玩家升级按完成的一次关卡给一次经验」】
         // 击杀不再喂玩家可见等级（经验唯一入口 = LevelSystem.AddStageClearExp，主线/支线完成关卡才给）
         HiddenLevelSystem.AddKillExp(m);
@@ -120,11 +122,15 @@ public partial class BattleManager
         BattleUI.Instance?.UpdateQuest(_stageQuestObjective, defeated, goal, StageQuestClearGold);
 
         // 技能蓝条改由受击/攻击涨，击杀不再加能量
-        AchievementSystem.Instance?.OnKillMonster(CurrentChapter, m.config != null && m.config.isBoss);
+        // 【2026-11-05 难度隔离】击杀成就属普通成就，难度局不写；图鉴同属普通主线收集（唯一出口 NormalOnlyContentAllowed）
+        if (NormalOnlyContentAllowed(BattleDifficulty))
+        {
+            AchievementSystem.Instance?.OnKillMonster(CurrentChapter, m.config != null && m.config.isBoss);
 
-        // 图鉴：击败解锁完整描述；未见过则顺带记遭遇并发里程
-        if (m.config != null)
-            AdventureCodex.MarkMonsterDefeated(m.config.id);
+            // 图鉴：击败解锁完整描述；未见过则顺带记遭遇并发里程
+            if (m.config != null)
+                AdventureCodex.MarkMonsterDefeated(m.config.id);
+        }
 
         BattleUI.Instance?.UpdateSkillEnergy(0, PlayerSkillEnergyPeak);
         BattleUI.Instance?.UpdateSkillEnergy(1, GetMercMp(0));

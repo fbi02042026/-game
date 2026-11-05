@@ -132,6 +132,15 @@ public static class StoryPortraitPresenter
         // 立绘等比放大，标准屏保持原效果；系数下限 1，**只放大不缩小**（修「大分辨率机上立绘偏小」）。
         float scale = ResolvePortraitScale(ctx);
         ApplyNativePixelSize(img, scale, out float w, out float h);
+        // 【2026-11-05 主人报「引导的这两个立绘太大」】额外缩放表（StoryPortraitLayout.PortraitExtraScale）：
+        // 引导坐姿两图随归一化放大到 968 高后过大，统一缩 20%；只缩尺寸，遮罩/位置旋钮不动。
+        float extraScale = StoryPortraitLayout.GetExtraScale(portraitId);
+        if (!Mathf.Approximately(extraScale, 1f))
+        {
+            w *= extraScale;
+            h *= extraScale;
+            img.rectTransform.sizeDelta = new Vector2(w, h);
+        }
 
         // 【2026-10-15 主人报「人物现在大小不一致」「玩家的形象偏小偏下」】
         // 上面按「整张 sprite 像素」定尺寸，但各图透明留白不同：留白多的图角色就偏小、偏下。

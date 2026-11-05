@@ -64,6 +64,12 @@ public class RunLoadoutData
     public int jobId;
     public int chapter = 1;
     public int stageIndex;
+    /// <summary>
+    /// 【2026-11-05 建议修】本局难度（0=普通 / 1=困难 / 2=噩梦）。
+    /// 老档 JSON 缺这个字段时 JsonUtility 读出 0 → 按普通处理，因此**普通局完全兼容**；
+    /// 跨难度作废判定见 BattleManager.OnRunStart（续关必须同难度）。
+    /// </summary>
+    public int difficulty;
     // heroLevel/heroExp 已删（2026-10-25 矫正）：等级账本迁存档永久账（SaveData.playerLevel/playerExp），
     // 10-24 拍板「只要打完就清」后每关都是新局，局内账本会导致等级每关归 1 永远升不了级。
     public string savedUtc = "";
@@ -143,13 +149,16 @@ public static class RunLoadout
     // 开新局 / 续关 / 落档
     // ============================================================
 
-    /// <summary>本局归属章节：优先冒险页实际选中的章，其次存档最远解锁章。</summary>
+    /// <summary>本局归属章节：优先冒险页实际选中的章，其次读**进度真源**（不再读 maxUnlockedChapter 兼容缓存）。</summary>
     static int ResolveRunChapter()
     {
         int pending = AdventureUI.PendingBattleChapter;
         if (pending >= 1) return pending;
-        int max = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
-        return Mathf.Max(1, max);
+        var data = SaveSystem.Instance?.Data;
+        int diff = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
+        return diff > 0
+            ? ChapterRouteTable.CurrentChapterToAdvanceAtDiff(diff, data)
+            : ChapterRouteTable.CurrentChapterToAdvance(data);
     }
 
     /// <summary>开新局：职业初始技能进构筑，清空佣兵与势能。</summary>
@@ -162,7 +171,8 @@ public static class RunLoadout
             // 章节分叉后 maxUnlockedChapter 是「最远可达章」，玩家实际打的不一定是它；
             // 优先用冒险页真正选中的章（PendingBattleChapter）
             chapter = ResolveRunChapter(),
-            stageIndex = 0
+            stageIndex = 0,
+            difficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2)
         };
         // 2026-09-30 主人拍板：**开局不带初始技能** —— 技能全部靠局内构筑拿（进关抽奖 / 升级三选一）。
         // 旧逻辑会把「角色界面选的技能 / 职业默认技能」直接塞进开局构筑，
@@ -376,6 +386,7 @@ public static class RunLoadout
         d.mercs ??= new List<RunMercEntry>();
         d.themeEntries ??= new List<StringIntEntry>();
         if (d.chapter < 1) d.chapter = 1;
+        d.difficulty = Mathf.Clamp(d.difficulty, 0, 2);   // 老档缺字段 → 0（普通），见 RunLoadoutData.difficulty 注释
         if (d.jobId < 0 || d.jobId >= PlayerJobDefs.All.Length) d.jobId = (int)PlayerJobId.SwordShield;
         for (int i = d.skills.Count - 1; i >= 0; i--)
         {

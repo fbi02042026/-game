@@ -206,7 +206,11 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
                 || AdventureUI.PendingBondDungeon    // 羁绊副本（2026-10-27）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingArenaRowIdx >= 0 // 竞技场挑战（2026-10-30）：独立进本，同金币本作废 parked 局
                 || AdventureUI.PendingBattleChapter <= 0
-                || AdventureUI.PendingBattleChapter != savedRun.chapter)
+                || AdventureUI.PendingBattleChapter != savedRun.chapter
+                // 【2026-11-05 难度隔离·建议修】续关必须**同难度**才能接：
+                // RunLoadoutData 无 difficulty 的老档读出 0（按普通处理），因此普通局完全不受影响；
+                // 困难/噩梦局若换了难度再进本 → 作废重开，绝不把普通局的构筑接到难度局上。
+                || AdventureUI.PendingBattleDifficulty != savedRun.difficulty)
             {
                 RunLoadout.Clear();
                 savedRun = null;
@@ -244,11 +248,20 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             SpawnMercenaries();
         }
 
+        // 【2026-11-05 难度隔离·必修】续局兜底章号必须读真源，不再读 maxUnlockedChapter 兼容缓存：
+        // 那是「最远可达章」，误标/缓存脏了会把玩家摆回前面的篇（正是「打完 11-1 回城变 5-4」的成因链路）。
+        // 难度局按该难度自己的真源落位（CurrentChapterToAdvanceAtDiff），普通局按普通真源。
+        int pendingDiff = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
         int targetChapter = AdventureUI.PendingBattleChapter;
         if (targetChapter < 1)
-            targetChapter = SaveSystem.Instance?.Data?.maxUnlockedChapter ?? 1;
+        {
+            var saveData = SaveSystem.Instance?.Data;
+            targetChapter = pendingDiff > 0
+                ? ChapterRouteTable.CurrentChapterToAdvanceAtDiff(pendingDiff, saveData)
+                : ChapterRouteTable.CurrentChapterToAdvance(saveData);
+        }
         if (targetChapter < 1) targetChapter = 1;
-        BattleDifficulty = Mathf.Clamp(AdventureUI.PendingBattleDifficulty, 0, 2);
+        BattleDifficulty = pendingDiff;
         // IsGoldDungeon 不再在这里写入：它由 Mode 派生（见属性定义）。
         // PendingGoldDungeon 只保留「读完即清」，避免下一局被上一局的静态标志污染。
         // （parked 局续/弃判定已整体上移到 OnRunStart 之前 —— 2026-10-30 修竞技场「技能槽已满」，

@@ -10,6 +10,14 @@ using System.Collections.Generic;
 public static class ChapterStoryBeats
 {
     /// <summary>
+    /// 【2026-11-05 难度隔离·硬锁】难度局（困难/噩梦）不得写剧情结果。
+    /// 🔴 唯一难度判定出口：复用 <see cref="BattleManager.NormalOnlyContentAllowed"/>，禁止此处自写 &gt;0 判断。
+    /// 本守卫是写入点自保；上游 ShouldPlayChapterStory / ShouldPlayChapter1Ending 仍保留（双保险）。
+    /// </summary>
+    static bool DifficultyRunBlocksStory()
+        => !BattleManager.NormalOnlyContentAllowed(BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0);
+
+    /// <summary>
     /// 章节 Boss 后尝试播放节点脚本。
     /// 返回 true 表示有脚本在播（调用方应等回调）；false 表示无脚本，直接走奖励流程。
     /// 【2026-10-23 主人二次拍板「8岛全通」】N3/N4 恢复周目分流，判据改 8 岛全通
@@ -273,6 +281,9 @@ public static class ChapterStoryBeats
 
     static void PlayN3(Action onDone)
     {
+        // 【2026-11-05 难度隔离·硬锁】梅莉莎好感是主线剧情状态，难度局不写。
+        if (DifficultyRunBlocksStory()) { onDone?.Invoke(); return; }
+
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。").Bg(StoryBackgrounds.MelissaCamp),
@@ -376,6 +387,9 @@ public static class ChapterStoryBeats
     /// <summary>N5 趣味回响：会长好感 -10 与选项无关照旧结；回响不影响走向。</summary>
     static void ApplyN5Choice(int idx, Action onDone)
     {
+        // 【2026-11-05 难度隔离·硬锁】会长好感是主线剧情状态，难度局不写。
+        if (DifficultyRunBlocksStory()) { onDone?.Invoke(); return; }
+
         StoryProgress.AddBond(StoryProgress.NpcMaster, -10);
         StoryBeat echo = idx == 0
             ? StoryDirector.Solo("你", "纸会烂，账不会。这张我贴身收着。", StoryPortraits.Player)
@@ -463,6 +477,9 @@ public static class ChapterStoryBeats
     /// <summary>选择后的即时回响——必须有，否则选择感会消失。</summary>
     static void ApplyEndingChoice(int index, Action onDone)
     {
+        // 【2026-11-05 难度隔离·硬锁】endingChoice / SetChoice / 线索 / 好感全部不可逆，难度局一律不写。
+        if (DifficultyRunBlocksStory()) { onDone?.Invoke(); return; }
+
         var data = SaveSystem.Instance?.Data;
         if (data != null) data.endingChoice = index + 1;
 
@@ -498,6 +515,9 @@ public static class ChapterStoryBeats
 
     static void PlayN8(Action onDone)
     {
+        // 【2026-11-05 难度隔离·硬锁】结局达成 / 周目派定清零不可逆，难度局一律不写。
+        if (DifficultyRunBlocksStory()) { onDone?.Invoke(); return; }
+
         var data = SaveSystem.Instance?.Data;
         var id = StoryEnding.Resolve(data);
 
@@ -579,6 +599,9 @@ public static class ChapterStoryBeats
     /// <summary>分支选择落账 + 即时回响（必须有回响，否则选择感会消失——照第 7 章口径）。</summary>
     static void ApplyFinaleChoice(int index, Action onDone)
     {
+        // 【2026-11-05 难度隔离·硬锁】postFinalChoice / 追查关解锁不可逆，难度局一律不写。
+        if (DifficultyRunBlocksStory()) { onDone?.Invoke(); return; }
+
         var data = SaveSystem.Instance?.Data;
         if (data != null) data.MarkFinaleChoice(index + 1);   // 1=回家 2=追查
 

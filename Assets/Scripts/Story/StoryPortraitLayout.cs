@@ -210,6 +210,25 @@ public static class StoryPortraitLayout
         { "receptionist_sitting", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },  // 496×456 坐姿整图（引导期）
     };
 
+    /// <summary>
+    /// 个别立绘整体额外缩放（乘在原图像素尺寸上）。2026-11-05 主人报「引导的这两个立绘太大」：
+    /// 11-04「剧情立绘统一 968」归一化后，引导坐姿两图（charHeightFrac=1 整图）被放大到 968 高，
+    /// 引导里显得过大 → 统一缩 20%。只缩显示尺寸，遮罩/位置旋钮（DeskPortraitBottomOffsetPx /
+    /// TutorialDeskLiftPx）一律不动。表外立绘 1 = 不缩。
+    /// </summary>
+    public static readonly Dictionary<string, float> PortraitExtraScale = new Dictionary<string, float>
+    {
+        { StoryPortraits.GuildMasterSitting, 0.8f },
+        { StoryPortraits.ReceptionistSitting, 0.8f },
+    };
+
+    /// <summary>查某个立绘的额外缩放；不在表内返回 1（不缩）。</summary>
+    public static float GetExtraScale(string portraitId)
+    {
+        if (string.IsNullOrEmpty(portraitId)) return 1f;
+        return PortraitExtraScale.TryGetValue(portraitId, out var s) ? s : 1f;
+    }
+
     /// <summary>查某个立绘 ID 的内容包围盒比例；不在表内返回 false（该立绘不做归一化）。</summary>
     public static bool TryGetContentFit(string portraitId, out PortraitContentFit fit)
     {

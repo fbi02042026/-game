@@ -297,8 +297,10 @@ public static class ChapterRouteTable
     /// <summary>
     /// 该章在指定难度下能否进入：
     /// · 普通(0)：沿用路线表 CanEnter（线性 1→8，与旧口径完全一致）。
-    /// · 困难/噩梦：先过全局难度门槛（通关章数，GameConfig.DIFF_*_NEED_CLEARS），
+    /// · 困难/噩梦：先过全局难度门槛（**真通关**章数，GameConfig.DIFF_*_NEED_CLEARS），
     ///   再逐章把关——上一章在该难度下通关过才开下一章；第 1 章只要全局门槛过了就开。
+    /// 🔴 2026-11-05：全局门槛的真源是 <see cref="SaveData.TrulyClearedChapterCount"/>（整篇小关全清），
+    ///    **不是** <see cref="SaveData.ClearedChapterCount"/>（已解锁镜像，只增不减，老档误标会让难度提前开门）。
     /// 纯查询，不写存档。
     /// </summary>
     public static bool CanEnterAtDiff(int chapter, int diff, SaveData data)
@@ -306,7 +308,7 @@ public static class ChapterRouteTable
         if (chapter < 1 || chapter > 8) return false;
         if (diff <= 0) return CanEnter(chapter, data);
 
-        int clearedCount = data != null ? data.ClearedChapterCount() : 0;
+        int clearedCount = data != null ? data.TrulyClearedChapterCount() : 0;
         if (diff == 1 && clearedCount < GameConfig.DIFF_HARD_NEED_CLEARS) return false;
         if (diff == 2 && clearedCount < GameConfig.DIFF_NIGHTMARE_NEED_CLEARS) return false;
         if (chapter == 1) return true;

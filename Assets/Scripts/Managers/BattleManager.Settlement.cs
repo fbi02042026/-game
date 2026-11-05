@@ -115,6 +115,9 @@ public partial class BattleManager
         // 目前 OnStageCleared 各 case 都带 stageIndex>=1 的门槛（岛恒为 0）才没漏，
         // 但那是巧合 —— 以后谁加一条不带门槛的 case，打岛就会白送主线线索。这里显式挡住。
         if (IsSideIsland) return;
+        // 【2026-11-05 难度隔离·必修】困难/噩梦局不发主线线索页：该局的 currentChapter 只是「打哪篇」的玩法参数，
+        // 不是普通主线进度。线索页属于普通主线内容，难度局一律不写（唯一出口见 NormalOnlyContentAllowed）。
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return;
         int idx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
         StoryClue.OnStageCleared(CurrentChapter, idx);
         if (currentStage.type == StageType.Elite)
@@ -123,8 +126,9 @@ public partial class BattleManager
 
     /// <summary>
     /// 2026-09-18：关卡掉落徽记（stage_drop.csv，见 StageDropTable / MercGrowInventory）。
-    /// Boss 关且该章通关次数 ≤1 视为「本章首次通关」，额外给 §7.4 的保底（+2 自选徽记）。
-    /// 用 ≤1 而不是 ==0：IncrementChapterClearCount 的时序若在清怪前，==0 会漏掉保底。
+    /// Boss 关且「本章首次通关」额外给 §7.4 的保底（+2 自选徽记）。
+    /// 【2026-11-05】首通口径按难度独立：普通读 chapterClearCounts（≤1 防 IncrementChapterClearCount 时序），
+    /// 困难/噩梦读该难度自己的 <see cref="SaveData.HasClearedChapterAtDiff"/>，绝不读普通次数。
     /// </summary>
     void GrantStageGrowDrops()
     {
@@ -163,8 +167,26 @@ public partial class BattleManager
         if (IsBondDungeon) return;
         string stageType = currentStage.type == StageType.Boss ? "Boss"
                          : currentStage.type == StageType.Elite ? "Elite" : "Normal";
-        bool firstClear = currentStage.type == StageType.Boss
-            && (ChapterManager.Instance == null || ChapterManager.Instance.GetChapterClearCount(CurrentChapter) <= 1);
+        // 【2026-11-05 难度隔离·建议修】Boss 首通保底按**难度独立**判定：
+        // · 普通：沿用 chapterClearCounts（那是普通口径，≤1 防 IncrementChapterClearCount 时序）；
+        // · 困难/噩梦：绝不读普通 chapterClearCounts —— 改读该难度自己的真源
+        //   HasClearedChapterAtDiff（整篇该难度首次通关才为 false → 首通）。
+        //   该难度重复通关时 clearedChapterDiffKeys 已有本条 → 不再给保底。
+        bool firstClear;
+        if (currentStage.type != StageType.Boss)
+        {
+            firstClear = false;
+        }
+        else if (BattleDifficulty > 0)
+        {
+            var diffData = SaveSystem.Instance?.Data;
+            firstClear = diffData == null || !diffData.HasClearedChapterAtDiff(CurrentChapter, BattleDifficulty);
+        }
+        else
+        {
+            firstClear = ChapterManager.Instance == null
+                        || ChapterManager.Instance.GetChapterClearCount(CurrentChapter) <= 1;
+        }
         // 2026-09-26 主人拍板：按本关物理/魔法击杀占比推导主导类型，透传给掉落分池（平局=不限制）。
         string dropBias = null;
         if (_magicKills > _physicalKills) dropBias = "magic";
@@ -202,6 +224,9 @@ public partial class BattleManager
     bool ShouldPlayChapter1Ending()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：Boss 记录点层直接发奖励
+        // 【2026-11-05 难度隔离·必修】困难/噩梦局不播主线剧情：难度只改变怪物强度与奖励，
+        // 不是主线进度。剧情状态（TutorialDone/Chapter1ChoiceDone/endingChoice/PreStorySeen）只允许普通局写。
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
         // 【2026-10-31 修】支线岛 1 的 currentChapter 也是 1 + Boss 关，条件里只看「第 1 章选边做完没」——
         // 一旦哪天派岛早于选边，打岛 1 就会把第 1 章结局整段演出来。支线岛一律不接主线节点。
         if (IsSideIsland) return false;
@@ -260,6 +285,9 @@ public partial class BattleManager
     bool ShouldPlayChapterStory()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：记录点层只弹「撤离/继续」双选
+        // 【2026-11-05 难度隔离·必修】难度局不播 ChapterStoryBeats（其中包括第 7 章 N7 三选一）——
+        // endingChoice 是不可逆字段，绝不能被困难/噩梦写掉。
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
         if (IsFinale) return false;        // 终章追查关不播战后章节剧情（2026-10-23）：act=8+Boss 型会误触 N8 重播，关后剧情走 FinaleBattleMode 自己的链
         // 【2026-10-31 修】支线岛的 currentChapter = 岛所属篇（1..8）+ 单 Boss 关，原判据会全部命中：
         // 岛 6 打完会播 N6（沉座/密令）、岛 8 打完会播 N8 结局演出（还会 MarkAchieved 结局）。
@@ -371,6 +399,9 @@ public partial class BattleManager
     bool ShouldPlayPreBattleStory()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
+        // 【2026-11-05 难度隔离·必修】难度局不播战前主线剧情 —— 连带 MarkPreStorySeen 也不会被写
+        // （标记只在 ShouldPlayPreBattleStory 通过且实际开播后写，见 CoPreBattleStoryThenFirstWave :417）。
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
         if (IsFinale) return false;        // 终章追查关不播战前章节剧情（2026-10-23）：act=8+首关会误触第 8 章战前剧情重播
         // 【2026-10-31 修】支线岛 currentChapter = 岛所属篇 + stageIndex 0，会误命中主线战前剧情
         // （如刚过第 1 章就派到岛 6，会提前播第 6 章战前「再往下诸神留下的东西就压在底下」→ 剧透）。
@@ -2213,7 +2244,9 @@ public partial class BattleManager
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡通关（胜利）
         bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
         // 竞技场不接主线冒险日志碎片（2026-10-31：它的章号是 1~8 随机场景，白掉碎片会污染主线收集进度）
-        if (!IsArena) AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
+        // 【2026-11-05 难度隔离·必修】难度局同样不掉：碎片属普通主线收集内容（唯一出口 NormalOnlyContentAllowed）。
+        if (!IsArena && NormalOnlyContentAllowed(BattleDifficulty))
+            AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
 
         // 通关结算交给模式：核心不需要知道一共有几种玩法、各自发什么、之后去哪。
         if (Mode == null)
@@ -2279,6 +2312,12 @@ public partial class BattleManager
     /// </summary>
     public void SettleNormalStageClear()
     {
+        // 【2026-11-05 主人拍板】章节战（普通/困难/噩梦，含章末 Boss）结束一律自动回冒险页，
+        // 并带上本局难度：回城后冒险页是新建实例，由 ShowPage 按该难度真源落位（失败/撤离见 Death.cs 同口径）。
+        // 本方法只被 NormalBattleMode.SettleStageClear 调用（BattleModes.cs:61），即章节战专属，不影响其它模式。
+        TownHubController.PendingOpenAdventure = true;
+        AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
         // 【2026-10-31 B2 落地】B2 后每座大关都以 Boss 收尾，只有「整篇打完」才算章末：
         // 章末分支（开冒险页 + 好评引导）改为看存档里该篇是否已通关，不再只看这一关是不是 Boss。
@@ -2306,7 +2345,7 @@ public partial class BattleManager
             // 战斗结果已在 FinishStageAfterPortalReached 统一门播过（UsesBattleResultScreen=true 的模式一次到位），
             // 这里不再二次弹「战斗结算」——直接收尾回城。原双钮（下一关/返回）行为本就都 = 回城，
             // 差别只在开不开冒险页，统一保留开冒险页（10-24「只要打完就清」口径不变，下一章由冒险页进）。
-            TownHubController.PendingOpenAdventure = true;
+            // 【2026-11-05】PendingOpenAdventure / 难度已在方法开头统一置好，这里不再重复。
             EndRunAndReturnToTown();
             return;
         }

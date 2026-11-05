@@ -30,6 +30,13 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     /// <summary>点「开始冒险」后开战用的章节；0 表示用存档最新解锁章</summary>
     public static int PendingBattleChapter;
     public static int PendingBattleDifficulty;
+    /// <summary>
+    /// 【2026-11-05】章节战结束回城后，冒险页首次 ShowPage 要落的难度（-1 = 无）。
+    /// 每场战斗结束都会重载 Town、冒险页是新建实例（_selectedChapter / _selectedDiff = 0），
+    /// 靠这个静态字段把「刚打完那档难度」带回来；ShowPage 读到即清零，只消费一次。
+    /// 由 BattleManager 在章节战胜利/失败/撤离时写入；其它模式不写。
+    /// </summary>
+    public static int PendingOpenAdventureDifficulty = -1;
     public static bool PendingGoldDungeon;
     /// <summary>
     /// 徽记副本进本标记（2026-10-23 主人拍板「活动副本一拆二」）。
@@ -353,6 +360,15 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         // 并排占上排两槽的排布见 ResourceStrip.ApplyRightAlign 的 N=2 分支。
         ResourceStrip.SetMode(ResourceStrip.Mode.DiamondStamina);
         EnsureStandaloneChrome(hall);
+
+        // 【2026-11-05】章节战结束回城：先接住「刚打完的难度」，再按真源落位（读完即清）。
+        // 难度 0（普通）也显式落位：防止上次停留的难度残留；未解锁的难度不采纳，保持默认普通。
+        if (PendingOpenAdventureDifficulty >= 0)
+        {
+            int pendingDiff = Mathf.Clamp(PendingOpenAdventureDifficulty, 0, 2);
+            PendingOpenAdventureDifficulty = -1;
+            if (pendingDiff == 0 || IsDiffUnlocked(pendingDiff)) _selectedDiff = pendingDiff;
+        }
 
         // 0（新实例还没选过章）或越界（<1 / >8）时落到「应推进的章节」：真源 = clearedStages，见
         // ChapterRouteTable.CurrentChapterToAdvance（真通关 + 最高已开打篇，对历史误标免疫）。

@@ -556,7 +556,7 @@ public class ChapterManager : Singleton<ChapterManager>
                 SaveSystem.Instance?.Save();
                 Debug.Log($"[ChapterManager] 第{currentChapter}篇 第{currentGrand - 1}/{grandTotal} 座大关通关 → 下一座第{currentGrand}座");
                 OnBranchReady?.Invoke(availableNextStages);
-                AchievementSystem.Instance?.OnReachStage(0);
+                AchievementSystem.Instance?.OnReachStage(0, runDiff);
                 return;
             }
 
@@ -622,6 +622,13 @@ public class ChapterManager : Singleton<ChapterManager>
                 // 内部还会写 AdventureCodex C1Z / C1G（图鉴）→ 必须与上面同一条「仅普通」守卫
                 AdventureLogAchievements.OnChapterCleared(currentChapter, 0, perfect);
             }
+            else
+            {
+                // 【2026-11-05 成就按难度分档·新增需求】困难/噩梦**必须**能推进成就，但只推进该难度自己的那一套：
+                // 普通成就（clear_ch1/3/5/8、survive_clear）绝不能被难度局写。
+                // 内部按真源 HasTrulyClearedChapterAtDiff 校验后才置位，不另建计数。
+                AchievementSystem.Instance?.OnChapterClearAtDiff(currentChapter, runDiff);
+            }
             return;
         }
 
@@ -641,8 +648,8 @@ public class ChapterManager : Singleton<ChapterManager>
 
         OnBranchReady?.Invoke(availableNextStages);
 
-        // 通知成就系统
-        AchievementSystem.Instance?.OnReachStage(currentStageIndex);
+        // 通知成就系统（生存类也按难度分档：困难/噩梦只写各自 #dN 后缀项）
+        AchievementSystem.Instance?.OnReachStage(currentStageIndex, runDiff);
     }
 
     /// <summary>

@@ -410,7 +410,11 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         // 【2026-10-21 拍板】老存档补掷入口：开世界地图时若 chosenBranch==0 且已通关第 1 章，补掷一次
         // （EnsureForkRoll 内部幂等，绝不重复掷；取不到 data 传 null 由函数内部兜底）。
         ChapterRouteTable.EnsureForkRoll(SaveSystem.Instance?.Data);
-        _availableChapters = ChapterRouteTable.AvailableChapters(SaveSystem.Instance?.Data);
+        // 【2026-11-05 建议修】难度模式下 base 集合也走难度自己的可选篇（不再用普通 AvailableChapters 再叠加难度过滤）：
+        // 普通难度两套口径本来就等价；困难/噩梦必须按该难度进度单独出集合。
+        _availableChapters = _difficulty > 0
+            ? ChapterRouteTable.AvailableChaptersAtDiff(_difficulty, SaveSystem.Instance?.Data)
+            : ChapterRouteTable.AvailableChapters(SaveSystem.Instance?.Data);
         if (_availableChapters == null) _availableChapters = new List<int>();
         if (_availableChapters.Count == 0) _availableChapters.Add(1);
     }

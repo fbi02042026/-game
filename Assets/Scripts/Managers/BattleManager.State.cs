@@ -160,6 +160,16 @@ public partial class BattleManager
 
     public int CurrentChapter => ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
     public int BattleDifficulty { get; private set; }
+
+    /// <summary>
+    /// 【2026-11-05 难度隔离·唯一口径出口】是否允许写「普通主线专属内容」。
+    /// <para>普通局（0）→ true；困难（1）/噩梦（2）→ false。</para>
+    /// <para>🔴 难度只改变怪物强度与掉落，**不是主线进度**。以下内容只允许普通局写：
+    /// 剧情播放（ChapterStoryBeats，含第 7 章不可逆 <c>endingChoice</c>）、剧情状态标记
+    /// （<c>MarkPreStorySeen</c> 等）、主线线索页（StoryClue）、冒险日志碎片、普通成就/图鉴/世界解锁。</para>
+    /// <para>🔴 其他位置禁止再各自写 <c>if (BattleDifficulty &gt; 0)</c> 判断——一律走本出口，保证口径唯一。</para>
+    /// </summary>
+    public static bool NormalOnlyContentAllowed(int difficulty) => difficulty <= 0;
     /// <summary>
     /// 是否金币本。
     /// 以前是开局从 <c>AdventureUI.PendingGoldDungeon</c> 拷进来的一个独立 bool（虽然只有一处写入），

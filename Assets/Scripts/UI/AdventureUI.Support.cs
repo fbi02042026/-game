@@ -67,11 +67,15 @@ public partial class AdventureUI
     /// <summary>是否无限裂隙（下标 2，2026-10-17 开放）</summary>
     bool IsEndlessMode(int mode) => BattleModes.FromSlot(mode).Id == BattleModeId.Endless;
 
-    static int GetClearedChapterCount()
+    /// <summary>
+    /// 难度全局门槛用的「真通关」章数（整篇小关全清）。
+    /// 🔴 2026-11-05 与 <see cref="ChapterRouteTable.CanEnterAtDiff"/> 统一口径：
+    /// 绝不能用 <see cref="SaveData.ClearedChapterCount"/>（已解锁镜像，只增不减，老档误标会让难度提前开）。
+    /// </summary>
+    static int GetTrulyClearedChapterCount()
     {
-        // 章节分叉后 maxUnlockedChapter-1 不再等于通关数，一律读权威集合
         var data = SaveSystem.Instance?.Data;
-        return data != null ? data.ClearedChapterCount() : 0;
+        return data != null ? data.TrulyClearedChapterCount() : 0;
     }
 
     static bool IsDiffUnlocked(int diff)
@@ -79,19 +83,29 @@ public partial class AdventureUI
         if (diff <= 0) return true;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
-        // 2026-10-23 主人拍板：困难=通关第一章、噩梦=通关第三章（统一按通关章节数，
+        // 2026-10-23 主人拍板：困难=真通关第一章、噩梦=真通关第三章（统一按真通关章节数，
         // 覆盖 2026-09-17「困难通关第 8 章开噩梦」旧规；SaveData.hardCleared 从此只写不读）
-        if (diff == 1) return GetClearedChapterCount() >= GameConfig.DIFF_HARD_NEED_CLEARS;
-        if (diff == 2) return GetClearedChapterCount() >= GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
+        if (diff == 1) return GetTrulyClearedChapterCount() >= GameConfig.DIFF_HARD_NEED_CLEARS;
+        if (diff == 2) return GetTrulyClearedChapterCount() >= GameConfig.DIFF_NIGHTMARE_NEED_CLEARS;
         return false;
     }
 
     /// <summary>
     /// 主线难度锁定提示（2026-10-23 主人拍板：困难=通关第一章开启、噩梦=通关第三章开启）。
-    /// OnSelectDiff / OnStartBattle 两处共用这一个出口，不许各写一份文案。
+    /// OnSelectDiff / OnStartBattle / 任务跳转 三处共用这一个出口，不许各写一份文案。
+    /// 【2026-11-05】抽成 public static，供非 UI 侧（<see cref="QuestJumpRouter"/>）复用。
     /// </summary>
-    string DiffLockHint(int idx)
-        => idx >= 2 ? "通关第三章后开启噩梦" : $"通关第一章后开启{DiffLabel(idx)}";
+    public static string DiffLockHintText(int idx, string diffName = null)
+    {
+        if (idx <= 0) return "";
+        // 【2026-11-05】文案必须可执行：明确「先通关普通第 N 章」，不只说「未解锁」。
+        // N 直接取门槛常量（困难=1 章、噩梦=3 章），改门槛只改一处。
+        int need = idx >= 2 ? GameConfig.DIFF_NIGHTMARE_NEED_CLEARS : GameConfig.DIFF_HARD_NEED_CLEARS;
+        string name = string.IsNullOrEmpty(diffName) ? GameConfig.GetDifficultyName(idx) : diffName;
+        return $"先通关普通第 {need} 章解锁{name}";
+    }
+
+    string DiffLockHint(int idx) => DiffLockHintText(idx, DiffLabel(idx));
 
     /// <summary>
     /// 难度解锁按模式分流（2026-10-23 主人拍板）：活动副本（金币/徽记）按「本标签已通难度」

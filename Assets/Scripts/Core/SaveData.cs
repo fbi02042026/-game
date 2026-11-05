@@ -1289,6 +1289,15 @@ public class SaveData
             }
 
         clearedStageDiffKeys ??= new HashSet<string>();
+        // 【2026-11-05 建议修】显式重建难度关真源，不再依赖 SyncRuntimeFromLists 的调用顺序：
+        // 先清空再按落盘镜像重建，避免「先调本方法、后重建 keys」时拿到空集合/旧集合。
+        clearedStageDiffKeys.Clear();
+        if (clearedStageDiffEntries != null)
+            for (int i = 0; i < clearedStageDiffEntries.Count; i++)
+            {
+                var e = clearedStageDiffEntries[i];
+                if (e != null && !string.IsNullOrEmpty(e.id)) clearedStageDiffKeys.Add(e.id);
+            }
     }
 
     /// <summary>
@@ -1347,7 +1356,21 @@ public class SaveData
     }
 
     // ──────────────────────────────────────────────────────────
-    // 【2026-11-05 难度隔离】困难/噩梦进度一律从 clearedStageDiffKeys 推，禁止读普通 clearedStages
+    // 【2026-11-05 难度隔离】难度进度**唯一一组出口**（其他位置禁止直接读集合字段）
+    //
+    // 真源（可写，只增不减）：
+    //   · clearedStageDiffKeys —— 键 "难度_篇_篇内小关0基"，由 GrantTalentForStageFirstClear(difficulty>0) 写
+    //     （落盘镜像 clearedStageDiffEntries 由 SyncListsFromRuntime 镜像）。
+    // 派生镜像（由真源推导，写入端可维护，**读取端一律走下面的出口，不得直查字段**）：
+    //   · clearedChapterDiffKeys —— 键 "章_难度"，由 RefreshChapterTruthAtDiff 在整篇小关全清时补，只增不减。
+    //
+    // 四个出口（难度侧调用方只准用这四个）：
+    //   ① 难度关       → HasStageClearedAtDiff(chapter, stage0, diff)
+    //   ② 难度大关     → DerivedGrandProgressFromClearedStagesAtDiff(chapter, diff)
+    //   ③ 难度真通关   → HasTrulyClearedChapterAtDiff(chapter, diff)
+    //   ④ 难度可选篇   → ChapterRouteTable.AvailableChaptersAtDiff(diff, data)
+    // 🔴 禁止在 UI / Manager 里写 clearedStageDiffKeys.Contains(...) 或 clearedChapterDiffKeys.Contains(...)；
+    //    🔴 禁止读普通 clearedStages / clearedChapterIds / chapterClearCounts / maxUnlockedChapter 来推难度进度。
     // ──────────────────────────────────────────────────────────
 
     /// <summary>指定难度下该篇是否小关全清（difficulty ≤ 0 走普通真源）。</summary>
@@ -2016,7 +2039,8 @@ public class SaveData
         sideIslandGuideEntries = new List<IntIdEntry>();
     }
 
-    /// <summary>已通关章节数（困难/噩梦难度解锁门槛用；分叉后不能用 maxUnlockedChapter-1 推算）。</summary>
+    /// <summary>已**解锁**章节数（只增不减的镜像；🔴 不是难度门槛判据，门槛用 <see cref="TrulyClearedChapterCount"/>）。
+    /// 分叉后不能用 maxUnlockedChapter-1 推算。</summary>
     public int ClearedChapterCount()
     {
         return clearedChapterIds != null ? clearedChapterIds.Count : 0;

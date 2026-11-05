@@ -378,7 +378,8 @@ public partial class AdventureUI
     void OnSelectChapter(int chapter)
     {
         if (chapter < 1 || chapter > 8) return;
-        if (!ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data))
+        // 【2026-11-05】难度模式下按难度集合把关（普通模式 _selectedDiff=0 时等价于 CanEnter）。
+        if (!ChapterRouteTable.CanEnterAtDiff(chapter, _selectedDiff, SaveSystem.Instance?.Data))
         {
             Toast("通关当前区域后开启");
             return;
@@ -388,20 +389,19 @@ public partial class AdventureUI
     }
 
     /// <summary>
-    /// 任务跳转用（2026-09-19 新增）：把冒险页定位到指定章节。
-    /// 只改选中章 + 刷新，不做其他事；章节现在进不去就静默保留当前选择，
-    /// 免得从任务条点进来被一句「未解锁」打断。
-    /// </summary>
-    /// <summary>
     /// 定位到指定章（切选中章并刷新）。
     /// 【2026-10-26 主人拍板「任务栏前往即使没开启也可以定位到」】任务点击走 ignoreLock=true：
     /// 锁着的章也照样切过去看（关卡列表自带锁态展示），普通点击（玩家手点页签）仍受 CanEnter 把关。
+    /// 【2026-11-05 建议修】<paramref name="difficulty"/> ≥ 0 时按任务自身难度落位并切换难度模式；
+    /// -1 = 保持当前难度。锁判定统一走 <see cref="ChapterRouteTable.CanEnterAtDiff"/>（难度模式下按难度集合）。
     /// </summary>
-    public void FocusChapter(int chapter, bool ignoreLock = false)
+    public void FocusChapter(int chapter, bool ignoreLock = false, int difficulty = -1)
     {
         if (chapter < 1 || chapter > 8) return;
-        if (!ignoreLock && !ChapterRouteTable.CanEnter(chapter, SaveSystem.Instance?.Data)) return;
+        int useDiff = difficulty >= 0 ? Mathf.Clamp(difficulty, 0, 2) : _selectedDiff;
+        if (!ignoreLock && !ChapterRouteTable.CanEnterAtDiff(chapter, useDiff, SaveSystem.Instance?.Data)) return;
 
+        _selectedDiff = useDiff;
         _selectedChapter = chapter;
         if (_built && gameObject.activeInHierarchy)
         {

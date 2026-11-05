@@ -170,7 +170,8 @@ public partial class BattleManager
         Analytics.StageEnd(CurrentChapter, currentStage != null ? currentStage.stageIndex : 0, false,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡结束（阵亡/失败）
         MercenaryManager.Instance?.ClearAllMercs();
-        AdventureLogAchievements.OnDied();
+        // 【2026-11-05 难度隔离】冒险日志属普通主线收集内容，难度局不写（唯一出口 NormalOnlyContentAllowed）
+        if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnDied();
         EndRunLoadout();
         // 【2026-11-02 晚主人拍板】裂隙死亡回城：下次裂隙页刷新时箭头脉冲两下，
         // 把视线引到出生点（「你从这里继续」）。主动撤离不置位 —— 撤离不是挫败时刻。
@@ -228,10 +229,15 @@ public partial class BattleManager
         EndRunLoadout();
         if (!Rules.SkipMercHireClearOnEvacuate)
             MercHireSession.ClearHired();
-        AdventureLogAchievements.OnEvacuated(Rules.Active);
+        // 【2026-11-05 难度隔离】同上：难度局不写普通冒险日志
+        if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnEvacuated(Rules.Active);
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!Rules.SkipPendingAdventureOnEvacuate)
+        {
             TownHubController.PendingOpenAdventure = true;
+            // 【2026-11-05】章节战记下本局难度，回城冒险页按该难度真源落位；其它模式 IsFormalMainRun=false 不写。
+            if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+        }
         // 教程收尾也走「战斗结果」界面（2026-10-28 主人拍板），关闭后再回城接剧情
         if (SkipLegacyOnEvacuate || Rules.Active)
         {
@@ -271,7 +277,7 @@ public partial class BattleManager
         SaveSystem.Instance?.Save();
 
         FillSettlementSnapshot(isDeath: false, talentGain);
-        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
+        if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         // 【2026-10-28 16:10 主人拍板「引导关结束也要战斗结果界面，不要战斗-结算」】
         // 引导撤离/引导通关收尾改播「战斗结果」界面（胜利大图 + 奖励格，奖励数据源 = RunStats 快照），
         // 点【确定】/点任意处 → 回城接剧情（链路原样）。结果界面引导局不建分享钮（BattleResultScreen 内已分流）。
@@ -364,8 +370,10 @@ public partial class BattleManager
 
         FillSettlementSnapshot(isDeath, talentGain);
         if (!isDeath)
-            AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
+            if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         TownHubController.PendingOpenAdventure = true;
+        // 【2026-11-05】章节战（失败/主动撤离）记下本局难度，回城冒险页按该难度真源落位；其它模式不写。
+        if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
         // 【2026-11-05 主人拍板「失败后…不要出现结算界面」】死亡不弹战斗结算（胜利侧 2026-10-27 已同
         // 口径），直接清临时雇佣、回城；主动撤离保留结算（展示金币/天赋石，2026-10-24 口径不变）。
         if (isDeath)
@@ -448,7 +456,7 @@ public partial class BattleManager
         // 金币已在通关时 PersistBattleGold 写回；天赋石改由冒险日志里程碑发放，此处不再按金币补发。
         int talentGain = 0;
         FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
-        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
+        if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         BattleSettlementUI.Show(RunStats, afterConfirm);
     }
 
@@ -462,7 +470,7 @@ public partial class BattleManager
     {
         int talentGain = 0;
         FillSettlementSnapshot(isDeath: false, talentGain, isVictory: true);
-        AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);
+        if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);
         BattleSettlementUI.Show(RunStats, afterConfirm, onNextStage, confirmLabel);
     }
 
