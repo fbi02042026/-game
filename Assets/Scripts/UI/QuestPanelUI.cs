@@ -363,16 +363,26 @@ public class QuestPanelUI : MonoBehaviour
             return;
         }
 
+        // 【2026-11-05 主人拍板「任务栏的主线任务不能出现已完成」】已完成行不再渲染，
+        // 只留页头 X/Y 汇总进度；全部完成时给一行占位提示。主线链尾已绑章末 Boss 关
+        //（quest.csv C3~C8 的 C?_Q4 + 本次补的 C1_Q8 / C2_Q7），没打 Boss 前列表永不空。
+        bool anyOpen = false;
         for (int i = 0; i < views.Count; i++)
         {
             var v = views[i];
+            if (v.done) continue;
+
             string reward = v.def.rewardStones > 0
                 ? "奖励：天赋石 ×" + v.def.rewardStones
                 : "奖励：随章节里程碑里程序释放";
-            int status = v.done ? 2 : (v.isCurrent ? 1 : 0);
+            int status = v.isCurrent ? 1 : 0;
             AddRow(v.def.title, v.Desc + "　" + reward, status,
-                v.done ? null : (Action)delegate { OnMainAction(v); });
+                (Action)delegate { OnMainAction(v); });
+            anyOpen = true;
         }
+
+        if (!anyOpen)
+            AddRow("本章主线已完成", "打通本章 BOSS 后即可前往下一章", 1, null);
     }
 
     void RefreshDaily()

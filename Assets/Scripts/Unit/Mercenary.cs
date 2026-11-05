@@ -209,6 +209,7 @@ public partial class Mercenary : UnitBase
         SetupAttributes(id, level);
         Face(1);
         WirePassiveOnAttack();
+        ApplyLegendaryFx();   // 【2026-11-05】传奇佣兵战斗特效（形象流光+脚下光环，见 Mercenary.LegendaryFx.cs）
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
     }
@@ -256,6 +257,7 @@ public partial class Mercenary : UnitBase
         ApplyGrowBonus();
         // 【2026-10-27 羁绊】通关羁绊后全属性 ×1.5 同款补挂时机（幂等：_bondApplied 挡重复，未通关是无操作）。
         ApplyBondClearBonus();
+        ApplyLegendaryFx();   // 【2026-11-05】hireId 到手后重判传奇（共用 asset 的佣兵稀有度可能不同）
     }
 
     /// <summary>

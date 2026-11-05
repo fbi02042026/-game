@@ -259,6 +259,7 @@ public partial class Monster : UnitBase
             _worldHpBar.gameObject.SetActive(false);
 
         HideStackLabel();
+        HideAffixHeadLabel();   // 【2026-11-05】死亡同步藏头顶词条（同叠怪标签口径）
         base.Die(isCritKill);
         BattleBossHpBar.RefreshFromField();
     }
@@ -280,6 +281,7 @@ public partial class Monster : UnitBase
         _forcedTarget = null;
         _worldHpBar = null;
         HideStackLabel();
+        HideAffixHeadLabel();   // 【2026-11-05】回池同步藏头顶词条（旧词缀不带到下一只）
         // 【2026-10-16】回池关掉精英光环：下一只从池里复用的可能是普通怪（显隐唯一出口见 ApplyEliteRingVisible）
         ApplyEliteRingVisible(false);
     }

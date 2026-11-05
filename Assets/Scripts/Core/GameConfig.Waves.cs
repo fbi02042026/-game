@@ -95,6 +95,12 @@ public static partial class GameConfig
     /// Boss 关 = 3 回合小怪波 + 末位 1 Boss 波（Boss 波不算回合，走通关链）。
     /// </summary>
     public const int FORMAL_STAGE_ROUND_COUNT = 3;
+    /// <summary>
+    /// 【2026-11-05 主人拍板】主线正式关每关削减的波数（从最后一回合扣，每回合保底 1 波）。
+    /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts；引导局 / 活动副本 / 无限裂隙不走定表，不受影响。
+    /// 2 = ch1 6→4、ch2 9→7、ch3+ 12→10（Ch3+ 双段爆发补 1 波 → 11，净减 1~2 波）。
+    /// </summary>
+    public const int FORMAL_ROUND_WAVE_CUT = 2;
 
     /// <summary>
     /// 【2026-10-25 主人拍板】正式关每回合波数**按章 × 回合位置定死**（不随机摇）：

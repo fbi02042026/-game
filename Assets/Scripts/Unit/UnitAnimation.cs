@@ -89,6 +89,9 @@ public class UnitAnimation : MonoBehaviour
     Color[] _spumFlashBaseline;
     int _spumFlashGen;
     bool _hitFlashRunning;
+    /// <summary>白闪中挂起的基准重采（换装 Recache 请求；白闪收尾/攻击打断/复用重置后消费）。
+    /// 【2026-11-05 主人报「头部闪白不退」】防把闪白采成永久基准。</summary>
+    bool _recachePending;
     bool _lowHpFlashOn;
     float _damagedRecoveryUntil;
     const float DamagedFlashFadeSeconds = 0.28f;
@@ -169,8 +172,10 @@ public class UnitAnimation : MonoBehaviour
             if (srs[i] == null || IsShadowRenderer(srs[i])) continue;
             if (i < _spumFlashBaseline.Length)
                 srs[i].color = _spumFlashBaseline[i];
+            // 【2026-11-05 主人报「头部闪白不退」】基准数组对不上的部件不再写死白色（那是一个
+            // 闪白不退的口子），保持当前色 —— 换装新增部件由 RecacheSpumFlashBaseline 重采。
             else
-                srs[i].color = Color.white;
+                continue;
         }
     }
 
@@ -853,6 +858,7 @@ public class UnitAnimation : MonoBehaviour
         _spumFlashGen++;
         _hitFlashRunning = false;
         RestoreSpumFlashColors();
+        FlushPendingSpumRecache();   // 白闪被攻击打断 = 已回基准色，补采换装挂起的基准（2026-11-05）
         if (!_isMoving)
             ApplyAnimatorSpeed(1f);
     }
@@ -1204,6 +1210,18 @@ public class UnitAnimation : MonoBehaviour
     public void RecacheSpumFlashBaseline()
     {
         if (_spum == null) return;
+        // 【2026-11-05 主人报「头部闪白不退」】白闪进行中部件全是闪白色，此刻重采会把白写成
+        // 永久基准（还原永远停在白）。挂起到白闪协程收尾 / 攻击打断 / 复用重置时再采。
+        if (_hitFlashRunning) { _recachePending = true; return; }
+        _recachePending = false;
+        CacheSpumFlashRenderers();
+    }
+
+    /// <summary>白闪彻底收尾（gen 未被接管）后消费挂起的基准重采。</summary>
+    void FlushPendingSpumRecache()
+    {
+        if (!_recachePending) return;
+        _recachePending = false;
         CacheSpumFlashRenderers();
     }
 
@@ -1261,6 +1279,7 @@ public class UnitAnimation : MonoBehaviour
         }
         RestoreSpumFlashFromBaseline();
         _hitFlashRunning = false;
+        FlushPendingSpumRecache();
     }
 
     static bool IsShadowRenderer(SpriteRenderer sr)
@@ -1424,6 +1443,12 @@ public class UnitAnimation : MonoBehaviour
         _damagedRecoveryUntil = 0f;
         _procDeathTime = 0f;
         _procDeathCritKill = false;
+
+        // 【2026-11-05 主人报「头部闪白不退」】复活/池化复用重置：上一世可能死在白闪里（协程随
+        // 失活中断、部件停在白色），这里按基准拉回，并推进 gen 让任何残存白闪协程立刻退场。
+        _spumFlashGen++;
+        _hitFlashRunning = false;
+        RestoreSpumFlashFromBaseline();
 
         // 程序化模式：恢复缩放、旋转、颜色
         if (_procMode && _sr != null)

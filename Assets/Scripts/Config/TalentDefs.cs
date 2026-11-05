@@ -4,7 +4,10 @@ using UnityEngine;
 
 /// <summary>
 /// 天赋 V4 静态表（右列重制）。
-/// 左列 L1-L80（金币，线性必点；2026-10-21 拍板 40→80，L1~40 老档兼容）；右列 13 个「天赋石」节点（花石、可升级、分批开放、互斥）。
+/// 【2026-11-05 主人拍板】左右列解锁门槛统改**人物等级**（LevelSystem，满级 80），左右列互相解耦：
+/// 左列 N 级开第 N 个（80 级 ↔ 80 节点一一对应，见 LeftNodeUnlockLevel）；
+/// 右列门槛 = 配表 unlockLeftIndex（20/30/40 三档，2026-11-05 主人拍板「30级的门槛变成40级」整体+10；语义 = 人物等级）。
+/// 左列 L1-L80（金币，1.5 倍价档）；右列 13 个「天赋石」节点（花石、可升级、互斥）。
 /// 右列数据来源：Assets/Data/Source/Tables/talent_right.csv → Resources/Data/Tables/talent_right.bytes。
 /// 缺表/解析失败时回退到下方 HardcodedRightNodes()，保证天赋界面一定开得起来。
 /// </summary>
@@ -73,10 +76,10 @@ public static class TalentDefs
         public string name;
         public int goldCost;
         /// <summary>
-        /// 【2026-10-21 拍板《天赋左列2小时加满》§2.2】章节门槛：需通关该章数才能解锁。
-        /// 0 = 不设门槛（L1~20，保新手引导正常点击）；L21~40=2 / L41~60=3 / L61~80=4。
-        /// 原字段 recommendLevel 是全库只写不读的死字段，改语义为 unlockChapter
-        /// （LeftNode 纯代码构建不进存档，改语义安全，已按死字段规矩报备）。
+        /// 【已退役 2026-11-05】原 10-21 章节门槛（L21~40 需通 ch2 / L41~60 ch3 / L61~80 ch4）
+        /// 被「按人物等级解锁」（<see cref="LeftNodeUnlockLevel"/>）取代。
+        /// 死字段报备：BuildLeft 仍写值、全库无读者（CanUnlockLeft / IsLeftUpgradeable 已改读等级）；
+        /// 字段保留，防后续要叠加章节门槛时再改语义。
         /// </summary>
         public int unlockChapter;
         public Effect effect;
@@ -104,7 +107,7 @@ public static class TalentDefs
         public string id;
         public string name;
         public RightNodeType type;
-        /// <summary>任务3：解锁需要的左列已点数量门槛。</summary>
+        /// <summary>解锁需要的**人物等级**门槛（2026-11-05 拍板：语义由「左列已点数」改为此，配表列名 unlockLeftIndex 不变）。</summary>
         public int unlockLeftIndex;
         public int maxLevel;
         /// <summary>costByLevel[L-1] = 从第 L-1 级升到第 L 级的花费（L=1 即解锁费）。</summary>
@@ -182,6 +185,14 @@ public static class TalentDefs
         RightNodes = BuildRightNodes();
     }
 
+    /// <summary>
+    /// 【2026-11-05 主人拍板「左边的天赋按玩家升一级开一个」】左列第 N 个节点的解锁人物等级。
+    /// 人物满级 80（LevelSystem.MaxLevel）↔ 左列 80 节点**一一对应**：N 级开第 N 个（1 级只有 L1 可点）。
+    /// 「开局只能点一个」由两层共同保证：1 级只有 L1 可点 + 金币 1.5 倍价（L1=150）。
+    /// </summary>
+    public static int LeftNodeUnlockLevel(int index1Based)
+        => index1Based <= LevelSystem.MaxLevel ? index1Based : LevelSystem.MaxLevel;
+
     // ===== 左列查询（保持不变） =====
     public static LeftNode GetLeft(int index1Based)
     {
@@ -247,25 +258,43 @@ public static class TalentDefs
         return n;
     }
 
-    // ===== 任务3：等级上限公式（实现位置，加注释）=====
+    // ===== 右列等级上限公式 =====
+    /// <summary>右列升级上限铺满的等级（2026-11-05 主人拍板「30级门槛改40级」：20级开专精 → 40级全开 → 50级全满 → 之后给左列+倾向属性）。
+    /// 固定 50 而不随 MaxLevel(80) 走，否则专精 Lv5 要 80 级才满、太拖。</summary>
+    public const int RightCapWindow = 50;
+
     /// <summary>
-    /// 可升上限 = 在「门槛 → 左列点满(40)」这段区间里，把 maxLevel 级**线性铺满**。
-    /// cap = 1 + (左列已点 - 门槛) * (maxLevel - 1) / (左列总数 - 门槛)，向上不超过 maxLevel；未达门槛返回 0。
-    /// <para>例：R_F1（门槛 10 / 满级 5）→ L10 上限1、L20 上限2、L30 上限3、L40 上限5；
-    /// R_HUNT（门槛 30 / 满级 3）→ L30 上限1、L35 上限2、L40 上限3；
-    /// 门槛 = 40 的节点（span 0）→ 解锁即可升到满级。</para>
+    /// 【2026-11-05 主人拍板「右侧天赋改人物等级开启，跟左列取消挂钩」】
+    /// 可升上限随**人物等级**线性铺满：cap = 1 + (人物等级 - 门槛) * (maxLevel - 1) / (<see cref="RightCapWindow"/> - 门槛)，
+    /// 向上不超过 maxLevel；未达门槛返回 0。门槛真源 = 配表 unlockLeftIndex（20/30/40，语义 = 人物等级；
+    /// 2026-11-05 主人拍板「30级的门槛变成40级」→ 三档整体 +10）。
+    /// <para>例：R_F1（门槛 20 / 满级 5）→ 20级 上限1、28级 上限2、35级 上限3、43级 上限4、50级(满) 上限5；
+    /// 门槛 30 的节点（span 20）→ 40级 上限2、50级 满；门槛 40 的节点（span 10）→ 45级 上限2、50级 满。</para>
     /// <para>2026-09-29 主人玩法口径：右列**不是必须点**，玩家可以「点新节点」也可以「把已开的旧节点升满」，
-    /// 由玩家取舍（都花天赋石）。旧公式 1 + (已点-门槛)/5 有个硬伤：门槛 40 的节点左列总共才 40，
-    /// 永远停在 Lv1 —— 「不点新的、只升旧的」这条路线直接走不通，因此改成线性铺满。</para>
+    /// 由玩家取舍（都花天赋石）。</para>
     /// </summary>
-    public static int RightNodeLevelCap(TalentRightNode node, int leftUnlocked)
+    public static int RightNodeLevelCap(TalentRightNode node, int playerLevel)
     {
         if (node == null) return 0;
-        if (leftUnlocked < node.unlockLeftIndex) return 0;
-        int span = Left.Length - node.unlockLeftIndex;
-        if (span <= 0) return node.maxLevel;                 // 门槛即终点：解锁后可直接升满
-        int cap = 1 + (leftUnlocked - node.unlockLeftIndex) * (node.maxLevel - 1) / span;
+        if (playerLevel < node.unlockLeftIndex) return 0;
+        int span = RightCapWindow - node.unlockLeftIndex;
+        if (span <= 0) return node.maxLevel;                 // 门槛即满级：解锁后可直接升满
+        int cap = 1 + (playerLevel - node.unlockLeftIndex) * (node.maxLevel - 1) / span;
         return cap < node.maxLevel ? cap : node.maxLevel;
+    }
+
+    /// <summary>
+    /// 把节点从 level 升到 level+1 需要的**人物等级**（RightNodeLevelCap 的反解：从门槛向上找第一个
+    /// cap &gt; level 的等级；已满级返回 0）。消费点：CanUpgradeRightNode 拦截话术 + 右列行内「升到 N 级可升级」。
+    /// </summary>
+    public static int LevelNeededForNextLevel(TalentRightNode node, int level)
+    {
+        if (node == null || level >= node.maxLevel) return 0;
+        for (int lv = node.unlockLeftIndex; lv <= RightCapWindow; lv++)
+        {
+            if (RightNodeLevelCap(node, lv) > level) return lv;
+        }
+        return RightCapWindow;
     }
 
     // ===== 任务4：互斥组（实现位置，加注释）=====
@@ -294,10 +323,10 @@ public static class TalentDefs
     /// 这批剩下的全部去掉「新」字，入口红点也一起灭。所以判定必须看整批，不能只看单个节点。</para>
     /// 右列行的红色「新」字与天赋入口红点**共用这一个判定**，不要各写一套。
     /// </summary>
-    public static bool IsNewlyOpen(TalentRightNode node, IDictionary<string, int> talents, int leftUnlocked)
+    public static bool IsNewlyOpen(TalentRightNode node, IDictionary<string, int> talents, int playerLevel)
     {
         if (node == null || talents == null) return false;
-        if (leftUnlocked < node.unlockLeftIndex) return false;               // 还没到门槛
+        if (playerLevel < node.unlockLeftIndex) return false;               // 还没到门槛（人物等级）
         if (GetRightNodeLevel(talents, node.id) > 0) return false;           // 自己已经点了
         if (IsRightNodeMutexLocked(node, talents)) return false;             // 互斥组已选其它
         // R_DUAL 的额外前置：主流派（R_F1 / R_F2 任一）满 5 级，没满足不算「可点」
@@ -319,9 +348,9 @@ public static class TalentDefs
     public static bool AnyNewlyOpen(IDictionary<string, int> talents)
     {
         if (talents == null) return false;
-        int leftUnlocked = LeftUnlockedCount(talents);
+        int playerLv = LevelSystem.CurrentLevel;   // 【2026-11-05 拍板】门槛 = 人物等级
         for (int i = 0; i < RightNodes.Length; i++)
-            if (IsNewlyOpen(RightNodes[i], talents, leftUnlocked)) return true;
+            if (IsNewlyOpen(RightNodes[i], talents, playerLv)) return true;
         return false;
     }
 
@@ -462,27 +491,27 @@ public static class TalentDefs
     static TalentRightNode[] HardcodedRightNodes()
     {
         var list = new List<TalentRightNode>();
-        list.Add(HNode(1, "R_F1", "流派·物理专精", RightNodeType.Mutex, 10, 5, "path",
+        list.Add(HNode(1, "R_F1", "流派·物理专精", RightNodeType.Mutex, 20, 5, "path",
             new[] { 5, 12, 22, 38, 60 }, AttrKind.PhysDamage, new[] { 5f, 10f, 15f, 20f, 25f }, "phys", "物理专精"));
-        list.Add(HNode(2, "R_F2", "流派·魔法专精", RightNodeType.Mutex, 10, 5, "path",
+        list.Add(HNode(2, "R_F2", "流派·魔法专精", RightNodeType.Mutex, 20, 5, "path",
             new[] { 5, 12, 22, 38, 60 }, AttrKind.MagicDamage, new[] { 5f, 10f, 15f, 20f, 25f }, "magic", "魔法专精"));
-        list.Add(HNode(3, "R_C1", "利刃", RightNodeType.Attr, 20, 3, "",
+        list.Add(HNode(3, "R_C1", "利刃", RightNodeType.Attr, 30, 3, "",
             new[] { 6, 14, 26 }, AttrKind.AttackPercent, new[] { 5f, 10f, 15f }, "AttackPercent", "利刃"));
-        list.Add(HNode(4, "R_C2", "体魄", RightNodeType.Attr, 20, 3, "",
+        list.Add(HNode(4, "R_C2", "体魄", RightNodeType.Attr, 30, 3, "",
             new[] { 6, 14, 26 }, AttrKind.Hp, new[] { 40f, 80f, 140f }, "hp", "体魄"));
-        list.Add(HNode(5, "R_C3", "精准", RightNodeType.Attr, 20, 3, "",
+        list.Add(HNode(5, "R_C3", "精准", RightNodeType.Attr, 30, 3, "",
             new[] { 14, 30, 52 }, AttrKind.CritRate, new[] { 1f, 2f, 3f }, "crit", "精准"));
-        list.Add(HNode(6, "R_C4", "迅捷", RightNodeType.Attr, 20, 3, "",
+        list.Add(HNode(6, "R_C4", "迅捷", RightNodeType.Attr, 30, 3, "",
             new[] { 14, 30, 52 }, AttrKind.AtkSpeed, new[] { 3f, 6f, 10f }, "spd", "迅捷"));
-        list.Add(HNode(7, "R_C5", "疾行", RightNodeType.Attr, 30, 3, "",
+        list.Add(HNode(7, "R_C5", "疾行", RightNodeType.Attr, 40, 3, "",
             new[] { 25, 50, 85 }, AttrKind.MoveSpeed, new[] { 3f, 6f, 10f }, "move", "疾行"));
-        list.Add(HNode(8, "R_C6", "凝神", RightNodeType.Attr, 30, 3, "",
+        list.Add(HNode(8, "R_C6", "凝神", RightNodeType.Attr, 40, 3, "",
             new[] { 25, 50, 85 }, AttrKind.SkillCooldown, new[] { 4f, 8f, 13f }, "cd", "凝神"));
         // R_JOB（职业专精 6选1）已按主人 2026-10-20 拍板移除：CSV 与硬编码兜底同步删行，
         // 右列不再出现职业专精；JobChoice 相关代码为数据驱动，无此节点即不会触发，保留不动。
         // R_BAG 2026-09-29 主人拍板：改 **3 级、每级 +1 行背包**（只针对角色界面的背包 ——
         // 装备不带出副本，里头放的是道具 / 碎片这类）。kind=Custom 无数值效果，靠等级查行数。
-        list.Add(HNode(10, "R_BAG", "背包扩容", RightNodeType.Attr, 30, 3, "",
+        list.Add(HNode(10, "R_BAG", "背包扩容", RightNodeType.Attr, 40, 3, "",
             new[] { 60, 140, 260 }, AttrKind.Custom, new[] { 0f, 0f, 0f }, "bag", "背包扩容"));
         // 2026-09-29 主人拍板：R_SLOT / R_DUAL 原「技能槽 IV」「双修解锁」**没有消费点**（点了没效果），
         // 换成两条**现有属性系统已经消费**的后期战力节点：暴击伤害 / 技能伤害。
@@ -491,19 +520,19 @@ public static class TalentDefs
         list.Add(HNode(12, "R_DUAL", "技能精通", RightNodeType.Attr, 40, 3, "",
             new[] { 40, 90, 160 }, AttrKind.SkillDamage, new[] { 10f, 20f, 35f }, "skill", "技能精通"));
         // R_HUNT：后期战力节点 —— 对精英 / Boss 的伤害加成（窄覆盖 → 单位数值给得比通用增伤高）
-        list.Add(HNode(13, "R_HUNT", "精英猎手", RightNodeType.Attr, 30, 3, "",
+        list.Add(HNode(13, "R_HUNT", "精英猎手", RightNodeType.Attr, 40, 3, "",
             new[] { 30, 65, 110 }, AttrKind.EliteDamage, new[] { 15f, 30f, 50f }, "hunt", "精英猎手"));
         // 2026-09-29 新增：R_LUCK 幸运提升 —— 提高进关抽奖「再来一次」的概率。
         // kind=Custom 不走属性系统（属性系统没有「概率」这一项），数值由
         // SlotMachineSystem.RerollChance 按等级直接读：每级 +3%（1/2/3 级 = +3%/+6%/+9%）。
         // optValues 与 SlotMachineDefs.REROLL_PER_TALENT 必须一致，改一处要同步另一处。
-        list.Add(HNode(14, "R_LUCK", "幸运提升", RightNodeType.Attr, 30, 3, "",
+        list.Add(HNode(14, "R_LUCK", "幸运提升", RightNodeType.Attr, 40, 3, "",
             new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 3f, 6f, 9f }, "luck", "幸运提升"));
         // 2026-09-29 新增：R_FUND 初始资金 —— 每局开局的启动金 +80/级。
         // 同 R_LUCK，kind=Custom 不走属性系统，由 SlotMachineSystem.RunStarterGold 按等级读
         // （【2026-10-10】发进局内钱包 currentGold，不再发抽奖币）。
-        list.Add(HNode(15, "R_FUND", "初始资金", RightNodeType.Attr, 30, 3, "",
-            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 4f, 8f, 12f }, "fund", "初始资金"));
+        list.Add(HNode(15, "R_FUND", "初始资金", RightNodeType.Attr, 40, 3, "",
+            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 80f, 160f, 240f }, "fund", "初始资金"));
         return list.ToArray();
     }
 
@@ -544,7 +573,7 @@ public static class TalentDefs
         // 2026-09-29 主人定序；2026-10-10 改序：**体质 → 攻击 → 防御 → 攻击**
         // （第 4 槽原「智力 = 魔攻」，主人拍板「所有职业统一加攻击」，改成第二个攻击槽）
         // 【2026-10-21 拍板《天赋左列2小时加满》§2】左列 40 → 80：L1~40 的 id/顺序/效果逐项不变，
-        // 只在数组尾部追加第二个十年（L41~80）；章节门槛见 unlockChapter（§2.2，L1~20 不设门槛）。
+        // 只在数组尾部追加第二个十年（L41~80）；解锁门槛 2026-11-05 起改按人物等级（见 LeftNodeUnlockLevel）。
         string[] names = { "体质", "力量", "防御", "攻击" };
         string[] romans =
         {
@@ -619,35 +648,34 @@ public static class TalentDefs
                 string label = slot == 0 ? "生命" : slot == 2 ? "双防" : "攻击";
                 fx = Fx(fx.kind, boosted, $"{label} +{boosted:0}{unit}");
             }
-            // 【2026-10-26 主人拍板涨价·温和档】原曲线太便宜——ch1 一小关 ≈132 金（满章 ≈1,056÷8），
-            // 旧 L1=50 起步一小关能连开 2~3 个。新曲线：L1~20 = 100+25i（L1=100，一小关开 1 个，
-            // 中后期约 2~3 关 1 个）；L21~80 = round(600 × 1.02^(i-20))（L21=600 与 L20=575 平滑衔接，
-            // L80≈1,969，全树 ≈75,180）。老档已买节点不回价，只影响未点节点。
+            // 【2026-11-05 主人拍板·1.5 倍档】（推翻同日上午"翻一倍"，回到 10-26 温和档 ×1.5）：
+            // L1~20 = 1.5×(100+25i) = 150+37.5i，整型实现 150+(75i+1)/2（L1=150、L2=188、L20=863）；
+            // L21~80 = round(900 × 1.02^(i-20))（L21=900 与 L20=863 平滑衔接，L80≈2,953）。
+            // 配合等级门槛（1 级只有 L1 可点）→ 开局只能点一个天赋。老档已买节点不回价，只影响未点节点。
             int cost = i < 20
-                ? 100 + i * 25
-                : Mathf.RoundToInt(600f * Mathf.Pow(1.02f, i - 20));
+                ? 150 + (i * 75 + 1) / 2
+                : Mathf.RoundToInt(900f * Mathf.Pow(1.02f, i - 20));
             list[i] = new LeftNode
             {
                 index = i + 1,
                 id = "L" + (i + 1),
                 name = nm,
                 goldCost = cost,
-                // 【§2.2 章节门槛】0 = 不设门槛（L1~20，保新手引导正常点击）；
-                // L21~40 需通 ch2、L41~60 需通 ch3、L61~80 需通 ch4（判定在 TalentSystem.CanUnlockLeft）。
+                // 【已退役 2026-11-05】章节门槛改按人物等级（LeftNodeUnlockLevel），本字段只写不读（死字段报备见字段注释）。
                 unlockChapter = i < 20 ? 0 : 1 + i / 20,
                 effect = fx
             };
         }
 
 #if UNITY_EDITOR
-        // 【§8 红线断言】左列 id 逐项连续无漂移；价格锁当前曲线（2026-10-26 涨价·温和档）：
-        // L1~20 = 100+25i、L21~80 = round(600×1.02^(i-20))，后续改档时两处同步改。
+        // 【§8 红线断言】左列 id 逐项连续无漂移；价格锁当前曲线（2026-11-05 主人拍板 1.5 倍档）：
+        // L1~20 = 150+(75i+1)/2、L21~80 = round(900×1.02^(i-20))，后续改档时两处同步改。
         for (int i = 0; i < 40; i++)
             if (list[i].id != "L" + (i + 1))
                 Debug.LogError($"[TalentDefs] 老档左列 id 漂移 L{i + 1}");
         for (int i = 0; i < 20; i++)
-            if (list[i].goldCost != 100 + i * 25)
-                Debug.LogError($"[TalentDefs] 左列价格漂移 L{i + 1}: {list[i].goldCost} ≠ {100 + i * 25}");
+            if (list[i].goldCost != 150 + (i * 75 + 1) / 2)
+                Debug.LogError($"[TalentDefs] 左列价格漂移 L{i + 1}: {list[i].goldCost} ≠ {150 + (i * 75 + 1) / 2}");
 #endif
         return list;
     }

@@ -807,6 +807,7 @@ public class RewardPopupUI : MonoBehaviour
     /// <summary>把一个格子的图标 / 文案 / 碎片卡填好（几何一律不动）。</summary>
     void FillCell(Transform cell, Entry e)
     {
+        string countPart = null;   // 【2026-11-05 主人拍板「数量写到图标框里」】从 label 拆出的 ×N，末尾统一建角标
         var iconT = FindChild(cell, "Icon");
         var iconImg = iconT != null ? iconT.GetComponent<Image>() : null;
         // 2026-10-15 主人拍板：获得弹窗「物品图标和字放大 30%」——只放 Icon 的 sizeDelta 与 Label 的 fontSize，
@@ -822,12 +823,21 @@ public class RewardPopupUI : MonoBehaviour
             var t = lblT.GetComponent<Text>();
             if (t != null)
             {
-                t.text = e.label ?? "";
-                // 2026-10-15 主人拍板：文字放大 30%（以预制体原始字号为基准，不改 sizeDelta/位置）
-                // 2026-10-18 主人拍板：金币等标签字再放大 2 号
-                if (_base.LabelFont > 0) t.fontSize = Mathf.RoundToInt(_base.LabelFont * CellContentScale) + 2;
-                // 2026-10-18 修复：字号放大后「金币 ×500」等三位数文案超出预制体 130×30 的文字框，
-                // 换行+截断导致整行被裁没（弹窗只见图标不见数字）。改为不换行/不截断，超框照常居中显示。
+                // 【2026-11-05 主人拍板「获得奖励的名字字太大 数量写到图标框里」】
+                // ① Label 只显示名字，字号回预制体原始值（覆盖 10-15「放大 30%」+ 10-18「再 +2」两道旧口径）；
+                // ② 数量（×N）拆出来，FillCell 末尾统一叠到图标框右下角（EnsureCountBadge）。
+                string namePart = e.label ?? "";
+                if (!string.IsNullOrEmpty(namePart))
+                {
+                    int xi = namePart.LastIndexOf('×');
+                    if (xi >= 0 && xi + 1 < namePart.Length)
+                    {
+                        countPart = namePart.Substring(xi).Trim();      // 「×100」
+                        namePart = namePart.Substring(0, xi).Trim();    // 「钻石」
+                    }
+                }
+                t.text = namePart;
+                if (_base.LabelFont > 0) t.fontSize = _base.LabelFont;
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 t.verticalOverflow = VerticalWrapMode.Overflow;
             }
@@ -865,7 +875,43 @@ public class RewardPopupUI : MonoBehaviour
             iconImg.enabled = true;
             ApplyIconSprite(iconImg, e.icon);
         }
+
+        // 数量角标最后建（与碎片卡同级且在其后 → 永远在最上层，碎片条目不被盖）
+        if (!string.IsNullOrEmpty(countPart)) EnsureCountBadge(cell.transform, countPart);
     }
+
+    /// <summary>
+    /// 【2026-11-05 主人拍板「数量写到图标框里」】图标框右下角数量角标（×N）。
+    /// 挂格子根（与碎片卡同级且后建 → 永远在最上层）；按 Icon 框世界四角落位，
+    /// 文字右下基准 = Icon 右下角内 8px。字号 24（fusion-pixel 12px 点阵取 12 的倍数），
+    /// 白字黑描边保证压在任意图标上可读。每次 Show 全量重建格子，无残留。
+    /// </summary>
+    void EnsureCountBadge(Transform cell, string countText)
+    {
+        var iconT = FindChild(cell, "Icon") as RectTransform;
+        if (iconT == null)
+        {
+            Debug.LogError("[RewardPopup] 格子缺 Icon 节点，数量角标放不了");
+            return;
+        }
+        var go = new GameObject("CountBadge", typeof(RectTransform), typeof(Text), typeof(Outline));
+        go.transform.SetParent(cell.transform, false);
+        var t = go.GetComponent<Text>();
+        t.text = countText;
+        t.fontSize = 24;
+        t.alignment = TextAnchor.LowerRight;
+        t.color = Color.white;
+        t.raycastTarget = false;
+        go.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.85f);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(120f, 30f);
+        var ic = new Vector3[4];
+        iconT.GetWorldCorners(ic);                                // ic[2]=右上 ic[0]=左下
+        Vector3 anchorWorld = new Vector3(ic[2].x - 8f, ic[0].y + 8f, 0f);   // Icon 右下角内 8px
+        rt.position = anchorWorld + new Vector3(-60f, 15f, 0f);   // badge 中心 = 右下基准左移半宽/上移半高
+    }
+
 
     static void ApplyIconSprite(Image img, Sprite sp)
     {

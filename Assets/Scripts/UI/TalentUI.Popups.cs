@@ -39,9 +39,9 @@ public partial class TalentUI
 
         if (lv1 <= 0 && lv2 <= 0)
         {
-            if (TalentDefs.LeftUnlockedCount(talents) < v.node.unlockLeftIndex)
+            if (LevelSystem.CurrentLevel < v.node.unlockLeftIndex)
             {
-                GlobalToastUI.Show($"左列开到第{v.node.unlockLeftIndex}个后开启", true);
+                GlobalToastUI.Show($"等级达到{v.node.unlockLeftIndex}级后解锁", true);
                 return;
             }
             OpenMutexChoice(v);
@@ -89,9 +89,9 @@ public partial class TalentUI
             return;
         }
         // 两侧都没选 → 二选一弹窗
-        if (TalentDefs.LeftUnlockedCount(talents) < v.node.unlockLeftIndex)
+        if (LevelSystem.CurrentLevel < v.node.unlockLeftIndex)
         {
-            GlobalToastUI.Show($"左列开到第{v.node.unlockLeftIndex}个后开启", true);
+            GlobalToastUI.Show($"等级达到{v.node.unlockLeftIndex}级后解锁", true);
             return;
         }
         // 【2026-10-20 修】把玩家点的那一侧带进弹窗做预选（0=物理 / 1=魔法），

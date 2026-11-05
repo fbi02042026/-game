@@ -319,7 +319,7 @@ public partial class AdventureUI
             int chapter = Mathf.Clamp(idx + 1, 1, 8);
             node.onClick.AddListener(() => OnSelectChapter(chapter));
         }
-        _selectedChapter = 1;
+        _selectedChapter = 0;   // 0 = 未选过章，交给 ShowPage 落到「应推进的章节」（同 AdventureUI.cs 2026-11-05 修回跳）
     }
 
     Button BuildStageNode(Transform parent, string label, Vector2 pos,

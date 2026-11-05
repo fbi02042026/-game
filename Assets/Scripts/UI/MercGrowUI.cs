@@ -73,6 +73,7 @@ public static class MercGrowUI
                 if (head == null) head = MercPortraitSprites.GetStand(hireIdOrAssetId);
                 Portrait.sprite = head;
                 Portrait.enabled = head != null;
+                MercRarityFx.ApplyPortraitShine(Portrait, hireIdOrAssetId);   // 【2026-11-05】传奇佣兵头像金色流光
             }
         }
     }

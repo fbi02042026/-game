@@ -152,6 +152,27 @@ public static partial class GameConfig
     /// 无限裂隙不吃（走 EndlessDifficultyMul / ENDLESS_BIGBOSS_HP_MUL 自己的两条线）。
     /// </summary>
     public const float BOSS_FINAL_STAT_MUL = 1.0f;
+    /// <summary>
+    /// 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2。
+    /// 真源只此一处，消费点唯一 = Monster.Init 最终写 attr 处（物理 / 魔法两条攻击线都吃）；
+    /// 普通怪 / 精英不受影响，副本 / 裂隙里的 Boss 同样生效。
+    /// </summary>
+    public const float BOSS_ATTACK_MUL = 0.6f;
+    public const float BOSS_HP_MUL = 2.0f;
+    /// <summary>
+    /// 【2026-11-05 主人拍板「词条怪出现后每关都时不时出现 越往后越多」】
+    /// 正式主线关每关词条怪配额档（关序 0 基）：x-1/x-2=0、x-3=1~2、x-4=2、
+    /// x-5/x-6=3~4、x-7 及以后=5~6。真源只此一处；消费点唯一 = WavePlanner.InitAffixQuota
+    /// （铺波时按各波怪数加权摊到 WaveData.affixQuotaInWave，刷怪时波内安全槽强制插入）。
+    /// </summary>
+    public static void AffixQuotaRange(int stageIdx, out int min, out int max)
+    {
+        if (stageIdx <= 1) { min = 0; max = 0; }
+        else if (stageIdx == 2) { min = 1; max = 2; }
+        else if (stageIdx == 3) { min = 2; max = 2; }
+        else if (stageIdx <= 5) { min = 3; max = 4; }
+        else { min = 5; max = 6; }
+    }
     /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
     public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
@@ -386,6 +407,15 @@ public static partial class GameConfig
     /// 与武器种族系数、连杀加速、被动攻速是乘法叠加。
     /// </summary>
     public const float PLAYER_ATTACK_SPEED_MUL = 0.8f;
+
+    /// <summary>
+    /// 佣兵（Mercenary）攻击速度倍率，0.7 = 出手间隔变慢 30%。
+    /// 【2026-11-05 主人拍板「佣兵攻速比玩家快太多」】只给佣兵降，怪物节奏不变
+    /// （在 UnitBase.GetAttackCooldown 的 is Mercenary 分支里乘，与玩家 0.8 同口径）。
+    /// 与连杀加速、团队攻速增益技能是乘法叠加。
+    /// </summary>
+    public const float MERC_ATTACK_SPEED_MUL = 0.7f;
+
 
     /// <summary>
     /// 玩家（Hero）行走/移动速度倍率。2026-09-28 主人要求「玩家行走速度再加快 10%」→ 1.1。
@@ -1098,4 +1128,8 @@ public static partial class GameConfig
         return $"第{cn[idx]}章  {GetChapterMapName(gameChapter)}";
     }
 
+
+    // ---- 受击后退（2026-11-05 主人拍板：普通怪受击小退；精英/Boss 免击退；它们打玩家/俇兵把人打退）----
+    public const float KNOCKBACK_MONSTER = 0.35f; // 普通怪受击退移（世界单位）
+    public const float KNOCKBACK_ALLY = 0.7f;     // 精英/Boss 命中玩家/俇兵的击退移（世界单位）
 }

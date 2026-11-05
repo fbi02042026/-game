@@ -144,9 +144,6 @@ public partial class TalentUI
 
     void OnClickLeft(int index0)
     {
-        // 【2026-10-13 主人拍板】跨过 10/20/30/40 时右列要演「暗→亮 + 放大缩小」，
-        // 前后点数在这取（唯一触发点 = 玩家点了左列并真的买成功，打开界面/洗点都不演）。
-        int before = TalentDefs.LeftUnlockedCount(GetTalents());
         if (!TalentSystem.TryUnlockLeft(index0 + 1, out string reason))
         {
             Debug.Log("[TalentUI] " + reason);
@@ -154,19 +151,19 @@ public partial class TalentUI
             GlobalToastUI.Show(reason, true);
             return;
         }
-        int after = TalentDefs.LeftUnlockedCount(GetTalents());
         onLeftUnlockRequested?.Invoke(index0 + 1);
         RefreshAll();
-        // 同上：买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
+        // 买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
         // 【2026-10-31 主人拍板】toast 不再念「已激活：节点名」，直接报实际属性增益 + 一句情绪价值
+        // 【2026-11-05 拍板】右列与左列解耦 → 左列购买不再触发右列开通演出/提示（改由升级链路 NotifyLevelUp 触发）
         GlobalToastUI.Show(LeftUnlockToast(index0), true);
-        if (after > before) PlayRightUnlockFx(before, after);
     }
 
     /// <summary>
-    /// 【2026-10-13 主人拍板】左列点数跨过某道门槛（真源 = <c>talent_right.csv</c> 的 unlockLeftIndex：10/20/30/40）
-    /// → 那一批右列节点「暗的节点变亮 + 放大缩小」提示玩家：右列又开了一行。
-    /// ⚠ 门槛从配表取，不在代码里写死 10/20/30/40。
+    /// 【2026-10-13 主人拍板】右列跨过门槛时演「暗→亮 + 放大缩小」。
+    /// 【2026-11-05 拍板】右列门槛改挂人物等级、与左列解耦 → 本方法改由升级链路触发
+    /// （TalentSystem.NotifyLevelUp → OnLevelUpFx，天赋页开着才演），before/after = 升级前后的人物等级。
+    /// 门槛真源 = talent_right.csv 的 unlockLeftIndex（10/20/30/40，语义 = 人物等级）。
     /// </summary>
     void PlayRightUnlockFx(int before, int after)
     {
@@ -251,7 +248,18 @@ public partial class TalentUI
     }
 
     /// <summary>
-    /// 下一道「开右列」门槛：比 leftUnlocked 大的最小 unlockLeftIndex（真源 = talent_right.csv）。
+    /// 【2026-11-05 主人拍板】人物升级跨过右列门槛 → 播右列开通演出（天赋页开着才演，否则只有 toast）。
+    /// 唯一入口：TalentSystem.NotifyLevelUp（LevelSystem 三个经验入口升级后调用）。
+    /// </summary>
+    public static void OnLevelUpFx(int beforeLevel, int afterLevel)
+    {
+        var ui = Instance;
+        if (ui == null || !ui.IsOpen) return;
+        ui.PlayRightUnlockFx(beforeLevel, afterLevel);
+    }
+
+    /// <summary>
+    /// 下一道「开右列」门槛：比 playerLevel 大的最小 unlockLeftIndex（真源 = talent_right.csv，语义 = 人物等级）。
     /// 没有更大门槛（全开完）返回 0。门槛查询只有这一个出口，别在别处另写一遍。
     /// </summary>
     static int NextRightThreshold(int leftUnlocked)
@@ -269,18 +277,8 @@ public partial class TalentUI
         return best;
     }
 
-    /// <summary>
-    /// 左列序号是不是「开右列」的门槛（同上，真源 = 配表 unlockLeftIndex：10/20/30/40）。
-    /// 门槛行用金色、普通行用灰，玩家一眼看出「到 L 几会开右侧」。
-    /// </summary>
-    static bool IsLeftMilestone(int orderNo)
-    {
-        var arr = TalentDefs.RightNodes;
-        if (arr == null) return false;
-        for (int i = 0; i < arr.Length; i++)
-            if (arr[i] != null && arr[i].unlockLeftIndex == orderNo) return true;
-        return false;
-    }
+    /// <summary>【2026-11-05 拍板】已删除 IsLeftMilestone：右列门槛改挂人物等级后，
+    /// 「左列第 N 行 = 门槛行」不再成立，金色标记与判定一并移除（EnsureLeftOrderLabel 统一灰色）。</summary>
 
     /// <summary>左列第 index0 个节点的显示名（越界返回占位，绝不返回空串把 toast 吞掉）。</summary>
     static string LeftNodeName(int index0)
@@ -366,7 +364,7 @@ public partial class TalentUI
         if (level <= 0)
         {
             // 【2026-10-17 主人要求】锁定的节点点了要有说法：先弹具体开启条件
-            //（左列开到第几个 / 互斥已选其它流派 / 双修前置），再谈解锁。
+            //（等级达到几级 / 互斥已选其它流派 / 双修前置），再谈解锁。
             if (!TalentSystem.CanUnlockRightNode(node.id, out string lockReason))
             {
                 // 【2026-10-18 主人拍板】天赋石不足不再直接 toast——也弹费用确认窗，

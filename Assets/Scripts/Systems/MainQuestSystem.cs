@@ -138,20 +138,13 @@ public static class MainQuestSystem
     // 章节
     // ============================================================
 
-    /// <summary>玩家当前应推进的章节：可选章节里第一个未通关的（全通关返回最后一章）。</summary>
+    /// <summary>玩家当前应推进的章节：唯一真源 = ChapterRouteTable.CurrentChapterToAdvance
+    /// （clearedStages 最高已开打篇 + 真通关口径；2026-11-05 主人拍板，不再自写一套）。</summary>
     public static int CurrentChapter()
     {
         var d = Data;
         if (d == null) return 1;
-
-        var avail = ChapterRouteTable.AvailableChapters(d);
-        if (avail != null && avail.Count > 0)
-        {
-            foreach (int c in avail)
-                if (!d.HasClearedChapter(c)) return c;
-            return avail[avail.Count - 1]; // 全通关返回最后一章
-        }
-        return 1;
+        return ChapterRouteTable.CurrentChapterToAdvance(d);
     }
 
     /// <summary>本章已首次通关的关卡数（长线牵引："快到头了"）。</summary>
@@ -163,6 +156,12 @@ public static class MainQuestSystem
 
     public static int ChapterStageTotal => GameConfig.STAGES_PER_CHAPTER;
 
+    /// <summary>
+    /// 该篇是否**已到达/已解锁**（主线任务「通关第 X 章」的展示与完成口径）。
+    /// 【2026-11-05】主线任务只认普通进度：难度局不写 clearedChapterIds（见 ChapterManager.OnStageComplete
+    /// 的 runDiff 守卫），所以这里天然只看到普通；「已解锁」只增不减（AGENTS 2026-11-03 禁止静默回滚），
+    /// 普通新档只在整篇小关全清时写入，与真通关恒等。
+    /// </summary>
     public static bool IsChapterCleared(int chapter)
     {
         var d = Data;

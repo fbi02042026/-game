@@ -113,6 +113,25 @@ public partial class WavePlanner
         var spawnPool = BuildSpawnPointPool();
         var usedSpritesThisWave = new System.Collections.Generic.HashSet<int>();
         var usedLanes = new System.Collections.Generic.List<float>();
+        // —— 【2026-11-05 主人拍板】本波词条怪槽位：从「安全槽区间」随机取 N 个，
+        // 避开波尾的精英 / 签名怪 / 波内 Boss / 亲卫窗口；引导波不插（Rules.UseTutorialSprites 排除）。
+        var affixSlotsThisWave = new System.Collections.Generic.HashSet<int>();
+        if (wave != null && wave.affixQuotaInWave > 0 && !Rules.UseTutorialSprites)
+        {
+            var arch0 = GetWaveArchetype(waveIndex);
+            int eliteQuota0 = (arch0 != null ? arch0.elite : 0) + (wave.eliteBonus > 0 ? wave.eliteBonus : 0);
+            int tailReserved = Mathf.Max(0, wave.bossCountInWave) + eliteQuota0 + (wave.signatureSpriteIndex > 0 ? 1 : 0);
+            int safeCount = Mathf.Max(0, wave.monsterCount - tailReserved);
+            int want = Mathf.Min(wave.affixQuotaInWave, safeCount);
+            var slots = new System.Collections.Generic.List<int>(safeCount);
+            for (int s = 0; s < safeCount; s++) slots.Add(s);
+            for (int s = slots.Count - 1; s > 0; s--)
+            {
+                int j = UnityEngine.Random.Range(0, s + 1);
+                int t = slots[s]; slots[s] = slots[j]; slots[j] = t;
+            }
+            for (int s = 0; s < want && s < slots.Count; s++) affixSlotsThisWave.Add(slots[s]);
+        }
         float stagger = wave != null && wave.staggerOverride >= 0f
             ? wave.staggerOverride
             : Rules.SpawnStagger;
@@ -129,8 +148,16 @@ public partial class WavePlanner
             // Boss 关变体「双护法」：本波最前 N 个名额是精英亲卫（非 Boss 模板），Boss 本体最后出场
             bool guardSlot = wave.isBossWave && wave.bossGuardCount > 0 && i < wave.bossGuardCount;
 
-            if (!TryPickWaveMonster(stageIdx, i, wave.isBossWave, usedSpritesThisWave,
-                    out MonsterConfig template, out int spriteIndexOverride, waveIndex, stageType, guardSlot))
+            // 【2026-11-05 主人拍板】词条怪槽优先：命中预选槽位且抽到表定词条怪则直接用；
+            // 抽不到（池空 / 找不到 config）回落普通选怪，不吞怪；槽位未命中不消耗名额。
+            // 【修 CS0165】&& 短路下 out 内联声明的变量跨语句不保持「已赋值」关联（CS0165），
+            // 预置默认值后任何路径都有值；affixSlotHit=true 时下方 TryPickWaveMonster 不会执行、不覆盖。
+            MonsterConfig template = null;
+            int spriteIndexOverride = 1;
+            bool affixSlotHit = affixSlotsThisWave.Remove(i)
+                && TryPickAffixMonster(stageIdx, out template, out spriteIndexOverride);
+            if (!affixSlotHit && !TryPickWaveMonster(stageIdx, i, wave.isBossWave, usedSpritesThisWave,
+                    out template, out spriteIndexOverride, waveIndex, stageType, guardSlot))
             {
                 Debug.LogWarning($"[BattleManager] wave monster pick fail i={i}");
                 continue;

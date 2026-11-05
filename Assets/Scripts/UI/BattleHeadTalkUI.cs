@@ -92,6 +92,12 @@ public class BattleHeadTalkUI : MonoBehaviour
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
+        // 【2026-11-05 主人拍板「战斗里的形象上面的小剧情框要置顶」】ApplyPopup 只改 order 不改 layer，
+        // 气泡留在 Default 层，会被 Effects 层的剧情大对话压住。照 StoryDirector.cs:144 先例挪进
+        // 全项目最高 sorting layer「Effects」，order 再 +1，同层内也压过剧情窗（气泡只停两三秒且
+        // blocksRaycasts=false 不吞点击，不影响剧情阅读）。
+        canvas.sortingLayerName = GameConfig.UiSort.TopLayer;
+        canvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
 
         // 不要 GraphicRaycaster：否则会吞点击，引导气泡点不掉
         var oldRay = GetComponent<GraphicRaycaster>();
@@ -147,7 +153,12 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
+        {
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
+            // 【2026-11-05 主人拍板「小剧情框要置顶」】RefreshPopup 同样只改 order 不改 layer，每次补设。
+            canvas.sortingLayerName = GameConfig.UiSort.TopLayer;
+            canvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
+        }
         _co = StartCoroutine(CoPlayLine(speaker, content, hold));
         return _co;
     }

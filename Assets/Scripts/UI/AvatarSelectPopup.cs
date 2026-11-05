@@ -8,7 +8,8 @@ using UnityEngine.UI;
 /// 结构：根（带 Canvas，prefab scale=0 需运行时扶正）→ Dim（全屏黑底+按钮=点空白关）
 ///       + panl（Tile 标题 / 「头像1」模板格 = mask(底框裁剪)+icon(头像图)+kuang(选中框) / 确定钮）。
 /// 行为：预制体只摆一格「头像1」模板 —— 本类按玩家【已拥有】佣兵克隆格子塞进
-///       运行时补建的【横向两排滑动列表】（ScrollRect 左右滑，2026-11-03 主人拍板「可以左右滑动」+
+///       运行时补建的【竖向滑动列表】（ScrollRect 上下滑 + 每行格子组水平居中、左右空隙一致，
+///       2026-11-05 主人拍板「列表改成上下滑动 把左右两边的空隙对齐一致」，取代 11-03 横向两排；
 ///       2026-11-03 二次拍板「头像看玩家拥有几个就显示几个」= 1 号玩家 + 已解锁 H001~H024，
 ///       未拥有的佣兵不出格；UI 运行时补节点不改预制体，先例 TalentUI.Build/QuestPanelUI）。
 ///       点格选中（kuang 外框常显，选中那格染高亮色）→ 点确定换头像并存档 → 主界面名牌等非战斗界面统一刷新。
@@ -32,15 +33,13 @@ public class AvatarSelectPopup : MonoBehaviour
     const string SpriteOkBtn = DirCommon + "确定按钮";          // 确定钮底图
     // 每格 mask/icon/kuang 三张图由 AvatarNodeUI.BindPrefabNode 统一按路径设（底框/头像框那组 192×180）。
 
-    // === 滑动列表排版（两排；2026-11-03 修：步进全部由预制体实测推导，不再硬编码）===
-    // 【踩坑实锤】主人手摆的 mask 是 192×180 × localScale 0.7 = 实际渲染 134×126，旧代码步进却写死
-    // 110/105 → 每格宽出 24px，相邻格子互相压叠（主人截图「越改越坏」）。现在：
-    //   步进 = 实测头像渲染尺寸 + 缝隙；视口宽 = panl 实测宽；视口高/中心 = Tile 底边与确定钮顶边
-    //   之间的可用区 —— 主人改 prefab 尺寸或位置，布局自动跟随（硬规矩：以主人预制体为准）。
-    const float GapX = 12f;              // 列缝隙（实测 134.4 + 12 = 146.4 → panl 450 宽每排 3 格）
-    const float GapY = 10f;              // 行缝隙（实测 126 + 10 = 136 → 两排 272 高）
-    /// <summary>【2026-11-03 主人需求「滑动的左边边框往右移20」】滑动窗口左边缘相对 panl 左边框内缩 20（右边缘不动）。</summary>
-    const float ViewLeftInset = 20f;
+    // === 滑动列表排版（【2026-11-05 主人拍板「列表改成上下滑动 把左右两边的空隙对齐一致」】）===
+    // 竖向滚动：视口 = panl 全宽（不再做任何左右内缩/偏移，取代 11-03「左缩20」与当日「右移20」），
+    // 行数 = 头像数 / 每行容量；每行格子组在视口内水平居中 → 左右空隙天然相等。
+    // 视口高 = Tile 底边到确定钮顶边的可用区，超出一屏上下滚。
+    // 步进仍由预制体实测推导（一格 mask 尺寸 + 缝隙），主人改 prefab 尺寸布局自动跟随（以主人预制体为准）。
+    const float GapX = 12f;              // 列缝隙（实测 134.4 + 12 = 146.4 → panl 450 宽每行 3 格）
+    const float GapY = 10f;              // 行缝隙（实测 126 + 10 = 136）
     const float FallbackCellW = 134.4f;  // 量不到 mask 时的兜底值（192×0.7；不兜底口径，仅记 LogError）
     const float FallbackCellH = 126f;
     /// <summary>【2026-11-03 主人拍板「选择头像框放的太大了 缩小30%」】整体等比缩放再打七折。</summary>
@@ -57,9 +56,9 @@ public class AvatarSelectPopup : MonoBehaviour
     readonly List<int> _avatars = new List<int>();             // 本局展示的头像号（1 玩家 + 已拥有佣兵，按号升序）
     readonly Dictionary<int, int> _avatarIndex = new Dictionary<int, int>();     // 头像号 → 列表下标（滚动定位用）
     ScrollRect _scroll;
-    int _perRow = 1;          // 本局每排格数（panl 实测宽 / 实测步进）
-    float _colStep = 146.4f;  // 列步进（实测头像渲染宽 + 缝）
-    float _viewW = 450f;      // 列表窗口宽（panl 实测宽）
+    int _perRow = 1;          // 本局每行格数（视口实测宽 / 实测列步进）
+    float _rowStep = 136f;    // 行步进（实测头像渲染高 + 缝；竖向滚动定位用）
+    float _viewH = 272f;      // 视口高（可用区实测；竖向滚动定位用）
     int _selected = AvatarDefs.DefaultSlot;
 
     /// <summary>打开弹窗（已开着就重建一份，保证选中态与存档一致）。缺预制体 LogError 不兜底。</summary>
@@ -212,7 +211,12 @@ public class AvatarSelectPopup : MonoBehaviour
         Debug.Log(LogTag + "panl 适配缩放 " + s.ToString("0.00") + "（panl " + pw.ToString("0") + "×" + ph.ToString("0") + "）");
     }
 
-    /// <summary>运行时补横向滑动列表 + 按已拥有佣兵克隆格子（1 玩家 + 已解锁 H001~H024；不改预制体；先例 TalentUI.Build.cs / QuestPanelUI.cs）。</summary>
+    /// <summary>
+    /// 运行时补竖向滑动列表 + 按已拥有佣兵克隆格子（1 玩家 + 已解锁 H001~H024；不改预制体；先例 TalentUI.Build.cs / QuestPanelUI.cs）。
+    /// 【2026-11-05 主人拍板「列表改成上下滑动 把左右两边的空隙对齐一致」】：横向两排废弃，
+    /// 改竖向滚动（行数 = 头像数 / 每行容量，超一屏上下滚）；视口 = panl 全宽（左右不再内缩/偏移），
+    /// 每行格子组水平居中 → 左右空隙相等；视口高 = Tile 底到确定钮顶的可用区。
+    /// </summary>
     void BuildScrollList(Transform panl, Transform template)
     {
         CollectOwnedAvatars();
@@ -226,63 +230,47 @@ public class AvatarSelectPopup : MonoBehaviour
             + "，mask 偏移(" + maskOff.x.ToString("0.0") + "," + maskOff.y.ToString("0.0") + ")"
             + " → 步进 " + colStep.ToString("0.0") + "×" + rowStep.ToString("0.0"));
 
-        // 视口：宽 = panl 实测宽；高 = 两排；中心 = Tile 底边到确定钮顶边这段可用区的中点
+        // 视口：宽 = panl 实测宽（左右对称，不再内缩）；高 = Tile 底边到确定钮顶边的可用区
         var panlRt = (RectTransform)panl;
-        // 【2026-11-03 主人需求「滑动的左边边框往右移20」】视口左边缘内缩 20、右边缘不动：
-        // 宽减 20，中心右移 10（pivot 居中 → 左边缘 = 中心 - 宽/2 = -panlW/2 + 20）
-        float viewW = panlRt.rect.width - ViewLeftInset;
+        float viewW = panlRt.rect.width;
         float top = UsableTop(panl);
         float bottom = UsableBottom(panl);
-        float viewH = rowStep * 2f;
-        float viewY = (top + bottom) * 0.5f;
-        if (viewH > top - bottom + 1f)
-            Debug.LogError(LogTag + "两排头像要 " + viewH.ToString("0") + " 高，panl 可用区只有 "
-                + (top - bottom).ToString("0") + "（加高 panl 或挪 Tile/确定钮），下面一排会被裁掉");
+        float viewH = top - bottom;
+        if (viewH < rowStep)
+            Debug.LogError(LogTag + "视口高 " + viewH.ToString("0") + " 摆不下一排头像（" + rowStep.ToString("0")
+                + "），加高 panl 或挪 Tile/确定钮");
 
-        // 视口（横向滑动窗口）：隐形 Image 接射线（拖动滚动靠它）+ RectMask2D 裁剪
+        // 视口（竖向滑动窗口）：隐形 Image 接收拖动（拖动滚动靠它）+ RectMask2D 裁剪
         var scrollGo = new GameObject("AvatarScroll", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
         scrollGo.transform.SetParent(panl, false);
         var viewRt = (RectTransform)scrollGo.transform;
         viewRt.anchorMin = new Vector2(0.5f, 0.5f);
         viewRt.anchorMax = new Vector2(0.5f, 0.5f);
         viewRt.pivot = new Vector2(0.5f, 0.5f);
-        viewRt.anchoredPosition = new Vector2(ViewLeftInset * 0.5f, viewY);   // 中心右移 10 = 左边缘右移 20
+        viewRt.anchoredPosition = new Vector2(0f, (top + bottom) * 0.5f);
         viewRt.sizeDelta = new Vector2(viewW, viewH);
         scrollGo.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0f);
 
-        // 内容：两排铺开（第一排按窗口宽装满，装不下的去第二排），左中锚；不满一排时整体居中
+        // 内容：竖向铺开（content 点宽、高 = 行数×行步进，顶中锚；ScrollRect 接管上下滚动）
         var contentGo = new GameObject("Content", typeof(RectTransform));
         contentGo.transform.SetParent(scrollGo.transform, false);
         var contentRt = (RectTransform)contentGo.transform;
-        contentRt.anchorMin = new Vector2(0f, 0.5f);
-        contentRt.anchorMax = new Vector2(0f, 0.5f);
-        contentRt.pivot = new Vector2(0f, 0.5f);
-        int perRow = PerRowOf(count, panlRt.rect.width, colStep);   // 每排格数仍按 panl 原宽算（本次只移左边框，不改排布）
-        float contentW = perRow * colStep;
-        contentRt.sizeDelta = new Vector2(contentW, viewH);
-        // 【2026-11-03 主人截图「右边的空隙多」】居中不能靠 anchoredPosition 偏移 —— ScrollRect 首帧布局
-        // 会把 content 重置回滚动原点（左对齐），偏移被吃掉 → 整排贴左边框、右侧空一块。
-        // 装得下一屏时改用居中锚点（ScrollRect 对零滚动范围的居中内容不动它）；装不下才左锚交给滚动。
-        if (contentW <= viewW)
-        {
-            contentRt.anchorMin = new Vector2(0.5f, 0.5f);
-            contentRt.anchorMax = new Vector2(0.5f, 0.5f);
-            contentRt.pivot = new Vector2(0.5f, 0.5f);
-            contentRt.anchoredPosition = Vector2.zero;
-        }
-        else
-        {
-            contentRt.anchoredPosition = Vector2.zero;   // 可滚动：从最左开始，ScrollRect 接管
-        }
+        contentRt.anchorMin = new Vector2(0.5f, 1f);
+        contentRt.anchorMax = new Vector2(0.5f, 1f);
+        contentRt.pivot = new Vector2(0.5f, 1f);
+        int perRow = Mathf.Max(1, Mathf.FloorToInt(viewW / colStep));   // 每行容量 = 视口宽 / 列步进
+        int rows = (count + perRow - 1) / perRow;
+        contentRt.sizeDelta = new Vector2(0f, rows * rowStep);
+        contentRt.anchoredPosition = Vector2.zero;   // 初始停在顶部
         _perRow = perRow;
-        _colStep = colStep;
-        _viewW = viewW;
+        _rowStep = rowStep;
+        _viewH = viewH;
 
         _scroll = scrollGo.GetComponent<ScrollRect>();
         _scroll.content = contentRt;
         _scroll.viewport = viewRt;
-        _scroll.horizontal = true;
-        _scroll.vertical = false;
+        _scroll.horizontal = false;
+        _scroll.vertical = true;
         _scroll.movementType = ScrollRect.MovementType.Clamped;
         _scroll.scrollSensitivity = 30f;
 
@@ -301,9 +289,12 @@ public class AvatarSelectPopup : MonoBehaviour
             int avatar = _avatars[i];
             int col = i % perRow;
             int row = i / perRow;
-            // 让【头像图 mask 的中心】落在网格点上：减掉 mask 相对格根的偏移，整组头像才不会偏
-            float x = (col + 0.5f) * colStep - maskOff.x;
-            float y = (row == 0 ? rowStep * 0.5f : -rowStep * 0.5f) - maskOff.y;
+            // 每行格子组水平居中（左右空隙一致）；让【头像图 mask 的中心】落在网格点上（减 mask 偏移）。
+            // x 相对 content 中心线（顶中锚参考系）：尾行不满时同样居中。
+            int inRow = Mathf.Min(perRow, count - row * perRow);
+            float rowW = inRow * colStep;
+            float x = (col + 0.5f) * colStep - rowW * 0.5f - maskOff.x;
+            float y = -((row + 0.5f) * rowStep) - maskOff.y;
             ConfigureCell(cells[i], avatar, new Vector2(x, y));
         }
     }
@@ -346,8 +337,8 @@ public class AvatarSelectPopup : MonoBehaviour
     void ConfigureCell(Transform cell, int avatar, Vector2 pos)
     {
         var rt = (RectTransform)cell;
-        rt.anchorMin = new Vector2(0f, 0.5f);
-        rt.anchorMax = new Vector2(0f, 0.5f);
+        rt.anchorMin = new Vector2(0.5f, 1f);   // 竖向列表顶中锚（2026-11-05 上下滑动）
+        rt.anchorMax = new Vector2(0.5f, 1f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.anchoredPosition = pos;   // 只摆进网格；尺寸/缩放/子件全按主人 prefab 原样，代码零操作
 
@@ -391,13 +382,6 @@ public class AvatarSelectPopup : MonoBehaviour
                 _cellKuangs[avatar] = kuangImg;
             }
         }
-    }
-
-    /// <summary>两排布局的每排格数：按窗口宽能装几个装几个（第一排永远满）。</summary>
-    static int PerRowOf(int count, float viewW, float colStep)
-    {
-        int byWidth = Mathf.Max(1, (int)(viewW / colStep));
-        return Mathf.Clamp(byWidth, 1, Mathf.Max(1, count));
     }
 
     /// <summary>
@@ -458,15 +442,16 @@ public class AvatarSelectPopup : MonoBehaviour
         return ok.anchoredPosition.y + ok.rect.height * ok.localScale.y * 0.5f;
     }
 
-    /// <summary>打开时把当前头像滚到可视区（横向滚动，选中格的【列】贴左，夹在 0~1；两排布局按列算）。</summary>
+    /// <summary>打开时把当前头像滚到可视区（竖向滚动，选中格的【行】进入视口；夹在 0~1）。</summary>
     void ScrollToSelected()
     {
         if (_scroll == null || _scroll.content == null) return;
-        float maxScroll = Mathf.Max(0f, _perRow * _colStep - _viewW);
+        int rows = Mathf.CeilToInt((float)Mathf.Max(1, _avatars.Count) / Mathf.Max(1, _perRow));
+        float maxScroll = Mathf.Max(0f, rows * _rowStep - _viewH);
         if (maxScroll <= 0f) return;
         if (!_avatarIndex.TryGetValue(_selected, out int idx)) return;
-        float x = (idx % _perRow) * _colStep;
-        _scroll.horizontalNormalizedPosition = Mathf.Clamp01(x / maxScroll);
+        int row = idx / _perRow;
+        _scroll.verticalNormalizedPosition = Mathf.Clamp01(1f - (row * _rowStep) / maxScroll);
     }
 
     void OnCellClicked(int avatar)

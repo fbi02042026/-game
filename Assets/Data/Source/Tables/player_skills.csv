@@ -13,3 +13,6 @@ battle_surge,战意爆发,AtkBuff,短时间内大幅提升攻击。,攻击 +50%�
 gale_stance,疾风架势,AtkSpeedBuff,进入疾风状态，攻速大幅提升。,攻速 +35%，持续 6 秒,15,6,输出窗口期自动释放,0,ally_atk_speed,Buff,None,0,0,6,1,12,AttackSpeed,0.35,1,0,0,1,0,0,0,0
 deadly_focus,致命专注,CritBuff,集中精神，暴击率提升。,暴击率 ×1.25，持续 8 秒,18,8,Boss 战或精英怪出现时自动释放,0,ally_crit_up,Buff,None,0,0,6,1,12,CritRate,0.25,1,0,0,1,0,0,0,0
 thunder_verdict,天雷裁决,Aoe,召唤天雷轰击目标区域。,造成 80% 攻击的范围伤害 每星多打 1 个目标,25,0,怪群聚集或 Boss 虚弱时自动释放,0,ally_thunder,AOE,None,0.8,0,8,1,12,Attack,0,0,0,0,1,0,0,3,0.1
+heavy_cleave,重斩,Aoe,凝聚全身力量向下重斩。,造成 80% 攻击的范围伤害（小范围高伤）,25,0,身边有敌人时自动释放,0,ally_heavy_cleave,AOE,None,0.8,0,4.5,1,12,Attack,0,0,0,0,1,0,0,3,0.1
+whirlwind,风龙卷,Aoe,召唤风龙卷向前漂移卷过敌人。,龙卷向怪群漂移，路径上每个敌人造成 65% 攻击伤害（各最多 1 次）,30,0,身边有敌人时自动释放,0,ally_whirlwind,MoveAoe,None,0.65,0,7,1,12,Attack,0,0,0,0,1,0,0,4,0.1
+starfall,星落,Aoe,召唤星辉在大范围坠落。,造成 65% 攻击的大范围伤害,30,0,身边有敌人时自动释放,0,ally_starfall,AOE,None,0.65,0,9,1,12,Attack,0,0,0,0,1,0,0,5,0.1

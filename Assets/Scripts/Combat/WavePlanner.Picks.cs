@@ -273,4 +273,87 @@ public partial class WavePlanner
         usedSprites?.Add(spriteIndexOverride);
         return template != null;
     }
+
+    // —— 【2026-11-05 主人拍板】词条怪每关配额：本关可用词条怪编号池（InitAffixQuota 按当关可用性算好）。
+    // 配额语义：词条怪从每章第 3 小关登场，之后每关都「时不时出现」且越往后越多（1-2 只 → 3-4 → 5-6）；
+    // 只影响正式主线关（引导局 / 金币本 / 徽记本 / 卷轴本 / 裂隙一律不插，行为与改动前一致）。
+    readonly List<int> _affixSpritePool = new List<int>();
+
+    /// <summary>
+    /// 铺波末尾调用：按 <see cref="GameConfig.AffixQuotaRange"/> 曲线定本关配额，按各波怪数加权摊成
+    /// WaveData.affixQuotaInWave（Boss 本体波不摊）；同时按本关可用性（minWave / 通关解锁 / 编号上限 /
+    /// 非 Boss / 表定词缀非空）算出本关词条怪编号池。重复调用先清旧状态（普通关 / Boss 关各铺一次）。
+    /// </summary>
+    void InitAffixQuota(int stageIdx)
+    {
+        _affixSpritePool.Clear();
+        for (int i = 0; i < _waves.Count; i++)
+            if (_waves[i] != null) _waves[i].affixQuotaInWave = 0;
+        if (bm == null || !bm.IsFormalMainRun) return;
+        if (ConfigManager.Instance == null) return;
+        GameConfig.AffixQuotaRange(stageIdx, out int qMin, out int qMax);
+        if (qMax <= 0) return;
+
+        var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
+        if (pool == null || pool.Count == 0) return;
+        var indices = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, false);
+        var affixSprites = pool.Where(m => !m.isBoss && !string.IsNullOrEmpty(m.tableAffix) && indices.Contains(m.spriteIndex))
+            .Select(m => m.spriteIndex).Distinct().OrderBy(s => s).ToList();
+        if (affixSprites.Count == 0) return;
+        _affixSpritePool.AddRange(affixSprites);
+
+        int quota = UnityEngine.Random.Range(qMin, qMax + 1);
+        var spawnable = new List<int>();
+        int totalNormal = 0;
+        for (int i = 0; i < _waves.Count; i++)
+        {
+            var w = _waves[i];
+            if (w == null || w.isBossWave || w.monsterCount <= 0) continue;   // Boss 本体波不插
+            spawnable.Add(i);
+            totalNormal += w.monsterCount;
+        }
+        if (spawnable.Count == 0) return;
+        quota = Mathf.Clamp(quota, 0, Mathf.Max(0, totalNormal / 3));   // 封顶总怪数 1/3，防比例失衡
+
+        // 按怪数占比加权摊到波（大数随机法），再修整差额
+        var perWaveQuota = new Dictionary<int, int>();
+        int assigned = 0;
+        foreach (int wi in spawnable)
+        {
+            float exact = (float)_waves[wi].monsterCount * quota / totalNormal;
+            int n = Mathf.FloorToInt(exact);
+            if (UnityEngine.Random.value < exact - n) n++;
+            n = Mathf.Min(n, _waves[wi].monsterCount);
+            perWaveQuota[wi] = n;
+            assigned += n;
+        }
+        int guard = 64;
+        while (assigned != quota && guard-- > 0)
+        {
+            int wi = spawnable[UnityEngine.Random.Range(0, spawnable.Count)];
+            if (assigned < quota && perWaveQuota[wi] < _waves[wi].monsterCount) { perWaveQuota[wi]++; assigned++; }
+            else if (assigned > quota && perWaveQuota[wi] > 0) { perWaveQuota[wi]--; assigned--; }
+        }
+        foreach (var kv in perWaveQuota)
+            if (kv.Value > 0) _waves[kv.Key].affixQuotaInWave = kv.Value;
+        GamePerf.Log($"[WavePlanner] 词条怪配额 ch{CurrentChapter} 第{stageIdx + 1}关 quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");
+    }
+
+    /// <summary>
+    /// 词条怪槽：从本关可用词条怪编号池随机抽一只（表定词缀怪，头顶词条 / 左缘首次登场提示照常走
+    /// Monster.Init 表定路径）。池空或池里找不到对应 config 返回 false，调用方回落普通选怪，不吞怪。
+    /// </summary>
+    bool TryPickAffixMonster(int stageIdx, out MonsterConfig template, out int spriteIndexOverride)
+    {
+        template = null;
+        spriteIndexOverride = 1;
+        if (ConfigManager.Instance == null || _affixSpritePool.Count == 0) return false;
+        int sprite = _affixSpritePool[UnityEngine.Random.Range(0, _affixSpritePool.Count)];
+        var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
+        if (pool == null || pool.Count == 0) return false;
+        template = pool.Find(m => !m.isBoss && m.spriteIndex == sprite && !string.IsNullOrEmpty(m.tableAffix));
+        if (template == null) return false;
+        spriteIndexOverride = sprite;
+        return true;
+    }
 }

@@ -775,7 +775,7 @@ public partial class AdventureUI
         int total = ChapterSubTotal(_selectedChapter, data);
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关 key），
         // 不再用「最大通关号 + 1」推断——中断续局跳关会留下「后关已通、前关未通」的记录。
-        int current = FirstUnclearedStage(_selectedChapter, total, data);   // 1 起；全通 = total+1
+        int current = FirstUnclearedStage(_selectedChapter, total, data, _selectedDiff);   // 1 起；全通 = total+1
         _currentFloatSlot = -1;   // 浮动槽位每次刷新重算（只有当前关浮动）
 
         // 【2026-10-24 主人拍板「难度逐章解锁」】该章在当前难度未开启（上一章该难度没通）
@@ -862,9 +862,18 @@ public partial class AdventureUI
         int curTotal = ChapterSubTotal(curCh, data);
         // 窗口起点 = 当前关卡第 1 节（章内 1 起）；已打完的关卡不再回溯展示（与旧「3 章窗口」同口径）。
         // 30 个槽位 = 3 章 × 10 关卡，跨章时自然接上「下一章的 1-1」。
-        int curStage = data != null
-            ? Mathf.Clamp(ActProgressionDefs.Sub0Of(curCh, data.CurrentGrand(curCh), 0), 0, Mathf.Max(0, curTotal - 1))
-            : 0;
+        // 🔴 大关号一律从 clearedStages 实时推导（DerivedGrandProgressFromClearedStages），
+        // 不读 grandProgress 缓存——缓存可能脏，clearedStages 是唯一真源（同 ChapterManager.StartChapter 口径）。
+        int curStage;
+        if (data != null)
+        {
+            int totalGrands = ActProgressionDefs.GrandCountOf(curCh);
+            // 【2026-11-05 难度隔离】窗口起点按当前选中难度取该难度真源（普通读 clearedStages）
+            int derivedGrand = data.DerivedGrandProgressFromClearedStagesAtDiff(curCh, _selectedDiff);
+            int grand = derivedGrand >= totalGrands ? 1 : derivedGrand + 1;   // 整篇通关 → 重打从第 1 座
+            curStage = Mathf.Clamp(ActProgressionDefs.Sub0Of(curCh, grand, 0), 0, Mathf.Max(0, curTotal - 1));
+        }
+        else curStage = 0;
         int currentSlot = -1;
         for (int slot = 0; slot < _slotNodes.Count; slot++)
         {
@@ -883,7 +892,7 @@ public partial class AdventureUI
                 }
                 // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关 = 第一个未通关（精确查单关），
                 // 不再用 max+1 推断；「是否已通关」在 WriteSlotContent 内按单关 key 判定。
-                int chCur = FirstUnclearedStage(curCh, curTotal, data);
+                int chCur = FirstUnclearedStage(curCh, curTotal, data, _selectedDiff);
                 bool chLocked = !ChapterRouteTable.CanEnterAtDiff(curCh, _selectedDiff, data);
                 // 【2026-10-29 主人拍板】已通关/已领取的关一律照常入槽（变灰留在列里），不再 skip 让位
                 sCh = curCh; sStage = curStage + 1; sCur = chCur; sLocked = chLocked; sTotal = curTotal;
@@ -928,7 +937,7 @@ public partial class AdventureUI
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】精确判单关：中断续局跳关会留下
         // 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），
         // 旧写法 stage <= chMaxCleared 会把 1-1 误判已通 → 显示领取后灰图。
-        bool isCleared = !chLocked && data != null && data.HasStageCleared(chapter, stage - 1);
+        bool isCleared = !chLocked && data != null && data.HasStageClearedAtDiff(chapter, stage - 1, _selectedDiff);
         bool isCurrent = !chLocked && stage == chCurrent;
 
         // 换图（【2026-10-29 主人拍板「打过一次后关卡变灰往下移，上面的从锁定变关闭」】）：
@@ -1058,12 +1067,14 @@ public partial class AdventureUI
     /// <summary>本章第一个未通关的小关号（1 起；全通返回 total+1）。
     /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】当前关/下一关一律用本方法（精确查单关 key），
     /// 不再用「最大通关号 + 1」推断——中断续局跳关会产生「后关已通、前关未通」的记录，
-    /// max 口径会跳过没打的关。与终章追查 FinaleDefs「第一个未通关」、BattleManager.FirstUnclearedStageIndex0 同口径。</summary>
-    int FirstUnclearedStage(int chapter, int total, SaveData data)
+    /// max 口径会跳过没打的关。与终章追查 FinaleDefs「第一个未通关」、BattleManager.FirstUnclearedStageIndex0 同口径。
+    /// 【2026-11-05 难度隔离】difficulty &gt; 0 查该难度自己的真源，普通(≤0)仍查 clearedStages——
+    /// 困难/噩梦页面的「当前关」不能被普通进度顶替。
+    /// </summary>
+    int FirstUnclearedStage(int chapter, int total, SaveData data, int difficulty)
     {
-        var cleared = data?.clearedStages;
         for (int s0 = 0; s0 < total; s0++)
-            if (cleared == null || !cleared.Contains(chapter + "_" + s0)) return s0 + 1;
+            if (data == null || !data.HasStageClearedAtDiff(chapter, s0, difficulty)) return s0 + 1;
         return total + 1;
     }
 
@@ -1300,7 +1311,7 @@ public partial class AdventureUI
         int stage1 = _slotStage[slot];   // 1 起关号
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】精确判单关，不再用最大通关号推断
         //（该点击路径当前射线已关、属领取制退役代码，口径仍修一致防将来复用复发）。
-        bool cleared = data.HasStageCleared(slotCh, stage1 - 1);
+        bool cleared = data.HasStageClearedAtDiff(slotCh, stage1 - 1, _selectedDiff);
         if (!cleared || data.IsChestClaimed(slotCh, stage1 - 1))
         {
             Debug.LogWarning($"[AdventureUI][宝箱] 点击忽略：章{slotCh} 关{stage1} 未通关或已领（已领={data.IsChestClaimed(slotCh, stage1 - 1)}）");

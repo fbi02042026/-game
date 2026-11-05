@@ -2282,8 +2282,14 @@ public partial class BattleManager
         bool isBoss = currentStage != null && currentStage.type == StageType.Boss;
         // 【2026-10-31 B2 落地】B2 后每座大关都以 Boss 收尾，只有「整篇打完」才算章末：
         // 章末分支（开冒险页 + 好评引导）改为看存档里该篇是否已通关，不再只看这一关是不是 Boss。
+        // 【2026-11-05 两套集合拆分】章末判定用「真通关」（整篇小关全清），不能用已解锁集合——
+        // 历史误标（只通 4 座大关却标已通关）会让大关 Boss 一打完就误报章末。
+        // 【2026-11-05 难度隔离】困难/噩梦必须判该难度自己的真通关，绝不读普通 clearedStages
+        //（否则困难重打已通篇时，第一个大关 Boss 打完就被误判「整篇通关」→ 提前开下一章）。
         bool chapterDone = SaveSystem.Instance?.Data != null
-                           && SaveSystem.Instance.Data.HasClearedChapter(CurrentChapter);
+                           && (BattleDifficulty > 0
+                               ? SaveSystem.Instance.Data.HasTrulyClearedChapterAtDiff(CurrentChapter, BattleDifficulty)
+                               : SaveSystem.Instance.Data.HasTrulyClearedChapter(CurrentChapter));
         if (isBoss && chapterDone)
         {
             // 【2026-10-25 主人拍板「做分享和推广（好评引导）」】章末通关 → 回城后弹一次好评引导
@@ -2328,6 +2334,10 @@ public partial class BattleManager
     void RecordStageRewardNoticeIfFirstClear()
     {
         if (Mode == null || Mode.Id != BattleModeId.Normal) return;
+        // 【2026-11-05 难度隔离】「获得奖励」通知是普通主线进度的展示队列（key = "篇_小节"，与普通
+        // clearedStages 同键空间）。困难/噩梦不往这里塞：难度局本来就不写普通 clearedStages，
+        // 若仍按普通 key 判首通，每次打难度关都会被当成「首通」重复弹同一关的奖励通知。
+        if (BattleDifficulty > 0) return;
         if (currentStage == null || ChapterManager.Instance == null) return;
         var data = SaveSystem.Instance?.Data;
         // 【2026-10-31 B2 落地】key 用「篇内小关下标」（currentGrand × 5 + 大关内小关），

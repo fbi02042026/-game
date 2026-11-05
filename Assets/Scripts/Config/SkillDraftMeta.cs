@@ -24,45 +24,34 @@ public static class SkillDraftMeta
     /// <summary>
     /// 稀有度登记表的**唯一真源**。
     /// <para>2026-10-05 主人拍板：**没有史诗品质**（品质统一三档 普通 / 稀有 / 传奇，
-    /// 跟装备表 NORMAL/RARE/LEGEND、佣兵三档对齐）→ 原来的 5 个史诗技能已并进「传说」。
-    /// 若主人要改成并进「稀有」，改这 5 行即可，别处没有第二份稀有度。</para>
+    /// 跟装备表 NORMAL/RARE/LEGEND、佣兵三档对齐）→ 原来的 5 个史诗技能已并进「传说」。</para>
+    /// <para>🔴 2026-11-05 主人拍板：技能图标自带稀有度边框，数值与边框对齐 ——
+    /// 普通档 = 攻击提升(战意爆发) / 护盾(圣盾壁垒) / 加血(治愈之泉)；
+    /// 稀有档(蓝) = 重劈(重斩) / 暴击(致命专注) / 攻击加速(疾风架势)；
+    /// **其余（天雷裁决/风龙卷/星落）为传奇档**。
+    /// 改稀有度只动本表；抽卡权重 / 概率公示 / 升星上限 / 卡面战力全部由本表派生，不另改第二处。</para>
     /// </summary>
     static readonly Dictionary<string, Meta> Table = new Dictionary<string, Meta>
     {
-        // —— 原始 6 技能 ——
+        // —— 基础 6 技（普通 3 + 稀有 2 + 传奇 1，与图标边框一致）——
         { "heal_spring",     M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.Priest) },
-        { "holy_barrier",    M(SkillRarity.Rare,      SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
-        { "battle_surge",    M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
+        { "holy_barrier",    M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
+        { "battle_surge",    M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
         { "gale_stance",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
-        { "deadly_focus",    M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
-        { "thunder_verdict", M(SkillRarity.Legendary,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
+        { "deadly_focus",    M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
+        { "thunder_verdict", M(SkillRarity.Legendary, SynergyTag.Thunder, (int)PlayerJobId.Mage) },
 
-        // —— 局内扩充池（VFX 走 attackKit 共用套，无 allyConfigId 依赖）——
-        { "flame_burst",     M(SkillRarity.Legendary,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
-        { "thunder_chain",   M(SkillRarity.Rare,      SynergyTag.Thunder, (int)PlayerJobId.Mage) },
-        { "wolf_volley",     M(SkillRarity.Rare,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
-        { "war_banner",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
-        { "iron_wall",       M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
-        { "frost_nova",      M(SkillRarity.Legendary, SynergyTag.Thunder, (int)PlayerJobId.Mage) },
-        { "blood_harvest",   M(SkillRarity.Legendary, SynergyTag.Fire,    (int)PlayerJobId.Berserker) },
+        // —— 2026-11-05 pixelfx 新技（主人边框分类：重劈=稀有(蓝)，龙卷/星落=传奇）——
+        { "heavy_cleave",    M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
+        { "whirlwind",       M(SkillRarity.Legendary, SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
+        { "starfall",        M(SkillRarity.Legendary, SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
 
-        // —— 2026-09-15 第二轮扩充（13 → 24）——
-        // 治疗线：牧师原来只有 1 个技能，补短 CD 续航 + 长 CD 大治疗
-        { "swift_mend",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.Priest) },
-        { "sacred_revival",  M(SkillRarity.Legendary,      SynergyTag.Guard,   (int)PlayerJobId.Priest) },
-        // 守护线：补短 CD 常驻减伤 + 传说级长减伤
-        { "stone_skin",      M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
-        { "aegis_oath",      M(SkillRarity.Legendary, SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
-        // 重甲近战线：原来只有 gale_stance 一个
-        { "bull_rush",       M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
-        { "quake_slam",      M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
-        // 游侠线：暴击增益 + 召唤流补到 3 个
-        { "hawk_eye",        M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
-        { "arrow_storm",     M(SkillRarity.Legendary,      SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
-        { "spirit_wolf",     M(SkillRarity.Common,    SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
-        // 剑盾输出 + 火系高伤
-        { "blade_storm",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.SwordShield) },
-        { "arcane_flame",    M(SkillRarity.Legendary,      SynergyTag.Fire,    (int)PlayerJobId.Mage) },
+        // 🔴 2026-11-05 主人确认「没让做过」：原 2026-09-15「技能池 13→24」扩充的 18 个技能
+        // （flame_burst/thunder_chain/wolf_volley/war_banner/iron_wall/frost_nova/blood_harvest/
+        //   swift_mend/sacred_revival/stone_skin/aegis_oath/bull_rush/quake_slam/hawk_eye/
+        //   arrow_storm/spirit_wolf/blade_storm/arcane_flame）在技能数值迁 player_skills.csv 时
+        // **没有对应表行**，抽卡池（只遍历 PlayerSkillDefs.All）永远刷不出来 = 死登记，已整批删除。
+        // 以后加新技能：player_skills.csv 加行 + Cook 出 bytes + 本表登记稀有度，三处齐才算进池。
     };
 
     static Meta M(SkillRarity r, SynergyTag tag, int jobAffinity)

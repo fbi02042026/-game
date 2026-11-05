@@ -148,6 +148,8 @@ public partial class UnitBase
         if (unitAnim != null)
             PlayHitReaction();
 
+        ApplyHitKnockback(source);
+
         if (currentHp <= 0)
         {
             // 【引导演出专用】死亡门：血条到底先拦住不判死（血钳到 1 点），
@@ -239,6 +241,60 @@ public partial class UnitBase
             unitAnim.ResetToIdle();
         if (rb != null)
             rb.velocity = Vector2.zero;
+    }
+
+
+    // ============================================================
+    // 受击后退（2026-11-05 主人拍板三层规则，Docs/《战斗趣味升级_pixelfx特效与打击反馈》）：
+    // ① 普通怪受击（我方打的）→ 小退；② 精英/Boss 受击→ 纹丝不动（体型重量感）；
+    // ③ 精英/Boss 命中玩家/俇兵→ 明显击退。普通怪打玩家/俇兵不退（主人未授权）。
+    // 位移走 transform 短促补间：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；0.15s 内不叠加；死亡单位不退。
+    // ============================================================
+    bool _knockbackBusy;
+    float _lastKnockbackAt;
+
+    void ApplyHitKnockback(UnitBase source)
+    {
+        if (source == null || _isDying) return;
+
+        float dist;
+        if (this is Monster victim)
+        {
+            if (victim.IsBossUnit || victim.IsEliteWave) return;   // ② 精英/Boss 免击退
+            if (!source.isAlly) return;                            // 怪只吃我方的击退
+            dist = GameConfig.KNOCKBACK_MONSTER;
+        }
+        else
+        {
+            // ③ 只有精英/Boss 怪打人才退（普通怪/敌方俇兵不退）
+            if (!(source is Monster atk) || !(atk.IsBossUnit || atk.IsEliteWave)) return;
+            dist = GameConfig.KNOCKBACK_ALLY;
+        }
+
+        if (Time.time - _lastKnockbackAt < 0.15f) return;
+        _lastKnockbackAt = Time.time;
+
+        float dir = Mathf.Sign(transform.position.x - source.transform.position.x);
+        if (Mathf.Abs(dir) < 0.5f) dir = -source.GetVfxFacingDir();
+        if (Mathf.Abs(dir) < 0.5f) dir = 1f;
+        StartCoroutine(KnockbackCo(dir, dist));
+    }
+
+    System.Collections.IEnumerator KnockbackCo(float dir, float dist)
+    {
+        if (_knockbackBusy) yield break;
+        _knockbackBusy = true;
+        Vector3 start = transform.position;
+        Vector3 end = start + new Vector3(dir * dist, 0f, 0f);
+        const float dur = 0.15f;
+        float t = 0f;
+        while (t < 1f)
+        {
+            t += Time.deltaTime / dur;
+            transform.position = Vector3.Lerp(start, end, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            yield return null;
+        }
+        _knockbackBusy = false;
     }
 
     public System.Action<UnitBase, float, bool> OnAttack;

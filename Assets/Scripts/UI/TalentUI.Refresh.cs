@@ -108,10 +108,10 @@ public partial class TalentUI
     void RefreshRight()
     {
         var talents = GetTalents();
-        int leftUnlocked = TalentDefs.LeftUnlockedCount(talents);
+        int playerLv = LevelSystem.CurrentLevel;   // 【2026-11-05 拍板】右列门槛/上限都看人物等级，与左列解耦
 
         for (int i = 0; i < _rightViews.Count; i++)
-            RefreshOneRightNode(_rightViews[i], talents, leftUnlocked);
+            RefreshOneRightNode(_rightViews[i], talents, playerLv);
 
         // 2026-09-29：入口红点 = 还有没有「新开通未点」的右列节点。
         // 玩家点了右侧那个新天赋 → 它不再是新 → 没有其它新节点时红点自动灭。
@@ -123,7 +123,7 @@ public partial class TalentUI
             rightCostValueText.text = "";
     }
 
-    void RefreshOneRightNode(RightNodeView v, Dictionary<string, int> talents, int leftUnlocked)
+    void RefreshOneRightNode(RightNodeView v, Dictionary<string, int> talents, int playerLv)
     {
         var node = v.node;
         if (node == null) return;
@@ -131,7 +131,7 @@ public partial class TalentUI
         // 【2026-10-18 主人拍板】物理/魔法专精合并行（二选一）：状态/置灰/红点/「新」走专门刷新
         if (v.node2 != null)
         {
-            RefreshMutexPairRow(v, talents, leftUnlocked);
+            RefreshMutexPairRow(v, talents, playerLv);
             return;
         }
 
@@ -139,8 +139,9 @@ public partial class TalentUI
         int level = TalentDefs.GetRightNodeLevel(talents, node.id);
         bool unlocked = level > 0;
         bool mutexLocked = !unlocked && TalentDefs.IsRightNodeMutexLocked(node, talents);
-        bool thresholdLocked = !unlocked && leftUnlocked < node.unlockLeftIndex;
-        int cap = TalentDefs.RightNodeLevelCap(node, leftUnlocked);
+        // 【2026-11-05 拍板】门槛/上限 = 人物等级（旧口径 = 左列已点数，已废除）
+        bool thresholdLocked = !unlocked && playerLv < node.unlockLeftIndex;
+        int cap = TalentDefs.RightNodeLevelCap(node, playerLv);
 
         string status;
         bool canAct = false;
@@ -150,7 +151,8 @@ public partial class TalentUI
         {
             // 任务3：等级上限受左列已点数量限制
             if (level >= cap)
-                status = "Lv" + cap + " (左列↑)";
+                // 【2026-11-05 拍板】门槛改人物等级 → 直接说升到几级能升
+                status = "升到" + TalentDefs.LevelNeededForNextLevel(node, level) + "级可升级";
             else
             {
                 int cost = node.costByLevel != null && level < node.costByLevel.Length ? node.costByLevel[level] : 0;
@@ -159,7 +161,7 @@ public partial class TalentUI
             }
         }
         else if (thresholdLocked)
-            status = "左列 L" + node.unlockLeftIndex;   // 任务3：分批开放提示
+            status = "Lv" + node.unlockLeftIndex + " 解锁";   // 【2026-11-05 拍板】门槛 = 人物等级
         else if (mutexLocked)
             status = "互斥";                            // 任务4：互斥置灰
         else
@@ -205,8 +207,8 @@ public partial class TalentUI
         SetRowRedDot(v.root, ref v.redDot, canAct);
         // 2026-09-29 主人要求：新开通且还没点过的节点右上角标红「新」；玩家一点就消失。
         // 判定统一走 TalentDefs.IsNewlyOpen（与入口红点同一口径），不要在这里另写一套条件。
-        SetRowNewTag(v.root, ref v.newTag, TalentDefs.IsNewlyOpen(node, talents, leftUnlocked));
-        // 【2026-10-17 主人要求】锁定行也保持可点：点了弹具体开启条件（左列开到第几个 / 互斥），
+        SetRowNewTag(v.root, ref v.newTag, TalentDefs.IsNewlyOpen(node, talents, playerLv));
+        // 【2026-10-17 主人要求】锁定行也保持可点：点了弹具体开启条件（等级达到几级 / 互斥），
         // 不再「点不动又没说法」。灰态与锁图标照旧 —— 灰度走 CanvasGroup，不依赖按钮禁用色。
         if (v.button != null) v.button.interactable = true;
     }

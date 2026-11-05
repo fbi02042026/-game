@@ -37,6 +37,22 @@ public static partial class GameConfig
     public const int HIDDEN_EXP_KILL_BOSS = 50;
     public const int HIDDEN_EXP_STAGE_CLEAR = 35;
     public const int HIDDEN_EXP_STAGE_CLEAR_PER_CHAPTER = 5;
+
+    // ===== 玩家等级经验（2026-11-05 主人拍板「打完一个小关发一次：1-1升1级、1-2升1级、1-3和1-4合计升1级」）=====
+    /// <summary>供给总账（发放点 = BeginRewardSequence 每小关一次；每章小关数 50/80/100，三难度各 730 个）：
+    /// 普通 110×730+32×2,780=169,260；困难 226,260；噩梦 283,260；任务（日常 670/天，不动）≈13,400。
+    /// 曲线 GetExpForLevel=60+30lv+lv²/2 → cum(80)=183,260：主线 169,260+日常 13,400=182,660
+    /// → 主线全通+一两天日常正好 80，**不打困难噩梦也能满级**；打了就是提前满（溢出经验转金币）。
+    /// 前期实测（模拟）：1-1 升1级、1-2 升1级、1-3+1-4 合计升1级、1-5 升1级；第1章末 lv16、主线全通 lv77。</summary>
+    /// <summary>普通难度通关一小关的基础经验（按章 +PLAYER_EXP_STAGE_CLEAR_PER_CHAPTER 递增）。支线岛同率（可重复刷，属额外加速）。</summary>
+    public const int PLAYER_EXP_STAGE_CLEAR = 110;
+    public const int PLAYER_EXP_STAGE_CLEAR_PER_CHAPTER = 32;
+    /// <summary>困难难度通关一小关的经验，每章都高于普通同章（主人拍板「困难的比普通经验多」）。</summary>
+    public const int PLAYER_EXP_HARD_STAGE_CLEAR = 150;
+    public const int PLAYER_EXP_HARD_STAGE_CLEAR_PER_CHAPTER = 42;
+    /// <summary>噩梦难度通关一小关的经验，每章都高于困难同章（主人拍板「噩梦比困难多」）。</summary>
+    public const int PLAYER_EXP_NIGHTMARE_STAGE_CLEAR = 190;
+    public const int PLAYER_EXP_NIGHTMARE_STAGE_CLEAR_PER_CHAPTER = 52;
     /// <summary>每日酒馆招募次数上限</summary>
     public const int DAILY_MERC_RECRUIT_MAX = 1;
     /// <summary>背包列数：与美术新画的 GridContainer 一致（4 列，Cell_0_0 ~ Cell_3_2）</summary>

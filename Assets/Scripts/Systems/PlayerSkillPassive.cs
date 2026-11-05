@@ -105,6 +105,10 @@ public static class PlayerSkillPassive
         ["battle_surge"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 2, radius = NearbyRadius },
         ["deadly_focus"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
         ["gale_stance"]     = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
+        // 2026-11-05 新技（主人拍板）：重斩贴身放，风龙卷/星落怪稍多才放（移动/大范围不空放）
+        ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
+        ["whirlwind"]       = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 2, radius = NearbyRadius },
+        ["starfall"]        = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 3, radius = NearbyRadius },
     };
 
     /// <summary>

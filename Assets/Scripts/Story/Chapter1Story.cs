@@ -88,20 +88,17 @@ public static class Chapter1Story
 
     static void PlayAfterChoice(Action onDone)
     {
-        var beats = new List<StoryBeat>
-        {
-            StoryDirector.Narration("你站起身，看向石碑。上面刻着古老的防御架势。你照着比划了几下，体内涌起一股守护之力。"),
-            StoryDirector.Narration("获得技能：圣盾壁垒。")
-        };
-        StoryDirector.Ensure().Play(beats, () =>
-        {
-            // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原「分解材料×3」按锚价（1材料=30金）折成金币×90
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: true);
-            ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 90, save: true, notify: true);
-            UIManager.Instance?.ShowToast("获得 圣盾壁垒、金币290");
-            StoryProgress.QueueChapter1TownReturn();
-            onDone?.Invoke();
-        });
+        // 【2026-11-05 主人拍板「删」】原两句旁白「石碑上的防御架势 / 获得技能：圣盾壁垒。」
+        // 与 toast 里的技能名一并删除：holy_barrier 开局自带（player_skills.csv unlockChapter=0、
+        // PlayerSkillDefs.Fallback unlockSource=None、剑盾初始技能），剧情里本就没有真实解锁动作，
+        // 三选一播完又宣告一次会误导玩家。金币奖励 / 回城队列 / 对外回调全部照旧。
+        // 选完选项时 StoryDirector 的 choice 分支已 ui.Hide() + ResumeGame()（StoryDirector.cs:345-352），
+        // 这里直接发奖励即可，不必再开一次 Play（空 beats 会打 LogError、还会二次暂停游戏）。
+        // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原「分解材料×3」按锚价（1材料=30金）折成金币×90
+        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: true);
+        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 90, save: true, notify: true);
+        StoryProgress.QueueChapter1TownReturn();
+        onDone?.Invoke();
     }
 
     public static void PlayReturnTown(Action onDone)

@@ -150,6 +150,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         {
             _icon.sprite = sp;                 // sp 为 null 时清掉，不留上一次的图
             _icon.enabled = sp != null;
+            MercRarityFx.ApplyPortraitShine(_icon, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光（DDOL 复用，每次 Fill 复位）
         }
 
         // 3) 名字：要名字不要代号；仍为空 → 报出来，不静默显示空白

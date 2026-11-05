@@ -180,6 +180,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             icon.sprite = sp;
             icon.enabled = sp != null;
+            MercRarityFx.ApplyPortraitShine(icon, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光
             // 【2026-11-04 主人拍板】未获得=黑剪影（与冒险日志佣兵图鉴同款 0,0,0,0.92，见 AdventureLogCodexPanel），
             //     获得后还原正常亮；已上阵=立绘压灰一档；未入队的已获得=正常亮（2026-10-17 主人拍板）
             icon.color = !owned ? new Color(0f, 0f, 0f, 0.92f)

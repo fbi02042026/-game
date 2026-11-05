@@ -429,17 +429,21 @@ public partial class AdventureUI
             Toast(DiffLockHint(idx));
             return;
         }
+        // 【2026-11-05】重复点同一难度直接返回：否则会把玩家手动选中的篇重置回真源篇。
+        if (idx == _selectedDiff) return;
         _selectedDiff = idx;
-        // 【2026-10-24 主人拍板「难度逐章解锁」】切难度后当前章在该难度可能未开启
-        // （上一章该难度没通）→ 选择回退到该难度下应推进的章，标识跟着走。
-        // 只对主线生效：活动副本难度走 ActivityDungeonRules 自己的逐级解锁，不牵动章节。
-        if (IsMainMode(_selectedMode)
-            && !ChapterRouteTable.CanEnterAtDiff(_selectedChapter, _selectedDiff, SaveSystem.Instance?.Data))
+        // 【2026-11-05 主人拍板】切难度必须重置冒险页的手动选中篇（**只影响展示，不写存档**）：
+        // 不许把上一个难度选中的章带过来，一律按新难度真源重新推导应推进的篇，
+        // 这样切到困难再切回普通时，普通会落回普通真源篇，而不是停在难度模式选中的那篇。
+        // 活动副本难度走 ActivityDungeonRules 自己的逐级解锁，不牵动章节。
+        if (IsMainMode(_selectedMode))
         {
+            int prevChapter = _selectedChapter;
             _selectedChapter = ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, SaveSystem.Instance?.Data);
-            PlayChapterFadeIn();
+            if (_selectedChapter != prevChapter) PlayChapterFadeIn();
         }
         RefreshDiffHighlight();
+        RefreshAvailableChapters();   // 【2026-11-05 难度落位】按新难度重建可选集合，滑动/箭头不再用旧难度的列表
         RefreshDetailPanel();
         RefreshChestNodes();   // 【2026-10-24 难度逐章解锁】难度变了：关卡列灰锁/当前关标识按新难度重算
     }

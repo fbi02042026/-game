@@ -175,6 +175,8 @@ public partial class Monster
 
         int monsterChapter = GameConfig.GetMonsterChapter(chapter);
         _attackStyle = MonsterAttackStyleTable.Get(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
+        // 【2026-11-05】记下掷骰前的表风格：瞬移遁走按它判近战，不让魔法型近战 Boss 闪现（见 Monster.Skills.cs）。
+        _baseAttackStyle = _attackStyle;
         _isBossUnit = bossUnit || effectiveSpriteIndex >= GameConfig.BOSS_SPRITE_START;
         _swingStyle = _attackStyle;
 
@@ -279,7 +281,12 @@ public partial class Monster
         // 引导局怪物（血/攻）保持 10-22 削弱批次之前的原始数值。
         bool isTutorialRun = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
         float hpGlobalMul = endlessRift || isTutorialRun ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul);
+        // 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2（真源 GameConfig.BOSS_*_MUL）。
+        // 放在最终写 attr 处，物理 / 魔法两条攻击线都吃到；非 Boss 恒 x1。
+        // 【2026-10-23 主人拍板「引导的不要动」】引导局 Boss 也不吃本批倍率，保持原数值。
+        float bossHpMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_HP_MUL : 1f;
+        float bossAtkMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_ATTACK_MUL : 1f;
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul);
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
         // 它和 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」是同一批 2026-09-23 测试数据，
@@ -340,12 +347,12 @@ public partial class Monster
             float baseMagDef = (template != null && template.baseMagicDefense > 0f)
                 ? template.baseMagicDefense
                 : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
-            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul);
             attr.SetAttr(AttrType.MagicDefense, baseMagDef * scale);
         }
         else
         {
-            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul);
+            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul);
             attr.SetAttr(AttrType.Defense, baseDef * scale);
             attr.SetAttr(AttrType.MagicAttack, 0f);
             attr.SetAttr(AttrType.MagicDefense, 0f);
@@ -475,6 +482,10 @@ public partial class Monster
         // 【2026-10-16 主人摆的 JY 脚下光环】精英/Boss 出场显示，普通怪隐藏。
         // 光环是 Visual 子节点，精英/Boss 的 rootScale 放大时**自动跟着变大**，代码不碰它的 scale/贴图/位置（铁律 2）。
         ApplyEliteRingVisible(_isBossUnit || _eliteWave);
+
+        // 【2026-11-05 主人拍板「词条怪的头顶加上词条」】表定词缀怪头顶显示词条名；
+        // 普通怪 / 精英 / Boss 在方法内自动隐藏（精英/Boss 的词缀走屏幕 Boss 血条后缀）。
+        RefreshAffixHeadLabel();
 
         BattleBossHpBar.RefreshFromField();
     }

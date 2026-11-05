@@ -198,7 +198,13 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
     int _selectedMode = 0;
     int _selectedDiff = 0;
-    int _selectedChapter = 1;
+    /// <summary>
+    /// 【2026-11-05 修「打完 11-1 回城下一关变 5-4」】0 = 本页实例还没选过章。
+    /// 每场战斗结束都会重载 Town 场景 → 冒险页新建实例，旧写法死钉 1，
+    /// 于是打完第 2 篇 11-1 回城又被摆回第 1 篇的当前关（5-4）。改由 ShowPage 落到应推进的那篇。
+    /// 玩家 / 世界地图 / 任务跳转选过章后即为 1~8，照旧保留。
+    /// </summary>
+    int _selectedChapter = 0;   // 0 = 本实例还没选过章，ShowPage 会落到真源应推进的篇（2026-11-05）
     /// <summary>活动副本选中态（2026-10-23 拆二 + 2026-10-24 加卷轴）：金币/徽记/卷轴三选一，与 ActivityDungeonKind 同源。</summary>
     ActivityDungeonKind _selectedActivityKind = ActivityDungeonKind.Gold;
     /// <summary>活动横条按钮是否已接线（金币/徽记/卷轴三横条，prefab 只摆了外观没挂 Button）。</summary>
@@ -348,12 +354,32 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         ResourceStrip.SetMode(ResourceStrip.Mode.DiamondStamina);
         EnsureStandaloneChrome(hall);
 
-        // 越界（<1 或 >8）时落到「应推进的章节」：可选里第一个未通关，全通关回最后一章。
-        // 仍在 1~8 范围内的有效选择（含已通关可重打的章）原样保留，由 RefreshAvailableChapters 兜底修正。
-        if (_selectedChapter < 1 || _selectedChapter > 8)
-            _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
+        // 0（新实例还没选过章）或越界（<1 / >8）时落到「应推进的章节」：真源 = clearedStages，见
+        // ChapterRouteTable.CurrentChapterToAdvance（真通关 + 最高已开打篇，对历史误标免疫）。
+        // 回城后本页是新建实例（_selectedChapter = 0）→ 自动回到刚打的那篇，不再默认第 1 篇。
+        // 玩家/世界地图/任务跳转选过的 1~8 原样保留，由 RefreshAvailableChapters 兜底修正。
+        int truthChapter = _selectedDiff > 0
+            ? ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, SaveSystem.Instance?.Data)
+            : ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
+        bool autoPickedChapter = _selectedChapter < 1 || _selectedChapter > 8;
+        if (autoPickedChapter)
+            _selectedChapter = truthChapter;
         HideUnfinishedEntries();
         RefreshAll();
+        // 【2026-11-05 主人拍板】落位自检（放在 RefreshAll 之后：RefreshAvailableChapters 可能再修正一次）：
+        // 只在「选中篇 ≠ 真源应推进篇」时输出，正常路径不刷屏；Error 级保留（自动落位不一致 = 逻辑 bug）。
+        int truthAfter = _selectedDiff > 0
+            ? ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, SaveSystem.Instance?.Data)
+            : ChapterRouteTable.CurrentChapterToAdvance(SaveSystem.Instance?.Data);
+        if (_selectedChapter != truthAfter)
+        {
+            if (autoPickedChapter)
+                Debug.LogError("[AdventureUI][自检] 自动落位与真源不一致：选中第 " + _selectedChapter
+                    + " 篇，真源应推进第 " + truthAfter + " 篇（逻辑 bug，请查 CurrentChapterToAdvance）");
+            else
+                Debug.Log("[AdventureUI][自检] 玩家手动选中第 " + _selectedChapter + " 篇（真源应推进第 "
+                    + truthAfter + " 篇），按玩家选择展示");
+        }
         // 【2026-10-24 主人拍板】进页不再自动弹「获得奖励」：改为玩家点击宝箱时按关取用
         // AdventureRewardNotice.Take 弹窗（见 AdventureUI.ChestNodes.cs OnClickChestClaim）。
 
@@ -460,7 +486,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         // 提示落点：该章下一关（没通过 = 从 1 关打起；整章通关重打 = 第 1 关）
         // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】下一关 = 第一个未通关（精确查单关），不再用最大号+1 推断
         int chapterTotal = ChapterSubTotal(chapter, SaveSystem.Instance?.Data);
-        int nextStage = Mathf.Clamp(FirstUnclearedStage(chapter, chapterTotal, SaveSystem.Instance?.Data), 1, chapterTotal);
+        int nextStage = Mathf.Clamp(FirstUnclearedStage(chapter, chapterTotal, SaveSystem.Instance?.Data, _selectedDiff), 1, chapterTotal);
         Toast($"已前往 {GameConfig.GetChapterMapName(chapter)} {ActProgressionDefs.GlobalStageLabel(chapter, nextStage - 1)}");
     }
 

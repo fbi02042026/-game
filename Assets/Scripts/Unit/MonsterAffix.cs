@@ -129,6 +129,16 @@ public class MonsterAffix : MonoBehaviour
         }
     }
 
+    /// <summary>第一个词缀的展示色（无词缀返回白色）。【2026-11-05】头顶词条标签用它，与染色/血条后缀同源。</summary>
+    public Color FirstTint
+    {
+        get
+        {
+            if (_ids.Count == 0) return Color.white;
+            return MonsterAffixDefs.Get(_ids[0]).Tint;
+        }
+    }
+
     public int Count => _ids.Count;
 
     /// <summary>词缀「吸血」：造成伤害后按比例回血（UnitBase.TakeDamage 里回调）。</summary>
@@ -138,12 +148,18 @@ public class MonsterAffix : MonoBehaviour
         if (_owner == null || _owner.isDead || _owner.attr == null) return;
 
         float maxHp = Mathf.Max(1f, _owner.attr.GetAttr(AttrType.MaxHp));
-        float heal = finalDamage * LeechRatio;
+        // 【2026-11-05 主人拍板「boss吸血可以高点 和小怪分开」】Boss 走独立比例 60%，
+        // 小怪/精英维持 Def.LeechRatio=30%；Boss 无吸血词缀时本方法不会进来（LeechRatio 早退）。
+        float ratio = _owner.IsBossUnit ? MonsterAffixDefs.BossLeechRatio : LeechRatio;
+        float heal = finalDamage * ratio;
         float before = _owner.currentHp;
         _owner.currentHp = Mathf.Min(maxHp, before + heal);
-        float healed = _owner.currentHp - before;
-        if (healed >= 1f)
-            DamageTextSystem.Instance?.SpawnHealText(_owner.GetHitPosition(), Mathf.RoundToInt(healed));
+        // 【2026-11-05 主人拍板「吸血打一下要看到绿色 +XX」】飘字按理论回血量显示：
+        // 旧口径只在实际回血 ≥1 时飘 —— 满血怪回血为 0，而吸血怪多为远程站后排打不到，
+        // 全程满血 → 主人实测「从来没见过吸血回血」。改为理论值四舍五入 ≥1 即飘；血仍只加到上限。
+        int show = Mathf.RoundToInt(heal);
+        if (show >= 1)
+            DamageTextSystem.Instance?.SpawnHealText(_owner.GetHitPosition(), show);
     }
 
     /// <summary>词缀「分裂」：死亡时分裂出残血小怪（Monster.TakeDamage 里回调）。</summary>
@@ -167,7 +183,16 @@ public class MonsterAffix : MonoBehaviour
         {
             // 左右各偏一点，避免完全重叠
             var p = pos + new Vector3((i % 2 == 0 ? -1f : 1f) * 0.6f * (1 + i / 2), 0f, 0f);
-            planner.SpawnMonsterAt(_owner.config, bm.currentStage != null ? bm.currentStage.stageIndex : 0, p, 0.3f);
+            var child = planner.SpawnMonsterAt(_owner.config, bm.currentStage != null ? bm.currentStage.stageIndex : 0, p, 0.3f);
+            // 【2026-11-05 主人拍板「分裂后的小怪不带词条」】词条只有当前怪有：
+            // Boss/精英掷到 Split 时分裂体在 Init 里会重新掷词缀（Boss 体走掷骰路径），
+            // 这里统一清空（含染色复位）并隐藏头顶词条，保证分裂体完全无词缀、链式分裂彻底断绝。
+            if (child != null)
+            {
+                var childAffix = child.GetComponent<MonsterAffix>();
+                if (childAffix != null) childAffix.ResetState();
+                child.HideAffixHeadLabel();
+            }
         }
     }
 

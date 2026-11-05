@@ -40,10 +40,40 @@ public static class EquipRarityMaterials
         if (def != null) sr.sharedMaterial = def;
     }
 
-    /// <summary>UI 图标：一律不挂材质（null = UI 内置默认材质，透明通道正常）。</summary>
+    /// <summary>UI 图标（无品质上下文）：一律不挂材质（null = UI 内置默认材质，透明通道正常）。</summary>
     public static void Apply(UnityEngine.UI.Image img)
     {
         if (img == null) return;
         img.material = null;
+    }
+
+    // ── UI 传奇（金色）装备流光（2026-11-05 主人指令：替换界面 + 装备界面里的图标）──
+    // 10-06「UI 图标一律不挂材质」的例外：传奇品质装备图标挂 SSU Shine 流光材质
+    // （Resources/Materials/Equip_shine_gold，与登录 LOGO logo01 / 按钮 btn19流光 同一着色器同族，
+    //  UI 上已验证可用；09-27 色块事故的 Armor_xiyou 是外描边世界材质，与此不同族）。
+    // 其余品质一律 null（内置默认材质）；品质框/描边仍走各自既有链路（LoadIconBg / EquipRarityRim），不混用。
+    static Material _legendaryShine;
+    static bool _legendaryShineResolved;
+    static bool _legendaryShineMissingLogged;
+
+    /// <summary>传奇流光材质；缺失按口径 LogError（不静默兜底），调用方退回默认材质。</summary>
+    public static Material LegendaryShineMaterial()
+    {
+        if (_legendaryShineResolved) return _legendaryShine;
+        _legendaryShineResolved = true;
+        _legendaryShine = Resources.Load<Material>("Materials/Equip_shine_gold");
+        if (_legendaryShine == null && !_legendaryShineMissingLogged)
+        {
+            _legendaryShineMissingLogged = true;
+            Debug.LogError("[EquipRarityMaterials] 传奇流光材质缺失：Resources/Materials/Equip_shine_gold.mat 加载失败，图标暂用默认材质");
+        }
+        return _legendaryShine;
+    }
+
+    /// <summary>UI 图标（带品质）：传奇挂流光材质，其余一律内置默认材质（见上注释）。</summary>
+    public static void Apply(UnityEngine.UI.Image img, Rarity? rarity)
+    {
+        if (img == null) return;
+        img.material = rarity == Rarity.Legendary ? LegendaryShineMaterial() : null;
     }
 }

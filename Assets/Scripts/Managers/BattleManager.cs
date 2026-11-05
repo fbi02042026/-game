@@ -323,7 +323,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             // 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关改精确判单关：第一个未通关的关（0 起），
             // 整章已通关重打 → 从第 1 关（原口径不变）。不再用最大通关号推断——中断续局跳关会留下
             // 「后关已通、前关未通」的记录（clearedStages 只有 1_1 没有 1_0），max 口径会跳到更后面的关、永久漏关。
-            int startIdx = FirstUnclearedStageIndex0(targetChapter, ChapterManager.Instance.currentGrand, stageCount);
+            int startIdx = FirstUnclearedStageIndex0(targetChapter, ChapterManager.Instance.currentGrand, stageCount, BattleDifficulty);
             if (startIdx >= stageCount) startIdx = 0;   // 整章通关 → 重打从第 1 关
             var next = ChapterManager.Instance.stageMap[startIdx];
             if (next != null)
@@ -356,17 +356,19 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
 
     /// <summary>
     /// 本章第一个未通关的 0 起关号（全通返回 stageCount，调用方决定钳回 0）。
-    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关不再用最大通关号推断
+    /// 【2026-10-29 修「1-1 未通 1-2 已标领取后」】起始关不用最大通关号推断
     /// （<see cref="MaxClearedStageOneBased"/> 保留备用不再调用：跳关记录会把没打的关跳过去）。
     /// 与 AdventureUI.FirstUnclearedStage 同口径（那边 1 起 UI 用，这边 0 起索引用）。
+    /// 【2026-11-05 难度隔离】difficulty &gt; 0 查该难度自己的真源 clearedStageDiffKeys——
+    /// 否则困难/噩梦进本会按普通进度落位（甚至直接插到普通已打过的关）。
     /// </summary>
-    static int FirstUnclearedStageIndex0(int chapter, int grand, int stageCount)
+    static int FirstUnclearedStageIndex0(int chapter, int grand, int stageCount, int difficulty)
     {
-        var cleared = SaveSystem.Instance?.Data?.clearedStages;
+        var data = SaveSystem.Instance?.Data;
         // 【2026-11-01 批 B3】存档 key 是「章内节下标」，本关的起点 = (关卡-1)×每关节数（节 5/8/10 按章取）
         int baseSub = ActProgressionDefs.Sub0Of(chapter, grand, 0);
         for (int s0 = 0; s0 < stageCount; s0++)
-            if (cleared == null || !cleared.Contains(chapter + "_" + (baseSub + s0))) return s0;
+            if (data == null || !data.HasStageClearedAtDiff(chapter, baseSub + s0, difficulty)) return s0;
         return stageCount;
     }
 

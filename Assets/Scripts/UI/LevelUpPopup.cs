@@ -117,7 +117,6 @@ public static class LevelUpPopup
             SetText(row2, "职业", PlayerJobDefs.Get(job).DisplayName);
             SetText(row2, "属性", LevelSystem.JobTendencyLabel(job));   // 玩家口径：生命/攻速/魔攻（10-25 拍板）
             SetText(row2, "升级后", "+" + Mathf.Max(1, afterLevel - beforeLevel));
-            BumpFontSize(row2, 2);   // 2026-11-01 主人要求：标题下面的字字号大两号
         }
 
         var dim = FindDeep(_host.transform, "Dim");

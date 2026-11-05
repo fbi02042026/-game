@@ -64,9 +64,26 @@ public class ChapterManager : Singleton<ChapterManager>
     {
         currentChapter = chapterNum;
         currentStageIndex = 0;
-        // 【2026-10-31 B2 落地】进本时按存档大关进度落位（打完一座大关回城再进，从这里续上下一座）。
+        // 【2026-10-31 B2 落地 + 2026-11-05 真源修复 + 难度隔离】进本时按存取大关进度落位。
+        // 🔴 currentGrand 一律从真源实时推导，不读 grandProgress 缓存。
+        // 🔴 难度隔离：普通读 clearedStages，困难/噩梦读该难度独立的 clearedStageDiffKeys——
+        //    绝不互相污染（困难通关不会推动普通进度，反之亦然）。
         var saveData = SaveSystem.Instance?.Data;
-        currentGrand = saveData != null ? saveData.CurrentGrand(chapterNum) : 1;
+        int runDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
+        int grand;
+        if (saveData != null)
+        {
+            int total = ActProgressionDefs.GrandCountOf(chapterNum);
+            int derived = runDiff > 0
+                ? saveData.DerivedGrandProgressFromClearedStagesAtDiff(chapterNum, runDiff)
+                : saveData.DerivedGrandProgressFromClearedStages(chapterNum);
+            if (derived >= total) grand = 1;   // 整篇通关 → 重打从第 1 座
+            else grand = derived + 1;
+            // 顺手写回普通显示缓存（幂等钳值：只升不降，防回滚）；难度局不写普通缓存
+            if (runDiff <= 0) saveData.MarkGrandCleared(chapterNum, derived);
+        }
+        else grand = 1;
+        currentGrand = grand;
         stageMap.Clear();
         availableNextStages.Clear();
         RollState.Reset();
@@ -467,6 +484,12 @@ public class ChapterManager : Singleton<ChapterManager>
         if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
             return;
 
+        // 【2026-11-05 难度隔离】本局难度：0 普通 / 1 困难 / 2 噩梦。
+        // 🔴 难度局的一切进度写入都必须落到该难度自己的真源（clearedStageDiffKeys / clearedChapterDiffKeys），
+        //    绝不写普通 clearedStages / clearedChapterIds —— 否则困难通关会替普通推进度、甚至误解锁下一篇。
+        int runDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
+        if (runDiff < 0) runDiff = 0;
+
         // 先把刚打完的关卡记进抽取状态，下一关的概率要用到
         StageData cleared = GetCurrentStage();
         if (cleared != null) RollState.RecordCleared(cleared.type);
@@ -477,23 +500,15 @@ public class ChapterManager : Singleton<ChapterManager>
         var milestoneData = SaveSystem.Instance?.Data;
         if (milestoneData != null)
         {
-            // C.1 每关首通 +3 钻：必须在 GrantTalentForStageFirstClear 写入 clearedStages 之前判定，否则永远不是首次
-            // 【2026-10-20 主人拍板】钻石不再对玩家展示与发放，发钻行注释保留，恢复时解开即可
-            // 【2026-10-31 B2 落地】key 从「大关内小关 0~4」改成「篇内小关下标 0..N-1」，
-            // 否则第二座大关的 1-1 会与第一座大关的 1-1 撞 key（宝箱列/首通全乱）。
             int sub0 = CurrentSubIndex0;
-            string stageClearKey = currentChapter + "_" + sub0;
-            bool isStageFirstClear = milestoneData.clearedStages == null || !milestoneData.clearedStages.Contains(stageClearKey);
 
             // 【2026-10-20 主人拍板】每关首通天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
             // GrantTalentForStageFirstClear 只保留首通记录（clearedStages，冒险日志里程碑进度要用），返回的石不再发放。
-            milestoneData.GrantTalentForStageFirstClear(currentChapter, sub0);
-            // int stageTalent = milestoneData.GrantTalentForStageFirstClear(currentChapter, currentStageIndex);
-            // if (stageTalent > 0)
-            //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, stageTalent, save: false, notify: true);
-            // if (isStageFirstClear)
-            //     ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 3, save: true, notify: true);
+            // 【2026-11-05 难度隔离】带难度写：普通写 clearedStages，困难/噩梦写 clearedStageDiffKeys（互不污染）。
+            milestoneData.GrantTalentForStageFirstClear(currentChapter, sub0, runDiff);
 
+            // 【2026-11-05 主人明确要求】**难度局照常给每日通关任务经验**，不要加 runDiff 守卫：
+            // 难度定位 = 怪更强 + 奖励更多，每日通关任务经验不区分难度（后来人勿当 bug 去堵）。
             int dailyExp = milestoneData.TryDailyClearTaskExp();
             if (dailyExp > 0)
             {
@@ -515,11 +530,21 @@ public class ChapterManager : Singleton<ChapterManager>
             var gData = SaveSystem.Instance?.Data;
 
             // 1. 增加通关次数（用于渐进式怪物解锁）——按「大关」记，与旧「一章=一座大关」口径一致
-            IncrementChapterClearCount(currentChapter);
-            if (gData != null) gData.MarkGrandCleared(currentChapter, currentGrand);
+            // 【2026-11-05 难度隔离】次数缓存与 grandProgress 只记普通难度；困难/噩梦一律不写，
+            // 否则「打困难」会把普通的大关次数/进度顶上去（跨难度污染）。
+            if (runDiff <= 0)
+            {
+                IncrementChapterClearCount(currentChapter);
+                if (gData != null) gData.MarkGrandCleared(currentChapter, currentGrand);
+            }
 
             int grandTotal = ActProgressionDefs.GrandCountOf(currentChapter);
-            bool chapterDone = gData == null || gData.GrandClearedCount(currentChapter) >= grandTotal;
+            // 🔴 整篇通关判断一律从真源推，不读 grandProgress 缓存（同 StartChapter 口径）。
+            // 缓存脏了会导致还没打完 10 座大关就被误判整篇通关 → 提前解锁下一篇。
+            // 【2026-11-05 难度隔离】普通读 clearedStages；困难/噩梦读该难度独立的 clearedStageDiffKeys。
+            bool chapterDone = gData == null || (runDiff > 0
+                ? gData.DerivedGrandProgressFromClearedStagesAtDiff(currentChapter, runDiff) >= grandTotal
+                : gData.DerivedGrandProgressFromClearedStages(currentChapter) >= grandTotal);
 
             if (!chapterDone)
             {
@@ -541,46 +566,51 @@ public class ChapterManager : Singleton<ChapterManager>
             var data = SaveSystem.Instance?.Data;
             if (data != null)
             {
-                // 整章通关额外天赋石：仅首次通关该章时发放一次
-                bool firstChapterClear = !data.HasClearedChapter(currentChapter);
-
-                int clearDiff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : -1;
-                data.MarkChapterCleared(currentChapter, clearDiff);
-                // 【2026-10-24 主人拍板「难度逐章解锁」】按难度另记一笔：上一章该难度没通，下一章该难度灰锁。
-                // clearDiff=-1（存档未就绪等异常）不记，宁缺勿滥（fail closed 由查询端把关节制）。
-                if (clearDiff >= 0) data.MarkChapterClearedAtDiff(currentChapter, clearDiff);
+                // 【2026-11-05 难度隔离】只有普通难度写普通两套集合；
+                // 困难/噩梦只写该难度自己的通关集合（MarkChapterClearedAtDiff），绝不替普通解锁/推进。
+                if (runDiff <= 0)
+                {
+                    data.MarkChapterCleared(currentChapter);
+                }
+                else
+                {
+                    // 【2026-10-24 主人拍板「难度逐章解锁」】按难度另记一笔：上一章该难度没通，下一章该难度灰锁。
+                    data.MarkChapterClearedAtDiff(currentChapter, runDiff);
+                }
 
                 // 【2026-10-29 主人拍板改回】派岛门槛在 EnsureForkRoll 内部判「通关第 1 章后」（覆盖 2026-10-26「引导完成即派」）。
                 // 这里保留 currentChapter == 1 外层护栏：第 8 章通关时 branchRoll 刚归零，无条件调会把下周目支线提前掷掉。
-                if (currentChapter == 1) ChapterRouteTable.EnsureForkRoll(data);
+                // 【2026-11-05 难度隔离】派岛是普通主线内容：只有普通难度通关才掷（困难/噩梦不碰普通支线进度）。
+                if (currentChapter == 1 && runDiff <= 0) ChapterRouteTable.EnsureForkRoll(data);
 
-                // 【2026-10-20 主人拍板】整章首通额外天赋石停发（天赋石改为精英/Boss 击杀概率掉落）。
-                // int chapterTalent = TalentDefs.TalentStoneRewards.ChapterClearStone(currentChapter);
-                // if (firstChapterClear && chapterTalent > 0)
-                //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, chapterTalent, save: false, notify: true);
-                // C.2 每章首通 +30 钻：firstChapterClear 在 MarkChapterCleared 之前判定，顺序正确
-                // 【2026-10-20 主人拍板】钻石停发，注释保留
-                // if (firstChapterClear)
-                //     ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 30, save: false, notify: true);
-                var avail = ChapterRouteTable.AvailableChapters(data);
-                if (avail.Count > 0)
+                // 【2026-10-20 主人拍板】整章首通额外天赋石停发（天赋石改为精英/Boss 击杀概率掉落）：
+                // 章首通的石与 30 钻都已在旧版本下线，旧的 firstChapterClear 判定代码一并清理（2026-11-05）。
+                if (runDiff <= 0)
                 {
-                    int far = avail[avail.Count - 1];
-                if (far > data.maxUnlockedChapter)
-                {
-                    data.maxUnlockedChapter = far;
-                    Debug.Log($"[ChapterManager] 解锁新区域：{GameConfig.GetChapterMapName(far)}（内部第{far}章）");
-                    Analytics.ChapterReach(far); // 埋点：章节解锁
-                }
+                    var avail = ChapterRouteTable.AvailableChapters(data);
+                    if (avail.Count > 0)
+                    {
+                        int far = avail[avail.Count - 1];
+                        if (far > data.maxUnlockedChapter)
+                        {
+                            data.maxUnlockedChapter = far;
+                            Debug.Log($"[ChapterManager] 解锁新区域：{GameConfig.GetChapterMapName(far)}（内部第{far}章）");
+                            Analytics.ChapterReach(far); // 埋点：章节解锁
+                        }
+                    }
                 }
                 SaveSystem.Instance.Save();
             }
 
             // 3. 触发事件
             OnChapterComplete?.Invoke();
-            AchievementSystem.Instance?.OnChapterClear(currentChapter);
-            if (currentChapter >= 1)
+            // 【2026-11-05 难度隔离】成就 / 冒险日志 / 剧情线索 / 图鉴 / 世界解锁全是**普通主线内容**：
+            // 困难、噩梦通关不得替普通解锁（同一份内容只认普通进度）。仅普通。
+            bool perfect = BattleManager.Instance == null
+                           || BattleManager.Instance.RunStats.DamageTaken <= 0.5f;
+            if (runDiff <= 0)
             {
+                AchievementSystem.Instance?.OnChapterClear(currentChapter);
                 // 叙事 V2.0：按本章发放线索页。旧代码无论第几章都标 C1F，是误标。
                 StoryClue.OnChapterBossCleared(currentChapter);
                 if (currentChapter == 1)
@@ -589,11 +619,9 @@ public class ChapterManager : Singleton<ChapterManager>
                     AdventureCodex.UnlockWorld("W004");
                     AdventureCodex.UnlockWorld("W002");
                 }
+                // 内部还会写 AdventureCodex C1Z / C1G（图鉴）→ 必须与上面同一条「仅普通」守卫
+                AdventureLogAchievements.OnChapterCleared(currentChapter, 0, perfect);
             }
-            int diff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
-            bool perfect = BattleManager.Instance == null
-                           || BattleManager.Instance.RunStats.DamageTaken <= 0.5f;
-            AdventureLogAchievements.OnChapterCleared(currentChapter, diff, perfect);
             return;
         }
 
@@ -657,7 +685,7 @@ public class ChapterManager : Singleton<ChapterManager>
 
     #region 通关追踪
 
-    /// <summary>获取指定章节的通关次数</summary>
+    /// <summary>获取指定章节的「大关通关次数」（B2 起语义：每通一座大关 Boss +1，不是整篇通关）。</summary>
     public int GetChapterClearCount(int chapter)
     {
         var data = SaveSystem.Instance?.Data;

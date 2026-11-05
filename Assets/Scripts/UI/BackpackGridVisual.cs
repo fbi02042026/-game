@@ -14,6 +14,22 @@ public static class BackpackGridVisual
     const string LockOverlayName = "LockedOverlay";
     const string LockIconName = "LockIcon";
 
+    /// <summary>
+    /// 【2026-11-05 根治】展示位图标相对格子的缩放真源：全项目只此一处。
+    /// None=0 保留给非展示位（struct 默认值），收集层只传类型语义，不再背像素参数。
+    /// 边界：碎片卡根 100×100 × 基缩放 0.78，1.05 倍后 81.9 < 82 格（余量仅 0.1px）；
+    /// 格子 spacing=0 且无 Mask，再放大必须先加格子或改基缩放。
+    /// </summary>
+    public enum DisplayIconKind { None = 0, Fragment = 1, JobBadge = 2, Scroll = 3, LogFragment = 4, Other = 5 }
+
+    static readonly float[] IconScaleByKind = { 1f, 1.05f, 0.95f, 1f, 1f, 1f };
+
+    static float ResolveIconScale(DisplayIconKind kind)
+    {
+        int i = (int)kind;
+        return i >= 0 && i < IconScaleByKind.Length ? IconScaleByKind[i] : 1f;
+    }
+
     public struct ItemPlacement
     {
         public int x, y, w, h;
@@ -36,6 +52,8 @@ public static class BackpackGridVisual
         /// 谁的碎片用谁的头像；为空走普通展示位图标。
         /// </summary>
         public string displayFragHireId;
+        /// <summary>展示位类型（2026-11-05 根治）：None=0 = 非展示位/不缩放；倍率见 IconScaleByKind。</summary>
+        public DisplayIconKind displayIconKind;
 
         public bool IsItem => item != null;
         public bool IsDisplay => !string.IsNullOrEmpty(displayName);
@@ -121,6 +139,7 @@ public static class BackpackGridVisual
         for (int i = 0; i < items.Count; i++)
         {
             var p = items[i];
+            float iconScale = ResolveIconScale(p.displayIconKind);   // 2026-11-05 缩放真源只此一处
             bool isItem = p.item != null;
             if (p.w < 1 || p.h < 1) continue;
             if (!isItem && p.equip == null && !p.IsDisplay) continue;
@@ -154,7 +173,7 @@ public static class BackpackGridVisual
             // 【2026-10-24 编译修复】iconImg 提到 if 块外声明：走碎片预制体路径（ownerFragCard）时没有图标 Image，interactive 段只对图标路径生效
             Image iconImg = null;
             bool ownerFragCard = p.IsDisplay && !string.IsNullOrEmpty(p.displayFragHireId)
-                && TryAddOwnerFragmentCard(go.transform, rt, p.displayFragHireId);
+                && TryAddOwnerFragmentCard(go.transform, rt, p.displayFragHireId, iconScale);
 
             if (!ownerFragCard)
             {
@@ -174,7 +193,7 @@ public static class BackpackGridVisual
                 img.raycastTarget = false;
                 img.type = Image.Type.Simple;
                 img.enabled = true;
-                PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip);
+                PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip, iconScale);
 
                 // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
                 // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
@@ -186,9 +205,10 @@ public static class BackpackGridVisual
                 }
                 else
                 {
-                    // 【2026-10-06 主人拍板】装备图片上**不挂任何稀有度效果**（UI 图标一律走内置默认材质，
-                    // 透明通道才正常）；稀有度改在格子外沿画一圈描边（见下面 EquipRarityRim.Apply）。
-                    EquipRarityMaterials.Apply(img);
+                    // 【2026-11-05 主人指令】传奇（金色）装备图标挂 SSU Shine 流光
+                    // （EquipRarityMaterials UI 品质重载：传奇才挂材质，其余仍内置默认材质）；
+                    // 稀有度描边照旧走 EquipRarityRim.Apply，两者不混用。
+                    EquipRarityMaterials.Apply(img, p.equip != null ? p.equip.rarity : (Rarity?)null);
                     img.color = !hasIcon
                         ? (p.equipped ? new Color(0.35f, 0.35f, 0.4f, 0.95f) : new Color(0.45f, 0.5f, 0.62f, 0.95f))
                         : (p.equipped ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white);
@@ -307,7 +327,7 @@ public static class BackpackGridVisual
     /// 同时关掉卡内三张图的 raycast —— 点击要落在宿主上走告知框。
     /// 预制体加载失败返回 false，由调用方回退原框体图路径（不手搭节点）。
     /// </summary>
-    static bool TryAddOwnerFragmentCard(Transform host, RectTransform hostRt, string hireId)
+    static bool TryAddOwnerFragmentCard(Transform host, RectTransform hostRt, string hireId, float iconScale = 1f)
     {
         var rarity = MercRosterDefs.TryGetByHireId(hireId, out var md)
             ? md.Rarity : MercRosterDefs.MercRarity.Common;
@@ -320,7 +340,7 @@ public static class BackpackGridVisual
 
         float side = Mathf.Min(hostRt.rect.width, hostRt.rect.height);
         if (side > 1f)
-            card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f);
+            card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f) * iconScale;   // 2026-11-05 本命碎片 +5% 由真源表给出
         return true;
     }
 
@@ -377,7 +397,7 @@ public static class BackpackGridVisual
     /// 多格装备按宽度等比缩放，避免 Image.preserveAspect 在高矩形里视觉贴顶。
     /// 盾牌图标再缩 20%，格子占位不变。
     /// </summary>
-    static void PlaceIconInHost(RectTransform host, RectTransform iconRt, Image img, Sprite sprite, int gridH, EquipInstance equip = null)
+    static void PlaceIconInHost(RectTransform host, RectTransform iconRt, Image img, Sprite sprite, int gridH, EquipInstance equip = null, float iconScale = 1f)
     {
         if (host == null || iconRt == null || img == null) return;
 
@@ -388,10 +408,8 @@ public static class BackpackGridVisual
             iconRt.offsetMin = Vector2.zero;
             iconRt.offsetMax = Vector2.zero;
             img.preserveAspect = true;
-            if (ShouldShrinkShieldIcon(equip))
-                iconRt.localScale = Vector3.one * 0.8f;
-            else
-                iconRt.localScale = Vector3.one;
+            float baseScale = ShouldShrinkShieldIcon(equip) ? 0.8f : 1f;
+            iconRt.localScale = Vector3.one * baseScale * iconScale;   // 2026-11-05 职业徽记 -5% 由真源表给出
             return;
         }
 
@@ -416,7 +434,7 @@ public static class BackpackGridVisual
         }
 
         img.preserveAspect = false;
-        iconRt.localScale = Vector3.one;
+        iconRt.localScale = Vector3.one * iconScale;
         iconRt.anchorMin = new Vector2(0.5f, 0.5f);
         iconRt.anchorMax = new Vector2(0.5f, 0.5f);
         iconRt.pivot = new Vector2(0.5f, 0.5f);

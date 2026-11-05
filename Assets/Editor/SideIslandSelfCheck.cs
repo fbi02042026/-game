@@ -46,12 +46,12 @@ public static class SideIslandSelfCheck
             errs.AppendLine("第 1 章应永远开放");
         if (ChapterRouteTable.CanEnter(2, fake))
             errs.AppendLine("未通关第 1 章时第 2 章不应开放（线性解锁坏了）");
-        fake.MarkChapterCleared(1, 0);
+        fake.MarkChapterCleared(1);
         if (!ChapterRouteTable.CanEnter(2, fake))
             errs.AppendLine("通关第 1 章后第 2 章应开放");
         if (ChapterRouteTable.CanEnter(3, fake))
             errs.AppendLine("未通关第 2 章时第 3 章不应开放（线性解锁坏了）");
-        fake.MarkChapterCleared(2, 0);
+        fake.MarkChapterCleared(2);
         if (!ChapterRouteTable.CanEnter(3, fake))
             errs.AppendLine("通关第 2 章后第 3 章应开放");
 

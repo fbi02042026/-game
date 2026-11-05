@@ -3,7 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// 天赋解锁、消耗与存档写入。
-/// 左列（金币，线性必点）；右列（天赋石，可升级、分批开放、互斥、可洗点）。
+/// 【2026-11-05 主人拍板】左右列解锁门槛统改人物等级（互相解耦）：左列 N 级开第 N 个（金币）；
+/// 右列门槛/等级上限 = 人物等级（天赋石，可升级、互斥、可洗点），升级跨门槛由 NotifyLevelUp 弹提示。
 /// </summary>
 public static class TalentSystem
 {
@@ -48,12 +49,12 @@ public static class TalentSystem
         if (index1Based != unlocked + 1) { reason = "请按顺序解锁"; return false; }
 
         var node = TalentDefs.Left[index1Based - 1];
-        // 【2026-10-21 拍板 T2 章节门槛】按通关章节数把关（权威源 clearedChapterIds）：
-        // L1~20 不设门槛（unlockChapter=0，保新手引导正常点击）；L21~40 需通 ch2 / L41~60 ch3 / L61~80 ch4。
-        // 文案说人话，参照右列「左列开到第 N 个后开启」先例。
-        if (node.unlockChapter > data.ClearedChapterCount())
+        // 【2026-11-05 主人拍板「左边的天赋按玩家升一级开一个」】解锁门槛 = 人物等级
+        //（替换 10-21 的章节门槛；满级 80 ↔ 80 节点一一对应，见 TalentDefs.LeftNodeUnlockLevel）。
+        int needLv = TalentDefs.LeftNodeUnlockLevel(index1Based);
+        if (LevelSystem.CurrentLevel < needLv)
         {
-            reason = $"通关第{node.unlockChapter}章后解锁";
+            reason = $"等级达到{needLv}级后解锁";
             return false;
         }
         int cost = GetLeftGoldCost(node, data.talents);
@@ -72,17 +73,15 @@ public static class TalentSystem
             reason = "金币不足";
             return false;
         }
-        // 2026-09-29：先记左列点数，写档后再算一次 —— 用于判断「这一步有没有把右列节点顶过门槛」。
-        int leftBefore = TalentDefs.LeftUnlockedCount(data.talents);
         data.talents[node.id] = 1;
-        int leftAfter = TalentDefs.LeftUnlockedCount(data.talents);
-        string rightHint = BuildRightUnlockHint(leftBefore, leftAfter, data.talents);
         RefreshTalentEntryRedDot(data);
 
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
         Hero.Instance?.RecalcAttr();
-        AnnounceTalentGain(node != null ? node.name : null, node != null ? node.effect : null, rightHint);
+        // 【2026-11-05 拍板】右列门槛改挂人物等级、与左列购买解耦 → 左列购买不再附带右列提示/演出
+        //（提示改由升级链路触发，见 NotifyLevelUp）。
+        AnnounceTalentGain(node != null ? node.name : null, node != null ? node.effect : null);
         return true;
     }
 
@@ -93,15 +92,14 @@ public static class TalentSystem
         return Mathf.Max(1, Mathf.RoundToInt(node.goldCost));
     }
 
-    /// <summary>左列天赋购买成功后的「恭喜获得」庆祝提示（2026-09-21 用户要求，样式对齐装备的 EquipDropPopupUI.ShowEquipGain）。</summary>
-    /// <param name="rightHint">2026-09-29：右列新解锁 / 可升级提示，拼进同一条 toast（见 <see cref="BuildRightUnlockHint"/>）。</param>
-    static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx, string rightHint = null)
+    /// <summary>左列天赋购买成功后的「恭喜获得」庆祝提示（2026-09-21 用户要求，样式对齐装备的 EquipDropPopupUI.ShowEquipGain）。
+    /// 【2026-11-05 拍板】右列提示与左列解耦，原 rightHint 参数与 BuildRightUnlockHint 已删，右列提示改由 NotifyLevelUp 弹。</summary>
+    static void AnnounceTalentGain(string nodeName, TalentDefs.Effect fx)
     {
         if (fx == null || string.IsNullOrEmpty(fx.display)) return;
         string text = string.IsNullOrEmpty(nodeName)
             ? $"恭喜获得【{fx.display}】，实力大增！"
             : $"恭喜获得【{nodeName}】，{fx.display}，实力大增！";
-        if (!string.IsNullOrEmpty(rightHint)) text += "\n" + rightHint;
         UIManager.Instance?.ShowToast(text);
     }
 
@@ -112,8 +110,8 @@ public static class TalentSystem
     /// <para>🔴 只**生成文案**、不自己弹：GlobalToastUI 是覆盖式的（Play 会 StopCoroutine 掉上一条），
     /// 连弹两条只会剩下后一条，所以必须由 <see cref="AnnounceTalentGain"/> 拼进同一条 toast。</para>
     /// </summary>
-    /// <summary>2026-09-29 主人定稿文案：只说一句，不列节点名。</summary>
-    const string RightUnlockHint = "右侧有新的天赋可以升级";
+    /// <summary>2026-11-05 拍板：右列提示唯一触发点 = 人物升级跨过门槛（NotifyLevelUp），文案只说「有新的可解锁」。</summary>
+    const string RightUnlockHint = "升级了！右侧有新的天赋可以解锁";
 
     /// <summary>
     /// 天赋入口红点 = **还有没有「新开通未点」的右列节点**。
@@ -125,40 +123,36 @@ public static class TalentSystem
         RedDot.Set(RedDot.Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
     }
 
-    static string BuildRightUnlockHint(int leftBefore, int leftAfter, IDictionary<string, int> talents)
+    /// <summary>
+    /// 【2026-11-05 主人拍板「右边天赋达到解锁条件时弹个 toast」】人物升级后由 LevelSystem 调用
+    ///（AddStageClearExp / AddDirectExp / AddExpForTown 三个经验入口）：右列门槛（=人物等级）刚跨过的节点
+    /// → 弹 toast + 刷入口红点；天赋页开着就顺带播右列开通演出（TalentUI.OnLevelUpFx）。
+    /// 判定口径：已解锁 / 被互斥锁 / R_DUAL 前置没满足的不算「新解锁」。
+    /// </summary>
+    public static void NotifyLevelUp(int beforeLevel, int afterLevel)
     {
-        if (talents == null || leftAfter <= leftBefore) return null;
+        if (afterLevel <= beforeLevel) return;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+
+        bool any = false;
         for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
         {
             var node = TalentDefs.RightNodes[i];
-            if (node == null || leftAfter < node.unlockLeftIndex) continue;
-
-            int lv = TalentDefs.GetRightNodeLevel(talents, node.id);
-            if (lv <= 0)
-            {
-                // 互斥组里已选了其它流派 → 这个节点玩家点不了，不算「有新天赋」（避免点了才发现被锁）
-                if (TalentDefs.IsRightNodeMutexLocked(node, talents)) continue;
-                // R_DUAL 还有「主流派满 5 级」的前置，没满足也不算
-                if (node.id == "R_DUAL" && !DualPathReady(talents)) continue;
-            }
-            else
-            {
-                if (node.IsOneTime || lv >= node.maxLevel) continue;
-                int capBefore = leftBefore >= node.unlockLeftIndex ? TalentDefs.RightNodeLevelCap(node, leftBefore) : 0;
-                int capAfter = TalentDefs.RightNodeLevelCap(node, leftAfter);
-                if (capAfter <= capBefore || capAfter <= lv) continue;   // 上限没变 / 已到顶 → 不算
-            }
-
-            // 任意一条成立就提示（文案统一，不列名字）
-            return RightUnlockHint;
+            if (node == null || node.unlockLeftIndex <= beforeLevel || node.unlockLeftIndex > afterLevel) continue;
+            if (TalentDefs.GetRightNodeLevel(data.talents, node.id) > 0) continue;      // 已解锁
+            if (TalentDefs.IsRightNodeMutexLocked(node, data.talents)) continue;        // 互斥：已选其它流派
+            if (node.id == "R_DUAL"
+                && TalentDefs.GetRightNodeLevel(data.talents, "R_F1") < 5
+                && TalentDefs.GetRightNodeLevel(data.talents, "R_F2") < 5) continue;    // 双修前置没满足
+            any = true;
         }
-        return null;
-    }
 
-    /// <summary>R_DUAL 的前置：主流派（R_F1 / R_F2 任一）满 5 级。</summary>
-    static bool DualPathReady(IDictionary<string, int> talents) =>
-        TalentDefs.GetRightNodeLevel(talents, "R_F1") >= 5
-        || TalentDefs.GetRightNodeLevel(talents, "R_F2") >= 5;
+        RefreshTalentEntryRedDot(data);
+        if (!any) return;
+        TalentUI.OnLevelUpFx(beforeLevel, afterLevel);
+        UIManager.Instance?.ShowToast(RightUnlockHint);
+    }
 
     static void AnnounceRightGain(TalentDefs.TalentRightNode node, int level, int chosenJob)
     {
@@ -211,11 +205,10 @@ public static class TalentSystem
             if (p1 < 5 && p2 < 5) { reason = "需主流派满 5 级"; return false; }
         }
 
-        // 任务3：分批开放——未达左列门槛不可解锁
-        // 2026-10-17 主人要求：门槛提示要说人话，「左列 L10 解锁」玩家看不懂，
-        // 改成「左列开到第10个后开启」（点击锁定的右列节点时弹这条）。
-        int leftN = TalentDefs.LeftUnlockedCount(data.talents);
-        if (leftN < node.unlockLeftIndex) { reason = $"左列开到第{node.unlockLeftIndex}个后开启"; return false; }
+        // 【2026-11-05 主人拍板「右侧天赋改人物等级开启，跟左列取消挂钩」】门槛 = 人物等级
+        //（配表 unlockLeftIndex：10/20/30/40，语义由「左列已点数」改为「人物等级」）。
+        if (LevelSystem.CurrentLevel < node.unlockLeftIndex)
+        { reason = $"等级达到{node.unlockLeftIndex}级后解锁"; return false; }
 
         if (node.costByLevel == null || node.costByLevel.Length < 1) { reason = "配置错误"; return false; }
         if (data.talentPoints < node.costByLevel[0]) { reason = ReasonNoStones; return false; }
@@ -262,10 +255,15 @@ public static class TalentSystem
         if (level <= 0) { reason = "请先解锁"; return false; }
         if (level >= node.maxLevel) { reason = "已满级"; return false; }
 
-        // 任务3：等级上限 = min(maxLevel, 1 + floor((左列已点 - 门槛)/5))
-        int leftN = TalentDefs.LeftUnlockedCount(data.talents);
-        int cap = TalentDefs.RightNodeLevelCap(node, leftN);
-        if (level >= cap) { reason = $"左列等级不足（上限 Lv{cap}）"; return false; }
+        // 任务3：等级上限随**人物等级**（2026-11-05 拍板：右列与左列解耦，门槛与上限都看人物等级）
+        int cap = TalentDefs.RightNodeLevelCap(node, LevelSystem.CurrentLevel);
+        if (level >= cap)
+        {
+            // 拦截话术带目标：直接报升到几级才能升下一级（2026-11-05 主人反馈「说是能升级但不知道怎么升」）。
+            int need = TalentDefs.LevelNeededForNextLevel(node, level);
+            reason = $"升到{need}级后可升级（当前上限 Lv{cap}）";
+            return false;
+        }
 
         if (node.costByLevel == null || level >= node.costByLevel.Length) { reason = "配置错误"; return false; }
         if (data.talentPoints < node.costByLevel[level]) { reason = ReasonNoStones; return false; }
@@ -378,9 +376,9 @@ public static class TalentSystem
         if (index0 != unlocked) return false;
         var data = SaveSystem.Instance?.Data;
         if (data == null) return false;
-        // 【2026-10-21 T2】章节门槛并入可升级判定：未过章的节点不出红点、整行置灰；
-        // 点击走 CanUnlockLeft 弹「通关第 N 章后解锁」，两处共用同一判定，不许各写一份。
-        if (TalentDefs.Left[index0].unlockChapter > data.ClearedChapterCount()) return false;
+        // 【2026-11-05 拍板】等级门槛并入可升级判定：等级不够的节点不出红点、整行置灰；
+        // 点击走 CanUnlockLeft 弹「等级达到 N 级后解锁」，两处共用同一判定，不许各写一份。
+        if (LevelSystem.CurrentLevel < TalentDefs.LeftNodeUnlockLevel(index0 + 1)) return false;
         return data.totalGold >= GetLeftGoldCost(TalentDefs.Left[index0], talents);
     }
 }

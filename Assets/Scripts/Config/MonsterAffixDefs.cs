@@ -60,9 +60,12 @@ public static class MonsterAffixDefs
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
                   Desc = "移动速度提升 40%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1.40f, DamageTakenMul = 1f },
+        // 【2026-11-05 主人拍板】吸血 12% -> 30%：链路验证全通（普攻/弹道/技能都走 TakeDamage 回调），
+        // 但 ch2 怪一刀只回 1~2 点、血条动 ~3%，Boss 更是 0.4% —— 肉眼不可见，主人实测「从来没见过回血」。
+        // 提到 30% 后怪一刀回 4~6 点（血条动 8%+）肉眼可辨；Boss 血厚回血占比天然低，属合理衰减。
         new Def { Id = MonsterAffixId.Leech,   Name = "吸血", Tint = new Color(0.85f, 0.45f, 0.90f),
-                  Desc = "造成伤害的 12% 转化为自身治疗",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.12f },
+                  Desc = "造成伤害的 30% 转化为自身治疗",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.30f },
         new Def { Id = MonsterAffixId.Split,   Name = "分裂", Tint = new Color(0.75f, 0.75f, 0.80f),
                   Desc = "死亡时分裂出 2 只小怪",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 2 },
@@ -72,6 +75,13 @@ public static class MonsterAffixDefs
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f,
                   CritChance = 0.20f,  CritDamageMul = 1.6f },
     };
+
+    /// <summary>
+    /// 【2026-11-05 主人拍板「boss吸血可以高点 和小怪分开」】Boss 专用吸血比例（覆盖 Def.LeechRatio）。
+    /// Boss 攻高血厚：60% 一刀回 20~40 点、绿字醒目；屏幕血条每刀 ~1.5-2%，连打可见累积。
+    /// 消费点唯一 = MonsterAffix.OnDealtDamage（按 owner.IsBossUnit 取档）。
+    /// </summary>
+    public const float BossLeechRatio = 0.60f;
 
     static readonly Dictionary<MonsterAffixId, Def> _map = BuildMap();
 

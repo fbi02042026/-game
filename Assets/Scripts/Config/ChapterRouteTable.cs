@@ -232,6 +232,20 @@ public static class ChapterRouteTable
         return list;
     }
 
+    /// <summary>
+    /// 【2026-11-05 难度落位】指定难度下所有可进章节（升序）——与 <see cref="CanEnterAtDiff"/> 同口径。
+    /// 难度模式的冒险页滑动 / 箭头 / 落位都用它，避免拿普通集合把难度选中篇挤回普通篇。
+    /// 纯查询，不写存档。
+    /// </summary>
+    public static List<int> AvailableChaptersAtDiff(int diff, SaveData data)
+    {
+        var list = new List<int>();
+        for (int ch = 1; ch <= 8; ch++)
+            if (CanEnterAtDiff(ch, diff, data)) list.Add(ch);
+        list.Sort();
+        return list;
+    }
+
     /// <summary>【2026-10-23 退役】分叉点可选支线（原 2/3/4 三选一）——主线线性后最多返回 1 条，
     /// 分叉提示 UI（BuildBranchHint 的 choices.Count &lt; 2 判断）自然不再显示。保留不删（下线≠删除）。</summary>
     public static List<int> BranchChoices(SaveData data)
@@ -248,20 +262,27 @@ public static class ChapterRouteTable
     // ============================================================
 
     /// <summary>
-    /// 【2026-10-21 续】玩家当前应推进的章节：在「可选章节（CanEnter 通过的集合）」里取
-    /// 第一个未通关的；若全部通关（本周目路径已走完）则返回可选集合的最后一章（= 第 8 章，用于 NG+ 重打）。
+    /// 【2026-11-05 主人拍板彻底改造】玩家当前应推进的章节——**唯一真源算法**：
+    /// ① 先按 clearedStages 求真源「已开打过的最高篇」（<see cref="SaveData.FurthestProgressChapter"/>）；
+    /// ② 该篇**真通关**（整篇小关全清，<see cref="SaveData.HasTrulyClearedChapter"/>）且下一篇已解锁 → 落到下一篇；
+    /// ③ 否则留在本篇。
+    /// 🔴 不再看「已解锁集合里第一个未通关」——历史误标（第 1 篇只通 4 座大关却标已通关）会把玩家摆回前面的篇，
+    ///    正是「打完 11-1 回城变 5-4」的成因。真源 + 真通关口径对误标免疫，且永不回退。
     /// · 纯查询，严禁触发掷点 / 写存档（不要在这里调 EnsureForkRoll / SaveSystem.Save）。
     /// · 只从 ChapterRouteTable 自身与 SaveData 读，不依赖 UI 状态。
     /// </summary>
     public static int CurrentChapterToAdvance(SaveData data)
     {
-        var avail = AvailableChapters(data);
-        if (avail == null || avail.Count == 0) return 1;
-        bool cleared(int ch) => data != null && data.HasClearedChapter(ch);
-        for (int i = 0; i < avail.Count; i++)
-            if (!cleared(avail[i]))
-                return avail[i];
-        return avail[avail.Count - 1]; // 全通关 → 最后一章（第 8 章，NG+ 重打入口）
+        if (data == null) return 1;
+        int ch = data.FurthestProgressChapter();
+        if (ch < 1) ch = 1;
+        if (ch > 8) ch = 8;
+        if (data.HasTrulyClearedChapter(ch))
+        {
+            int next = DefaultNext(ch);
+            if (next > 0 && CanEnter(next, data)) ch = next;
+        }
+        return ch;
     }
 
     // ============================================================
@@ -295,21 +316,30 @@ public static class ChapterRouteTable
     }
 
     /// <summary>
-    /// 指定难度下当前应推进的章：CanEnterAtDiff 通过的集合里第一个「该难度未通关」的；
-    /// 全通关回集合最后一章。纯查询。
+    /// 指定难度下当前应推进的章——**【2026-11-05 难度隔离】与普通同一套真源算法**：
+    /// ① 起点 = 该难度真源（clearedStageDiffKeys）里「已开打过的最高篇」；
+    /// ② 该篇在该难度**真通关**（该难度小关全清，或该难度通关记录）且下一篇该难度可进 → 逐篇前进；
+    /// ③ 否则留在本篇。
+    /// 🔴 绝不读普通 clearedStages / clearedChapterIds 来推该难度的进度——
+    ///    困难通关不会让普通往前走，普通进度也不能替困难落位。纯查询，不写存档。
     /// </summary>
     public static int CurrentChapterToAdvanceAtDiff(int diff, SaveData data)
     {
-        var avail = new List<int>();
-        for (int ch = 1; ch <= 8; ch++)
-            if (CanEnterAtDiff(ch, diff, data)) avail.Add(ch);
-        if (avail.Count == 0) return 1;
-        bool cleared(int ch) => diff <= 0
-            ? (data != null && data.HasClearedChapter(ch))
-            : (data != null && data.HasClearedChapterAtDiff(ch, diff));
-        for (int i = 0; i < avail.Count; i++)
-            if (!cleared(avail[i]))
-                return avail[i];
-        return avail[avail.Count - 1];
+        if (data == null) return 1;
+        if (diff <= 0) return CurrentChapterToAdvance(data);
+
+        int ch = data.FurthestProgressChapterAtDiff(diff);
+        if (ch < 1) ch = 1;
+        if (ch > 8) ch = 8;
+        // 只有该难度「通关记录」没有小节记录时（正常新档不会出现，写入端两者同步）：
+        // 逐篇推行，直到遇到未真通关或下一章不可进。
+        for (int guard = 0; guard < 8; guard++)
+        {
+            if (!data.HasTrulyClearedChapterAtDiff(ch, diff)) break;
+            int next = ch + 1;
+            if (next > 8 || !CanEnterAtDiff(next, diff, data)) break;
+            ch = next;
+        }
+        return ch;
     }
 }

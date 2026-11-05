@@ -87,6 +87,12 @@ public class WaveData
     public int signatureSpriteIndex;
     /// <summary>签名怪词缀偏好（| 分隔的 MonsterAffixId 名，如 "Bulwark"、"Bulwark|Thorns"）。</summary>
     public string signatureAffixBias = "";
+    /// <summary>
+    /// 【2026-11-05 主人拍板】本波词条怪名额：铺波时按「本关配额按各波怪数加权摊」预分配，
+    /// 刷怪时在波内安全槽位（避开精英/签名怪/波内 Boss/亲卫尾巴）强制插入表定词条怪。
+    /// 0 = 本波不插；仅正式主线关非 Boss 本体波大于 0。消费点唯一 = CoSpawnWaveMonsters。
+    /// </summary>
+    public int affixQuotaInWave;
     public bool HasEngageAnchor => engageAnchorX > -900f;
 
     /// <summary>本波原型；未接管时为 null。</summary>

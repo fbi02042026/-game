@@ -49,9 +49,14 @@ public partial class AdventureUI
         // 【2026-10-23 合并方案】补掷入口：branchRoll 未派满且当前派定岛已通关 → 首次进冒险页补掷一次
         // （EnsureForkRoll 内部幂等，绝不重复掷；data 取不到传 null 由函数内部兜底）。
         var data = SaveSystem.Instance?.Data;
-        ChapterRouteTable.EnsureForkRoll(data);
+        // 难度可选集合只对**主线**生效：活动副本的难度是「逐级解锁」，仍按普通章节集合走。
+        bool useDiffList = IsMainMode(_selectedMode) && _selectedDiff > 0;
+        // 【2026-11-05 难度隔离】支线派岛只属于普通：难度模式下只查进度，不掷点、不写档。
+        if (_selectedDiff <= 0) ChapterRouteTable.EnsureForkRoll(data);
         _availableChapters.Clear();
-        var list = ChapterRouteTable.AvailableChapters(data);
+        var list = useDiffList
+            ? ChapterRouteTable.AvailableChaptersAtDiff(_selectedDiff, data)
+            : ChapterRouteTable.AvailableChapters(data);
         if (list != null)
         {
             for (int i = 0; i < list.Count; i++)
@@ -62,8 +67,12 @@ public partial class AdventureUI
 
         // 当前选择不在可选集合内（例如刚通关了最末章、或选中了一支未派定的支线）→
         // 落到「应推进的章节」：可选里第一个未通关，全通关回最后一章（详见 ChapterRouteTable.CurrentChapterToAdvance）。
+        // 【2026-11-05 难度落位】难度模式必须用该难度的集合与真源，否则切难度后任何 RefreshAll
+        // 都会把选中篇拉回普通篇（自检还会误报）。
         if (!_availableChapters.Contains(_selectedChapter))
-            _selectedChapter = ChapterRouteTable.CurrentChapterToAdvance(data);
+            _selectedChapter = useDiffList
+                ? ChapterRouteTable.CurrentChapterToAdvanceAtDiff(_selectedDiff, data)
+                : ChapterRouteTable.CurrentChapterToAdvance(data);
     }
 
     /// <summary>分叉点提示：支线可选时列出地图名（不露章节号）。</summary>

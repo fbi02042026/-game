@@ -45,6 +45,9 @@ public partial class UnitBase
         // 玩家攻速 -20%（仅 Hero；佣兵/怪物节奏不变）
         if (this is Hero)
             atkSpd *= GameConfig.PLAYER_ATTACK_SPEED_MUL;
+        // 佣兵攻速 -30%（仅 Mercenary；怪物节奏不变）【2026-11-05 主人拍板「佣兵攻速比玩家快太多」】
+        if (this is Mercenary)
+            atkSpd *= GameConfig.MERC_ATTACK_SPEED_MUL;
         // 残血加成（R1）：低血时提升攻速，越打越快制造反扑手感
         atkSpd *= GetLowHpAttackSpeedMul();
         // 游侠攻速减速（仅 Hero 且职业为游侠 P004）：额外乘 0.85，让游侠出手更慢、与前摇统一手感

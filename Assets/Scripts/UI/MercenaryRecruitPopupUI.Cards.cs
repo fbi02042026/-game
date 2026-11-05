@@ -58,6 +58,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
                 ?? (MercenaryManager.Instance != null ? MercenaryManager.Instance.GetIcon(offer.mercId) : null);
             c.portrait.sprite = sp;
             c.portrait.enabled = true;
+            MercRarityFx.ApplyPortraitShine(c.portrait, portraitKey);   // 【2026-11-05】传奇佣兵立绘金色流光
             c.portrait.color = sp != null ? Color.white : new Color(0.35f, 0.32f, 0.38f, 1f);
             c.portrait.preserveAspect = true;
             if (sp != null)

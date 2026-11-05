@@ -40,8 +40,8 @@ public static class RedDot
     public const string LogMerc = "log.merc";
     public const string Guild = "nav.guild";
     public const string Adventure = "nav.adventure";
-    /// <summary>2026-09-29：天赋入口红点 —— 左列推到某个右列门槛时点亮（TalentSystem.BuildRightUnlockHint），
-    /// 玩家打开一次天赋页就清掉（TalentUI.Show）。</summary>
+    /// <summary>2026-09-29：天赋入口红点 —— 右列有「新开通未点」节点时点亮
+    ///（2026-11-05 拍板门槛=人物等级，升级跨门槛由 TalentSystem.NotifyLevelUp 刷，玩家点开对应节点才灭）。</summary>
     public const string Talent = "nav.talent";
     /// <summary>2026-10-16：每日登录入口红点 —— 有可领的登录奖励时亮起。</summary>
     public const string DailyLogin = "dailylogin";

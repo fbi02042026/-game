@@ -51,7 +51,8 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         Projectile,     // 弹幕
         AOE,            // 范围
         Buff,           // 增益
-        Chain           // 连锁
+        Chain,          // 连锁
+        MoveAoe         // 移动判定范围（2026-11-05 风龙卷/火龙卷：判定跟锚点走，每目标限 1 次）
     }
 
     readonly List<string> _cooldownKeyBuffer = new List<string>(8);
@@ -106,6 +107,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
                 break;
             case SkillType.Chain:
                 ExecuteChain(skill, caster);
+                break;
+            case SkillType.MoveAoe:
+                ExecuteMoveAoe(skill, caster);
                 break;
         }
 
@@ -276,6 +280,17 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             chainMultiplier *= 0.6f; // 每次连锁递减40%
             if (chainMultiplier < 0.2f) break;
         }
+    }
+
+    /// <summary>
+    /// 移动判定 AOE（2026-11-05 主人拍板「风龙卷是移动的，所有范围也是移动的」）。
+    /// 伤害在这里先算好（含攻击基底），生成 MoveAoeExecutor 锚点后由其周期性重叠检测结算（每目标限 1 次）。
+    /// VFX 不在这里播：由 MoveAoeExecutor 挂在移动锚点上随行，SkillCastService 对 MoveAoe 跳过 PlaySkillVfx。
+    /// </summary>
+    private void ExecuteMoveAoe(ActiveSkill skill, UnitBase caster)
+    {
+        float damage = CalculateDamage(skill, caster);
+        MoveAoeExecutor.Spawn(skill, caster, damage);
     }
 
     /// <summary>

@@ -441,7 +441,8 @@ public class SaveData
     /// <summary>
     /// 【2026-10-31 B2 落地】每篇已通关的大关数（下标 = 篇号-1，值 = 已通关大关数 0..GrandCountOf(篇)）。
     /// 真源是这里 + clearedStages（关级），<see cref="CurrentGrand"/> 由两者推出。
-    /// 老档迁移：clearedChapterIds 里已通关的篇 → 直接记满（见 MigrateGrandProgress）。
+    /// 【2026-11-05】**纯显示缓存**（行为判据一律不读，见 <see cref="GrandClearedCount"/>）：
+    /// 启动时按真源 clearedStages 整体重算后落值（见 MigrateGrandProgress），不做任何老档补记。
     /// JsonUtility 不能序列化 Dictionary，故用 List&lt;int&gt; 定长 8。
     /// </summary>
     public List<int> grandProgress = new List<int>();
@@ -450,10 +451,9 @@ public class SaveData
     public int GrandClearedCount(int chapter)
     {
         if (chapter <= 0) return 0;
-        EnsureGrandProgress();
-        int i = chapter - 1;
-        if (i < 0 || i >= grandProgress.Count) return 0;
-        return ClampInt(grandProgress[i], 0, ActProgressionDefs.GrandCountOf(chapter));
+        // 【2026-11-05 主人拍板】grandProgress 降级为**纯显示缓存**：每次读都从真源 clearedStages 重算，
+        // 绝不把 grandProgress 里的旧值当行为判据（旧迁移/跳关/历史 bug 都可能把它写脏）。
+        return DerivedGrandProgressFromClearedStages(chapter);
     }
 
     /// <summary>该篇当前应打第几座大关（1 起；整篇已通关 → 回 1，重打从第一座开始）。</summary>
@@ -515,11 +515,29 @@ public class SaveData
         seenAffixMonsterEntries.Add(new StringIdEntry { id = monsterId });
     }
 
-    /// <summary>章节通关次数列表（用于渐进式怪物解锁）</summary>
+    /// <summary>章节通关次数列表（用于渐进式怪物解锁）。
+    /// ⚠️【2026-11-05】B2 起语义是「大关通关次数」（每通一座大关 Boss +1），**不等于整篇通关**，
+    /// 任何解锁 / 进度判定禁止再读本字段（误标来源已彻底删除）。</summary>
     public List<ChapterClearCountEntry> chapterClearCounts = new List<ChapterClearCountEntry>();
-    /// <summary>已通关章节集合（权威；章节分叉后 maxUnlockedChapter 的减法不再成立，一律读这里）</summary>
+
+    // ============================================================
+    // 【2026-11-05 主人拍板「两套集合彻底拆分」】章节进度双集合
+    //   ① 已解锁章节（unlocked）：准入 / 展示唯一判据；一旦写入**永久保留、绝不回退**。
+    //   ② 真通关章节（truly cleared）：进度推进唯一判据；**整篇小关全部通关才算**，真源 = clearedStages。
+    // 字段名沿用 clearedChapterEntries（历史命名，不随语义改名）。
+    // 读写入口只允许：IsChapterUnlocked / HasTrulyClearedChapter / MarkChapterCleared，
+    // 禁止业务代码裸碰集合或自行判「通关」。
+    // 【2026-11-05】老档不再兼容：启动只按落盘镜像重建集合，不补写、不重算（存档可弃）。
+    // ============================================================
+
+    /// <summary>① 已解锁章节（准入 / 展示用；一旦写入永久保留）。
+    /// 读写只走 <see cref="IsChapterUnlocked"/> / <see cref="MarkChapterCleared"/>。</summary>
     public List<IntIdEntry> clearedChapterEntries = new List<IntIdEntry>();
     [NonSerialized] public HashSet<int> clearedChapterIds = new HashSet<int>();
+
+    /// <summary>② 真通关章节（进度推进用；整篇小关全清才算，只增不减）。</summary>
+    public List<IntIdEntry> trulyClearedChapterEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<int> trulyClearedChapterIds = new HashSet<int>();
     /// <summary>
     /// 【2026-10-24 主人拍板「上一章该难度没通，下一章该难度灰锁」】按难度记章节通关。
     /// key 格式 "章_难度"（如 "3_1" = 第 3 章在困难难度下通关）；读写只走
@@ -529,8 +547,14 @@ public class SaveData
     public List<StringIdEntry> clearedChapterDiffEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> clearedChapterDiffKeys = new HashSet<string>();
     /// <summary>
+    /// 【2026-11-05 难度定位收窄为纯关卡玩法】困难/噩梦的**关卡真源**：键 "难度_篇_篇内小关0基"（如 "1_2_0" = 困难 11-1）。
+    /// 普通难度仍用 <see cref="clearedStages"/>，两套**互不写入**——难度只改自身进度，普通一行不变。
+    /// </summary>
+    public List<StringIdEntry> clearedStageDiffEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> clearedStageDiffKeys = new HashSet<string>();
+    /// <summary>
     /// 是否在困难（或更高）难度下通关过第 8 章。2026-09-17：**噩梦难度的唯一解锁条件**。
-    /// 由 <see cref="MarkChapterCleared(int, int)"/> 在通关第 8 章且难度 &gt;= 1 时置 true。
+    /// 由 <see cref="MarkChapterClearedAtDiff(int, int)"/> 在困难/噩梦通关第 8 章时置 true。
     /// 旧存档默认 false —— 已通关的玩家重打一次困难第 8 章即可开启噩梦。
     /// </summary>
     public bool hardCleared = false;
@@ -720,7 +744,7 @@ public class SaveData
     /// <summary>每日任务阈值：当日通关 3 关。</summary>
     public const int DAILY_CLEAR_TASK_NEED = 3;
     /// <summary>每日任务奖励：5 天赋石。</summary>
-    public const int DAILY_CLEAR_TASK_EXP = 50;  // 2026-10-30 主人拍板：每日通关任务改发经验（原 5 天赋石停发，天赋石只随关卡出）
+    public const int DAILY_CLEAR_TASK_EXP = 120;  // 2026-11-05 主人拍板：经验预算 6:2:2，日常任务经验 ×2.4（原 50→120；2026-10-30 由 5 天赋石改发经验）
 
     // === 每日/周常任务计数（2026-10-29 扩编，主人拍板：金币/击杀/Boss/佣兵/升星）===
     public string dailyTaskDayKey = "";      // 日计数日期键（yyyyMMdd）
@@ -877,6 +901,7 @@ public class SaveData
         storyChoices ??= new List<StoryChoiceEntry>();
         chapterClearCounts ??= new List<ChapterClearCountEntry>();
         clearedChapterEntries ??= new List<IntIdEntry>();
+        trulyClearedChapterEntries ??= new List<IntIdEntry>();   // 【2026-11-05】两套集合拆分：字段缺失 → 空集合，不补写
         clearedSideIslandEntries ??= new List<IntIdEntry>();   // 【2026-10-23 合并方案】旧存档没有 → 空，全岛未通关，兼容
         // 老语义迁移：branchRoll1/2 曾记支线章号(2/3/4)，现改记支线岛 id(1..8)。
         // 2/3/4 与岛 id 域重叠、语义无法区分 → 一律归零，让补掷入口（冒险页/世界地图）重新掷岛（幂等）。
@@ -912,6 +937,7 @@ public class SaveData
         mercRecruitCountEntries ??= new List<StringIntEntry>();   // 【2026-10-31】旧档无列表 → 空，全员 0 次招募（价格 1000 起）
         mercGrowEntries ??= new List<MercGrowEntry>();   // 【2026-10-23 施工单 T3】旧存档没有该列表 → 空，全员 Lv1 无加成
         clearedStageEntries ??= new List<StringIdEntry>();
+        clearedStageDiffEntries ??= new List<StringIdEntry>();   // 【2026-11-05 难度隔离】旧档无此列表 → 空
         mainQuestDoneEntries ??= new List<StringIdEntry>();
         mainQuestCntEntries ??= new List<StringIntEntry>();
         mainQuestBaseEntries ??= new List<StringIntEntry>();
@@ -1044,6 +1070,7 @@ public class SaveData
         chestClaimedStages = ToIdSet(chestClaimedStageEntries);
         seenAffixMonsterIds = ToIdSet(seenAffixMonsterEntries);
         clearedChapterDiffKeys = ToIdSet(clearedChapterDiffEntries);
+        clearedStageDiffKeys = ToIdSet(clearedStageDiffEntries);   // 【2026-11-05 难度隔离】困难/噩梦关卡真源
 
         mainQuestDone = ToIdSet(mainQuestDoneEntries);
 
@@ -1195,14 +1222,14 @@ public class SaveData
             logAchProgress[e.id] = e.value;
         }
 
-        MigrateClearedChapters();
+        MigrateChapterSets();   // 【2026-11-05】集合启动初始化 = 只按落盘镜像重建，不重算、不补写、无老档兼容
         // 【2026-10-29 主人拍板】支线岛改为「通关第 1 章后才开放」：若第 1 章尚未通关却已派定支线岛
         // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
         // 等门槛到了由 EnsureForkRoll 重新随机派定。
         // 【2026-10-31 对齐 FeatureUnlock.SideIslandOpen】B2 后「通第 1 章」= 50 小关会把支线岛拖到第 2 天，
-        // 派岛门槛改成「第 1 篇第 1 座大关通关」（≈25 体力）。grandProgress 在上面的
-        // MigrateClearedChapters → MigrateGrandProgress 里已就绪，这里读的是迁移后的值。
-        if (GrandClearedCount(1) < 1) { branchRoll1 = 0; branchRoll2 = 0; }
+        // 派岛门槛改成「第 1 篇第 1 座大关通关」（≈25 体力）。
+        // 🔴 一律从 clearedStages 推，不读 grandProgress 缓存（同 StartChapter / OnStageComplete / FeatureUnlock 口径）。
+        if (DerivedGrandProgressFromClearedStages(1) < 1) { branchRoll1 = 0; branchRoll2 = 0; }
         MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
@@ -1211,46 +1238,63 @@ public class SaveData
     }
 
     /// <summary>
-    /// 老档迁移：把 chapterClearCounts（count&gt;0）补进权威的 clearedChapterIds。
-    /// 新档本来就是空集合，走同一入口无副作用。
+    /// 【2026-11-05 主人拍板「老档不再兼容」】章节集合启动初始化（幂等，无兼容分支）：
+    /// 运行时集合（HashSet）是 [NonSerialized]，JsonUtility 载入后为空 —— 这里**只按落盘镜像重建**，
+    /// 不重算、不补写、不告警。真通关的严格判定由 <see cref="HasTrulyClearedChapter"/> 实时从
+    /// clearedStages 推导（<see cref="ChapterSubsAllCleared"/>），不依赖历史存档内容。
     /// </summary>
-    void MigrateClearedChapters()
+    public void MigrateChapterSets()
     {
-        clearedChapterIds = new HashSet<int>();
-        for (int i = 0; i < clearedChapterEntries.Count; i++)
-        {
-            var e = clearedChapterEntries[i];
-            if (e != null && e.id > 0) clearedChapterIds.Add(e.id);
-        }
-
-        if (clearedChapterIds.Count == 0)
-        {
-            for (int i = 0; i < chapterClearCounts.Count; i++)
+        // 已解锁：只从落盘镜像重建（只增不减的语义由写入端 MarkChapterCleared 保证）
+        clearedChapterIds ??= new HashSet<int>();
+        clearedChapterIds.Clear();
+        if (clearedChapterEntries != null)
+            for (int i = 0; i < clearedChapterEntries.Count; i++)
             {
-                var e = chapterClearCounts[i];
-                if (e != null && e.chapter > 0 && e.clearCount > 0)
-                    clearedChapterIds.Add(e.chapter);
+                var e = clearedChapterEntries[i];
+                if (e != null && e.id > 0) clearedChapterIds.Add(e.id);
             }
-            if (clearedChapterIds.Count > 0)
-                clearedChapterEntries = FromIntIdSet(clearedChapterIds);
-        }
 
-        // 【2026-10-31 B2 落地】大关进度迁移必须在 clearedChapterIds 定稿之后跑（依赖它判「整篇已通」）。
+        // 真通关：同样只从镜像重建（写入端只在整篇小关全清时写）
+        trulyClearedChapterIds ??= new HashSet<int>();
+        trulyClearedChapterIds.Clear();
+        if (trulyClearedChapterEntries != null)
+            for (int i = 0; i < trulyClearedChapterEntries.Count; i++)
+            {
+                var e = trulyClearedChapterEntries[i];
+                if (e != null && e.id > 0) trulyClearedChapterIds.Add(e.id);
+            }
+
+        // 难度侧（单套通关记录）：只重建运行时集合
+        MigrateChapterDiffSets();
+
+        // 大关进度纯显示缓存：每次从真源重算（不参与任何行为判据，见 GrandClearedCount）
         MigrateGrandProgress();
     }
 
     /// <summary>
-    /// 【2026-10-31 B2 落地】老档大关进度迁移（幂等）。
-    /// 🔴【2026-11-03 修「3-4 打完进 3-5 变 1-1」】大关进度一律以 clearedStages 覆盖推导值
-    /// <see cref="DerivedGrandProgressFromClearedStages"/> 直接落值（双向纠偏）：
-    /// · 坏档（打过任意大关 Boss 被 count&gt;0 兜底误标整章通关，grandProgress 被顶成 10）→ 本次不再自动压回，
-    ///   只打 Warning 保留原值交人工核对（2026-11-03 主人拍板「不要静默回滚」）；
-    /// · 旧 10 关制老档（没有 grandProgress 字段，key 0~9）→ 抬到推导值 2（主人 2026-11-03 拍板
-    ///   「老档按前两座大关已通、从 3-1 续打」，不再整章重打）；
-    /// · 合法新档推导值恒等于现值（线性解锁：打过大关 Boss = 该大关小关全通），幂等零影响。
-    /// 【2026-11-03 补】推导值 < 存档值时不再覆盖，只打 Warning 保留旧值——防分叉/跳关的洞把玩家进度回滚。
-    /// 注意：clearedChapterIds / clearedChapterEntries（章节解锁判据，ChapterRouteTable.CanEnter 用）
-    /// 这里一个字不动——老档 10 关制的「已通关章」覆盖不全但解锁必须保留。
+    /// 【2026-11-05 难度定位收窄为纯关卡玩法】难度侧只有**一套**集合：
+    /// clearedChapterDiffKeys（键 "章_难度"）= 该难度已通关的章，由该难度真源
+    /// clearedStageDiffKeys 严格推导后写入（整篇小关全清才算）。这里只重建运行时集合，不做兼容。
+    /// </summary>
+    public void MigrateChapterDiffSets()
+    {
+        clearedChapterDiffKeys ??= new HashSet<string>();
+        clearedChapterDiffKeys.Clear();
+        if (clearedChapterDiffEntries != null)
+            for (int i = 0; i < clearedChapterDiffEntries.Count; i++)
+            {
+                var e = clearedChapterDiffEntries[i];
+                if (e != null && !string.IsNullOrEmpty(e.id)) clearedChapterDiffKeys.Add(e.id);
+            }
+
+        clearedStageDiffKeys ??= new HashSet<string>();
+    }
+
+    /// <summary>
+    /// 【2026-11-05】大关进度是**纯显示缓存**：启动时一律从真源 clearedStages 重算后落值，
+    /// 运行时任何行为判据都不读它（见 GrandClearedCount 每次实时推导）。
+    /// 老档不再做任何特殊处理（项目仍在测试期，存档可弃）。
     /// </summary>
     void MigrateGrandProgress()
     {
@@ -1259,20 +1303,7 @@ public class SaveData
         {
             int i = ch - 1;
             if (i < grandProgress.Count)
-            {
-                int derived = DerivedGrandProgressFromClearedStages(ch);
-                int old = grandProgress[i];
-                // 【2026-11-03 主人拍板】推导值小于存档值 → 保留旧值并告警，绝不静默回滚玩家进度。
-                // 触发场景：分叉章/跳关在 clearedStages 留下空洞，或坏档；交人工核对，不自动压缩。
-                if (derived < old)
-                {
-                    UnityEngine.Debug.LogWarning(
-                        "[SaveData] 大关进度异常：第 " + ch + " 篇由 clearedStages 推导得 " + derived
-                        + "，小于存档值 " + old + "，已保留存档值（不自动回滚）。请人工核对 clearedStages。");
-                    continue;
-                }
-                grandProgress[i] = derived;
-            }
+                grandProgress[i] = DerivedGrandProgressFromClearedStages(ch);
         }
     }
 
@@ -1313,6 +1344,92 @@ public class SaveData
             grans++;
         }
         return grans;
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 【2026-11-05 难度隔离】困难/噩梦进度一律从 clearedStageDiffKeys 推，禁止读普通 clearedStages
+    // ──────────────────────────────────────────────────────────
+
+    /// <summary>指定难度下该篇是否小关全清（difficulty ≤ 0 走普通真源）。</summary>
+    public bool ChapterSubsAllClearedAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) return ChapterSubsAllCleared(chapter);
+        if (chapter < 1 || chapter > ActProgressionDefs.ActCount) return false;
+        if (clearedStageDiffKeys == null || clearedStageDiffKeys.Count == 0) return false;
+        int total = ActProgressionDefs.StageCountOf(chapter);
+        for (int s0 = 0; s0 < total; s0++)
+            if (!HasStageClearedAtDiff(chapter, s0, difficulty)) return false;
+        return true;
+    }
+
+    /// <summary>指定难度下该篇已连续通关的大关数（0 起；与普通口径同算法）。</summary>
+    public int DerivedGrandProgressFromClearedStagesAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) return DerivedGrandProgressFromClearedStages(chapter);
+        if (chapter < 1 || chapter > ActProgressionDefs.ActCount) return 0;
+        if (clearedStageDiffKeys == null || clearedStageDiffKeys.Count == 0) return 0;
+        int subs = ActProgressionDefs.SubsPerGrandOf(chapter);
+        int grandTotal = ActProgressionDefs.GrandCountOf(chapter);
+        int grans = 0;
+        for (int g = 0; g < grandTotal; g++)
+        {
+            bool full = true;
+            for (int s = 0; s < subs; s++)
+            {
+                if (!HasStageClearedAtDiff(chapter, g * subs + s, difficulty)) { full = false; break; }
+            }
+            if (!full) break;
+            grans++;
+        }
+        return grans;
+    }
+
+    /// <summary>指定难度下该篇是否有任一通关记录（用于「已到达该篇」展示与提前保护）。</summary>
+    public bool HasAnyStageInChapterAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) return HasAnyStageInChapter(chapter);
+        if (clearedStageDiffKeys == null || clearedStageDiffKeys.Count == 0) return false;
+        int total = ActProgressionDefs.StageCountOf(chapter);
+        for (int s0 = 0; s0 < total; s0++)
+            if (HasStageClearedAtDiff(chapter, s0, difficulty)) return true;
+        return false;
+    }
+
+    /// <summary>指定难度下已开打过的最高篇（1..ActCount；无记录返回 1）。</summary>
+    public int FurthestProgressChapterAtDiff(int difficulty)
+    {
+        if (difficulty <= 0) return FurthestProgressChapter();
+        for (int ch = ActProgressionDefs.ActCount; ch >= 1; ch--)
+            if (HasAnyStageInChapterAtDiff(ch, difficulty)) return ch;
+        return 1;
+    }
+
+    /// <summary>
+    /// 【2026-11-05 难度隔离】指定难度下的**真通关**（进度推进判据）：
+    /// · 该难度通关记录（整篇小关全清时由 RefreshChapterTruthAtDiff 写入，只增不减）
+    /// · 或该难度小关全清（每次实时从真源 clearedStageDiffKeys 推导，集合脏了也不会判错）
+    /// 🔴 绝不读普通难度数据 —— 困难通关不会让普通进度前进，反之亦然。
+    /// </summary>
+    public bool HasTrulyClearedChapterAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) return HasTrulyClearedChapter(chapter);
+        if (chapter <= 0 || chapter > ActProgressionDefs.ActCount) return false;
+        if (clearedChapterDiffKeys != null && clearedChapterDiffKeys.Contains(chapter + "_" + difficulty))
+            return true;
+        return ChapterSubsAllClearedAtDiff(chapter, difficulty);
+    }
+
+    /// <summary>写入难度真源后重算该难度的已通关集合（幂等；只在真通关时补，绝不回退）。</summary>
+    public void RefreshChapterTruthAtDiff(int chapter, int difficulty)
+    {
+        if (difficulty <= 0) { RefreshChapterTruth(chapter); return; }
+        if (chapter <= 0 || chapter > ActProgressionDefs.ActCount) return;
+        clearedChapterDiffKeys ??= new HashSet<string>();
+        if (ChapterSubsAllClearedAtDiff(chapter, difficulty))
+        {
+            if (clearedChapterDiffKeys.Add(chapter + "_" + difficulty))
+                clearedChapterDiffEntries = FromIdSet(clearedChapterDiffKeys);
+        }
     }
 
     /// <summary>
@@ -1685,14 +1802,28 @@ public class SaveData
         return true;
     }
 
-    /// <summary>标记章节通关；通关第 8 章时把 chosenBranch 归零，允许下一周目换支线。</summary>
-    /// <param name="difficulty">本次通关所处的难度（0 普通 / 1 困难 / 2 噩梦）；传 -1 表示未知，不参与 hardCleared 判定。</param>
-    public void MarkChapterCleared(int chapter, int difficulty = -1)
+    /// <summary>
+    /// 【2026-11-05 两套集合拆分】仅普通难度调用：标记章节已解锁 + 若整篇真通关则记入「真通关」。
+    /// 已解锁**只增不减、永久保留**；真通关严格按 clearedStages 判定（整篇小关全清）。
+    /// 调用点必须已先把该关写进 clearedStages（本函数不负责写关卡记录）。
+    /// 困难/噩梦走 <see cref="MarkChapterClearedAtDiff"/>（另一套真源，绝不写这里）。
+    /// </summary>
+    public void MarkChapterCleared(int chapter)
     {
         if (chapter <= 0) return;
-        if (clearedChapterIds == null) clearedChapterIds = new HashSet<int>();
-        if (clearedChapterIds.Add(chapter))
+        clearedChapterIds ??= new HashSet<int>();
+        trulyClearedChapterIds ??= new HashSet<int>();
+        bool changed = clearedChapterIds.Add(chapter);   // ① 准入：一旦解锁永不回退（clearedChapterIds = 已解锁集合）
+        if (ChapterSubsAllCleared(chapter))
+        {
+            // ② 真通关：整篇小关全清才算（真源 clearedStages）
+            if (trulyClearedChapterIds.Add(chapter)) changed = true;
+        }
+        if (changed)
+        {
             clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+            trulyClearedChapterEntries = FromIntIdSet(trulyClearedChapterIds);
+        }
         if (chapter >= 8)
         {
             chosenBranch = 0;
@@ -1700,13 +1831,80 @@ public class SaveData
             branchRoll1 = 0;
             branchRoll2 = 0;
         }
-        // 噩梦门槛：在困难及以上难度通关第 8 章
-        if (chapter >= 8 && difficulty >= 1) hardCleared = true;
     }
 
-    public bool HasClearedChapter(int chapter)
+    /// <summary>
+    /// 【准入 / 展示唯一判据】该篇是否**已解锁**（一旦发生永久保留，绝不回退）。
+    /// 章节能否进入、UI 是否显示已通关、天赋/裂隙/支线岛等门槛一律用本函数。
+    /// 历史字段名 clearedChapterIds 沿用作已解锁集合（仅命名，不再做老档兼容）。
+    /// </summary>
+    public bool IsChapterUnlocked(int chapter)
+        => clearedChapterIds != null && chapter > 0 && clearedChapterIds.Contains(chapter);
+
+    /// <summary>
+    /// 【兼容旧调用】== <see cref="IsChapterUnlocked"/>。全部现有调用点（准入 / 展示）语义保持不变，不会回退。
+    /// 进度推进请用 <see cref="HasTrulyClearedChapter"/>。
+    /// </summary>
+    public bool HasClearedChapter(int chapter) => IsChapterUnlocked(chapter);
+
+    /// <summary>
+    /// 【进度推进唯一判据】该篇是否**真通关**：整篇小关全部通关（真源 clearedStages）。
+    /// 不读任何缓存集合的旧值——集合里没有也会按真源实时判，脏数据不会让玩家前进/后退。
+    /// </summary>
+    public bool HasTrulyClearedChapter(int chapter)
     {
-        return clearedChapterIds != null && chapter > 0 && clearedChapterIds.Contains(chapter);
+        if (chapter <= 0 || chapter > ActProgressionDefs.ActCount) return false;
+        if (trulyClearedChapterIds != null && trulyClearedChapterIds.Contains(chapter)) return true;
+        return ChapterSubsAllCleared(chapter);
+    }
+
+    /// <summary>已真通关的篇数（进度推进 / 统计用）。</summary>
+    public int TrulyClearedChapterCount()
+    {
+        int n = 0;
+        for (int ch = 1; ch <= ActProgressionDefs.ActCount; ch++)
+            if (HasTrulyClearedChapter(ch)) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// 【2026-11-05 真源】按 clearedStages 求玩家已开打过的最高篇（1..ActCount；一条记录都没有返回 1）。
+    /// 冒险页 / 进本落位用它，彻底不依赖 UI 选中态与任何集合标签——误标也摆不回去。
+    /// </summary>
+    public int FurthestProgressChapter()
+    {
+        for (int ch = ActProgressionDefs.ActCount; ch >= 1; ch--)
+            if (HasAnyStageInChapter(ch)) return ch;
+        return 1;
+    }
+
+    /// <summary>clearedStages 里是否有该篇的任何通关记录（键格式 "篇_篇内小关下标"）。</summary>
+    public bool HasAnyStageInChapter(int chapter)
+    {
+        if (clearedStages == null || clearedStages.Count == 0) return false;
+        string prefix = chapter + "_";
+        foreach (var key in clearedStages)
+            if (key != null && key.StartsWith(prefix, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    /// <summary>从 clearedStages 重算某篇的「真通关 / 已解锁」并同步落盘镜像（幂等，只增不减）。</summary>
+    public void RefreshChapterTruth(int chapter)
+    {
+        if (chapter <= 0 || chapter > ActProgressionDefs.ActCount) return;
+        clearedChapterIds ??= new HashSet<int>();
+        trulyClearedChapterIds ??= new HashSet<int>();
+        bool changed = false;
+        if (ChapterSubsAllCleared(chapter))
+        {
+            if (trulyClearedChapterIds.Add(chapter)) changed = true;
+            if (clearedChapterIds.Add(chapter)) changed = true;   // 不变式：真通关 ⊂ 已解锁
+        }
+        if (changed)
+        {
+            clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+            trulyClearedChapterEntries = FromIntIdSet(trulyClearedChapterIds);
+        }
     }
 
     /// <summary>
@@ -1719,6 +1917,9 @@ public class SaveData
         clearedChapterDiffKeys ??= new HashSet<string>();
         if (clearedChapterDiffKeys.Add(chapter + "_" + difficulty))
             clearedChapterDiffEntries = FromIdSet(clearedChapterDiffKeys);
+        // 【2026-11-05 难度隔离】难度局不再走 MarkChapterCleared（那条会写普通集合），
+        // 原先由它维护的 hardCleared 在这里保持同口径（语义：困难及以上通关第 8 章）。
+        if (chapter >= 8 && difficulty >= 1) hardCleared = true;
     }
 
     /// <summary>该章是否在该难度下通关过（2026-10-24 难度逐章解锁用）。</summary>
@@ -1828,15 +2029,44 @@ public class SaveData
     public bool HasStageCleared(int chapter, int stageIndex0)
         => clearedStages != null && clearedStages.Contains(chapter + "_" + stageIndex0);
 
-    /// <summary>标记某关首次通关；返回本次应发的天赋石（按章首次通关石）。重复通关返回 0。</summary>
-    public int GrantTalentForStageFirstClear(int chapter, int stageIndex)
+    /// <summary>标记某关首次通关；返回本次应发的天赋石（按章首次通关石）。重复通关返回 0。
+    /// 【2026-11-05 难度隔离】difficulty ≤ 0（普通）写普通真源 clearedStages；
+    /// difficulty ≥ 1 写该难度的独立真源 clearedStageDiffKeys —— **绝不写普通集合**，杜绝跨难度污染。
+    /// 天赋石按难度各自首通各发一次（重复通关返回 0）。</summary>
+    public int GrantTalentForStageFirstClear(int chapter, int stageIndex, int difficulty = 0)
     {
-        clearedStages ??= new HashSet<string>();
-        string key = chapter + "_" + stageIndex;
-        if (!clearedStages.Add(key)) return 0;     // 重复通关不再发石
-        clearedStageEntries = FromIdSet(clearedStages);
+        if (difficulty > 0)
+        {
+            clearedStageDiffKeys ??= new HashSet<string>();
+            string dkey = DiffStageKey(difficulty, chapter, stageIndex);
+            if (!clearedStageDiffKeys.Add(dkey)) return 0;     // 该难度重复通关不再发石
+            clearedStageDiffEntries = FromIdSet(clearedStageDiffKeys);
+            RefreshChapterTruthAtDiff(chapter, difficulty);
+        }
+        else
+        {
+            clearedStages ??= new HashSet<string>();
+            string key = chapter + "_" + stageIndex;
+            if (!clearedStages.Add(key)) return 0;     // 重复通关不再发石
+            clearedStageEntries = FromIdSet(clearedStages);
+            // 【2026-11-05 两套集合拆分】每次写入关卡真源后，立刻重算该篇的「真通关 / 已解锁」，
+            // 保证 MarkChapterCleared / 章节解锁判定拿到的都是最新真值（不依赖缓存时点）。
+            RefreshChapterTruth(chapter);
+        }
         int ch = chapter < 1 ? 1 : (chapter > 8 ? 8 : chapter);
         return TalentDefs.TalentStoneRewards.FirstClearStone(ch);
+    }
+
+    /// <summary>难度关卡的键格式："难度_篇_篇内小关0基"。</summary>
+    public static string DiffStageKey(int difficulty, int chapter, int stageIndex)
+        => difficulty + "_" + chapter + "_" + stageIndex;
+
+    /// <summary>该关在指定难度下是否已通关（difficulty ≤ 0 走普通真源）。</summary>
+    public bool HasStageClearedAtDiff(int chapter, int stageIndex0, int difficulty)
+    {
+        if (difficulty <= 0) return HasStageCleared(chapter, stageIndex0);
+        return clearedStageDiffKeys != null
+            && clearedStageDiffKeys.Contains(DiffStageKey(difficulty, chapter, stageIndex0));
     }
 
     /// <summary>该关宝箱奖励是否已领取（主线宝箱点击领奖用，2026-10-23）。</summary>
@@ -2114,7 +2344,8 @@ public class SaveData
         viewedMercEntries = FromIdSet(viewedMercIds);
         unlockedMercEntries = FromIdSet(unlockedMercIds);
         mercDrawPoolEntries = FromIdList(mercDrawPool);
-        clearedChapterEntries = FromIntIdSet(clearedChapterIds);
+        clearedChapterEntries = FromIntIdSet(clearedChapterIds);            // ① 已解锁镜像
+        trulyClearedChapterEntries = FromIntIdSet(trulyClearedChapterIds);  // ② 真通关镜像（2026-11-05 两套集合）
         clearedSideIslandEntries = FromIntIdSet(clearedSideIslandIds);   // 【2026-10-23 合并方案】岛存档双写
         sideIslandGuideEntries = FromIntIdSet(sideIslandGuideIds);       // 【2026-10-26】支线岛指引已播双写
         finaleClearedEntries = FromIntIdSet(finaleClearedIds);           // 【2026-10-23 终章追查线】双写
@@ -2138,6 +2369,9 @@ public class SaveData
         clearedStageEntries = FromIdSet(clearedStages);
         chestClaimedStageEntries = FromIdSet(chestClaimedStages);
         clearedChapterDiffEntries = FromIdSet(clearedChapterDiffKeys);
+        // 【2026-11-05 难度进度落盘（评审必修）】难度关卡真源也必须镜像回序列化字段，否则
+        // 难度通关只存在运行时 HashSet，存档 → 重启后难度进度会丢。
+        clearedStageDiffEntries = FromIdSet(clearedStageDiffKeys);
 
         mainQuestDoneEntries = FromIdSet(mainQuestDone);
 

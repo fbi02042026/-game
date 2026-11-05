@@ -235,6 +235,7 @@ public static class PlayerSkillTable
             case "Projectile": return SkillSystem.SkillType.Projectile;
             case "AOE": return SkillSystem.SkillType.AOE;
             case "Chain": return SkillSystem.SkillType.Chain;
+            case "MoveAoe": return SkillSystem.SkillType.MoveAoe;
             default: return SkillSystem.SkillType.Buff;
         }
     }

@@ -874,7 +874,12 @@ public static class DraftPool
             // 直接用现 ★1 档，MpProfile/PowerCalc 均 max(1,star) 天然对齐）；旧「按稀有度定 3/2/1 星」作废。
             // 局内 star（1~5）与 RunLoadout.MaxMercStar 体系不动，只改入场初值；攻防加成由 T8 按 outStar 另乘。
             int star = MercStarSystem.InRunStarOf(def.HireId);
-            int level = Mathf.Max(1, 1 + heroLv / 2);
+            // 【2026-11-05 主人拍板「战斗里的佣兵要跟战斗外的属性一致…现在还没开战斗内升级」】
+            // 局内招募一律基础档 1 级：与战斗外已拥有佣兵同一套 SetupAttributes 基准（酒馆购买只
+            // UnlockMerc、不落等级），星级仍按 InRunStarOf 映射 outStar，养成/羁绊加成由
+            // Mercenary.SetHireId 幂等补挂 —— 两条链路属性完全同源。不再用 1+heroLv/2 自造局内等级
+            //（10-25 换存档等级源后玩家 4/5 级恒出 Lv3）。卡面连等级数字也不显示（见下方 Desc）。
+            int level = 1;
             // 【2026-10-19 主人拍板】只能从上架队列出 → 每名上架佣兵单独等概率（权重全 1），
             // 旧的「空池全池按稀有度加权（普通62/稀有33/传奇5）」随空池回落一起作废。
             int weight = 1;
@@ -896,9 +901,11 @@ public static class DraftPool
                     // 【2026-10-11 主人拍板】同上（SlotMachineSystem.BuildGuaranteedMercCard 那一处）：
                     // 佣兵名字只取真名，描述行也不再写职业名（旧写法会出现「[普通] 游侠」这种
                     // 「名字栏写着职业」的错位，主人反馈「不要取职业名字 剑盾卫士什么的」）。
-                    // 【2026-10-24 主人拍板】局内佣兵没有升星体系（后面再开放），卡面只显示等级数字，
-                    // 不写 ★N 与局外升星混淆；star 仍按 InRunStarOf 供战力计算（显示不露出）。
-                    Desc = $"[{rarName}]　Lv{level}",
+                    // 【2026-10-24 主人拍板】局内佣兵没有升星体系，不写 ★N 与局外升星混淆；star 仍按
+                    // InRunStarOf 供战力计算（显示不露出）。
+                    // 【2026-11-05 主人拍板「不要显示等级」】卡面连等级数字也不显示（局内没有升级体系），
+                    // 只留稀有度 —— Desc 全库无解析依赖（只做展示）。
+                    Desc = $"[{rarName}]",
                     Rarity = rar,
                     Tag = SynergyTag.Summon,
                     Star = star,

@@ -395,7 +395,8 @@ public static class MailSystem
     }
 
     /// <summary>
-    /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 一位伙伴「莉娜(H017)」+ 致谢与加群邀请。
+    /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 5 天赋石 + 致谢与加群邀请。
+    /// 【2026-11-05 主人拍板】原附件佣兵「莉娜(H017)」删掉，换 5 天赋石；id 升版 v3 重发（老玩家也会收到新版一封）。
     /// 配图走表情包「高兴」（2026-10-16 主人原话：「表情用表情包里的图片 用高兴的那个」——不用佣兵头像顶表情位）。
     /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励/换配图）只需把 id 升版（如 welcome_2026_v3）。
     /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone，notifyToast=false：提示延后到关登录时）；
@@ -404,7 +405,7 @@ public static class MailSystem
     public static void EnsureWelcomeMail(bool notifyToast = true)
     {
         Ensure();
-        const string WelcomeId = "welcome_2026_v2";
+        const string WelcomeId = "welcome_2026_v3";
         var list = SaveSystem.Instance.Data.mailInbox;
         for (int i = 0; i < list.Count; i++)
             if (list[i] != null && list[i].id == WelcomeId) return;   // 已发过，不重复
@@ -415,7 +416,7 @@ public static class MailSystem
             title = "欢迎来到《像素冒险：裂隙之刃》！",
             sender = "制作组",
             body = "感谢您下载并试玩《像素冒险：裂隙之刃》！\n\n" +
-                   "这是制作组的一点小心意——200 金币与一位伙伴「莉娜」请收下，祝您冒险顺利。\n\n" +
+                   "这是制作组的一点小心意——200 金币与 5 枚天赋石请收下，祝您冒险顺利。\n\n" +
                    "我们是个小团队，正努力把游戏做得更好玩。如果您在游戏里有任何想法、吐槽或建议，" +
                    "非常欢迎加入玩家交流群（QQ 群号 1126152907），和我们一起聊游戏制作。\n\n" +
                    "我们一定会认真听取大家合理的建议，让游戏变得更有趣。再次感谢您的支持！\n\n" +
@@ -424,16 +425,7 @@ public static class MailSystem
             type = MailType.Reward,
             detailImagePath = "UI/Art/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）
             gold = 200,
-            attachments = new List<MailAttachment>
-            {
-                new MailAttachment
-                {
-                    type = "merc",
-                    amount = 1,
-                    hireId = "H017",
-                    iconOverride = ContentPaths.Icons.MercHead + "/H017",
-                },
-            },
+            talentPoints = 5,   // 【2026-11-05 主人拍板】佣兵莉娜删掉，换 5 天赋石（flat 字段，详情页/领取弹窗均有现成展示）
         }, notifyToast);
     }
 

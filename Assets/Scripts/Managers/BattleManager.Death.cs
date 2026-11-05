@@ -181,9 +181,10 @@ public partial class BattleManager
             RestartTutorialBattle();
             return;
         }
-        // 【2026-10-24 主人拍板】正式关卡/支线岛/活动副本阵亡先播「失败」结果界面，
-        // 淡出（或点击跳过）后再进遗产/撤离结算；无限裂隙不播（每层累计奖励走自己的结算链），直接进遗产结算。
-        // 引导局在上面 Rules.Active 分支已重进战斗，永远到不了这里。
+        // 【2026-11-05 主人拍板「失败后只显示一个图并且不要出现结算界面」】阵亡全程只播上面那张
+        // 「失败 + 复活/返回」选择图；点【返回】收局后直接回城，不再二次播失败结果界面、也不再弹
+        // 战斗结算（失败没有奖励可展示；金币/天赋石照常入账）。无限裂隙不播结果界面（每层累计奖励
+        // 走自己的结算链）；引导局在上面 Rules.Active 分支已重进战斗，永远到不了这里。
         if (Mode != null && Mode.UsesBattleResultScreen)
         {
             // 竞技场挑战（2026-10-30 主人拍板「竞技场真战斗」）判负：无复活（OffersRevive=false 已在
@@ -206,7 +207,7 @@ public partial class BattleManager
                 });
                 return;
             }
-            BattleResultScreen.Show(false, null, () => TriggerLegacyFlow(isDeath: true));   // 失败无奖励格，stats 传 null
+            TriggerLegacyFlow(isDeath: true);   // 不再二次播失败结果界面（2026-11-05 主人拍板，见上）
         }
         else
             TriggerLegacyFlow(isDeath: true);
@@ -365,11 +366,21 @@ public partial class BattleManager
         if (!isDeath)
             AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
         TownHubController.PendingOpenAdventure = true;
-        BattleSettlementUI.Show(RunStats, () =>
+        // 【2026-11-05 主人拍板「失败后…不要出现结算界面」】死亡不弹战斗结算（胜利侧 2026-10-27 已同
+        // 口径），直接清临时雇佣、回城；主动撤离保留结算（展示金币/天赋石，2026-10-24 口径不变）。
+        if (isDeath)
         {
             MercHireSession.ClearHired();
             GameSceneManager.Instance?.LoadTownScene();
-        });
+        }
+        else
+        {
+            BattleSettlementUI.Show(RunStats, () =>
+            {
+                MercHireSession.ClearHired();
+                GameSceneManager.Instance?.LoadTownScene();
+            });
+        }
     }
 
     void FillSettlementSnapshot(bool isDeath, int talentGain, bool isVictory = false)

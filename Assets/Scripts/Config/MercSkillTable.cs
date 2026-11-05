@@ -329,6 +329,9 @@ public static class MercSkillTable
             return SkillSystem.SkillType.Buff;
         if (row.Category == SkillCategory.Magic && (row.Formula ?? "").Contains("目标攻击"))
             return SkillSystem.SkillType.Buff;
+        // 2026-11-05 主人拍板「龙卷类是移动的」：作用范围含「移动」 = 移动判定 AOE（判定跟 MoveAoeExecutor 锚点走）
+        if (row.RangeDesc != null && row.RangeDesc.Contains("移动"))
+            return SkillSystem.SkillType.MoveAoe;
         if (row.RangeDesc != null && (row.RangeDesc.Contains("全体") || row.RangeDesc.Contains("扇形") || row.RangeDesc.Contains("溅射")))
             return SkillSystem.SkillType.AOE;
         if (row.TargetType != null && row.TargetType.Contains("单体"))
@@ -345,9 +348,22 @@ public static class MercSkillTable
         return id == "SK004" || id == "SK013" || id == "SK015";
     }
 
+    // 2026-11-05 主人拍板「佣兵的技能图标可以从项目里找相似的代替」：
+    // SK021 烈焰龙卷 → 复用 SK005 烈焰斩（橙红火焰剪影，最贴火龙卷）；
+    // SK022 等离子爆发 → 复用 SK016 裂隙冲击（紫色能量爆发带电弧感，正对等离子）。
+    // 只做路径别名引用，不复制 PNG——字节级重复内容会触发团结 56 字符 guid 事故（2026-09-27 前车之鉴）。
+    // 以后有正式美术图，把对应条目删掉即可回落到本名图标。
+    static readonly Dictionary<string, string> IconAlias = new Dictionary<string, string>
+    {
+        { "SK021", "SK005" }, // 烈焰龙卷 ← 烈焰斩（火焰）
+        { "SK022", "SK016" }, // 等离子爆发 ← 裂隙冲击（能量爆发）
+    };
+
     public static Sprite LoadIcon(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
+        if (IconAlias.TryGetValue(skillId, out var aliased) && !string.IsNullOrEmpty(aliased))
+            skillId = aliased;
         string path = ContentPaths.Icons.MercSkill + "/" + skillId;
         var sp = Resources.Load<Sprite>(path);
         if (sp != null) return sp;

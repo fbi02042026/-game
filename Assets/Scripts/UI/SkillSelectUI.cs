@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -83,13 +84,16 @@ public class SkillSelectUI : MonoBehaviour
         transform.SetAsLastSibling();
         EnsureVisible();
         ApplyFit();
+        RebuildSlotOrder();
         RefreshSlots();
         if (selectIndex < 0)
         {
             string saved = SaveSystem.Instance?.Data?.selectedPlayerSkillId;
             selectIndex = PlayerSkillDefs.IndexOf(saved);
         }
-        Select(Mathf.Clamp(selectIndex, 0, MaxSkills - 1), persist: false);
+        // 2026-11-05 主人拍板：弹窗按稀有度从低到高排 —— 传入/存档里的 All 下标先换算成槽位再选中。
+        int slot = selectIndex >= 0 ? SlotOfAllIndex(selectIndex) : 0;
+        Select(Mathf.Clamp(slot, 0, MaxSkills - 1), persist: false);
     }
 
     public void Hide()
@@ -106,7 +110,8 @@ public class SkillSelectUI : MonoBehaviour
     public void Select(int index, bool persist)
     {
         index = Mathf.Clamp(index, 0, MaxSkills - 1);
-        var def = PlayerSkillDefs.Get(index);
+        // 2026-11-05 主人拍板：index 是「槽位」（按稀有度升序排列），经映射换算成真技能。
+        var def = DefOfSlot(index);
         if (def == null) return;
         bool unlocked = PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data);
         if (persist && !unlocked)
@@ -140,7 +145,8 @@ public class SkillSelectUI : MonoBehaviour
     // 【2026-10-19 主人拍板】技能名颜色的唯一真源：CharacterUI.prefab 里 Skill_0..Skill_5 的
     // Label 是主人手涂的 6 种颜色，运行时曾被 ApplySlotTint 刷白覆盖；现在恢复手涂色，
     // 并通过 NameColorOf 开放给战斗技槽（BattleUI.Skills）共用，保证两处颜色一致。
-    // 下标 = PlayerSkillDefs.All[N]（TownSelectCount=6，顺序稳定）。
+    // 下标 = 弹窗槽位（2026-11-05 起槽序按稀有度从低到高，见 RebuildSlotOrder）。
+    // 当前 6 技对齐后顺序恰好不变：治愈之泉/圣盾壁垒/战意爆发(普通) → 疾风架势/致命专注(稀有) → 天雷裁决(传奇)。
     static readonly Color[] SkillNameColors =
     {
         new Color(1f, 1f, 1f),                    // 0 治愈之泉 白
@@ -177,12 +183,53 @@ public class SkillSelectUI : MonoBehaviour
         return null;
     }
 
+    // ===== 2026-11-05 主人拍板：技能弹窗格子按稀有度从低到高排 =====
+    // 槽序 = 稀有度升序（普通 → 稀有 → 传奇），同稀有度保持 PlayerSkillDefs.All 原序（稳定排序）。
+    // 稀有度唯一真源 = SkillDraftMeta；每次打开弹窗重建一次映射（表可被 Reload）。
+    // 存档仍按技能 id 存（selectedPlayerSkillId），槽序变化不影响持久化。
+    int[] _slotToAll;
+
+    void RebuildSlotOrder()
+    {
+        var all = PlayerSkillDefs.All;
+        int n = Mathf.Min(MaxSkills, all != null ? all.Length : 0);
+        var idx = new List<int>(n);
+        for (int i = 0; i < n; i++) idx.Add(i);
+        idx.Sort((a, b) =>
+        {
+            int ra = (int)SkillDraftMeta.Rarity(all[a].id);
+            int rb = (int)SkillDraftMeta.Rarity(all[b].id);
+            return ra != rb ? ra - rb : a - b;
+        });
+        _slotToAll = new int[MaxSkills];
+        for (int slot = 0; slot < MaxSkills; slot++)
+            _slotToAll[slot] = slot < idx.Count ? idx[slot] : -1;
+    }
+
+    /// <summary>槽位 → 技能定义（空槽 / 未映射返回 null）。</summary>
+    PlayerSkillDefs.Def DefOfSlot(int slot)
+    {
+        if (_slotToAll == null) RebuildSlotOrder();
+        int allIdx = (slot >= 0 && slot < _slotToAll.Length) ? _slotToAll[slot] : -1;
+        return allIdx >= 0 ? PlayerSkillDefs.Get(allIdx) : null;
+    }
+
+    /// <summary>PlayerSkillDefs.All 下标 → 槽位；查不到（抽卡池专属技等）回退 0。</summary>
+    int SlotOfAllIndex(int allIdx)
+    {
+        if (_slotToAll == null) RebuildSlotOrder();
+        for (int slot = 0; slot < _slotToAll.Length; slot++)
+            if (_slotToAll[slot] == allIdx) return slot;
+        return 0;
+    }
+
     void RefreshSlots()
     {
         var data = SaveSystem.Instance?.Data;
-        for (int i = 0; i < MaxSkills && i < PlayerSkillDefs.All.Length; i++)
+        for (int i = 0; i < MaxSkills; i++)
         {
-            var def = PlayerSkillDefs.All[i];
+            var def = DefOfSlot(i);
+            if (def == null) continue;
             bool unlocked = PlayerSkillDefs.IsUnlocked(def, data);
             if (skillNames[i] != null)
                 skillNames[i].text = def.displayName;

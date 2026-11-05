@@ -28,6 +28,7 @@ public partial class WavePlanner
     /// 【2026-10-25 主人拍板】正式关每回合波数：全章**定表**（不随机摇）——
     /// ch1=1/2/3、ch2=2/3/4、ch3 起=3/4/5（GameConfig.FormalRoundWaveFixedCounts，公式 = 基数 + 回合下标）。
     /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.2「按章区间随机摇」口径作废（Min/Max 已删）；
+    /// 【2026-11-05】Σ 还要减去 FORMAL_ROUND_WAVE_CUT（末回合扣，见函数内）；Ch3+ 双段爆发会补回 1 波。
     /// v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」更早作废（常量保留退役）。
     /// </summary>
     static int[] RollFormalRoundWaveCounts(int chapter)
@@ -36,6 +37,14 @@ public partial class WavePlanner
         int[] counts = GameConfig.FormalRoundWaveFixedCounts(chapter);
         if (counts.Length != rounds)
             Debug.LogError($"[WavePlanner] 回合波数定表长度 {counts.Length} ≠ 回合数 {rounds}（ch{chapter}），请核对 FormalRoundWaveFixedCounts");
+        // 【2026-11-05 主人拍板】所有关卡波次减 1~2 波：从最后一回合扣（保底 1 波），前两回合不动
+        // → 3 回合结构与回合末标记 isRoundEnd 不变；正式主线关普通 / 精英 / Boss 共用本出口。
+        // Ch3+ 的「双段爆发」会在第 3 波后补插 1 波，净减 1 波，正好落在 1~2 波区间。
+        if (counts.Length > 0)
+        {
+            int cut = Mathf.Clamp(GameConfig.FORMAL_ROUND_WAVE_CUT, 0, Mathf.Max(0, counts[counts.Length - 1] - 1));
+            counts[counts.Length - 1] -= cut;
+        }
         return counts;
     }
 
@@ -296,6 +305,8 @@ public partial class WavePlanner
             }
         }
 
+        // 【2026-11-05 主人拍板】词条怪每关配额：铺完波按曲线摊名额（先于事件层；事件改怪数只会让名额更宽松）
+        InitAffixQuota(stageIdx);
         PlanStageEvents();
         _totalWaves = _waves.Count;
         string tag = elite ? "精英关" : "普通关";
@@ -734,6 +745,8 @@ public partial class WavePlanner
             bossPressureInterval = pressureInterval,
             bossPressureCap = pressureCap
         });
+        // 【2026-11-05 主人拍板】Boss 关小怪波同样吃词条怪配额（Boss 本体波不插，见 InitAffixQuota）
+        InitAffixQuota(stageIdx);
         PlanStageEvents();
         _totalWaves = _waves.Count;
         string bossModeTag = string.IsNullOrEmpty(_stageModeName) ? "无模式(旧逻辑)" : $"模式={_stageModeName}";

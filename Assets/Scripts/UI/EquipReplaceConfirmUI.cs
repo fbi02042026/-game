@@ -300,6 +300,9 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             Sprite sp = eq != null ? EquipIcons.Resolve(eq) : null;
             icon.sprite = sp;
             icon.enabled = sp != null;
+            // 2026-11-05 主人指令：传奇（金色）装备图标挂 SSU Shine 流光（空栏/普通件回默认材质）。
+            // 弹窗是 DDOL 复用的，每次 Fill 都会走到这里，材质随品质正确复位。
+            EquipRarityMaterials.Apply(icon, eq?.rarity);
         }
 
         // 2026-10-14 主人拍板：Iconbg（装备格子框）按装备稀有度换图，三色三档。

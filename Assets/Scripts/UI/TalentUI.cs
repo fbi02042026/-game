@@ -109,9 +109,9 @@ public partial class TalentUI : MonoBehaviour
     bool _wired;
     bool _listsBuilt;
 
-    // 右列「开通演出」（2026-10-13 主人拍板）：左列点数跨过门槛（10/20/30/40）时，
-    // 对应那批右列节点「暗→亮 + 放大缩小」提示玩家。⚠ 只在 OnClickLeft 里触发一次，
-    // 打开界面 / 重复刷新都不重播（RefreshRight 不碰这两个字段）。
+    // 右列「开通演出」（2026-10-13 主人拍板；【2026-11-05】触发源改人物升级：右列门槛改挂人物等级、
+    // 门槛档位 20/30/40）——人物等级跨过门槛时对应那批右列节点「暗→亮 + 放大缩小」提示玩家。
+    // ⚠ 打开界面 / 重复刷新都不重播（RefreshRight 不碰这两个字段）。
     Coroutine _rightUnlockFx;
     readonly List<RightNodeView> _fxBatch = new List<RightNodeView>();
 

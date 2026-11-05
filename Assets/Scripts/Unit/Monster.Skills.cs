@@ -11,6 +11,12 @@ public partial class Monster
     private float _skillEnergy = 0f;
     private float _skillCooldown = 0f;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
+    /// <summary>
+    /// 【2026-11-05 主人拍板「近战 boss 不要出现闪现」】Init 时表给的原始攻击风格（掷骰前），终身不变。
+    /// 精英 / Boss 掷骰成魔法型会把 _attackStyle 强制改 Ranged，若按它判「远程专属」，表上是近战的
+    /// Boss 也会遁走闪现。瞬移遁走只认 _baseAttackStyle：Melee 一律不闪现，Bow / Ranged 照旧。
+    /// </summary>
+    MonsterAttackStyle _baseAttackStyle = MonsterAttackStyle.Melee;
     bool _skillTelegraphing;
     /// <summary>【2026-10-20 保险】演出协程冻场等待上限（真实秒）：连续冻结超过该时长视为冻场异常，
     /// 放弃本次技能演出并走 finally 清理标志，绝不让 _skillTelegraphing/_leaping 卡死成永久站桩。
@@ -360,7 +366,10 @@ public partial class Monster
     bool TryBlinkAwayIfCrowded()
     {
         // 远程专属：近战怪靠贴脸砍，永不遁走（2026-10-20 主人拍板）
-        if (!MonsterAttackStyleTable.IsRanged(_attackStyle)) return false;
+        // 【2026-11-05 主人拍板「近战 boss 不要出现闪现」】判据改用表给的原始风格（掷骰前）：
+        // 精英 / Boss 掷骰成魔法型会把 _attackStyle 强制改 Ranged，按它判会让近战 Boss 也闪现。
+        // _baseAttackStyle 记住表 style，Melee 一律不遁走；Bow / Ranged 的远程精英与 Boss 照旧。
+        if (!MonsterAttackStyleTable.IsRanged(_baseAttackStyle)) return false;
         // 【2026-10-20 主人拍板】远程小怪不带瞬移：只有远程精英/Boss 保留遁走技
         if (!_isBossUnit && !_eliteWave) return false;
         if (_blinkCd > 0f) return false;

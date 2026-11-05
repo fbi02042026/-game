@@ -324,6 +324,11 @@ public class QuestBarBinder : MonoBehaviour
     void Refresh()
     {
         if (SaveSystem.Instance == null || SaveSystem.Instance.Data == null) return;
+        // 【2026-11-05 主人重申「当有支线任务的时候支线任务条会出来」】派定补掷入口 +1：
+        // EnsureForkRoll 自身幂等（门槛未开 / 已派满 / 岛1未通 直接 return，绝不重复掷），
+        // 老档 / 错过「通关第 1 章战斗派定点」的存档，任务栏一刷即补派 —— 支线行当拍就能出来，
+        // 不再只依赖「打开冒险页 / 世界地图」两个补掷入口（0.5s 轮询 + 幂等护栏，非每帧查询函数）。
+        ChapterRouteTable.EnsureForkRoll(SaveSystem.Instance.Data);
         var snap = QuestBarData.Build();
 
         if (_mainText != null)

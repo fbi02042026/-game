@@ -80,6 +80,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 icon.sprite = null;
                 icon.enabled = false;
                 icon.color = Color.white;
+                MercRarityFx.ApplyPortraitShine(icon, null);   // 清格时材质一并复位
             }
             if (nameT != null)
             {
@@ -124,6 +125,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             icon.sprite = sp;
             icon.enabled = sp != null;
             icon.color = Color.white;
+            MercRarityFx.ApplyPortraitShine(icon, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光
         }
         // 【2026-10-20 主人拍板】名字颜色与稀有度对齐（RarityPalette），与下方已拥有/未拥有列表卡同口径
         if (nameT != null)

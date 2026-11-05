@@ -3,7 +3,8 @@ using UnityEngine;
 /// <summary>
 /// 等级系统（2026-10-25 复活，主人拍板「升级提示 + 每个职业提升不同的一个属性」）：
 /// · 经验来源 = 【2026-10-25 主人拍板「玩家升级按完成的一次关卡给一次经验，目前只有主线和支线给」】
-///   完成一次关卡给一次（35 + 章递增，与 HiddenLevelSystem 同源同量）；击杀不喂经验（旧 AddKillExp 已删，
+///   完成一次关卡给一次（90 + 章递增 12；2026-11-05 主人拍板「关卡经验给太少」与隐藏等级经验解耦、单独调参）；
+///   击杀不喂经验（旧 AddKillExp 已删，
 ///   HiddenLevelSystem 隐藏账照旧只管裂缝掉落稀有度）；白名单 = 主线 Normal / 终章追查 Finale / 支线岛 SideIsland，
 ///   活动副本（金币/徽记/卷轴）、无限裂隙、引导局一律不给（单一出口见 StageFeedsExp）；
 /// · 账本 = 【2026-10-25 矫正】真源在存档（SaveData.playerLevel/playerExp），跨关卡/跨章累计。
@@ -15,9 +16,15 @@ using UnityEngine;
 /// </summary>
 public static class LevelSystem
 {
-    public static int GetExpForLevel(int level) => 50 + level * 20;
+    /// <summary>升到 level 级所需经验【2026-11-05 主人拍板「前期生的快后期慢」】60+30*lv+lv*lv/2（线性+二次项）：
+    /// 1→2 只要 90（打完 1-1 升 1 级），后期二次变贵（79→80 要 5,550）；累计到 80 级总需 183,260，
+    /// 对齐主线供给 169,260 + 任务 ≈13,400（见 GameConfig.Progression）→ 主线全通+几天日常正好 80。</summary>
+    public static int GetExpForLevel(int level) => 60 + level * 30 + level * level / 2;
 
-    public const int MaxLevel = 40;                 // 2026-10-30 主人拍板：满级封顶，避免属性溢出
+    public const int MaxLevel = 80;                 // 【2026-11-05 主人拍板「玩家可以满80级」】40→80：配合左列 80 节点严格一级开一个；
+                                                    // 倾向属性每级 +1 → 满级 +79（后期难度变软，怪物数值待实测校准）；
+                                                    // 经验曲线 60+30lv+lv²/2 → 满级总需 183,260；
+                                                    // 主线 169,260+日常 ≈13,400 即可满级（不打困难噩梦也到 80），困难噩梦=加速项（见 GameConfig.Progression）。
     public const int ExpOverflowGoldPerExp = 5;      // 满级后每点溢出经验转金币数（可调）
 
     /// <summary>玩家当前等级（存档真源；无存档回落 1）。名牌/抽卡/蓝量等只读消费统一走这里。</summary>
@@ -128,7 +135,10 @@ public static class LevelSystem
         }
     }
 
-    /// <summary>通关经验：与 HiddenLevelSystem.AddStageClearExp 同量（35 + 章递增）。每完成一次关卡调一次。</summary>
+    /// <summary>通关经验：每打完**一个小关**（1-1 这种）调一次（BeginRewardSequence 每小关走一遍）。
+    /// 【2026-11-05 主人拍板「1-1升1级、1-2升1级、1-3和1-4合计升1级」】普通 110+32×(章-1)（第1大关 110=恰好升1级），
+    /// 困难 150+42×(章-1)、噩梦 190+52×(章-1)（每档都高于前一难度同章）；
+    /// 主线 169,260+日常 13,400 ≈ 曲线 cum(80)=183,260 → 不打困难噩梦也能满级，困难噩梦只是加速项。</summary>
     public static void AddStageClearExp(int chapter)
     {
         if (!StageFeedsExp) return;
@@ -141,8 +151,25 @@ public static class LevelSystem
         }
 
         int before = Mathf.Max(1, data.playerLevel);
-        int exp = GameConfig.HIDDEN_EXP_STAGE_CLEAR
-            + Mathf.Max(0, chapter - 1) * GameConfig.HIDDEN_EXP_STAGE_CLEAR_PER_CHAPTER;
+        // 本局难度：0 普通 / 1 困难 / 2 噩梦（与 ChapterManager 难度隔离同一真源）
+        int diff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
+        int baseExp, perChapter;
+        if (diff <= 0)
+        {
+            baseExp = GameConfig.PLAYER_EXP_STAGE_CLEAR;
+            perChapter = GameConfig.PLAYER_EXP_STAGE_CLEAR_PER_CHAPTER;
+        }
+        else if (diff == 1)
+        {
+            baseExp = GameConfig.PLAYER_EXP_HARD_STAGE_CLEAR;
+            perChapter = GameConfig.PLAYER_EXP_HARD_STAGE_CLEAR_PER_CHAPTER;
+        }
+        else
+        {
+            baseExp = GameConfig.PLAYER_EXP_NIGHTMARE_STAGE_CLEAR;
+            perChapter = GameConfig.PLAYER_EXP_NIGHTMARE_STAGE_CLEAR_PER_CHAPTER;
+        }
+        int exp = baseExp + Mathf.Max(0, chapter - 1) * perChapter;
 
         data.playerExp += exp;
         bool leveled = false;
@@ -167,6 +194,9 @@ public static class LevelSystem
 
         // 立刻落盘：升级是关键进度，不靠下一笔存档兜
         SaveSystem.Instance?.Save();
+
+        // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
+        TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
 
         // 反馈：英雄脚下 Level Up 特效（结算时刻英雄还在场）。恭喜升级弹窗不在这里弹——
         // 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】只挂起，Town 就绪后由
@@ -217,6 +247,8 @@ public static class LevelSystem
         // 立刻落盘：升级是关键进度，不靠下一笔存档兜
         SaveSystem.Instance?.Save();
 
+        // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
+        TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
         LevelUpPopup.FlushPending();   // 城镇已就绪（任务栏轮询只在城镇跑），立即弹，不挂起到下次回城
     }
@@ -252,7 +284,12 @@ public static class LevelSystem
             SaveSystem.Instance?.Save();
         }
         SaveSystem.Instance?.Save();
-        if (leveled) LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+        if (leveled)
+        {
+            LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+            // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
+            TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
+        }
     }
 
     // ============================================================

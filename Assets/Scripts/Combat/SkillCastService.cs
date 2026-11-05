@@ -131,7 +131,9 @@ public sealed class SkillCastService
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
         // VFX 仍走别名：SkillRegistry 是按 SO 装配的 ally_* id 索引特效的，换成真 id 会丢特效。
-        SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.GetVfxFacingDir(), vfxAttach);
+        // 移动判定 AOE（MoveAoe）：VFX 由 MoveAoeExecutor 挂在移动锚点上随行，不在这里钉在施法者身上
+        if (skill.skillType != SkillSystem.SkillType.MoveAoe)
+            SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.GetVfxFacingDir(), vfxAttach);
 
         // #region agent log
         DebugAgentLog.Log("H5", "BattleManager.TryUsePlayerSkill", "skill_vfx_facing",
@@ -284,8 +286,10 @@ public sealed class SkillCastService
             float dx = vfxTo.x - vfxFrom.x;
             if (Mathf.Abs(dx) > 0.05f) face = dx > 0f ? 1 : -1;
         }
-        SkillRegistry.Instance?.PlaySkillVfx(
-            skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
+        // 移动判定 AOE（MoveAoe）：VFX 随 MoveAoeExecutor 锚点走，不钉在命中点
+        if (skill.skillType != SkillSystem.SkillType.MoveAoe)
+            SkillRegistry.Instance?.PlaySkillVfx(
+                skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
 
         // 左侧技能释放通知：佣兵与玩家共用一侧，图标走 merc_skills 表
         SkillCastNotifyController.PushMercSkill(merc.mercId, merc.DisplayName, skill.skillId, skill.skillName);

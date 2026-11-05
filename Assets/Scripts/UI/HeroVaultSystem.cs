@@ -308,8 +308,13 @@ public static class HeroVaultSystem
         // 绝不 return 挡后面的条目 —— 原来洛恩碎片要 11 格装不下就整条 return，
         // 排在后面的徽记/天赋石/卷轴全被掐死（仓库还有空格也铺不上去）。
         // 放不下的仍由 TryAddDisplay 内部 LogWarning（不静默吞），继续铺下一条。
+        // 【2026-11-05 根治】收集层只传展示位类型语义，±5% 的像素倍率真源在
+        // BackpackGridVisual.IconScaleByKind 一处；category 0..4 -> DisplayIconKind 1..5，None=0 保留给非展示位。
         foreach (var e in entries)
-            TryAddDisplay(result, occupied, rows, e.name, e.info, e.icon, e.count, e.fragHireId);
+        {
+            var kind = (BackpackGridVisual.DisplayIconKind)(e.category + 1);
+            TryAddDisplay(result, occupied, rows, e.name, e.info, e.icon, e.count, e.fragHireId, kind);
+        }
     }
 
     /// <summary>本命碎片稀有度排序档（高 = 更稀有）：传奇 2 / 稀有 1 / 普通 0；识别不出按普通。</summary>
@@ -334,7 +339,8 @@ public static class HeroVaultSystem
     /// fragHireId 非空 = 本命碎片展示位，铺格时实例化主人的碎片预制体叠佣兵头像。
     /// </summary>
     static bool TryAddDisplay(List<BackpackGridVisual.ItemPlacement> result, bool[,] occupied, int rows,
-        string name, string info, Sprite icon, int count, string fragHireId = null)
+        string name, string info, Sprite icon, int count, string fragHireId = null,
+        BackpackGridVisual.DisplayIconKind iconKind = BackpackGridVisual.DisplayIconKind.None)
     {
         const int PerCellCap = 99;
         int remaining = Mathf.Max(1, count);
@@ -363,7 +369,8 @@ public static class HeroVaultSystem
                 {
                     x = rx + c, y = ry, w = 1, h = 1,
                     displayName = name, displayInfo = info, displayIcon = icon, displayCount = chunk,
-                    displayFragHireId = fragHireId
+                    displayFragHireId = fragHireId,
+                    displayIconKind = iconKind
                 });
             }
             return true;
@@ -385,7 +392,8 @@ public static class HeroVaultSystem
             {
                 x = px, y = py, w = 1, h = 1,
                 displayName = name, displayInfo = info, displayIcon = icon, displayCount = chunk,
-                displayFragHireId = fragHireId
+                displayFragHireId = fragHireId,
+                displayIconKind = iconKind
             });
         }
         return true;

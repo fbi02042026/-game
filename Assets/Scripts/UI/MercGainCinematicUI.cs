@@ -239,6 +239,7 @@ public class MercGainCinematicUI : MonoBehaviour
                            "（Resources/Icons/MercStand/ 下缺图，需主人补图）");
         img.sprite = sp;
         img.enabled = sp != null;
+        MercRarityFx.ApplyPortraitShine(img, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光
     }
 
     /// <summary>

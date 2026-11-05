@@ -50,7 +50,7 @@ public partial class TalentUI
     /// 【2026-10-14 主人拍板】序号改用**主人在模板里摆好的 Number 节点**（主人原话「我在天赋界面的
     /// 左列加了个Number节点 把每行的数字加上」）——位置/字号/颜色底全按预制体，代码只填文本；
     /// 旧的运行时建 OrderText + 手调坐标那套（21:51 那版）整段删除。
-    /// 门槛行（配表 unlockLeftIndex）金色、普通行灰的配色规则保留（10-13 口径）。
+    /// 【2026-11-05 拍板】右列门槛改挂人物等级 → 原「门槛行金色」配色废除，序号统一灰。
     /// ⚠ 序号 = TalentDefs.Left 的次序 i+1；reverseArrangement 只影响视觉上下，不影响编号。
     /// </summary>
     void EnsureLeftOrderLabel(LeftNodeView v, int index0)
@@ -70,9 +70,8 @@ public partial class TalentUI
 
         int no = index0 + 1;
         v.orderText.text = "L" + no;
-        v.orderText.color = IsLeftMilestone(no)
-            ? new Color(1f, 0.84f, 0.3f)          // 门槛行：金色，给玩家盼头
-            : new Color(0.80f, 0.80f, 0.82f, 1f); // 普通行：灰
+        // 【2026-11-05 拍板】右列门槛改挂人物等级、与左列解耦 →「门槛行金色」失去意义，序号统一灰色。
+        v.orderText.color = new Color(0.80f, 0.80f, 0.82f, 1f);
     }
 
     RightNodeView BindRightNode(GameObject go, int visualIndex0, TalentDefs.TalentRightNode node)
@@ -184,7 +183,7 @@ public partial class TalentUI
     }
 
     /// <summary>合并行刷新：标题/费用/锁/菱形/连线/置灰/红点/「新」/选项槽置灰，口径与普通行同源。</summary>
-    void RefreshMutexPairRow(RightNodeView v, Dictionary<string, int> talents, int leftUnlocked)
+    void RefreshMutexPairRow(RightNodeView v, Dictionary<string, int> talents, int playerLv)
     {
         var n1 = v.node;
         var n2 = v.node2;
@@ -196,7 +195,8 @@ public partial class TalentUI
         bool picked = lv1 > 0 || lv2 > 0;
         var pickedNode = lv1 > 0 ? n1 : (lv2 > 0 ? n2 : null);
         int pickedLv = lv1 > 0 ? lv1 : lv2;
-        bool thresholdLocked = !picked && leftUnlocked < n1.unlockLeftIndex;
+        // 【2026-11-05 拍板】门槛/上限 = 人物等级（旧口径 = 左列已点数，已废除）
+        bool thresholdLocked = !picked && playerLv < n1.unlockLeftIndex;
 
         if (v.titleText != null)
             v.titleText.text = pickedNode != null
@@ -206,9 +206,9 @@ public partial class TalentUI
         {
             if (pickedNode != null)
             {
-                int cap = TalentDefs.RightNodeLevelCap(pickedNode, leftUnlocked);
+                int cap = TalentDefs.RightNodeLevelCap(pickedNode, playerLv);
                 if (pickedLv >= pickedNode.maxLevel) v.costText.text = "MAX";
-                else if (pickedLv >= cap) v.costText.text = "Lv" + cap + " (左列↑)";
+                else if (pickedLv >= cap) v.costText.text = "升到" + TalentDefs.LevelNeededForNextLevel(pickedNode, pickedLv) + "级可升级";   // 【2026-11-05 拍板】门槛改人物等级
                 else
                 {
                     int upCost = pickedNode.costByLevel != null && pickedLv < pickedNode.costByLevel.Length
@@ -219,7 +219,7 @@ public partial class TalentUI
             else
             {
                 int cost = n1.costByLevel != null && n1.costByLevel.Length > 0 ? n1.costByLevel[0] : 0;
-                v.costText.text = thresholdLocked ? "左列 L" + n1.unlockLeftIndex : "解锁 " + cost;
+                v.costText.text = thresholdLocked ? "Lv" + n1.unlockLeftIndex + " 解锁" : "解锁 " + cost;
             }
         }
 
@@ -261,7 +261,7 @@ public partial class TalentUI
             }
             else
             {
-                int cap = TalentDefs.RightNodeLevelCap(pickedNode, leftUnlocked);
+                int cap = TalentDefs.RightNodeLevelCap(pickedNode, playerLv);
                 if (pickedLv < pickedNode.maxLevel && pickedLv < cap)
                 {
                     int upCost = pickedNode.costByLevel != null && pickedLv < pickedNode.costByLevel.Length
@@ -273,8 +273,8 @@ public partial class TalentUI
         SetRowRedDot(v.root, ref v.redDot, canAct);
 
         // 「新」：两口子任一是新就算（口径与普通行同源 TalentDefs.IsNewlyOpen）
-        bool isNew = TalentDefs.IsNewlyOpen(n1, talents, leftUnlocked)
-                     || TalentDefs.IsNewlyOpen(n2, talents, leftUnlocked);
+        bool isNew = TalentDefs.IsNewlyOpen(n1, talents, playerLv)
+                     || TalentDefs.IsNewlyOpen(n2, talents, playerLv);
         SetRowNewTag(v.root, ref v.newTag, isNew);
 
         // 选项槽：已选另一流派 → 这侧置灰表达互斥（门槛锁由整行 CanvasGroup 统一压暗，不再叠加）

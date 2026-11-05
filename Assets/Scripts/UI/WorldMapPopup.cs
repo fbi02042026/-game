@@ -441,19 +441,15 @@ public class WorldMapPopup : MonoBehaviour, UnityEngine.EventSystems.IPointerDow
         return IsCleared(chapterId);
     }
 
-    /// <summary>该章是否已通关（任意难度口径，普通难度地块暗显用）。</summary>
+    /// <summary>该章是否已通关（任意难度口径，普通难度地块暗显用）。
+    /// 【2026-11-05 主人拍板】只认「已解锁集合」——已解锁即视为通关展示，不回退。
+    /// 🔴 已删除 chapterClearCounts(clearCount&gt;0) 兜底：B2 起它记的是「大关通关次数」，
+    /// 只通 4 座大关的第 1 篇会被误判「整章已通关」（误标来源，彻底删除）。</summary>
     static bool IsCleared(int chapterId)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null) return false;
-        if (data.HasClearedChapter(chapterId)) return true;
-        if (data.chapterClearCounts == null) return false;
-        for (int i = 0; i < data.chapterClearCounts.Count; i++)
-        {
-            var e = data.chapterClearCounts[i];
-            if (e != null && e.chapter == chapterId && e.clearCount > 0) return true;
-        }
-        return false;
+        return data.HasClearedChapter(chapterId);
     }
 
     // ============================================================

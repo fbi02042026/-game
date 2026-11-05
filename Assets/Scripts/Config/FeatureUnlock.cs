@@ -178,9 +178,11 @@ public static class FeatureUnlock
     // 内部
     // ────────────────────────────────────────────────────────────────
 
-    /// <summary>第 1 篇已通关大关数是否 ≥ 门槛（裂隙 / 世界地图 / 支线岛共用）。</summary>
+    /// <summary>第 1 篇已通关大关数是否 ≥ 门槛（裂隙 / 世界地图 / 支线岛共用）。
+    /// 🔴 一律从 clearedStages 实时推导（DerivedGrandProgressFromClearedStages），不读 grandProgress 缓存——
+    /// 缓存可能脏导致还没打完就提前解锁。同 ChapterManager.StartChapter / OnStageComplete 口径。</summary>
     static bool GrandCleared(SaveData data, int grandGate)
-        => data != null && data.GrandClearedCount(1) >= grandGate;
+        => data != null && data.DerivedGrandProgressFromClearedStages(1) >= grandGate;
 
     /// <summary>第 chapter 章是否已通关（招募 / 情报 / 进阶 / 羁绊共用）。</summary>
     static bool ChapterCleared(SaveData data, int chapter)

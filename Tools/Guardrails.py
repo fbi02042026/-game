@@ -325,9 +325,56 @@ def check_g7_ui_fit_location():
             warn(name, "新增了通用适配文件 %s —— 适配请写在各界面自己的脚本里（第 0.1 节）" % f)
 
 
+
+# ---------------------------------------------------------------------------
+# G8 UI 单一写入者（2026-11-05 主人「彻底根治、不要反复打补丁」）
+#     背景：邮件标题重叠 / 头像列表偏移 / 恭喜升级属性行不齐 / 任务弹窗排版，
+#     历史上反复出现，根因都是「预制体摆一套几何/字体，运行时代码再覆盖一套」。
+#     今天已把真源收敛到 prefab + BackpackGridVisual.IconScaleByKind 一张表，
+#     并删掉所有运行时纠正层；这里钉住「纠正层不许回来」。
+#     prefab 的几何/字体数值不变式由 Assets/Editor/UiLayoutInvariantSelfCheck.cs
+#     （Tools/自检/UI 布局不变式）用引擎 API 校验，两边分工不重复。
+# ---------------------------------------------------------------------------
+def check_g8_ui_single_writer():
+    name = "G8 UI 单一写入者"
+
+    def read(rel):
+        p = os.path.join(ROOT, rel.replace("/", os.sep))
+        if not os.path.exists(p):
+            return None
+        try:
+            return open(p, "rb").read().decode("utf-8", "ignore")
+        except Exception:
+            return None
+
+    mail = read("Assets/Scripts/UI/MailListUI.cs")
+    if mail and "GetWorldCorners" in mail and "sizeDelta" in mail:
+        err(name, "MailListUI.cs 又出现「世界坐标算差写进 sizeDelta」的运行时几何纠正层"
+                  "（不同分辨率必然复发）；标题几何真源只在 MailListWindow.prefab")
+
+    level_up = read("Assets/Scripts/UI/LevelUpPopup.cs")
+    if level_up and ("UnifyRowTextStyle" in level_up or "t.fontSize = 36" in level_up):
+        err(name, "LevelUpPopup.cs 又出现运行时字体/字号纠正层；"
+                  "第二行字体与字号真源只在 恭喜升级.prefab")
+
+    avatar = read("Assets/Scripts/UI/AvatarSelectPopup.cs")
+    if avatar and ("ViewLeftInset" in avatar or "ListShiftX" in avatar):
+        err(name, "AvatarSelectPopup.cs 又出现左右偏移常量（11-03 / 11-05 反复三次）；"
+                  "视口应恒等于 panl 全宽，每行居中")
+
+    bgv = read("Assets/Scripts/UI/BackpackGridVisual.cs")
+    if bgv and ("displayIconScaleDelta" in bgv or "static readonly float[] IconScaleByKind" not in bgv):
+        err(name, "BackpackGridVisual.cs 的展示位图标缩放真源被拆散；"
+                  "应只有 IconScaleByKind 一张表，收集层只传 DisplayIconKind")
+
+    quest = read("Assets/Scripts/UI/AdventureLogUI.cs")
+    if quest and quest.count("taskLayout: true") != 2:
+        err(name, "主线/支线任务弹窗的 taskLayout: true 应恰好 2 处，实为 %d；"
+                  "排版会被改回通用布局" % quest.count("taskLayout: true"))
+
 CHECKS = [check_g1_job_icon, check_g2_singleton, check_g3_prefab,
           check_g4_fallback_inventory, check_g5_new_singleton, check_g6_new_playerprefs,
-          check_g7_ui_fit_location]
+          check_g7_ui_fit_location, check_g8_ui_single_writer]
 
 
 def main():
