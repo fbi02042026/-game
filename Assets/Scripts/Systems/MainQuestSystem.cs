@@ -204,6 +204,105 @@ public static class MainQuestSystem
         return list;
     }
 
+    /// <summary>
+    /// 当前这一条挑战（线性链：困难 1→8）。
+    /// 「当前」= 链上第一条**还没结算过**的（mainQuestDone 里没有它），**不是**「进度未达成」——
+    /// 否则玩家刚打完、Tick 还没发奖时就会被跳过，直接漏发一条。
+    /// 全链做完返回 null。调用前会先做老档基线（<see cref="EnsureChallengeBaseline"/>）。
+    /// </summary>
+    public static MainQuestDef? CurrentChallenge()
+    {
+        EnsureChallengeBaseline();
+        var arr = MainQuestDefs.Challenge;
+        for (int i = 0; i < arr.Length; i++)
+            if (!IsDoneId(arr[i].id)) return arr[i];
+        return null;
+    }
+
+    /// <summary>
+    /// 【2026-11-05 主人拍板】挑战链结算：只从「当前这条」开始检测，达成 → 立即完成 + 弹提示 + 发金币，
+    /// 再推进到下一条；下一条若也已达成则连锁处理，每条只发一次（Complete 里靠 mainQuestDone 去重）。
+    /// 未达成就立刻停，**不会扫后面未轮到的挑战**（避免玩家先打噩梦几章就跳过前面）。
+    /// 调用时机：Tick（每 0.5s）+ 任务面板要渲染挑战小节之前（「轮到即出现」时结算）。
+    /// </summary>
+    public static void SettleChallengeChain()
+    {
+        EnsureChallengeBaseline();
+        var arr = MainQuestDefs.Challenge;
+        while (true)
+        {
+            MainQuestDef? cur = null;
+            for (int i = 0; i < arr.Length; i++)
+            {
+                if (!IsDoneId(arr[i].id)) { cur = arr[i]; break; }
+            }
+            if (!cur.HasValue) return;                       // 全链完成
+            if (ProgressOf(cur.Value) < NeedOf(cur.Value)) return;   // 当前这条还没达成
+            Complete(cur.Value);
+        }
+    }
+
+    /// <summary>
+    /// 面板用：**同一时间只返回一条**（当前这条挑战），未轮到的完全不显示。
+    /// 与主线链无关，也不占主线「本章 X/Y」计数。
+    /// </summary>
+    public static List<MainQuestView> ChallengeViews()
+    {
+        var list = new List<MainQuestView>();
+        var cur = CurrentChallenge();
+        if (!cur.HasValue) return list;
+
+        var def = cur.Value;
+        int need = NeedOf(def);
+        list.Add(new MainQuestView
+        {
+            def = def,
+            need = need,
+            progress = Math.Min(need, ProgressOf(def)),
+            done = false,
+            isCurrent = false
+        });
+        return list;
+    }
+
+    const string CHALLENGE_BASELINE_ID = "__challenge_baseline_v1";
+
+    /// <summary>
+    /// 【2026-11-05 主人拍板】挑战任务的一次性「启用基线」。
+    ///
+    /// 背景：挑战完成判定读难度真源（clearedStageDiffKeys），老档里历史已通的困难章末立刻满足；
+    /// 若直接结算，首次进游戏会一次性补发最多 8 条金币（合计 1224）。
+    ///
+    /// 口径：本版本第一次接触挑战体系时（面板打开 / Tick），把**此刻已经达成**的挑战
+    /// 静默记进 mainQuestDone（只标已结算，**不发奖、不弹 toast、不埋点**），
+    /// 再用哨兵 id 记「基线已做」。之后（启用后）新打通的（包括超前打的）才轮到即结算发奖。
+    /// 玩家侧表现：老档首进不会看到任何挑战金币；代价是历史通关不再补发
+    /// ——宁可少发一次，也不要在老档里一次性注入一笔钱（经济会失真）。
+    /// 老档兼容：不新增存档字段，只用 mainQuestDone 里一个哨兵 id；
+    /// 字段缺失（老档/旧版本）就按「历史全部算已结算」处理，正是我们要的。
+    /// 新档同样走这一步，但此时一条都没达成，等价于空操作。
+    /// </summary>
+    static void EnsureChallengeBaseline()
+    {
+        EnsureMigrated();
+        var d = Data;
+        if (d == null) return;
+        if (d.mainQuestDone == null) d.mainQuestDone = new HashSet<string>();
+        if (d.mainQuestDone.Contains(CHALLENGE_BASELINE_ID)) return;
+
+        var challenge = MainQuestDefs.Challenge;
+        for (int i = 0; i < challenge.Length; i++)
+        {
+            var def = challenge[i];
+            if (string.IsNullOrEmpty(def.id)) continue;
+            if (d.mainQuestDone.Contains(def.id)) continue;
+            if (ProgressOf(def) >= NeedOf(def))
+                d.mainQuestDone.Add(def.id);   // 静默标记：不发奖、不弹提示、不埋点
+        }
+        d.mainQuestDone.Add(CHALLENGE_BASELINE_ID);
+        Persist();   // 哨兵必须落盘，否则下次启动会再跑一遍
+    }
+
     /// <summary>当前该做的那一条；本章全做完（或未配表）返回 null。</summary>
     public static MainQuestView CurrentView()
     {
@@ -220,7 +319,9 @@ public static class MainQuestSystem
         if (IsDoneId(def.id)) return true;
 
         // 整章已通关 → 该章任务一律算完成，避免老玩家被非战斗任务卡住
-        if (IsChapterCleared(def.chapter)) return true;
+        // 🔴 2026-11-05 只对普通任务生效：挑战任务（difficulty>0）必须按难度真源逐条判定，
+        //    否则「普通第 X 章通关」会把该章困难/噩梦挑战直接白送（普通任务口径零变化）。
+        if (def.difficulty <= 0 && IsChapterCleared(def.chapter)) return true;
 
         return ProgressOf(def) >= NeedOf(def);
     }
@@ -233,7 +334,9 @@ public static class MainQuestSystem
 
     /// <summary>
     /// 各类任务的完成判定：
-    ///   ClearStage    → 存档 clearedStages 里有没有 "章_关卡下标"（现成字段，不新增持久化）
+    ///   ClearStage    → 普通任务读 clearedStages（"章_关卡下标"）；
+    ///                   挑战任务（difficulty&gt;0，2026-11-05）读难度真源 clearedStageDiffKeys
+    ///                   （<see cref="SaveData.HasStageClearedAtDiff"/>），普通进度不能替难度结算
     ///   TalkNpc       → 播完对话后 NotifyTalk 写计数
     ///   （WatchStory 已废：2026-11-01 主人拍板「不要回顾剧情这个模式」，任务行全删，见 NotifyTalk 下方注）
     ///   RecruitMerc   → 已解锁佣兵数 - 接任务时的基线（不入侵 TavernUnlockUI，只轮询）
@@ -250,6 +353,10 @@ public static class MainQuestSystem
             case MainQuestType.ClearStage:
             {
                 int idx = MainQuestDefs.StageIndexOf(def);
+                // 【2026-11-05】难度真源分支：困难/噩梦挑战只认该难度下的通关记录，
+                // 不读普通 clearedStages（两套进度互不顶替，与 ChapterManager/AdventureUI 同一口径）。
+                if (def.difficulty > 0)
+                    return d.HasStageClearedAtDiff(def.chapter, idx, def.difficulty) ? 1 : 0;
                 return (d.clearedStages != null && d.clearedStages.Contains(def.chapter + "_" + idx)) ? 1 : 0;
             }
 
@@ -304,6 +411,10 @@ public static class MainQuestSystem
             if (ProgressOf(v.def) >= v.need)
                 Complete(v.def);
         }
+
+        // 挑战任务（2026-11-05）：线性链，**只结算当前这一条**（达成后连锁推进下一条）。
+        // 不扫全 8 条 —— 玩家先打了后面（比如后面章的困难 Boss）不能越过前面的挑战直接结算。
+        SettleChallengeChain();
     }
 
     /// <summary>对话播完：把本章对应的 TalkNpc 任务计数 +1。</summary>

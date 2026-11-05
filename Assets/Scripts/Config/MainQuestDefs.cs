@@ -43,6 +43,13 @@ public struct MainQuestDef
     public int rewardStones;
     /// <summary>完成时发放的金币（2026-11-01 主人拍板：主线每条都给点奖励，哪怕几十金币）。</summary>
     public int rewardGold;
+    /// <summary>
+    /// 【2026-11-05 建议修】任务自身难度（0=普通 / 1=困难 / 2=噩梦）。
+    /// 现有任务定义没有难度字段，进度判定也只查普通 clearedStages → **隐含难度=0**；
+    /// 这里补一个默认 0 的字段，任务跳转按它落位。存档兼容：任务进度按 id 存（mainQuestDone/mainQuestCnt），
+    /// 与难度无关，加字段不影响任何老档。
+    /// </summary>
+    public int difficulty;
 
     public bool IsBattle => type == MainQuestType.ClearStage;
 }
@@ -68,23 +75,50 @@ public static class MainQuestDefs
     public const string StoryC8Ice = "c8_ice";
 
     static MainQuestDef[] _all;
+    static MainQuestDef[] _challenge;
 
     /// <summary>
     /// 全部主线任务（按 章节 → order 排序，顺序 = 推进顺序）。
     /// 懒加载读表：不在静态构造期读表（工程坑 ④「构造期禁读表」），首次访问才加载。
+    /// 🔴 这里只含 category=主线：挑战任务（category=挑战）走 <see cref="Challenge"/>，
+    ///    绝不混进本数组 —— 任务面板「本章 X/Y」、冒险日志主线页、HUD 任务栏都按它的长度算。
     /// </summary>
     public static MainQuestDef[] All
     {
         get
         {
-            if (_all == null) _all = BuildFromTable();
+            if (_all == null) _all = BuildFromRows(QuestTable.MainRows());
             return _all;
         }
     }
 
-    static MainQuestDef[] BuildFromTable()
+    /// <summary>
+    /// 全部挑战任务（2026-11-05 新增：困难章末 Boss），**按线性链顺序**：困难第 1~8 章
+    /// （与表里的行序无关，见 <see cref="BuildChallenge"/>）。
+    /// 与主线链完全独立：不打不影响主线推进，打完也不推动主线。
+    /// </summary>
+    public static MainQuestDef[] Challenge
     {
-        var rows = QuestTable.MainRows();
+        get
+        {
+            if (_challenge == null) _challenge = BuildChallenge();
+            return _challenge;
+        }
+    }
+
+    static MainQuestDef[] BuildChallenge()
+    {
+        var arr = BuildFromRows(QuestTable.ChallengeRows());
+        // 【2026-11-05 主人拍板】挑战是线性链：同一时间只出当前一条，顺序 = 困难第 1→8 章。
+        // 表里若按 (chapter, order) 排，未来加别的难度会插队；这里显式按 (难度, 章号) 排。
+        Array.Sort(arr, (a, b) => a.difficulty != b.difficulty
+            ? a.difficulty - b.difficulty
+            : a.chapter - b.chapter);
+        return arr;
+    }
+
+    static MainQuestDef[] BuildFromRows(List<QuestTable.Row> rows)
+    {
         var list = new List<MainQuestDef>(rows.Count);
         for (int i = 0; i < rows.Count; i++)
         {
@@ -99,7 +133,8 @@ public static class MainQuestDefs
                 targetCount = r.targetCount,
                 param = r.param,
                 rewardStones = r.rewardStones,
-                rewardGold = r.rewardGold
+                rewardGold = r.rewardGold,
+                difficulty = r.difficulty
             });
         }
         return list.ToArray();

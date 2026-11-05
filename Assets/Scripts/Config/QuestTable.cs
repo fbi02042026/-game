@@ -6,7 +6,8 @@ using UnityEngine;
 ///
 /// 表：Assets/Data/Source/Tables/quest.csv → Resources/Data/Tables/quest.bytes（CookAll → CookQuest）。
 /// 内容：主线（category=主线，8 章 × 5~6 条，含 clear_stages 密度行）+ 日常（category=日常，7 条）
-///       + 周常（category=周常，1 条）。（2026-10-29 扩编：日常 2→7、新增周常，见 DailyTaskSystem）
+///       + 周常（category=周常，1 条）+ 挑战（category=挑战，2026-11-05 新增：困难 8 条 / 噩梦 6 条）。
+///       （2026-10-29 扩编：日常 2→7、新增周常，见 DailyTaskSystem）
 /// 支线不进表：支线 = 支线岛（2026-10-23 合并方案），运行时读 SaveData.branchRoll1/2，见 QuestBarData.cs。
 ///
 /// 消费方：MainQuestDefs（主线迁表，结构体字段 1:1 对应）与 MainQuestSystem.DailyViews（日常文案参数化）。
@@ -30,6 +31,11 @@ public static class QuestTable
         public string rewardText;   // 日常展示用奖励文案
         public int rewardExp;       // 任务奖励经验（2026-10-29 扩编末列；0=不发，DailyTaskSystem 随达标自动发）
         public int rewardGold;      // 主线完成发金币（2026-11-01 主人拍板：主线多少都要给点奖励，哪怕几十金币）
+        /// <summary>
+        /// 【2026-11-05 建议修】任务自身难度（0=普通 / 1=困难 / 2=噩梦；缺列/缺值 → 0）。
+        /// 现有任务表没有这一列，全部隐含普通难度；任务跳转按本字段落位。
+        /// </summary>
+        public int difficulty;
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -69,7 +75,9 @@ public static class QuestTable
                 order = GameTableCsv.TryInt(c[9], out int od) ? od : 0,
                 rewardText = c.Length > 10 ? c[10] : "",
                 rewardExp = c.Length > 12 && GameTableCsv.TryInt(c[12], out int rExp) ? rExp : 0,  // 末列（2026-10-29 扩编）
-                rewardGold = c.Length > 13 && GameTableCsv.TryInt(c[13], out int rGold) ? rGold : 0 // 主线金币奖励（2026-11-01）
+                rewardGold = c.Length > 13 && GameTableCsv.TryInt(c[13], out int rGold) ? rGold : 0, // 主线金币奖励（2026-11-01）
+                // 第 15 列（下标 14）可选：任务难度。源表不加列时全部按 0（普通）——老表/老档不受影响。
+                difficulty = c.Length > 14 && GameTableCsv.TryInt(c[14], out int rDiff) ? Mathf.Clamp(rDiff, 0, 2) : 0
             };
             _rows.Add(row);
         }
@@ -81,6 +89,20 @@ public static class QuestTable
     {
         EnsureLoaded();
         var list = _rows.FindAll(r => r.category == "主线");
+        list.Sort((a, b) => a.chapter != b.chapter
+            ? a.chapter.CompareTo(b.chapter)
+            : a.order.CompareTo(b.order));
+        return list;
+    }
+
+    /// <summary>
+    /// 挑战行（2026-11-05 新增，category=挑战：困难/噩梦的章末 Boss），按 (chapter, order) 升序。
+    /// 🔴 独立于主线链：不进 <see cref="MainRows"/>，不参与主线推进/「本章 X/Y」计数。
+    /// </summary>
+    public static List<Row> ChallengeRows()
+    {
+        EnsureLoaded();
+        var list = _rows.FindAll(r => r.category == "挑战");
         list.Sort((a, b) => a.chapter != b.chapter
             ? a.chapter.CompareTo(b.chapter)
             : a.order.CompareTo(b.order));

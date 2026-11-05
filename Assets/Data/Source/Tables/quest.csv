@@ -12,7 +12,8 @@
 #
 # 列说明：
 # id            任务唯一ID（主线沿用旧 id；日常 daily_ 前缀）
-# category      主线 / 日常（决定任务栏哪一块；支线不走本表）
+# category      主线 / 日常 / 周常 / 挑战（决定任务栏哪一块；支线不走本表）
+#                挑战（2026-11-05 新增）：困难/噩梦的章末 Boss 挑战，挂章节、不进主线链、不阻塞推进；
 # chapter       章节号（日常填 0）
 # title         任务名（展示；主线正式文案 V1，别随手改）
 # desc          目标描述（主线留空 → MainQuestDefs.AutoDesc 自动生成，改参数不用同步文案；日常可带 {0}/{1} 占位）
@@ -33,51 +34,66 @@
 # reward_text   日常展示用奖励文案（登录的动态奖励由代码按当日循环填）
 # note          策划备注（开发可忽略）
 # reward_exp    任务奖励经验（2026-10-29 扩编；末列追加；0/缺省=不发经验；DailyTaskSystem 随达标自动发）
-id,category,chapter,title,desc,target_type,target_param,target_count,reward_stones,order,reward_text,note,reward_exp,reward_gold
-C1_Q1,主线,1,踏出第一步,,clear_stage,0,1,0,1,,,,50
-C1_Q5,主线,1,热热身子,,clear_stages,,2,0,2,,新增密度行（前期密）,,50
-C1_Q7,主线,1,打出感觉,,clear_stages,,3,0,3,,新增密度行（前期密）,,50
-C1_Q2,主线,1,去见见老板娘,,talk_npc,innkeeper,1,1,4,,,,50
-C1_Q3,主线,1,深入森林层,,clear_stage,2,1,0,5,,,,50
-C1_Q8,主线,1,森林尽头,,clear_stage,9,1,0,6,,,,50
-C2_Q1,主线,2,新的委托,,clear_stage,0,1,0,1,,,,60
-C2_Q5,主线,2,小试牛刀,,clear_stages,,2,0,2,,新增密度行,,60
-C2_Q2,主线,2,先强化自己,,upgrade_talent,,1,1,3,,,,60
-C2_Q3,主线,2,找个搭子,,recruit_merc,,1,1,4,,,,60
-C2_Q6,主线,2,再接再厉,,clear_stages,,3,0,5,,新增密度行,,60
-C2_Q4,主线,2,走到半程,,clear_stage,4,1,0,6,,,,60
-C2_Q7,主线,2,走到尽头,,clear_stage,9,1,0,7,,,,60
-C3_Q1,主线,3,密林的另一头,,talk_npc,innkeeper,1,1,1,,,,70
-C3_Q5,主线,3,乘胜追击,,clear_stages,,2,0,2,,新增密度行,,70
-C3_Q2,主线,3,穿过藤蔓,,clear_stage,2,1,0,3,,,,70
-C3_Q4,主线,3,翡翠尽头,,clear_stage,9,1,0,6,,,,70
-C4_Q1,主线,4,再添一人,,recruit_merc,,1,1,1,,,,80
-C4_Q5,主线,4,连战连捷,,clear_stages,,2,0,2,,新增密度行,,80
-C4_Q2,主线,4,草原的风,,clear_stage,3,1,0,3,,,,80
-C4_Q4,主线,4,长风尽头,,clear_stage,9,1,0,6,,,,80
-C5_Q1,主线,5,出海前的委托,,talk_npc,guildmaster,1,1,1,,,,90
-C5_Q5,主线,5,越战越勇,,clear_stages,,2,0,2,,新增密度行,,90
-C5_Q2,主线,5,潮汐之上,,clear_stage,2,1,0,3,,,,90
-C5_Q3,主线,5,沉下心来,,upgrade_talent,,3,1,4,,,,90
-C5_Q4,主线,5,遗迹之门,,clear_stage,9,1,0,6,,,,90
-C6_Q1,主线,6,走进深窟,,clear_stage,1,1,0,1,,,,100
-C6_Q5,主线,6,步步为营,,clear_stages,,2,0,2,,新增密度行,,100
-C6_Q3,主线,6,带上帮手,,recruit_merc,,1,1,4,,,,100
-C6_Q4,主线,6,深窟尽头,,clear_stage,9,1,0,6,,,,100
-C7_Q1,主线,7,老板娘的劝阻,,talk_npc,innkeeper,1,1,1,,,,110
-C7_Q5,主线,7,烈火淬刃,,clear_stages,,2,0,2,,新增密度行,,110
-C7_Q2,主线,7,烈焰之前,,clear_stage,2,1,0,3,,,,110
-C7_Q3,主线,7,炼心,,upgrade_talent,,3,1,4,,,,110
-C7_Q4,主线,7,炼狱尽头,,clear_stage,9,1,0,6,,,,110
-C8_Q5,主线,8,裂隙前夕,,clear_stages,,2,0,2,,新增密度行,,120
-C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,,,120
-C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,,,120
-C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,,,120
-daily_login,日常,0,每日登录,领取今日登录奖励,daily_login,,1,0,1,经验 ×70,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,70
-daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,经验 ×120,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回)
-daily_gold,日常,0,财源广进,今日获取 {0}/{1} 金币,daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50
-daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,20,0,3,经验 ×50,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),50
-daily_recruit,日常,0,招贤纳士,今日获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,0,5,经验 ×70,计数=SaveData.UnlockMerc 新解锁(任何来源都算),70
-daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,0,6,经验 ×120,与除害共用计数,120
-daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,0,7,经验 ×190,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,190
-weekly_starup,周常,0,百战精锐,本周升星 {0}/{1} 个佣兵,weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释
+# difficulty    任务难度（0=普通 / 1=困难 / 2=噩梦；缺列或空=0；2026-11-05 新增，现有任务一律 0）
+id,category,chapter,title,desc,target_type,target_param,target_count,reward_stones,order,reward_text,note,reward_exp,reward_gold,difficulty
+C1_Q1,主线,1,踏出第一步,,clear_stage,0,1,0,1,,,,50,0
+C1_Q5,主线,1,热热身子,,clear_stages,,2,0,2,,新增密度行（前期密）,,50,0
+C1_Q7,主线,1,打出感觉,,clear_stages,,3,0,3,,新增密度行（前期密）,,50,0
+C1_Q2,主线,1,去见见老板娘,,talk_npc,innkeeper,1,1,4,,,,50,0
+C1_Q3,主线,1,深入森林层,,clear_stage,2,1,0,5,,,,50,0
+C1_Q8,主线,1,森林尽头,,clear_stage,9,1,0,6,,,,50,0
+C2_Q1,主线,2,新的委托,,clear_stage,0,1,0,1,,,,60,0
+C2_Q5,主线,2,小试牛刀,,clear_stages,,2,0,2,,新增密度行,,60,0
+C2_Q2,主线,2,先强化自己,,upgrade_talent,,1,1,3,,,,60,0
+C2_Q3,主线,2,找个搭子,,recruit_merc,,1,1,4,,,,60,0
+C2_Q6,主线,2,再接再厉,,clear_stages,,3,0,5,,新增密度行,,60,0
+C2_Q4,主线,2,走到半程,,clear_stage,4,1,0,6,,,,60,0
+C2_Q7,主线,2,走到尽头,,clear_stage,9,1,0,7,,,,60,0
+C3_Q1,主线,3,密林的另一头,,talk_npc,innkeeper,1,1,1,,,,70,0
+C3_Q5,主线,3,乘胜追击,,clear_stages,,2,0,2,,新增密度行,,70,0
+C3_Q2,主线,3,穿过藤蔓,,clear_stage,2,1,0,3,,,,70,0
+C3_Q4,主线,3,翡翠尽头,,clear_stage,9,1,0,6,,,,70,0
+C4_Q1,主线,4,再添一人,,recruit_merc,,1,1,1,,,,80,0
+C4_Q5,主线,4,连战连捷,,clear_stages,,2,0,2,,新增密度行,,80,0
+C4_Q2,主线,4,草原的风,,clear_stage,3,1,0,3,,,,80,0
+C4_Q4,主线,4,长风尽头,,clear_stage,9,1,0,6,,,,80,0
+C5_Q1,主线,5,出海前的委托,,talk_npc,guildmaster,1,1,1,,,,90,0
+C5_Q5,主线,5,越战越勇,,clear_stages,,2,0,2,,新增密度行,,90,0
+C5_Q2,主线,5,潮汐之上,,clear_stage,2,1,0,3,,,,90,0
+C5_Q3,主线,5,沉下心来,,upgrade_talent,,3,1,4,,,,90,0
+C5_Q4,主线,5,遗迹之门,,clear_stage,9,1,0,6,,,,90,0
+C6_Q1,主线,6,走进深窟,,clear_stage,1,1,0,1,,,,100,0
+C6_Q5,主线,6,步步为营,,clear_stages,,2,0,2,,新增密度行,,100,0
+C6_Q3,主线,6,带上帮手,,recruit_merc,,1,1,4,,,,100,0
+C6_Q4,主线,6,深窟尽头,,clear_stage,9,1,0,6,,,,100,0
+C7_Q1,主线,7,老板娘的劝阻,,talk_npc,innkeeper,1,1,1,,,,110,0
+C7_Q5,主线,7,烈火淬刃,,clear_stages,,2,0,2,,新增密度行,,110,0
+C7_Q2,主线,7,烈焰之前,,clear_stage,2,1,0,3,,,,110,0
+C7_Q3,主线,7,炼心,,upgrade_talent,,3,1,4,,,,110,0
+C7_Q4,主线,7,炼狱尽头,,clear_stage,9,1,0,6,,,,110,0
+C8_Q5,主线,8,裂隙前夕,,clear_stages,,2,0,2,,新增密度行,,120,0
+C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,,,120,0
+C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,,,120,0
+C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,,,120,0
+daily_login,日常,0,每日登录,领取今日登录奖励,daily_login,,1,0,1,经验 ×70,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,70,,0
+daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,经验 ×120,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回),,,0
+daily_gold,日常,0,财源广进,今日获取 {0}/{1} 金币,daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50,,0
+daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,20,0,3,经验 ×50,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),50,,0
+daily_recruit,日常,0,招贤纳士,今日获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,0,5,经验 ×70,计数=SaveData.UnlockMerc 新解锁(任何来源都算),70,,0
+daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,0,6,经验 ×120,与除害共用计数,120,,0
+daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,0,7,经验 ×190,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,190,,0
+weekly_starup,周常,0,百战精锐,本周升星 {0}/{1} 个佣兵,weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释,,,0
+#
+# 挑战任务（2026-11-05 主人拍板）：独立 category=挑战，不进主线链、不阻塞推进；线性出题，同一时间只出当前一条。
+#   目标 = 该章章末 Boss（clear_stage param=9 = 第 10 关，与主线链尾同关号），判定读难度真源 HasStageClearedAtDiff。
+#   只保留困难第 1~8 章各 1 条（order=1）。
+#   金币 = 同章普通主线金币（40+章号×10）× 困难倍率 1.8（GameConfig.GetDifficultyGoldMul），
+#   Mathf.RoundToInt 取整（本组 8 条乘积均为整数，无小数）；天赋石/经验跟普通主线口径一致 = 0（普通主线这列也全是 0，不凭空发石）。
+C1_HARD,挑战,1,困难·第 1 章,通关困难难度第 1 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,90,1
+C2_HARD,挑战,2,困难·第 2 章,通关困难难度第 2 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,108,1
+C3_HARD,挑战,3,困难·第 3 章,通关困难难度第 3 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,126,1
+C4_HARD,挑战,4,困难·第 4 章,通关困难难度第 4 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,144,1
+C5_HARD,挑战,5,困难·第 5 章,通关困难难度第 5 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,162,1
+C6_HARD,挑战,6,困难·第 6 章,通关困难难度第 6 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,180,1
+C7_HARD,挑战,7,困难·第 7 章,通关困难难度第 7 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,198,1
+C8_HARD,挑战,8,困难·第 8 章,通关困难难度第 8 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,216,1

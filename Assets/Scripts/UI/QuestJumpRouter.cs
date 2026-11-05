@@ -22,12 +22,12 @@ public static class QuestJumpRouter
         switch (def.type)
         {
             case MainQuestType.ClearStage:
-                // 打关：切到冒险页并定位到任务所在章节
-                return GoAdventure(def.chapter);
+                // 打关：切到冒险页并定位到任务所在章节（按任务自身难度落位：普通任务跳普通）
+                return GoAdventure(def.chapter, def.difficulty);
 
             case MainQuestType.ClearStages:
                 // 密度行（2026-10-26）：任意主线关都算进度，同样送冒险页定位当前章
-                return GoAdventure(def.chapter);
+                return GoAdventure(def.chapter, def.difficulty);
 
             case MainQuestType.TalkNpc:
                 // 找老板娘：人就在酒馆，切过去再开口
@@ -94,18 +94,29 @@ public static class QuestJumpRouter
     // 具体落点
     // ============================================================
 
-    /// <summary>冒险页 + 定位章节。【2026-10-26 主人拍板】任务前往即使章没开也定位过去（看锁态），ignoreLock=true。</summary>
-    static bool GoAdventure(int chapter)
+    /// <summary>冒险页 + 定位章节。【2026-10-26 主人拍板】任务前往即使章没开也定位过去（看锁态），ignoreLock=true。
+    /// 【2026-11-05】按任务自身难度落位：普通任务跳普通、困难任务跳困难、噩梦任务跳噩梦。
+    /// 🔴 难度任务（diff&gt;0）必须先过 <see cref="ChapterRouteTable.CanEnterAtDiff"/>：
+    /// 没解锁就只给提示、不静默切页（普通任务保持 ignoreLock 口径，允许看锁态）。</summary>
+    static bool GoAdventure(int chapter, int difficulty = 0)
     {
         var hub = TownHubController.Instance;
         if (hub == null) return false;
+
+        int ch = chapter > 0 ? chapter : MainQuestSystem.CurrentChapter();
+        int diff = Mathf.Clamp(difficulty, 0, 2);
+        if (diff > 0 && !ChapterRouteTable.CanEnterAtDiff(ch, diff, SaveSystem.Instance?.Data))
+        {
+            UIManager.Instance?.ShowToast(AdventureUI.DiffLockHintText(diff));
+            return true;   // 已告知原因，不算跳转失败
+        }
 
         hub.OpenAdventure();
 
         // 页面已在 OpenAdventure 里预加载好，这里只把选中章拨过去
         var adv = AdventureUI.Instance;
         if (adv != null)
-            adv.FocusChapter(chapter > 0 ? chapter : MainQuestSystem.CurrentChapter(), ignoreLock: true);
+            adv.FocusChapter(ch, ignoreLock: true, difficulty: diff);
         return true;
     }
 

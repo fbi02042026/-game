@@ -383,6 +383,44 @@ public class QuestPanelUI : MonoBehaviour
 
         if (!anyOpen)
             AddRow("本章主线已完成", "打通本章 BOSS 后即可前往下一章", 1, null);
+
+        RefreshChallenges();
+    }
+
+    /// <summary>
+    /// 挑战任务小节（2026-11-05 新增：困难章末 Boss）。
+    /// **线性链，同一时间只显示当前这一条**（顺序 = 困难第 1~8 章，见
+    /// <see cref="MainQuestSystem.CurrentChallenge"/>）；未轮到的不显示。
+    /// 进入本小节（「当前条出现」）时先跑一次链结算：轮到即已达成 → 直接完成/提示/发金币，
+    /// 再顺延到下一条（连锁由 <see cref="MainQuestSystem.SettleChallengeChain"/> 负责）。
+    /// 不进「本章 X/Y」计数、不阻塞主线；当前这条若困难还没解锁，仍显示并点击只给
+    /// 「先通关普通第 N 章解锁困难」提示，不切页、不关面板。
+    /// </summary>
+    void RefreshChallenges()
+    {
+        MainQuestSystem.SettleChallengeChain();
+
+        var challenges = MainQuestSystem.ChallengeViews();
+        if (challenges.Count == 0) return;
+
+        AddRow("挑战任务", "难度挑战 · 不影响主线推进", 1, null);
+
+        for (int i = 0; i < challenges.Count; i++)
+        {
+            var v = challenges[i];
+            int diff = v.def.difficulty;
+            // 锁判定按挑战自己的章节（挑战链是全局一条，不一定和面板当前章相同）
+            bool locked = !ChapterRouteTable.CanEnterAtDiff(v.def.chapter, diff, SaveSystem.Instance?.Data);
+
+            string sub = v.Desc;
+            if (v.def.rewardGold > 0) sub += "　奖励：金币 ×" + v.def.rewardGold;
+            if (locked) sub += "　未解锁：" + AdventureUI.DiffLockHintText(diff);
+
+            Action onClick = locked
+                ? (Action)delegate { GlobalToastUI.Show(AdventureUI.DiffLockHintText(diff)); }
+                : (Action)delegate { OnMainAction(v); };
+            AddRow(v.def.title, sub, 0, onClick);
+        }
     }
 
     void RefreshDaily()
