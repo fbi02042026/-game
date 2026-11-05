@@ -37,9 +37,6 @@ public static class MainPathPlaytestChecklist
         Debug.Log("[Checklist]\n" + Checklist);
     }
 
-    [MenuItem("Tools/_归档/自检/P0 主路径验收清单")]
-    public static void ShowLegacy() => Show();
-
     [MenuItem("Tools/Build/Android Release APK")]
     public static void BuildRelease() => CliAndroidBuild.BuildReleaseApk();
 

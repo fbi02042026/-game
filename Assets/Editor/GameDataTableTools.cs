@@ -45,7 +45,6 @@ public static class GameDataTableTools
         EditorUtility.DisplayDialog("Data", $"已导出 {count} 条到 monster_stats.csv", "OK");
     }
 
-    [MenuItem("Tools/Data/补全 monster_stats 至 96 行")]
     public static void CompleteMonsterStatsTo96()
     {
         Directory.CreateDirectory(TablesDir);

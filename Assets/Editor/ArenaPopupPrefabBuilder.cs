@@ -59,7 +59,6 @@ public static class ArenaPopupPrefabBuilder
     static readonly Color PodiumSilver = new Color(0.42f, 0.46f, 0.56f, 0.95f);
     static readonly Color PodiumBronze = new Color(0.52f, 0.33f, 0.20f, 0.95f);
 
-    [MenuItem("Tools/竞技场/生成竞技场弹窗预制体")]
     public static void Build()
     {
         if (File.Exists(SavePath))

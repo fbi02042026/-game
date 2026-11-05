@@ -67,7 +67,6 @@ public static class AdMercEventPrefabBuilder
     static readonly Color TxtMain = Color.white;
     static readonly Color TxtGold = new Color(1f, 0.85f, 0.45f, 1f);
 
-    [MenuItem("Tools/看广告活动/生成活动面板预制体")]
     public static void Build()
     {
         if (File.Exists(SavePath))
