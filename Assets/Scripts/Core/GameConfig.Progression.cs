@@ -23,6 +23,14 @@ public static partial class GameConfig
     public const float MERC_CATCHUP_SPEED_MUL = 1.35f;   // 掉队后追赶速度 = 玩家移速 × 此倍率
     public const float MERC_CATCHUP_ENTER_DIST = 0.8f;   // 落后编队位超过此距离才加速，否则同速跟（防顶着玩家跑）
 
+    // 【2026-11-06 主人拍板】战斗体验：抽到/获得佣兵时的入队冲刺 + 离玩家太远时的掉队追赶加速。
+    // 只改临时移速倍率，不改阵型/站位规则；玩家与怪物移速不受影响。
+    public const float MERC_RUSH_SPEED_MUL = 2.2f;       // 新入队冲刺倍率（战斗中抽到后冲向玩家）
+    public const float MERC_RUSH_STOP_DIST = 2.5f;       // 距玩家 <= 此距离结束冲刺，恢复正常移速/交给编队
+    public const float MERC_LAG_ENTER_DIST = 3.0f;       // 距玩家 > 此距离开始掉队追赶加速
+    public const float MERC_LAG_EXIT_DIST = 2.0f;        // 距玩家 <= 此距离结束追赶（滞回，防在阈值上来回抖）
+    public const float MERC_LAG_SPEED_MUL = 1.5f;        // 掉队追赶倍率
+
     // 【2026-10-20 主人拍板】牧师「站住等自动奶」的最长定身时长：
     // 施法失败（蓝不够回蓝慢 / merc_skills 表缺耗蓝 fail closed）时 CooldownRemain 一直 <= 0，
     // 原实现会无限站桩脱队 → 超此时限强制恢复跟队（治疗由 MercSkillCaster.Update 自动放，不要求站着）。

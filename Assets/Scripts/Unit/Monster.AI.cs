@@ -278,6 +278,15 @@ public partial class Monster
             return;
         }
 
+        // 【2026-11-06 二修】击退推进窗口内：AI 一律不写速度（追击/停步都会覆盖击退速度），
+        // 动画按移动播（被打得踉跄后退的观感），窗口结束由下方逻辑自然接管走回继续打。
+        if (_knockbackBusy)
+        {
+            if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
+
         if (TryHoldDuringAttack())
             return;
 
@@ -358,8 +367,16 @@ public partial class Monster
         if (foe == null)
         {
             // 无目标：停步，勿写死往左冲
-            if (rb != null) rb.velocity = Vector2.zero;
+            if (rb != null && !_knockbackBusy) rb.velocity = Vector2.zero;   // 击退推进中不清速度
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
+
+        // 【2026-11-06 二修】击退推进窗口内不写速度，逻辑=可视（与 RunForcedCombat 同口径）
+        if (_knockbackBusy)
+        {
+            if (unitAnim != null) unitAnim.SetMove(true, facingDir);
             ApplyLaneY(Time.deltaTime);
             return;
         }

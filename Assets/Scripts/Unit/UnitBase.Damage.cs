@@ -249,9 +249,9 @@ public partial class UnitBase
     // 受击后退（2026-11-05 主人拍板三层规则，Docs/《战斗趣味升级_pixelfx特效与打击反馈》）：
     // ① 普通怪受击（我方打的）→ 小退；② 精英/Boss 受击→ 纹丝不动（体型重量感）；
     // ③ 精英/Boss 命中玩家/俇兵→ 明显击退。普通怪打玩家/俇兵不退（主人未授权）。
-    // 位移走 transform + rb.position 短促补间（只写 transform 会被物理回写吃掉，见 KnockbackCo 内注释）：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；0.15s 内不叠加；死亡单位不退。
+    // 位移走 transform + rb.position 短促补间（只写 transform 会被物理回写吃掉，见 KnockbackCo 内注释）：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；同一单位 KNOCKBACK_RETRIGGER_INTERVAL(0.8s) 内不重复击退——留出走回来继续攻击的时间（2026-11-06 主人反馈「被击退后原地不动」）；死亡单位不退。
     // ============================================================
-    bool _knockbackBusy;
+    protected bool _knockbackBusy;   // 【2026-11-06】改 protected：Monster 是 UnitBase 子类，Monster.AI 击退窗口要读它判不写速度
     float _lastKnockbackAt;
 
     void ApplyHitKnockback(UnitBase source)
@@ -272,12 +272,18 @@ public partial class UnitBase
             dist = GameConfig.KNOCKBACK_ALLY;
         }
 
-        if (Time.time - _lastKnockbackAt < 0.15f) return;
+        if (Time.time - _lastKnockbackAt < GameConfig.KNOCKBACK_RETRIGGER_INTERVAL) return;
         _lastKnockbackAt = Time.time;
 
         float dir = Mathf.Sign(transform.position.x - source.transform.position.x);
         if (Mathf.Abs(dir) < 0.5f) dir = -source.GetVfxFacingDir();
         if (Mathf.Abs(dir) < 0.5f) dir = 1f;
+        // 受击 juice 的推挤协程会在结束时把逻辑体瞬移回受击前位置并清零速度，与真实击退互踩 → 先停掉
+        if (_knockbackCo != null)
+        {
+            StopCoroutine(_knockbackCo);
+            _knockbackCo = null;
+        }
         StartCoroutine(KnockbackCo(dir, dist));
     }
 
@@ -285,14 +291,45 @@ public partial class UnitBase
     {
         if (_knockbackBusy) yield break;
         _knockbackBusy = true;
+        // 【2026-11-06 二修「击退后僵住/玩家原地打中被击退的怪」】怪走速度通道，我方保持瞬移：
+        // 怪是两级结构——逻辑体在 MonsterBody 父节点（Rigidbody2D 在这），可视/动画是它的子节点。
+        // 直接写 transform（=可视子节点）物理永远不会回写，位移以「永久本地偏移」留在贴图上：
+        // 人被推走了、逻辑体还在原地 → 玩家原地打中被击退的怪 / 怪自以为够得着不再往前追。
+        // 写 rb.position 瞬移又与受击 juice 的回位瞬移（CoKnockback 末尾 root.position=start）互踩。
+        // 改走与移动 AI 完全相同的通道：击退窗口内只写 rb.velocity 物理积分，逻辑=可视永远一致；
+        // AI 侧用 _knockbackBusy 跳过追击/停步赋速（见 Monster.AI.RunForcedCombat / AdvanceTowardEnemies
+        // / UnitBase.AI.TryHoldDuringAttack）。开打前把可视子节点一次性钉回逻辑体，清掉历史偏移。
+        // 我方（transform 与 rb 同一节点）瞬移自洽，维持 2026-11-06 修「击退看不见」的原路径。
+        if (this is Monster mon)
+        {
+            Transform bodyTf = mon.GetBodyTransform();
+            if (bodyTf == null || rb == null)
+            {
+                _knockbackBusy = false;
+                yield break;
+            }
+            transform.position = new Vector3(bodyTf.position.x, transform.position.y, transform.position.z);
+            const float dur = 0.15f;
+            float vx = dir * dist / dur;
+            float t = 0f;
+            while (t < dur)
+            {
+                t += Time.deltaTime;
+                rb.velocity = new Vector2(vx, rb.velocity.y);
+                yield return null;
+            }
+            rb.velocity = new Vector2(0f, rb.velocity.y);
+            _knockbackBusy = false;
+            yield break;
+        }
         Vector3 start = transform.position;
         Vector3 end = start + new Vector3(dir * dist, 0f, 0f);
-        const float dur = 0.15f;
-        float t = 0f;
-        while (t < 1f)
+        const float dur2 = 0.15f;
+        float t2 = 0f;
+        while (t2 < 1f)
         {
-            t += Time.deltaTime / dur;
-            Vector3 p = Vector3.Lerp(start, end, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            t2 += Time.deltaTime / dur2;
+            Vector3 p = Vector3.Lerp(start, end, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t2)));
             transform.position = p;
             // 【2026-11-06 修「击退看不见」】所有战斗单位位移都由 Rigidbody2D 驱动（AI 每帧写 rb.velocity，
             // 物理每步用刚体位姿回写 transform），只写 transform 的击退位移一帧内就被物理打回原位。

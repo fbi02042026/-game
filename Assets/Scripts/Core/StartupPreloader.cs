@@ -64,6 +64,16 @@ public static class StartupPreloader
                 Resources.Load<GameObject>(TownPrefabs[i]);
         }));
 
+        // 【2026-11-06 主人报「刚进战斗还是会卡一下」】把战斗首帧要同步 Load 的资源
+        // 提前摊到进 Town 的 Loading 里；只 Load、不点亮任何战斗 UI（预热点亮 ≠ 玩家进页）。
+        steps.Add(Step("战斗资源", () =>
+        {
+            Resources.Load<GameObject>("Units/wanjia");
+            Resources.Load<GameObject>("Prefabs/Monster/Monstersmoban");
+            Resources.Load("UI/Battle/wave_next_incoming");
+            Resources.Load("UI/Battle/wave_boss_incoming");
+        }));
+
         int total = steps.Count;
         LoadingFlavorText.Reset();
         for (int i = 0; i < total; i++)

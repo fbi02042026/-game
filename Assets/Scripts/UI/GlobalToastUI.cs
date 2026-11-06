@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -80,6 +81,35 @@ public class GlobalToastUI : MonoBehaviour
             return;
         }
         Ensure().Play(msg);
+    }
+
+    // ============ 【2026-11-06 主人拍板】任务奖励汇总 toast 排队播报 ============
+    // 连续多条任务同拍结算 → 排队逐条播：一条向上飘走淡出后，下一条从原位淡入；不许后顶前。
+    // 普通 Show / ShowPersona / Hide 的「后顶前」语义一行未改，队列只服务于任务奖励汇总。
+    static readonly Queue<string> _queued = new Queue<string>();
+    const int QUEUE_MAX = 8;   // 防刷屏：等待队列封顶
+
+    /// <summary>
+    /// 排队播报一条汇总 toast（任务奖励明细专用）。固定走实例 Play：Plain 原文照发、
+    /// 不套 Persona 尾巴、不被 AnyBubbleShowing 压制、不套 Show 的 Loading 攥住逻辑，RefreshPopup 也不丢。
+    /// 空闲（_co == null）时立即起播，否则只入队；CoPlay 收尾会自动接播下一条。
+    /// 已知边界：普通 toast 打断队列播报时，被顶掉的只是「正在播的那条」（后顶前语义不变），
+    /// 队列里剩余未播条目会在那条普通 toast 的 CoPlay 结束后接着播，信息不丢。
+    /// </summary>
+    public static void ShowQueued(string msg)
+    {
+        if (string.IsNullOrEmpty(msg)) return;
+        if (_queued.Count >= QUEUE_MAX) return;   // 队列满：丢弃后来的，不顶掉正在播的
+        _queued.Enqueue(msg);
+        if (_instance == null || _instance._co == null)
+            PlayNextQueued();
+    }
+
+    /// <summary>出队一条走实例 Play；队列空则什么也不做。ShowQueued 起播与 CoPlay 收尾共用。</summary>
+    static void PlayNextQueued()
+    {
+        if (_queued.Count == 0) return;
+        Ensure().Play(_queued.Dequeue());
     }
 
     /// <summary>攥住的 toast（Loading 期间来的），等遮罩收掉后冲刷。</summary>

@@ -466,13 +466,17 @@ public class BattleSettlementUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 结算奖励格数据口径（唯一出口）：金币/天赋石/附魔石/强化材料/装备。
+    /// 结算奖励格数据口径（唯一出口）：经验/金币/天赋石/附魔石/强化材料/装备（经验排首位）。
     /// 【2026-10-25 主人拍板】战斗结果界面胜利奖励区复用同一口径（private→public），禁再开第二条数据链。
     /// </summary>
     public static List<SettlementRewardCell> BuildRewardCells(BattleRunStats s)
     {
         var list = new List<SettlementRewardCell>();
         if (s == null) return list;
+
+        // 【主人拍板】经验格排奖励首位：本关实际发放经验（ExpGained）>0 才上格，没发经验的模式不显示。
+        if (s.ExpGained > 0)
+            list.Add(MakeCell("经验", s.ExpGained, CommonIconSprites.Load("exp"), ExpFrameColor));
 
         // 2026-10-09 主人拍板：结算物品图标改走项目现有口径 CommonIconSprites（Resources + 编辑器回退）。
         // 旧写法 LoadUiIcon 只读 Resources/UI/Settlement/<key>，该目录不存在且无回退 → 每个物品格子都空图标。
@@ -510,6 +514,9 @@ public class BattleSettlementUI : MonoBehaviour
 
         return list;
     }
+
+    // 经验格框色：主人要调框色只改这里（暖橙，与金币/天赋石/附魔石/强化材料四色不撞）。
+    static readonly Color ExpFrameColor = new Color(0.85f, 0.45f, 0.35f, 1f);
 
     static SettlementRewardCell MakeCell(string label, int count, Sprite icon, Color frame)
     {
@@ -557,6 +564,8 @@ public class BattleSettlementUI : MonoBehaviour
         if (frame != null) frame.color = data.frameColor;
 
         var iconTf = FindDeep(go.transform, "Icon");
+        if (iconTf != null)
+            StartCoroutine(CoPopRewardIcon(iconTf as RectTransform));
         var icon = iconTf != null ? iconTf.GetComponent<Image>() : null;
         if (icon != null)
         {
@@ -591,6 +600,41 @@ public class BattleSettlementUI : MonoBehaviour
         var nameText = nameTf != null ? nameTf.GetComponent<Text>() : null;
         if (nameText != null)
             nameText.text = string.IsNullOrEmpty(data.label) ? "" : data.label;
+    }
+
+    // 奖励格图标弹出：小 → 过冲 → 回原大小；纯代码插值（Time.unscaledDeltaTime），只动 Icon 的 localScale。
+    const float PopStartScale = 0.1f;       // 起手缩放（别用 0，免得某些布局算不出尺寸）
+    const float PopOverScale = 1.18f;       // 过冲峰值
+    const float PopUpSec = 0.18f;           // 段一：起手 → 过冲
+    const float PopBackSec = 0.12f;         // 段二：过冲 → 回原大小
+
+    IEnumerator CoPopRewardIcon(RectTransform rt)
+    {
+        if (rt == null) yield break;
+        rt.localScale = Vector3.one * PopStartScale;
+
+        float t = 0f;
+        while (t < PopUpSec)
+        {
+            if (rt == null) yield break;
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / PopUpSec);
+            float e = 1f - (1f - k) * (1f - k) * (1f - k);   // EaseOutCubic
+            rt.localScale = Vector3.one * Mathf.Lerp(PopStartScale, PopOverScale, e);
+            yield return null;
+        }
+
+        t = 0f;
+        while (t < PopBackSec)
+        {
+            if (rt == null) yield break;
+            t += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(t / PopBackSec);
+            rt.localScale = Vector3.one * Mathf.Lerp(PopOverScale, 1f, k);   // 线性
+            yield return null;
+        }
+
+        if (rt != null) rt.localScale = Vector3.one;
     }
 
     void ClearSpawnedCells()
@@ -635,12 +679,17 @@ public class BattleSettlementUI : MonoBehaviour
         if (_stats == null || _stats.GoldGained < 2) return;
         if (confirmButton == null) return;
 
-        // 金币格恒为奖励列表第一格（BuildRewardCells 金币首位；GoldGained>=2 才上格）
-        // —— PopulateRewards 已跑完，_spawnedCells[0] 就是金币格，抓 Count 文本备用。
-        if (_spawnedCells.Count > 0 && _spawnedCells[0] != null)
+        // 经验格可能占首位，按 Name 找金币格（不再假设 _spawnedCells[0] 就是金币）。
+        for (int i = 0; i < _spawnedCells.Count; i++)
         {
-            var countTf = FindDeep(_spawnedCells[0].transform, "Count");
+            var cell = _spawnedCells[i];
+            if (cell == null) continue;
+            var nameTf = FindDeep(cell.transform, "Name");
+            var nameText = nameTf != null ? nameTf.GetComponent<Text>() : null;
+            if (nameText == null || nameText.text != "金币") continue;
+            var countTf = FindDeep(cell.transform, "Count");
             _goldCellCountText = countTf != null ? countTf.GetComponent<Text>() : null;
+            break;
         }
 
         var srcRt = confirmButton.transform as RectTransform;

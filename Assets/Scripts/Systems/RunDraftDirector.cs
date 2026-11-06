@@ -853,6 +853,12 @@ public class RunDraftDirector : MonoBehaviour
             float slotX = UnitCrowd.GetMercDesiredCombatX(hero, null, slot);
             merc.BeginMapEnter(slotX, 1, walkWhileFrozen: true);
         }
+        else if (walkInOffscreen && bm._firstWaveSpawned)
+        {
+            // 【2026-11-06 主人拍板】战斗中抽到/获得佣兵：以更高移速冲到玩家身边，
+            // 接近到 MERC_RUSH_STOP_DIST 后自动恢复正常移速（阵型/站位规则不变）。
+            merc.BeginRushToHero();
+        }
 
         merc.mercStar = Mathf.Clamp(e.star, 1, 5);       // 2026-10-06：MP 池/回复的星级真源
 

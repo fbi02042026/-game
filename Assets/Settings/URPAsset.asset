@@ -53,6 +53,18 @@ MonoBehaviour:
   m_AdditionalLightsShadowResolutionTierMedium: 512
   m_AdditionalLightsShadowResolutionTierHigh: 1024
   m_lightProbeSystem: 1
+  m_VGComputeShaders:
+    gpuCulling: {fileID: 0}
+    gpuCullingDegenerate: {fileID: 0}
+    gpuCullingInit: {fileID: 0}
+    gpuVisibleBucket: {fileID: 0}
+    gpuVisibleBucketIndexed: {fileID: 0}
+    generateMaterialRange: {fileID: 0}
+    scatterCopy: {fileID: 0}
+    downsampleDepth: {fileID: 0}
+    gpuVertexCacheManage: {fileID: 0}
+    gpuDrivenFlattenProbeData: {fileID: 0}
+    transcode: {fileID: 0}
   m_ReflectionProbeBlending: 0
   m_ReflectionProbeBoxProjection: 0
   m_ReflectionProbeAtlasResolution: 134219776
@@ -107,8 +119,8 @@ MonoBehaviour:
     blueNoise64LTex: {fileID: 2800000, guid: e3d24661c1e055f45a7560c033dbb837, type: 3}
     bayerMatrixTex: {fileID: 2800000, guid: f9ee4ed84c1d10c49aabb9b210b0fc44, type: 3}
   testURPForceGRD: 0
-  m_PrefilteringModeMainLightShadows: 3
-  m_PrefilteringModeAdditionalLight: 3
+  m_PrefilteringModeMainLightShadows: 0
+  m_PrefilteringModeAdditionalLight: 0
   m_PrefilteringModeAdditionalLightShadows: 0
   m_PrefilterXRKeywords: 1
   m_PrefilteringModeClusteredLighting: 0

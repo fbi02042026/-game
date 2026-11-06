@@ -109,7 +109,14 @@ public partial class TutorialDirector
 
         hint.Hide();
         if (TalentUI.LeftUnlockedCount() > before)
-            UIManager.Instance?.ShowToastPersona("天赋点亮了，属性已更新。不错嘛。");
+        {
+            // 【2026-11-06 主人拍板】点亮提示要说清涨的属性，别只称赞（数值走 TalentDefs 真源）。
+            var newTalentNode = TalentDefs.GetLeft(before + 1);
+            string talentGainText = newTalentNode != null && newTalentNode.effect != null
+                && !string.IsNullOrEmpty(newTalentNode.effect.display)
+                ? newTalentNode.effect.display : "属性";
+            UIManager.Instance?.ShowToastPersona("天赋点亮了，" + talentGainText + "，练练手吧。");
+        }
     }
 
     // 【2026-10-06 已删除】CoRefreshMercHudNextFrame：只被「救援入队」那一段调用，

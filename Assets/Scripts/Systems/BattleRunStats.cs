@@ -30,6 +30,8 @@ public class BattleRunStats
     /// 写回城镇的也是它 —— 抽奖花的是抽奖币池（currentGold），碰不到这本账。</summary>
     public long GoldEarned;
     public int TalentGained;
+    /// <summary>本关实际发放的玩家经验量（唯一来源 = LevelSystem.AddStageClearExp 返回值）</summary>
+    public int ExpGained;
     public int EquipCount;
     public int EnchantStoneDelta;
     public int DecomposeMatDelta;
@@ -92,6 +94,7 @@ public class BattleRunStats
         GoldGained = 0;
         GoldEarned = 0;
         TalentGained = 0;
+        ExpGained = 0;
         EquipCount = 0;
         EnchantStoneDelta = 0;
         DecomposeMatDelta = 0;

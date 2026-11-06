@@ -187,7 +187,12 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         _image.sprite = sp;
         _image.enabled = true;
         SetSubtitle(subtitle);
-        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, GameConfig.DESIGN_WIDTH * 1.32f);   // 【2026-11-06 主人拍板「下一波/首领来袭再大20%」】在上次 ×1.1 基础上再 ×1.2 = ×1.32（720→950）；NextWave/Boss 两图共用此入口一起放大，开场横幅（StageStartBannerUI）不传宽度不受影响
+        // 【2026-11-06 主人拍板「再大 20%、允许超出屏幕」】上次 ×1.32 再 ×1.2 = ×1.584（720→1140）。
+        // 撤掉同日早些时候的可见宽自适应钳制：瘦屏按宽匹配时 visibleWidth=720 会把 950 钳回去，
+        // 只改系数看不出变化；主人已确认允许左右超出。NextWave/Boss 两图共用此入口一起放大，
+        // 开场横幅（StageStartBannerUI）不传宽度不受影响。
+        float bannerTargetWidth = GameConfig.DESIGN_WIDTH * 1.584f;
+        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, bannerTargetWidth);
 
         _image.enabled = false;
         SetSubtitle(null);

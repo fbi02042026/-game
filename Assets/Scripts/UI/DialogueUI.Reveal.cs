@@ -241,10 +241,14 @@ public partial class DialogueUI
         if (nextArrowImage != null) nextArrowImage.gameObject.SetActive(on);
         if (advanceButton != null)
         {
-            advanceButton.gameObject.SetActive(on);
-            advanceButton.interactable = on;
+            // 【2026-11-06 修·黑屏点击穿透】揭示黑幕期间（_revealing）chrome 关但全屏推进层不能关：
+            // RevealBlack.raycastTarget=false、TownIntroVeil.blocksRaycasts=false → 点击会穿透到底下按钮，
+            // 把开播剧情再触发一次＝从头。OnClickAdvance 在 _revealing 时只置 _skipReveal（快进黑幕），不推进、不重播。
+            bool advanceOn = on || _revealing;
+            advanceButton.gameObject.SetActive(advanceOn);
+            advanceButton.interactable = advanceOn;
             var img = advanceButton.targetGraphic as Image;
-            if (img != null) img.raycastTarget = on;
+            if (img != null) img.raycastTarget = advanceOn;
         }
         var choice = transform.Find("ChoicePanel");
         if (choice != null && !on) choice.gameObject.SetActive(false);

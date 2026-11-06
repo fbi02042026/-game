@@ -138,16 +138,17 @@ public static class LevelSystem
     /// <summary>通关经验：每打完**一个小关**（1-1 这种）调一次（BeginRewardSequence 每小关走一遍）。
     /// 【2026-11-05 主人拍板「1-1升1级、1-2升1级、1-3和1-4合计升1级」】普通 110+32×(章-1)（第1大关 110=恰好升1级），
     /// 困难 150+42×(章-1)、噩梦 190+52×(章-1)（每档都高于前一难度同章）；
+    /// 返回本次实际发放经验量，供结算展示；调用方可忽略返回值
     /// 主线 169,260+日常 13,400 ≈ 曲线 cum(80)=183,260 → 不打困难噩梦也能满级，困难噩梦只是加速项。</summary>
-    public static void AddStageClearExp(int chapter)
+    public static int AddStageClearExp(int chapter)
     {
-        if (!StageFeedsExp) return;
+        if (!StageFeedsExp) return 0;
 
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null)
         {
             Debug.LogError("[LevelSystem] AddStageClearExp 失败：SaveData 为空，本关经验不发（不兜底）");
-            return;
+            return 0;
         }
 
         int before = Mathf.Max(1, data.playerLevel);
@@ -190,7 +191,7 @@ public static class LevelSystem
             SaveSystem.Instance?.Save();   // 溢出金币要落盘（即便未升级）
         }
 
-        if (!leveled) return;
+        if (!leveled) return exp;
 
         // 立刻落盘：升级是关键进度，不靠下一笔存档兜
         SaveSystem.Instance?.Save();
@@ -204,6 +205,7 @@ public static class LevelSystem
         var hero = Hero.Instance;
         if (hero != null) BattleVFXSystem.Instance?.PlayLevelUp(hero.transform.position);
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+        return exp;
     }
 
     /// <summary>
@@ -251,6 +253,7 @@ public static class LevelSystem
         TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
         LevelUpPopup.FlushPending();   // 城镇已就绪（任务栏轮询只在城镇跑），立即弹，不挂起到下次回城
+        return;
     }
 
     /// <summary>
@@ -290,6 +293,7 @@ public static class LevelSystem
             // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
             TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
         }
+        return;
     }
 
     // ============================================================

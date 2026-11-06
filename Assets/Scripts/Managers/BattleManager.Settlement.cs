@@ -1960,7 +1960,8 @@ public partial class BattleManager
         // 【2026-10-25 矫正后口径】玩家等级 = 存档永久账（SaveData.playerLevel/playerExp），
         // 经验 = 完成关卡才给一次，白名单（主线 Normal/支线 SideIsland/终章 Finale）在 LevelSystem.StageFeedsExp 内部把关；
         // 升级反馈走 LevelUpPopup（挂起到回冒险界面才弹）。
-        LevelSystem.AddStageClearExp(ch);
+        // 结算「获得经验 +N」直接取本次发放返回值（唯一出口），不重算公式。
+        RunStats.ExpGained = LevelSystem.AddStageClearExp(ch);
         int bonusGold = 0;
         // 支线岛（2026-10-23 合并方案）不发关卡任务金——岛产出走自己的结算链，宝箱演出只呈现装备与折金
         if (!_stageQuestGoldGranted && !IsSideIsland)

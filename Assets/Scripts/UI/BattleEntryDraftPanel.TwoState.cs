@@ -144,6 +144,26 @@ public partial class BattleEntryDraftPanel
     void ApplyState(float k)
     {
         _animK = k;
+        ApplyPanelState(k);
+
+        // map：中心 Y 250 → 350（主人给的绝对值），缩放两态恒 1.4（2026-10-27 主人拍板）。
+        // 写的是「Pos Y / 中心 Y」这把尺子，不是「离父级底边多少」—— 换算错尺子会把 map 顶飞。
+        ApplyMapState(k);
+
+        // 【2026-10-06 主人拍板】map 上移时，<b>战斗场景里的玩家</b>（世界单位）要跟着一起上移：
+        // 主人原话「map 上移时 玩家没有跟着移动上去」—— 背景上去了、人还在原地，看着像人掉下去了。
+        ApplyWorldLift(k);
+    }
+
+    /// <summary>
+    /// 【2026-11-06 主人报「进战斗背景卡一下」】ApplyState 拆出的<b>面板 UI 部分</b>
+    /// （面板高 / 内容位移 / DraftRoot 落位），不含 map 与世界层。
+    /// <para>LiveMode 的 BeginLive 一步落位只写这一部分（2026-10-31 拍板「不走动画」不变），
+    /// map/世界层改走 <c>StartMapGlide</c> 短过渡 —— 揭幕+走场都在玩家眼前，
+    /// 面板瞬移带着背景瞬跳就是主人看到的「卡一下」。</para>
+    /// </summary>
+    void ApplyPanelState(float k)
+    {
         float panelH = Mathf.Lerp(HeightCollapsed, HeightExpanded, k);
         if (_panel != null)
             _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, panelH);
@@ -162,14 +182,6 @@ public partial class BattleEntryDraftPanel
         // 先换算成「父级本地 Y = 0.5×面板高 + PosY」，再按<b>当时真实的锚点</b>反算回 Pos Y 写下去。
         float draftPosY = Mathf.Lerp(DraftCollapsedPosY, DraftExpandedPosY, k);
         SetPivotLocalY(_draftRt, panelH * DraftAnchorY + draftPosY, panelH);
-
-        // map：中心 Y 250 → 350（主人给的绝对值），缩放两态恒 1.4（2026-10-27 主人拍板）。
-        // 写的是「Pos Y / 中心 Y」这把尺子，不是「离父级底边多少」—— 换算错尺子会把 map 顶飞。
-        ApplyMapState(k);
-
-        // 【2026-10-06 主人拍板】map 上移时，<b>战斗场景里的玩家</b>（世界单位）要跟着一起上移：
-        // 主人原话「map 上移时 玩家没有跟着移动上去」—— 背景上去了、人还在原地，看着像人掉下去了。
-        ApplyWorldLift(k);
     }
 
     /// <summary>

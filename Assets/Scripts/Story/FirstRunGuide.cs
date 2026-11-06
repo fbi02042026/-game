@@ -485,7 +485,12 @@ public class FirstRunGuide : MonoBehaviour
         if (TalentUI.LeftUnlockedCount() > before)
         {
             Advance(GuideStep.Talent, null);
-            UIManager.Instance?.ShowToastPersona("天赋点亮了，属性已更新。不错嘛。");
+            // 【2026-11-06 主人拍板】点亮提示要说清涨的属性，别只称赞（数值走 TalentDefs 真源）。
+            var newTalentNode = TalentDefs.GetLeft(before + 1);
+            string talentGainText = newTalentNode != null && newTalentNode.effect != null
+                && !string.IsNullOrEmpty(newTalentNode.effect.display)
+                ? newTalentNode.effect.display : "属性";
+            UIManager.Instance?.ShowToastPersona("天赋点亮了，" + talentGainText + "，练练手吧。");
 
             // 【2026-10-16 主人拍板】引导到天赋就到头了：先收掉还开着的天赋面板（让玩家看着主界面）。
             // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done 收引导。

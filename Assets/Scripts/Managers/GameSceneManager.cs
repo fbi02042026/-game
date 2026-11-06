@@ -163,6 +163,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
 
     IEnumerator LoadBattleAsync()
     {
+        GamePerf.Log("[BattleFlow] 进战斗：LoadBattleAsync 开始");   // 【2026-11-06】首帧卡顿定位打点（VerboseLog 开才输出）
         _loadingBattle = true;
         if (!StoryProgress.TutorialDone && !StoryProgress.TutorialBattleCleared)
             StoryProgress.ResetTutorialRunInventoryIfNeeded();
@@ -217,8 +218,10 @@ public class GameSceneManager : Singleton<GameSceneManager>
         }
 
         SceneLoadingCoordinator.ReportSceneLoaded();
+        GamePerf.Log("[BattleFlow] 进战斗：场景已加载，等初始化");
         // 进场景后的初始化由 AutoGameInitializer 上报 45~100% 并 Finish
         yield return WaitForBattleInitComplete();
+        GamePerf.Log("[BattleFlow] 进战斗：AutoGameInitializer 初始化完成");
 
         // 等 Loading 真正关掉（100% 停留 0.4s 后 Hide）再演章节文字 —— 顺序：Loading → 章节卡。
         // 万一 Coordinator 异常没收，超时兜底照样往下走：章节卡是不透明黑底，会盖住残留的 Loading。

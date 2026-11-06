@@ -167,7 +167,7 @@ public partial class UnitBase
             || !target.gameObject.activeInHierarchy || !GameConfig.IsInCombatViewport(target))
             return false;
 
-        if (rb != null) rb.velocity = Vector2.zero;
+        if (rb != null && !_knockbackBusy) rb.velocity = Vector2.zero;   // 击退推进中不清速度（会把击退顶掉）
         if (unitAnim != null) unitAnim.SetMove(false, facingDir);
         if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();
@@ -187,7 +187,7 @@ public partial class UnitBase
         if (AttackDueDuringDamaged())
             return false;
 
-        if (rb != null) rb.velocity = Vector2.zero;
+        if (rb != null && !_knockbackBusy) rb.velocity = Vector2.zero;   // 击退推进中不清速度（会把击退顶掉）
         unitAnim.SetMove(false, facingDir);
         if (isAlly && (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode))
             ClampToScreen();

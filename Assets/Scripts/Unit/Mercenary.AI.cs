@@ -17,6 +17,64 @@ public partial class Mercenary : UnitBase
     // 默认 false：竞技场敌方小队 / 怪物入场等现有调用方「开打前定住、解冻才走」的口径不变。
     bool _mapEnterWalkWhileFrozen;
 
+    // —— 战斗体验（2026-11-06 主人拍板）——
+    // 新入队冲刺：战斗中抽到/获得佣兵时，以更高倍率冲到玩家身边（到 MERC_RUSH_STOP_DIST 结束）。
+    // 掉队追赶：离玩家超过 MERC_LAG_ENTER_DIST 自动加速，回到 MERC_LAG_EXIT_DIST 内结束（滞回防抖）。
+    // 两项都只是「临时移速倍率」，由 GetCombatMoveSpeed 覆写统一生效，
+    // 阵型/站位/索敌规则一行不动；敌方佣兵（竞技场机器人）不参与。
+    bool _rushToHero;
+    bool _lagBoost;
+
+    /// <summary>战斗中抽到/获得佣兵：开启入队冲刺（走到玩家附近自动结束）。</summary>
+    public void BeginRushToHero()
+    {
+        _rushToHero = true;
+    }
+
+    /// <summary>每帧刷新冲刺/掉队加速的开关状态（AIUpdate 开头调用，只读距离，不改站位）。</summary>
+    void UpdateSpeedBoostState()
+    {
+        if (!isAlly)
+        {
+            _rushToHero = false;
+            _lagBoost = false;
+            return;
+        }
+
+        var hero = Hero.Instance;
+        if (hero == null || hero.isDead)
+        {
+            _rushToHero = false;
+            _lagBoost = false;
+            return;
+        }
+
+        float dist = Mathf.Abs(GetCombatX(this) - GetCombatX(hero));
+
+        if (_rushToHero && dist <= GameConfig.MERC_RUSH_STOP_DIST)
+            _rushToHero = false;
+
+        if (dist > GameConfig.MERC_LAG_ENTER_DIST)
+            _lagBoost = true;
+        else if (dist <= GameConfig.MERC_LAG_EXIT_DIST)
+            _lagBoost = false;
+    }
+
+    /// <summary>
+    /// 【2026-11-06】移速统一出口的覆写：只叠「入队冲刺 / 掉队追赶」两个临时倍率。
+    /// - 开打前剧本走入（_mapEnterActive）不吃加速，保持原有入场节奏；
+    /// - 敌方佣兵不吃（竞技场敌方小队口径不变）；
+    /// - 冲刺优先于追赶，两者不叠乘；玩家与怪物仍走基类实现。
+    /// </summary>
+    protected override float GetCombatMoveSpeed()
+    {
+        float spd = base.GetCombatMoveSpeed();
+        if (!isAlly || _mapEnterActive) return spd;
+        if (_rushToHero) return spd * GameConfig.MERC_RUSH_SPEED_MUL;
+        if (_lagBoost) return spd * GameConfig.MERC_LAG_SPEED_MUL;
+        return spd;
+    }
+
     /// <summary>
     /// 从屏外缓步走到 targetX（到达后交还普通 AI）。速度 = 自身移速，朝向 faceDir。
     /// walkWhileFrozen=true = UnitsCanAct=false（开打前）也照走（抽卡入场专用）。
@@ -70,6 +128,9 @@ public partial class Mercenary : UnitBase
 
     protected override void AIUpdate()
     {
+        // 【2026-11-06】先刷新冲刺/掉队加速开关，本帧所有移动点统一走 GetCombatMoveSpeed。
+        UpdateSpeedBoostState();
+
         // 【2026-11-01 临时诊断】主人报「竞技场玩家形象的机器人（弓）一直往左走 不攻击，佣兵攻击了」
         // —— 敌方单位每秒一条 AI 状态，定位卡在哪条分支；定位根因后整段删掉。
         LogEnemyAiStateOncePerSec();
@@ -385,7 +446,9 @@ public partial class Mercenary : UnitBase
             // 同速追赶永远追不上（见 GameConfig.MERC_CATCHUP_SPEED_MUL 注释），
             // 不加这条佣兵只会越掉越远。回队（拴绳触发）也走这里，一并享受加速。
             float speed = GetCombatMoveSpeed();
-            if (Mathf.Abs(dx) > GameConfig.MERC_CATCHUP_ENTER_DIST)
+            // 【2026-11-06】全局加速（入队冲刺/掉队追赶）已在倍率里生效时不再叠编队位追赶，
+            // 否则 1.35 × 1.5 会叠成两倍速；没触发全局加速时这条原有口径不变。
+            if (!_rushToHero && !_lagBoost && Mathf.Abs(dx) > GameConfig.MERC_CATCHUP_ENTER_DIST)
                 speed *= GameConfig.MERC_CATCHUP_SPEED_MUL;
             if (rb != null)
                 rb.velocity = new Vector2(moveDir * speed, rb.velocity.y);

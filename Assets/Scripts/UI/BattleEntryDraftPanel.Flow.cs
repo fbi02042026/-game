@@ -94,12 +94,19 @@ public partial class BattleEntryDraftPanel
         _liveDrawHintTimer = 0f;
         // ⚠ 不走动画：主人原话「不会出现抽奖时那个界面动画了」—— 直接按展开态真值表一步落位
         //（面板 750 / zhuangshi +80 / DraftRoot -250 / map 350），与旧面板 Begin 的 SetExpanded(true) 同一套数值，
-        // 只是跳过 CoAnimState 插值。世界层跟随抬升（ApplyWorldLift）也一并到位。
+        // 只是跳过 CoAnimState 插值。【2026-11-06 起 map/世界层不再跟着瞬移，见下方 StartMapGlide】
         if (_animCo != null) { StopCoroutine(_animCo); _animCo = null; }
+        if (_settleCo != null) { StopCoroutine(_settleCo); _settleCo = null; }
         SetDraftVisible(true);
         _expanded = true;
-        ApplyState(1f);
+        // 【2026-10-31】面板 UI 一步落位不变（主人拍板「不会出现抽奖时那个界面动画了」）。
+        // 【2026-11-06 主人报「进战斗背景卡一下」】map/世界层不再跟着瞬移 ——
+        // 揭幕+走场都在玩家眼前，面板一步落位=背景从收起位「啪」地跳到展开位。
+        // 改走 StartMapGlide 短过渡（AnimSec 0.25s），面板本体仍瞬移。
+        ApplyPanelState(1f);
+        StartMapGlide(1f);
         RefreshLive();
+        ShowLiveEntryDrawHint();
         LogState("BeginLive");
     }
 
@@ -148,6 +155,19 @@ public partial class BattleEntryDraftPanel
         }
     }
 
+    // 抽奖引导气泡「关卡闸门」：已通关主线小关数 < 该值才允许弹两条引导（第 4 关起全关）。
+    // 口径真源唯一 = SaveSystem.Instance?.Data.clearedStages（只记主线 Normal 小关），用 Count 判定；
+    // 不用 ChapterManager.currentChapter / CurrentSubIndex0 / 难度集合，也不自算累计。
+    const int DrawHintEarlyStageLimit = 3;
+
+    // 系统未就绪静默不弹（不写 LogError：TickLiveDrawHint 每帧会调，避免刷屏）。
+    bool IsDrawHintStageAllowed()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || data.clearedStages == null) return false;
+        return data.clearedStages.Count < DrawHintEarlyStageLimit;
+    }
+
     /// <summary>
     /// 🔴【2026-10-31 主人拍板「关卡战斗中如果玩家抽奖币够了 玩家没抽的时候要加上引导」】
     /// LiveMode（正式关 / 金币本）战斗内：<b>开打后</b>连续 <see cref="LiveDrawHintDelaySec"/> 秒
@@ -163,6 +183,11 @@ public partial class BattleEntryDraftPanel
     /// </summary>
     void TickLiveDrawHint()
     {
+        if (!IsDrawHintStageAllowed())
+        {
+            _liveDrawHintTimer = 0f;
+            return;
+        }
         if (_liveDrawHintShown || _liveDrawnThisStage)
         {
             _liveDrawHintTimer = 0f;
@@ -205,6 +230,34 @@ public partial class BattleEntryDraftPanel
         // 竞技场不吃金币（四类按钮共用 5 次额度），文案不能写「抽奖币够了」，否则玩家会去找币
         string hintText = bm.IsArena ? "还有抽奖次数，点这里抽一次！" : "抽奖币够了，点这里抽一次！";
         hint.Show(hintText, drawRt, 5f);
+    }
+
+    /// <summary>
+    /// 【2026-11-06】正式关/金币本刚进关、玩家还没点「开始战斗」时，在「随机抽奖」按钮上
+    /// 立即弹一次抽奖引导气泡（口径 A = 进关就弹）。底框/文案与 TickLiveDrawHint 同源；
+    /// 只有 Show 真显示成功才置 _liveDrawHintShown，压住开打后那条不重复弹。
+    /// </summary>
+    void ShowLiveEntryDrawHint()
+    {
+        if (!IsDrawHintStageAllowed()) return;
+        // 可抽与否的唯一真源 = Refresh 刷出来的 Btn.interactable（币够/免费额度/竞技场次数）
+        bool anyClickable = false;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            if (_slots[i].Btn != null && _slots[i].Btn.interactable) { anyClickable = true; break; }
+        }
+        if (!anyClickable) return;
+        if (SettingsPopupUI.IsBlockingSoftGuide) return;
+        var drawRt = NormalButtonRect;
+        if (drawRt == null) return;
+
+        var hint = TutorialHintUI.Ensure();
+        hint.SetBannerSpriteOnce(BattleManager.DraftHintBubble);
+        var bm = BattleManager.InstanceQuiet;
+        string hintText = bm != null && bm.IsArena ? "还有抽奖次数，点这里抽一次！" : "抽奖币够了，先抽一次再开打吧！";
+        hint.Show(hintText, drawRt, 5f);
+        // Show 内部被 BattleHeadTalkUI.IsShowing 闸门静默吞掉时不置位，开打后还能补弹
+        if (hint.IsVisible) _liveDrawHintShown = true;
     }
 
     static BattleEntryDraftPanel Ensure()
@@ -404,6 +457,58 @@ public partial class BattleEntryDraftPanel
         }
         _settleCo = null;
         ApplyMapState(0f);
+    }
+
+    /// <summary>
+    /// 【2026-11-06 主人报「进战斗背景卡一下」】map/世界层两态<b>短过渡</b>入口：
+    /// LiveMode 的 BeginLive 展开时，面板 UI 一步落位（2026-10-31 拍板不变），
+    /// 但 map 与世界层从当前 <c>_animK</c> 平滑滑到目标态（时长 <c>AnimSec</c>、ease-out）——
+    /// 背景瞬跳就是主人看到的「卡一下」。收起（Finish → SetExpanded(false)）本就走
+    /// <c>CoAnimState</c> 动画，不经这里。
+    /// <para>占用 <c>_animCo</c> 槽位：LateUpdate 静止写回（<c>ApplyMapState(_animK)</c>）
+    /// 在 _animCo 运行期间自动让路，同一时刻只有一处写 map；跑完置 null 归还槽位
+    /// （与 <c>CoSettleMap</c> 同款收尾）。</para>
+    /// </summary>
+    void StartMapGlide(float to)
+    {
+        if (_animCo != null) { StopCoroutine(_animCo); _animCo = null; }
+        if (_settleCo != null) { StopCoroutine(_settleCo); _settleCo = null; }
+        // 宿主未激活 / 没 map：与 SetExpanded 同一口径，跳过动画直接落位，绝不起协程炸调用方
+        if (!gameObject.activeInHierarchy || _mapRt == null)
+        {
+            _animK = to;
+            ApplyMapState(to);
+            ApplyWorldLift(to);
+            return;
+        }
+        _animCo = StartCoroutine(CoGlideMap(to));
+    }
+
+    IEnumerator CoGlideMap(float to)
+    {
+        float from = _animK;
+        if (Mathf.Approximately(from, to))
+        {
+            _animK = to;
+            ApplyMapState(to);
+            ApplyWorldLift(to);
+            _animCo = null;
+            yield break;
+        }
+        float t = 0f;
+        while (t < AnimSec)
+        {
+            t += Time.unscaledDeltaTime;
+            float p = Mathf.Clamp01(t / AnimSec);
+            _animK = Mathf.Lerp(from, to, EaseOut(p));
+            ApplyMapState(_animK);
+            ApplyWorldLift(_animK);
+            yield return null;
+        }
+        _animK = to;
+        ApplyMapState(to);
+        ApplyWorldLift(to);
+        _animCo = null;
     }
 
     /// <summary>

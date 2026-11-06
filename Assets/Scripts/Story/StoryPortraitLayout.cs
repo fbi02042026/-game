@@ -215,11 +215,12 @@ public static class StoryPortraitLayout
     /// 11-04「剧情立绘统一 968」归一化后，引导坐姿两图（charHeightFrac=1 整图）被放大到 968 高，
     /// 引导里显得过大 → 统一缩 20%。只缩显示尺寸，遮罩/位置旋钮（DeskPortraitBottomOffsetPx /
     /// TutorialDeskLiftPx）一律不动。表外立绘 1 = 不缩。
+    /// 【2026-11-06 主人再要求小 10%】0.8 × 0.9 = 0.72；遮罩/位置旋钮仍一律不动。
     /// </summary>
     public static readonly Dictionary<string, float> PortraitExtraScale = new Dictionary<string, float>
     {
-        { StoryPortraits.GuildMasterSitting, 0.8f },
-        { StoryPortraits.ReceptionistSitting, 0.8f },
+        { StoryPortraits.GuildMasterSitting, 0.72f },
+        { StoryPortraits.ReceptionistSitting, 0.72f },
     };
 
     /// <summary>查某个立绘的额外缩放；不在表内返回 1（不缩）。</summary>

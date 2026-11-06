@@ -62,8 +62,10 @@ public partial class UnitBase
     /// <summary>残血加成（R1）普攻额外暴击率（绝对值）。默认 0。仅 Hero 覆写。</summary>
     protected virtual float GetLowHpCritRateBonus() => 0f;
 
-    /// <summary>友军连杀加速后的移速。</summary>
-    protected float GetCombatMoveSpeed()
+    /// <summary>友军连杀加速后的移速。
+    /// 【2026-11-06】改 virtual，只给 Mercenary 覆写「新入队冲刺 / 掉队追赶」倍率；
+    /// 玩家与怪物的取速逻辑一字未变。</summary>
+    protected virtual float GetCombatMoveSpeed()
     {
         float spd = attr != null ? attr.GetAttr(AttrType.MoveSpeed) : 1f;
         if (isAlly && BattleManager.Instance != null)
@@ -155,6 +157,7 @@ public partial class UnitBase
     public void ApplyKnockback(float dx, float duration = 0.08f)
     {
         if (!GameConfig.COMBAT_JUICE_KNOCKBACK || _isDying || isDead || isAlly) return;
+        if (_knockbackBusy) return;   // 【2026-11-06 二修】真实击退推进中：juice 推挤不叠加（会清速度/回位瞬移，把击退顶回去）
         if (Mathf.Abs(dx) < 0.001f) return;
         if (Time.time - _lastKnockbackTime < 0.1f) return;
         _lastKnockbackTime = Time.time;
