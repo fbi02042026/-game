@@ -48,6 +48,7 @@
 - TapTap 数据分析能力由 `TapSDK.Core` 内的 `TapTapEvent` 提供，**无需独立的 analytics 模块**。
 - 游客模式不调用 TapSDK 登录，仅以本地 UUID 作为上报用户标识（`TapTapEvent.SetUserID`），保证不授权也可产出调优数据。
 - 事件属性必须先在 TapTap 后台「配置 → 事件属性管理」预登记，否则属性可能被丢弃。
+- 接入方式遵循 `Docs/SDK统一开关规范.md`。
 
 ---
 

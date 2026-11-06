@@ -151,7 +151,7 @@ public sealed class TapTapBootstrap : MonoBehaviour
         TapSDK.Core.TapTapSDK.AddInitCallback(new InitCallback(this));
         Debug.Log("[TapTap] Init 已发起，等待异步结果");
 #else
-        Debug.Log("[TapTap] 未定义 TAPSDK_ENABLED，跳过 SDK 初始化（依赖未安装或非 Android 包）。");
+        // 未定义 TAPSDK_ENABLED（SDK 开关关闭）：静默走游客身份、不刷日志（见 SDK统一开关规范 2.7）。
         BindGuestId();
         _initOk = false;
         _initError = "TAPSDK_ENABLED 未定义";

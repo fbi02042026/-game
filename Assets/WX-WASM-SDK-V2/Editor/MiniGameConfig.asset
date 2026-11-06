@@ -15,7 +15,7 @@ MonoBehaviour:
   ProjectConf:
     projectName: "\u50CF\u7D20\u5192\u9669\u88C2\u9699\u4E4B\u5203"
     Appid: wx37eb4c2fee0fecf8
-    CDN: http://192.168.10.50:8080
+    CDN: https://xiangmaoxian-d6gwypcs56f621d9-1525110162.tcloudbaseapp.com/
     assetLoadType: 0
     compressDataPackage: 1
     VideoUrl: 

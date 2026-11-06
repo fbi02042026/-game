@@ -48,9 +48,17 @@ public static class CliAndroidBuild
         PlayerSettings.Android.forceInternetPermission = false;
 
         string prevDefines = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.Android);
-        string nextDefines = spotlight ? AddDefine(prevDefines, SpotlightDefine) : RemoveDefine(prevDefines, SpotlightDefine);
-        if (nextDefines != prevDefines)
-            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Android, nextDefines);
+        string baseDefines = spotlight ? AddDefine(prevDefines, SpotlightDefine) : RemoveDefine(prevDefines, SpotlightDefine);
+        if (baseDefines != prevDefines)
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Android, baseDefines);
+        // 出包前把登记表里每个 SDK 宏的 ON/OFF 打进日志；构建脚本不代管、缺宏不自动补、不报错中断。
+        foreach (var sdk in SdkToggles.All)
+        {
+            string groupDefines = PlayerSettings.GetScriptingDefineSymbolsForGroup(sdk.Group);
+            bool on = !string.IsNullOrEmpty(groupDefines)
+                      && groupDefines.Split(';').Any(d => d.Trim() == sdk.Define);
+            Debug.Log("[CliAndroidBuild] " + sdk.Define + "=" + (on ? "ON" : "OFF"));
+        }
 
         EditorUserBuildSettings.development = development;
         EditorUserBuildSettings.connectProfiler = false;
@@ -83,9 +91,14 @@ public static class CliAndroidBuild
         }
         finally
         {
-            // Spotlight 宏仅用于参赛包；构建后恢复，避免日常编辑器误开合规裁剪
-            if (spotlight && prevDefines != nextDefines)
-                PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Android, prevDefines);
+            // Spotlight 宏仅用于参赛包；构建后恢复，避免日常编辑器误开合规裁剪。
+            // SDK 宏由 ProjectSettings / SdkToggles 菜单管理，构建脚本不注入、不代管、不回滚。
+            if (spotlight)
+            {
+                string restore = RemoveDefine(prevDefines, SpotlightDefine);
+                if (restore != prevDefines)
+                    PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Android, restore);
+            }
         }
     }
 

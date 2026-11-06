@@ -1,6 +1,18 @@
 {
+  "scopedRegistries": [
+    {
+      "name": "NPMJS",
+      "url": "https://registry.npmmirror.com",
+      "scopes": [
+        "com.taptap"
+      ]
+    }
+  ],
   "dependencies": {
     "com.qq.weixin.minigame": "https://gitee.com/wechat-minigame/minigame-tuanjie-transform-sdk.git#915d4bf4f60ef0cd1c29316a8d67257185d609a7",
+    "com.taptap.sdk.core": "4.10.9",
+    "com.taptap.sdk.login": "4.10.9",
+    "com.google.external-dependency-manager": "file:com.google.external-dependency-manager@1.2.179",
     "com.unity.test-framework": "1.1.33",
     "com.unity.feature.2d": "2.0.1",
     "com.unity.nuget.newtonsoft-json": "3.2.1",

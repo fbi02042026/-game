@@ -211,9 +211,9 @@ public class LoginUI : MonoBehaviour
         LoginTapRowBuilder.Ensure(panel, OnClickTapLogin);
     }
 
-    /// <summary>【2026-11-01 主人拍板】TapTap 端放弃、转微信小游戏：登录入口暂时关闭。
-    /// 接微信登录方案（P2-B）定了再改回 false 并替换实现。</summary>
-    const bool TapLoginClosed = true;
+    /// <summary>【2026-11-06 主人拍板】项目回归仅安卓端（11-06「只推 origin」同日拍板），
+    /// 11-01「TapTap 端放弃、转微信小游戏」的前提已不存在，登录入口重新开放。</summary>
+    const bool TapLoginClosed = !SdkFeatures.TapTapEnabled;
 
     void OnClickTapLogin()
     {

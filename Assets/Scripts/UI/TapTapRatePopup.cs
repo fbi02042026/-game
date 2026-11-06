@@ -29,6 +29,12 @@ public static class TapTapRatePopup
             PendingPrompt = false;
             return;
         }
+        // 与 TAPTAP_RATE_ENABLED 并列：SDK 关闭时清残留 PendingPrompt 直接返回（各管一件事，见 SDK统一开关规范）。
+        if (!SdkFeatures.TapTapEnabled)
+        {
+            PendingPrompt = false;
+            return;
+        }
         if (!PendingPrompt) return;
         PendingPrompt = false;
         MaybeShow("chapter_boss_clear");

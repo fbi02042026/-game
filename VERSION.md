@@ -10,6 +10,14 @@ git show v0.3.3:VERSION.md
 
 ---
 
+## 版本号对齐 — 2026-11-06
+
+- 商店线上实际已是 **1.0.5 / APK 版本号 5**（2026-10-21 上传，当时在另一台机器 `E:/xiangsumaoxian` 工程上改的号，递增记录未回流本仓库）
+- 本机工程 `ProjectSettings/ProjectSettings.asset` 之前还停留在 `1.0.0 / 1`，本次对齐改为 **`bundleVersion: 1.0.6`、`AndroidBundleVersionCode: 6`**
+- 下次正式打包上传商店即用 1.0.6 / 6；测试包不改号
+
+---
+
 ## v1.0.0 — 2026-10-04（TapTap 上架版 · 图标全量替换 + 对外版本号）
 
 ### 图标（各平台 / 各机型槽位全覆盖）

@@ -64,7 +64,7 @@ TapTap 其实已有开关雏形，只是被写死成「常开」，而且业务�
 
 ### 2.7 关闭态行为（fail-closed，且静默）
 
-- 关掉后：隐藏 SDK 专属入口、不创建 / 不初始化 Bootstrap、不弹渠道弹窗、清掉跨场景残留标记、不刷「未定义宏」的 LogError。
+- 关掉后：隐藏 SDK 专属入口、不初始化 SDK、不弹渠道弹窗、清掉跨场景残留标记、不刷「未定义宏」的 LogError。
 - 这是**开关的预期行为，不是兜底**；真实异常（初始化抛错、配置缺失、节点找不到）仍按项目纪律 `Debug.LogError`，不许一起吞掉。
 - 账号身份类持久化键（如 `Assets/Scripts/Systems/SaveSystem.cs:55-58` 的 `TapTapGuestId`）清档时照旧保留，不因开关删除。
 
@@ -99,12 +99,20 @@ TapTap 其实已有开关雏形，只是被写死成「常开」，而且业务�
 | 2 | 新增 `Assets/Scripts/Core/SdkFeatures.cs` | 运行时只读开关出口，每个 SDK 一个 `#if` 生成的 `const bool`，不引用 SDK 类型 | 关宏时编译零 `CS0246`；业务侧只认这个类 | 无 SDK 依赖，换机 / 微信组都安全 |
 | 3 | `Assets/Editor/CliAndroidBuild.cs:14-16, 52-56, 87-97` | 删无条件 `AddDefine`；保持现有 SDK 宏不动，只处理 `SPOTLIGHT_BUILD`；构建前打印各 SDK 宏 ON/OFF | 出包日志能看到 `TAPSDK_ENABLED=ON/OFF`；开与关各出一次 APK 均成功 | 最小改动，不动其它构建参数；关宏不自动补、不报错中断 |
 | 4 | `ProjectSettings/ProjectSettings.asset:1251` | Android 组填入 `TAPSDK_ENABLED`（默认开），入库跨机一致 | `git pull` 后新机器无需额外配置即与当前行为一致 | 改 YAML 前备份，只动这一行，别碰 WeixinMiniGame 组 |
-| 5 | `Assets/Scripts/UI/LoginUI.cs:194-212, 216, 229, 562` | `TapLoginClosed` 常量改读 `SdkFeatures.TapTapEnabled`：关时隐藏 `TapLoginButton`、不调 `OnClickTapLogin`；`:562` 的 `Ensure()` 同样判开关 | 关宏进 Play：登录页无 Tap 按钮、Console 无 `[TapTap]` 报错；开宏时按钮与登录流程与现在完全一致 | 复用现有隐藏分支，不动预制体、不动按钮美术 |
+| 5 | `Assets/Scripts/UI/LoginUI.cs:194-212, 216, 229, 562` | `TapLoginClosed` 常量改读 `!SdkFeatures.TapTapEnabled`（**必须取反**）：关时隐藏 `TapLoginButton`、不调 `OnClickTapLogin`；`:562` 的 `Ensure()` **保留、不加开关判断**（主人拍板，关闭态靠 `#else` 静默走游客身份、继续生成 `TapTapGuestId`） | 关宏进 Play：登录页无 Tap 按钮、Console 无 `[TapTap]` 报错；开宏时按钮与登录流程与现在完全一致 | 复用现有隐藏分支，不动预制体、不动按钮美术；`:229` 由按钮隐藏自然不走 |
 | 6 | `Assets/Scripts/UI/TapTapRatePopup.cs:25-35` | `ConsumePendingPrompt` 并列加「SDK 关 → 清残留 `PendingPrompt` 直接返回」，与既有 `TAPTAP_RATE_ENABLED` 各管一件事 | 章末通关置位后回城不弹、无残留 | `BattleManager.Settlement.cs:2336` 置位点不改，最小增量 |
 | 7 | `Assets/Scripts/Core/TapTapBootstrap.cs:153-159`（可选） | `#else` 分支降噪：开关主动关闭时静默走游客身份，不 LogError「未定义」 | 关闭态零噪音 | 按 2.7 定性，属预期行为不是兜底 |
 | 8 | 追加 `Docs/接入第三方SDK情况说明.md` | 在 TapTap 条目注明「接入方式遵循 `Docs/SDK统一开关规范.md`」 | 两份文档互相指向，新增 SDK 时不会漏 | 与本规范同批或随后一次落地，勿改合规正文 |
 
 **落地注意**：提交本规范时，工作区已有 `CliAndroidBuild.cs`、`LoginUI.cs`、`ProjectSettings.asset`、`manifest.json` 等他人 / 旧会话的未提交改动。落地时必须按点最小增量修改，**禁止整文件覆盖、禁止顺手 `git add -A`**。
+
+**架构审查修订（落地时已并入上述做法）**：
+
+1. **运行时 / 编辑器程序集隔离**：`SdkFeatures`（`Assets/Scripts/Core`，Assembly-CSharp）**零引用** `SdkToggles`（`Assets/Editor`，Assembly-CSharp-Editor）——运行时引用 Editor 程序集会 `CS0246`；两者只靠「宏名字符串约定重复」对齐，靠规范与出包日志校验。
+2. **`SdkToggles.All` 接口契约**：公开只读枚举，每项至少含 `Define` 与 `Group`（`BuildTargetGroup`）；`CliAndroidBuild` 只依赖这两个字段遍历打印 ON/OFF，缺宏不自动补、不报错中断。
+3. **`TapLoginClosed` 必须取反**：`TapLoginClosed = !SdkFeatures.TapTapEnabled`（`true`=隐藏、`false`=可用）；直接写 `= SdkFeatures.TapTapEnabled` 会变成「开=隐藏、关=显示」，方向反了。
+4. **`nextDefines` → `baseDefines` 与 Spotlight 回滚的顺序依赖**：删掉 `AddDefine(baseDefines, TapDefine)` 后，写回语句改用 `baseDefines`（只含 `SPOTLIGHT_BUILD` 变化）；否则 `finally` 里 `RemoveDefine(prevDefines, SpotlightDefine)` 的回滚会把脚本注入的 SDK 宏一并抹掉 / 或让 SDK 宏常驻，破坏「构建脚本不代管」。
+5. **只借菜单三件套、不抄 EditorPrefs**：照 `UiSpriteRefGuard.cs:82-95` 的 `MenuItem` + validate + `Menu.SetChecked` 写法；**不要**抄它 78-79 行的 `EditorPrefs` 状态存储——真值只从 `PlayerSettings.Get/SetScriptingDefineSymbolsForGroup` 读写。
 
 ---
 
@@ -126,13 +134,13 @@ TapTap 其实已有开关雏形，只是被写死成「常开」，而且业务�
 
 ---
 
-## 八、待确认项（本次提交时未拍板，落地前须主人确认）
+## 八、待确认项（2026-11-06 主人拍板，4 项均按推荐口径收口）
 
-| # | 问题 | 未确认前的处置 |
+| # | 问题 | 收口结论 |
 |---|---|---|
-| 1 | 开关真值放 `ProjectSettings` define（推荐，入库跨机一致）还是 EditorPrefs 菜单（本机即改即生效、不入库） | 按本规范 2.1 的 define 口径写文档；**落地前需一句话确认** |
-| 2 | 默认值保持「开」（推荐，行为不变）还是改成关 | 登记表暂记「开」 |
-| 3 | 关掉后登录按钮「直接隐藏」（推荐，与现有 `TapLoginClosed` 分支一致）还是「置灰提示暂未开放」 | 清单第 5 条暂按隐藏写 |
-| 4 | `Assets/Scripts/UI/LoginUI.cs:15-18` 的隐私协议页目前指向 TapTap 渠道页，是否随开关切换 | **不动**，保持现状，待主人明确 |
+| 1 | 开关真值放 `ProjectSettings` define（推荐，入库跨机一致）还是 EditorPrefs 菜单（本机即改即生效、不入库） | 采用推荐口径：真值 = `ProjectSettings` define 宏（规范 2.1），菜单只读写宏、不另存状态 |
+| 2 | 默认值保持「开」（推荐，行为不变）还是改成关 | 采用推荐口径：默认「开」，行为不变（登记表 / `ProjectSettings.asset` 已填 `TAPSDK_ENABLED`） |
+| 3 | 关掉后登录按钮「直接隐藏」（推荐，与现有 `TapLoginClosed` 分支一致）还是「置灰提示暂未开放」 | 采用推荐口径：关闭态直接隐藏 `TapLoginButton`（复用 `TapLoginClosed` 分支） |
+| 4 | `Assets/Scripts/UI/LoginUI.cs:15-18` 的隐私协议页目前指向 TapTap 渠道页，是否随开关切换 | **不动**，保持现状（隐私协议页仍指向 TapTap 渠道页） |
 
-> 以上 4 项未经主人点头，不得据此改动线上行为；规范正文与任务清单按推荐口径先入库，供落地时按确认结果微调。
+> 以上 4 项均按推荐口径收口。另，关闭态定调（主人 2026-11-06 拍板）：`Assets/Scripts/UI/LoginUI.cs:562` 的 `TapTapBootstrap.Ensure()` **保留、不加开关判断**；关宏靠现有 `#else` 静默走游客身份、继续生成 `TapTapGuestId`，不改 `BindGuestId` / `LoadOrCreateGuestId` 链路。

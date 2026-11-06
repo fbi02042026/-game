@@ -1,11 +1,33 @@
 {
   "dependencies": {
+    "com.google.external-dependency-manager": {
+      "version": "file:com.google.external-dependency-manager@1.2.179",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.qq.weixin.minigame": {
       "version": "https://gitee.com/wechat-minigame/minigame-tuanjie-transform-sdk.git#915d4bf4f60ef0cd1c29316a8d67257185d609a7",
       "depth": 0,
       "source": "git",
       "dependencies": {},
       "hash": "915d4bf4f60ef0cd1c29316a8d67257185d609a7"
+    },
+    "com.taptap.sdk.core": {
+      "version": "4.10.9",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {},
+      "url": "https://registry.npmmirror.com"
+    },
+    "com.taptap.sdk.login": {
+      "version": "4.10.9",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.taptap.sdk.core": "4.10.9"
+      },
+      "url": "https://registry.npmmirror.com"
     },
     "com.unity.2d.animation": {
       "version": "9.2.0",
