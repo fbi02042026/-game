@@ -234,6 +234,7 @@ public partial class UnitBase
     {
         _isDying = false;
         holdAtDeathDoor = false;
+        _knockbackBusy = false;   // 【2026-11-06】击退协程可能被回收（SetActive(false)）中途打断，标志卡死 → 回池复用后永不击退，必须复位
         attackCd = 0;
         target = null;
         OnDead = null;
@@ -248,7 +249,7 @@ public partial class UnitBase
     // 受击后退（2026-11-05 主人拍板三层规则，Docs/《战斗趣味升级_pixelfx特效与打击反馈》）：
     // ① 普通怪受击（我方打的）→ 小退；② 精英/Boss 受击→ 纹丝不动（体型重量感）；
     // ③ 精英/Boss 命中玩家/俇兵→ 明显击退。普通怪打玩家/俇兵不退（主人未授权）。
-    // 位移走 transform 短促补间：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；0.15s 内不叠加；死亡单位不退。
+    // 位移走 transform + rb.position 短促补间（只写 transform 会被物理回写吃掉，见 KnockbackCo 内注释）：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；0.15s 内不叠加；死亡单位不退。
     // ============================================================
     bool _knockbackBusy;
     float _lastKnockbackAt;
@@ -291,7 +292,14 @@ public partial class UnitBase
         while (t < 1f)
         {
             t += Time.deltaTime / dur;
-            transform.position = Vector3.Lerp(start, end, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            Vector3 p = Vector3.Lerp(start, end, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t)));
+            transform.position = p;
+            // 【2026-11-06 修「击退看不见」】所有战斗单位位移都由 Rigidbody2D 驱动（AI 每帧写 rb.velocity，
+            // 物理每步用刚体位姿回写 transform），只写 transform 的击退位移一帧内就被物理打回原位。
+            // 前科：CoKnockback 早就踩过同一坑、专门补了 SyncKnockbackRigidbody（UnitBase.Combat.cs）。
+            // 这里必须把位移同步进刚体位姿才落得住；不碰 velocity，不打断移动 AI。
+            if (rb != null)
+                rb.position = new Vector2(p.x, rb.position.y);
             yield return null;
         }
         _knockbackBusy = false;

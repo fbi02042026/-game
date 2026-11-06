@@ -119,6 +119,10 @@
 1. `git pull`（本地有改动先提交或 stash）。
 2. **必须重启团结引擎**——Library 缓存还按旧 guid 索引，不重启会看到一堆 Missing / 空图。
 3. **不再扫 56 字符 guid**（2026-10-14 主人拍板：默认不处理，见 §2.3）。
+4. **TapSDK 依赖位置（2026-11-06 起，项目仅安卓端）**：`Packages/manifest.json` 里 `com.taptap.sdk.core/login` 4.10.9 走 npmmirror 国内源（github 直连拉不动，勿改回 git URL）；EDM 是**内嵌包** `Packages/com.google.external-dependency-manager@1.2.179`（`file:` 路径相对 `Packages/` 目录解析，不是项目根——踩过一次坑）。`TAPSDK_ENABLED` 由 `CliAndroidBuild` 出包时自动加，恒开不回滚。
+   **SDK 包与微信小游戏配置不入库**（2026-11-06 主人拍板：提交时排除 `LocalPackages/`、`Packages/com.google.external-dependency-manager@1.2.179/`、
+   TapTap 依赖改动（manifest / packages-lock / PackageManagerSettings）、微信小游戏配置（MiniGameConfig / activeSubplatform / WeixinMiniGame 贴图 meta）。
+   同理 `minigame/`（微信构建产物，约 280MB）与 `TextToolDatas/`（约 83MB 数据）也不入库。
 
 ## 4. 工作纪律
 
@@ -127,7 +131,12 @@
 - 不动美术排版，改前先问；没明确指令不动文件。
 - 资源 / 代码 / .meta 全部入库。
 - 🚫 不主动提交推送；用户说「提交」= 提交 + 推送，一次做完不再回头问。
-- 🔴 **推送优先 GitHub（2026-11-03 主人拍板「以后优先推到github上」）**：说「提交」= 提交 + **先推 `origin`（GitHub）：`git push origin main`**；gitee 不再是默认目标，主人明确要求（如「推 gitee」）才推。本仓库配了双远程：`gitee`（本地 `main` 跟踪它，`git push` 不带参数只会推它）与 `origin`（GitHub），所以推 GitHub **必须显式写 `git push origin main`**，不能裸 `git push`。说「同步提交」= 提交 + `git push origin main` 和 `git push gitee main` 各推一次，两个远程都要到才算完成。
+- 🔴 **只推 origin（2026-11-06 主人拍板「以后这个项目只是安卓端的 只提交和推送到不是后缀weixin的那个GitHub上」，覆盖 2026-11-03）**：
+  项目**仅安卓端**，不再打微信小游戏包；说「提交」= 提交 + **只推 `origin`：`git push origin main`**，一次做完。
+  本仓库三个远程：`origin`=GitHub `fbi02042026/-game.git`（**唯一推送目标**）、`gitee`（❌ 不再推）、
+  `weixin`=GitHub `fbi02042026/xiangsumaoxianweixin.git`（❌ 不再推，微信端已停）。
+  本地 `main` 已改为跟踪 `origin/main`（2026-11-06），裸 `git push` 即推 GitHub 的 `-game.git`；仍建议显式写 `git push origin main`。
+  「同步提交」旧口径作废；主人明确要求「推两个 GitHub」时才额外 `git push weixin main`。
 - 汇报讲人话，不堆术语。
 - 🔴 **不许为救断链而兜底**（2026-10-08 主人拍板）：
   断链就**修 guid** 或**在预制体里重新拖好**，**禁止**这两件事 ——
