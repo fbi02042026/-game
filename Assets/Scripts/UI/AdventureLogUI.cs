@@ -47,6 +47,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         public string QuestId;
         /// <summary>QuestId 非空时生效：true = 主线任务，false = 支线岛。</summary>
         public bool QuestMain;
+        /// <summary>【2026-11-07 主人拍板】成就行：已领取 → 整条压暗并沉到列表底部。</summary>
+        public bool Claimed;
+        /// <summary>【2026-11-07 主人拍板】成就行：可领取 → 右上角挂红点。</summary>
+        public bool Claimable;
     }
 
     static readonly string[] TabNames =
@@ -223,6 +227,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         WireButtons();
         BindRewardRedDots();
         BindTabIllustration();
+        // 2026-11-07 主人拍板：冒险日志其它页面用到同款「标签底」横条底的也一起 70% 不透明
+        UiKeyedBackgrounds.ApplyLogBarAlphaToTree(transform);
         RedDot.RefreshCommon();
         _bound = true;
     }
@@ -976,6 +982,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         AdventureLogAchievements.EvaluateAll();
         var list = AdventureLogCatalog.Achievements;
+        // 【2026-11-07 主人拍板】已领取的条沉到列表最下面：先按原表顺序分两批，末尾合并（稳定，不打乱其余顺序）。
+        var claimedRows = new List<LogRow>();
         int unlocked = 0;
         int claimable = 0;
         AdventureLogCatalog.AchEntry current = default;
@@ -1002,22 +1010,21 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string detail = done
                 ? e.Desc + "\n奖励：" + AdventureLogAchievements.GetReward(e.Id).Label
                 : e.Category + "　" + e.Desc;
-            AddRow(rows, e.Name, prog, detail, !done, e.Unlock, e.Id);
+            // 【2026-11-07 主人拍板】可领取的条右上角挂红点；已领取的条整条压暗，并排到最后面。
+            AddRow(claimed ? claimedRows : rows, e.Name, prog, detail, !done, e.Unlock, e.Id,
+                claimed: claimed, claimable: canClaim);
         }
+        rows.AddRange(claimedRows);
         title = hasCurrent ? current.Name : "成就";
         desc = hasCurrent
             ? current.Desc
             : "成长、战斗、收集、养成、探索。达成后请在此领取奖励。";
         // 2026-10-31 校对：原先这里显示 AdventureLogMileage.FormatStatusLine()（里程状态，
-        // 属世界页口径，放成就页错位）。改为可领提示 / 下一个成就的达成条件。
-        objective = claimable > 0
-            ? "有 " + claimable + " 个成就奖励可领取"
-            : NextGoal(list,
-                  e => AdventureLogAchievements.IsCompleted(e.Id) || AdventureLogCatalog.AchUnlocked(e),
-                  e => e.Unlock)
-              ?? "成就已全部达成";
-        progress = unlocked + "/" + list.Length
-                   + (claimable > 0 ? $"  可领×{claimable}" : "");
+        // 属世界页口径，放成就页错位）。2026-11-07 起改为下方「成就达成 x/y」。
+        // 2026-11-07 主人拍板：当前目标改「成就达成 x/y」，进度并到同一行，
+        // 可领重复数字不再拼在进度槽；只动这一处，其它页签进度不变。
+        objective = "成就达成 " + unlocked + "/" + list.Length;
+        progress = "";
     }
 
     void FillWorld(out string title, out string desc, out string objective, out string progress, List<LogRow> rows)
@@ -1058,11 +1065,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     static void AddRow(List<LogRow> rows, string title, string progress, string detail, bool locked,
         string objective, string achId = null, int worldIndex = -1,
-        string questId = null, bool questMain = false)
+        string questId = null, bool questMain = false, bool claimed = false, bool claimable = false)
     {
         rows.Add(new LogRow { Title = title, Progress = progress, Detail = detail,
             Objective = objective, Locked = locked, AchId = achId, WorldIndex = worldIndex,
-            QuestId = questId, QuestMain = questMain });
+            QuestId = questId, QuestMain = questMain, Claimed = claimed, Claimable = claimable });
     }
 
     /// <summary>第一个未达成条目的目标文案；全部达成返回 null。</summary>
@@ -1358,6 +1365,38 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var prog = row.Find("Progress")?.GetComponent<Text>();
         if (prog != null)
             prog.text = data.Progress ?? "";
+        ApplyRowState(row, data);
+    }
+
+    /// <summary>
+    /// 【2026-11-07 主人拍板】成就行状态：可领取 → 右上角红点；已领取 → 整条压暗并排在列表最下面（排序在 FillAchievement）。
+    /// 红点图走 RedDot.Sprite 唯一出口；压暗用 CanvasGroup（同 AdMercEventUI 口径，不改预制体底图 / 文字色）。
+    /// 行是复用的（RebuildRows 行数一致时只刷数据），所以每次都按当前数据重设，切页 / 领取后不残留。
+    /// </summary>
+    static void ApplyRowState(Transform row, LogRow data)
+    {
+        var red = row.Find("ClaimRedDot");
+        if (red == null && data.Claimable)
+        {
+            var go = new GameObject("ClaimRedDot", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(row, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-8f, -8f);
+            rt.sizeDelta = new Vector2(24f, 24f);
+            var img = go.GetComponent<Image>();
+            img.sprite = RedDot.Sprite;
+            img.color = Color.white;
+            img.raycastTarget = false;
+            img.preserveAspect = true;   // 与 UIRedDot 同款，不拉伸红点图
+            red = go.transform;
+        }
+        if (red != null) red.gameObject.SetActive(data.Claimable);
+
+        var cg = row.GetComponent<CanvasGroup>();
+        if (cg == null) cg = row.gameObject.AddComponent<CanvasGroup>();
+        cg.alpha = data.Claimed ? 0.55f : 1f;
     }
 
     Transform FindTransform(string name)

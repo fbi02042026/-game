@@ -180,10 +180,13 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             icon.sprite = sp;
             icon.enabled = sp != null;
-            MercRarityFx.ApplyPortraitShine(icon, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光
-            // 【2026-11-04 主人拍板】未获得=黑剪影（与冒险日志佣兵图鉴同款 0,0,0,0.92，见 AdventureLogCodexPanel），
-            //     获得后还原正常亮；已上阵=立绘压灰一档；未入队的已获得=正常亮（2026-10-17 主人拍板）
-            icon.color = !owned ? new Color(0f, 0f, 0f, 0.92f)
+            // 【2026-11-07 主人拍板「不要加材质球效果 只是把颜色给到全黑就行」】
+            // 未获得卡不挂任何材质球：传奇流光材质不带 UI Mask 的 stencil，挂上后 Iconmask
+            // 裁剪失效，立绘的腿脚会画到卡框外（主人报的「下面的脚都露出来了」）。
+            // 已获得（含已上阵）的传奇立绘仍走 ApplyPortraitShine 单一出口，每次刷新按稀有度复位。
+            MercRarityFx.ApplyPortraitShine(icon, owned ? hireId : null);
+            // 未获得=纯黑；已上阵=立绘压灰一档；未入队的已获得=正常亮（2026-10-17 主人拍板）
+            icon.color = !owned ? Color.black
                 : inQueue ? new Color(0.45f, 0.45f, 0.45f, 1f)
                 : Color.white;
             // 【2026-10-16 主人拍板】只替换形象，尺寸/取景一律保持模板原样（主人已调好），不做适配

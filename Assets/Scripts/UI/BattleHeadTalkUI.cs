@@ -53,7 +53,9 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// <summary>头顶气泡正文字号。2026-10-10 主人拍板 22→26；2026-10-12 主人再报太挤 → 26→32。
     /// 【2026-10-21 还原窄框】框宽退回 260 后，32 号字一行只放得下 6 个字（长句要折 4 行、框变得又高又窄），
     /// 一并退回 26（同 10-10 那版），一行 8 个字，两句即收。要再调只改这一个常量。</summary>
-    const int BubbleFontSize = 26;
+    public const int BubbleFontSize = 26;
+    /// <summary>头顶气泡正文色（深灰，配米色底框）。引导气泡要与「战斗佣兵说话」同款时读这里。</summary>
+    public static readonly Color BubbleTextColor = new Color(0.28f, 0.28f, 0.30f, 1f);
     /// <summary>
     /// 气泡锚点离说话人的抬高（世界单位，脚下原点起算）。【2026-10-20 主人「能不能离得近点」】1.55 → 1.35：
     /// 气泡 pivot 在底部中点，锚点越低气泡越贴头；要再近/再远改这一个常量（低于 1.2 会压到头顶）。
@@ -129,7 +131,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         _text = textGo.AddComponent<Text>();
         _text.alignment = TextAnchor.MiddleCenter;
         _text.fontSize = BubbleFontSize;
-        _text.color = new Color(0.28f, 0.28f, 0.30f, 1f);
+        _text.color = BubbleTextColor;
         _text.horizontalOverflow = HorizontalWrapMode.Wrap;
         _text.verticalOverflow = VerticalWrapMode.Overflow;
         _text.resizeTextForBestFit = false;

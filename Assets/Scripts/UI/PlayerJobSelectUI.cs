@@ -10,6 +10,11 @@ public class PlayerJobSelectUI : MonoBehaviour
 {
     public const string PrefabResourcePath = "Prefabs/UI/PlayerJobSelect";
 
+    /// <summary>选职提示：一行短句 + 放大字号（预制体原为两行 22 号字塞在 600×48 框里，挤压发糊）。
+    /// 运行时与白模两条路径共用同一组值，避免同语义出现两个出口。</summary>
+    const string HintText = "请选择职业，踏入裂隙";
+    const int HintFontSize = 30;
+
     public static PlayerJobSelectUI Instance { get; private set; }
 
     /// <summary>选职界面当前是否开着（FirstRunGuide 复弹气泡的闸门：弹窗开着时不许把气泡弹回屏上）。</summary>
@@ -173,14 +178,15 @@ public class PlayerJobSelectUI : MonoBehaviour
             _refreshBtn.interactable = false;
         }
 
-        // 手做 prefab：绝不碰 Hint（字号/字体/文案），也不整树套字体
-        if (!_fromPrefab)
+        // 提示字缩短成一行并放大：预制体 Hint 是两行 22 号字塞在 600×48 的框（Wrap+Truncate），
+        // 两行挤压发糊。文案/字号在这里统一设，预制体文件不动；只作用于 Hint 这一个节点。
+        if (_hint != null)
         {
-            if (_hint != null)
-                _hint.text = "请选择你想成为的职业，踏入裂隙，迎接挑战！";
-            if (_title != null)
-                _title.text = "选择职业";
+            _hint.text = HintText;
+            _hint.fontSize = HintFontSize;
         }
+        if (!_fromPrefab && _title != null)
+            _title.text = "选择职业";
 
         if (_root != null)
         {
@@ -453,7 +459,7 @@ public class PlayerJobSelectUI : MonoBehaviour
         title.color = new Color(0.35f, 0.22f, 0.08f);
 
         var hint = CreateText(panel.transform, "Hint",
-            "请选择你想成为的职业，踏入裂隙，迎接挑战！", 18, TextAnchor.MiddleCenter);
+            HintText, HintFontSize, TextAnchor.MiddleCenter);
         AnchorTop(hint.rectTransform, -78f, 600f, 48f);
         hint.color = new Color(0.35f, 0.28f, 0.18f);
         hint.horizontalOverflow = HorizontalWrapMode.Wrap;

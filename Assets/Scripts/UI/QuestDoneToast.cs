@@ -15,7 +15,8 @@ using UnityEngine.UI;
 public class QuestDoneToast : MonoBehaviour
 {
     const float SlideInTime = 0.30f;    // 快速滑入
-    const float HoldTime = 5.0f;        // 停留 5 秒
+    // 2026-11-07 主人「左边任务完成提示时间缩短20%」：停留 5s → 4s（滑入/滑出动画不动）。
+    const float HoldTime = 4.0f;        // 停留 4 秒
     const float SlideOutTime = 0.35f;   // 向左滑出
     const float PadX = 18f;             // 左右内边距
     const float PadY = 10f;             // 上下内边距

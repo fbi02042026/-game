@@ -309,7 +309,7 @@ public partial class UnitBase
                 yield break;
             }
             transform.position = new Vector3(bodyTf.position.x, transform.position.y, transform.position.z);
-            const float dur = 0.15f;
+            const float dur = GameConfig.KNOCKBACK_DURATION;
             float vx = dir * dist / dur;
             float t = 0f;
             while (t < dur)
@@ -324,7 +324,7 @@ public partial class UnitBase
         }
         Vector3 start = transform.position;
         Vector3 end = start + new Vector3(dir * dist, 0f, 0f);
-        const float dur2 = 0.15f;
+        const float dur2 = GameConfig.KNOCKBACK_DURATION;
         float t2 = 0f;
         while (t2 < 1f)
         {

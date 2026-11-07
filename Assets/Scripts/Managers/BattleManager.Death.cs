@@ -130,7 +130,8 @@ public partial class BattleManager
                     ReviveQuota.RegisterClaimed();
                     BattleResultScreen.ForceCloseChoice();
                     DoReviveHero();
-                });
+                }, sortingOrder: GameConfig.UiSort.BattleSettlement + 1);
+                // 失败选择图/结果界面是 985~990，确认框默认 910 会被压在下面；本次抬到结算之上
                 return false;
 
             default:   // Capped：CanOfferRevive 已挡，理论上到不了；fail-closed 当放弃处理
@@ -162,6 +163,9 @@ public partial class BattleManager
     /// </summary>
     void FinalizeHeroDeath()
     {
+        // 【2026-11-07】确认框是 DDOL，玩家不点「取消」直接按【返回】不会收它 → 回到主界面还挂着。
+        // 死亡收尾是「放弃复活」唯一出口，在这里统一收掉（Close 幂等，已关时无副作用）。
+        StaminaConfirmPopup.Close();
         _reviveChoiceOpen = false;  // 选择窗已收（放弃复活）——广告异步回调凭本标志不再生效
         UnitsCanAct = true;  // 还原冻场，后续结算/协程照旧
         Planner?.NotifyStageResult(true, 0f); // V3.0 压力阀：死过 → 下一关减一波

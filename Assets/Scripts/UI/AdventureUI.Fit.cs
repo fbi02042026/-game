@@ -42,6 +42,9 @@ public partial class AdventureUI
     /// <summary>「根矩形未就绪挂起重试」诊断只打一次（每次 Play 会话一条，帮助定位进页太早问题）。</summary>
     bool _adventureFitWaitLogged;
 
+    /// <summary>DetailPanel/you 文字块的预制体基准缩放（首次懒记；每次适配从它重算，幂等且不累积）。</summary>
+    Vector3 _detailTextBaseScale;
+
     // 记录被重锚定节点的原始锚点/偏移/轴心，用于幂等重算与一键回退还原（按 instanceID）。
     struct AdventureUiBase
     {
@@ -101,6 +104,11 @@ public partial class AdventureUI
             // 瘦屏/标准屏逻辑宽恒 720 → s=1 与现状零差别。挂在瘦屏闸门之前——宽屏也要生效；
             // s 每次现算，s=1 即自然回预制体缩放，无需单独还原口。
             FitSidebarWidthScale();
+            // 详情面板右侧四行小字（消耗体力 / 剩余次数 / X10 / 未通关）跟面板自适应倍率一起放大缩小：
+            // 2026-11-07 主人「跟面板一起放大缩小」——不写死字号，按竖屏逻辑高 / 设计高 的倍率
+            // 等比缩放整个 you 文字块（字、体力图标、间距同步）。标准 9:16 倍率=1 即预制体原样，
+            // 关适配开关/回标准屏也自动缩回，无需单独还原口（与 FitSidebarWidthScale 同范式）。
+            FitDetailTextScale(EnableAdventureUiFit && UiLayoutStretch.IsThinnerScreen());
 
             var right = root.Find("RightContent") as RectTransform;
             var detail = root.Find("DetailPanel") as RectTransform;
@@ -1267,6 +1275,33 @@ public partial class AdventureUI
         var target = new Vector3(_sidebarBaseScale.x * s, _sidebarBaseScale.y * s, _sidebarBaseScale.z);
         if (sidebar.localScale != target)
             sidebar.localScale = target;
+    }
+
+    /// <summary>
+    /// 详情面板右侧四行小字随面板自适应倍率等比缩放（2026-11-07 主人「跟面板一起放大缩小」）。
+    /// 不写死字号：s = 竖屏逻辑高 / 设计高，钳在 1~1.3；标准屏 / 关开关 s=1 自动回到预制体缩放。
+    /// 只改 you 容器的 localScale —— 文字、体力图标、X10、行间距一起等比，字号与文字框尺寸
+    /// 一个都不动，所以既不撑破框、也不压到图标；该容器 pivot=(1,0.5) 贴面板右缘，
+    /// 放大只向左扩展，不会溢出屏幕。节点缺失按本文件惯例 no-op。
+    /// </summary>
+    void FitDetailTextScale(bool fitActive)
+    {
+        var detail = transform.Find("DetailPanel") as RectTransform;
+        if (detail == null)
+        {
+            var right = transform.Find("RightContent") as RectTransform;
+            if (right != null) detail = right.Find("DetailPanel") as RectTransform;
+        }
+        if (detail == null) return;
+        var you = detail.Find("you") as RectTransform;
+        if (you == null) return;
+
+        if (_detailTextBaseScale == Vector3.zero) _detailTextBaseScale = you.localScale;
+        float s = 1f;
+        if (fitActive)
+            s = Mathf.Clamp(UiLayoutStretch.ResolveUiLogicalHeight() / GameConfig.DESIGN_HEIGHT, 1f, 1.3f);
+        var target = new Vector3(_detailTextBaseScale.x * s, _detailTextBaseScale.y * s, _detailTextBaseScale.z);
+        if (you.localScale != target) you.localScale = target;
     }
 
     // ────────────────────────────────────────────────────

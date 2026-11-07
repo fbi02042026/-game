@@ -162,7 +162,7 @@ public static class StoryPortraitPresenter
         var hostRt = GetHostRt(img);
         hostRt.pivot = new Vector2(0.5f, 0f);
         hostRt.anchorMin = hostRt.anchorMax = new Vector2(anchorX, 0f);
-        // 【2026-10-15 主人】引导局坐姿立绘（会长/前台小姐）再上抬 80；其他人物不在名单、恒 0，位置照旧
+        // 【2026-10-15 主人，2026-11-07 下调 20】引导局坐姿立绘（会长/前台小姐）额外上抬 60；其他人物不在名单、恒 0，位置照旧
         float bottomY = ResolveBottomY(hostRt, profile, ctx, portraitId);
         bottomY += StoryPortraitLayout.GetTutorialDeskLiftPx(portraitId);
         bottomY += footAdjustPx;

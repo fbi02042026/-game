@@ -54,7 +54,8 @@ public static class StaminaConfirmPopup
 
     /// <summary>带标题版本（2026-10-19）：设置弹窗「清除数据」等通用确认复用同一套默认弹窗预制体，
     /// 体力线三个调用点走上面的旧签名不受影响。</summary>
-    public static void Show(string title, string body, string okLabel, Action onConfirm)
+    public static void Show(string title, string body, string okLabel, Action onConfirm,
+        int sortingOrder = GameConfig.UiSort.TownConfirm)
     {
         Ensure();
         if (_rootPanel == null) return;
@@ -74,7 +75,7 @@ public static class StaminaConfirmPopup
         _host.transform.SetAsLastSibling();
         var canvas = _host.GetComponent<Canvas>();
         if (canvas != null)
-            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownConfirm);
+            UICanvasSetup.RefreshPopup(canvas, sortingOrder);
     }
 
     /// <summary>

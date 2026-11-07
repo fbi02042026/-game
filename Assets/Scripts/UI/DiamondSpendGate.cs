@@ -18,7 +18,8 @@ public static class DiamondSpendGate
     /// cost 本次花费钻石数（必须 &gt; 0）；onConfirmed 玩家点「确认」后的回调（扣费与发货都在回调里做）；
     /// okLabel 确认键文字，缺省「确认」。
     /// </summary>
-    public static void Request(string title, string body, long cost, Action onConfirmed, string okLabel = "确认")
+    public static void Request(string title, string body, long cost, Action onConfirmed,
+        string okLabel = "确认", int sortingOrder = GameConfig.UiSort.TownConfirm)
     {
         if (cost <= 0 || onConfirmed == null)
         {
@@ -44,6 +45,6 @@ public static class DiamondSpendGate
         }
 
         string fullBody = body + $"\n\n花费钻石 ×{cost}（持有 {have} → 剩余 {have - cost}）";
-        StaminaConfirmPopup.Show(title, fullBody, okLabel, onConfirmed);
+        StaminaConfirmPopup.Show(title, fullBody, okLabel, onConfirmed, sortingOrder);
     }
 }

@@ -867,16 +867,16 @@ public class RewardPopupUI : MonoBehaviour
                 iconImg.enabled = true;
                 ApplyIconSprite(iconImg, e.icon);
             }
-            return;
         }
-
-        if (iconImg != null)
+        else if (iconImg != null)
         {
             iconImg.enabled = true;
             ApplyIconSprite(iconImg, e.icon);
         }
 
-        // 数量角标最后建（与碎片卡同级且在其后 → 永远在最上层，碎片条目不被盖）
+        // 数量角标最后建（与碎片卡同级且在其后 → 永远在最上层，碎片条目不被盖）。
+        // 碎片分支原先直接 return，拆出的 ×N 到不了这里，截图上就只剩名字没有数量；
+        // 现在碎片/非碎片两路共用这一处出口，单一出口不重复建角标。
         if (!string.IsNullOrEmpty(countPart)) EnsureCountBadge(cell.transform, countPart);
     }
 
@@ -894,10 +894,15 @@ public class RewardPopupUI : MonoBehaviour
             Debug.LogError("[RewardPopup] 格子缺 Icon 节点，数量角标放不了");
             return;
         }
-        var go = new GameObject("CountBadge", typeof(RectTransform), typeof(Text), typeof(Outline));
+        // 仍挂格子根（与碎片卡同级且在其后 → 永远在最上层），只修两处：
+        // ① 运行时 new 的 Text 默认 font=null，不显式给字体整串不渲染；
+        // ② 节点名不带「Count」，避免 Open 末尾 GameFonts.ApplyToHierarchy 按数字规则换成
+        //    PixelFont（PixelFont 没有「×」字形，×N 会整串不显示）。
+        var go = new GameObject("QtyBadge", typeof(RectTransform), typeof(Text), typeof(Outline));
         go.transform.SetParent(cell.transform, false);
         var t = go.GetComponent<Text>();
         t.text = countText;
+        t.font = GameFonts.GetChinese();
         t.fontSize = 24;
         t.alignment = TextAnchor.LowerRight;
         t.color = Color.white;

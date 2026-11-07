@@ -69,6 +69,27 @@ public static class GameBgm
     public static bool IsLoadingMuted => _loadingMuted;
     public static bool IsCutsceneMuted => _cutsceneMuted;
 
+    /// <summary>
+    /// 【2026-11-07 主人报「删除数据后已经重新开始了但是背景音乐没有及时切断」】
+    /// 清档/开新档：立刻切断当前曲目，并把待恢复曲目钉成登录曲。
+    /// 根因：GoLogin 是同步 LoadScene，不走 SceneLoadingCoordinator，清档前
+    /// _pendingAfterLoading 残留 Town/Battle；登录片头结束时 UnmuteAfterCutscene
+    /// 会按它把旧曲播回来，旧 BGM 就一路拖到登录页。清档统一复位只走这一处。
+    /// 登录界面原地清档（不切场景）时也要有 BGM，所以切断后直接淡入登录曲；
+    /// 若正处于静音期，Play 会被拦下，后续 Unmute 仍按已钉好的 Login 恢复。
+    /// </summary>
+    public static void ResetForNewGame()
+    {
+        EnsureHost();
+        if (_fadeCo != null) { _runner.StopCoroutine(_fadeCo); _fadeCo = null; }
+        if (_endStoryCo != null) { _runner.StopCoroutine(_endStoryCo); _endStoryCo = null; }
+        _storyHold = 0;
+        _restoreAfterStory = Track.None;
+        StopImmediate();                      // 两个声道一起停，不等淡出
+        _pendingAfterLoading = Track.Login;   // 之后任何 Unmute / 加载恢复只能拿登录曲
+        Play(Track.Login);
+    }
+
     /// <summary>按关卡类型选曲：战斗/首领/功能关。
     /// 【2026-10-31 主人拍板】精英关与首领关共用 bgm_boss（新曲「boss战」）；普通关用 bgm_battle。</summary>
     public static Track TrackForStage(StageType type)

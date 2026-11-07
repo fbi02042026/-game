@@ -228,9 +228,15 @@ public partial class BattleEntryDraftPanel
         var hint = TutorialHintUI.Ensure();
         hint.SetBannerSpriteOnce(BattleManager.DraftHintBubble);   // 一次性：Hide 后还原默认底框
         // 竞技场不吃金币（四类按钮共用 5 次额度），文案不能写「抽奖币够了」，否则玩家会去找币
-        string hintText = bm.IsArena ? "还有抽奖次数，点这里抽一次！" : "抽奖币够了，点这里抽一次！";
-        hint.Show(hintText, drawRt, 5f);
+        hint.Show(DrawHintText(bm.IsArena), drawRt, 5f);
+        hint.ApplyBattleTalkTextStyle();   // 框用主人给的，字与「战斗佣兵说话」同款
     }
+
+    /// <summary>「币够了没抽」引导气泡文案唯一出口（前台小姐傲娇口吻，实用信息不丢）。</summary>
+    internal static string DrawHintText(bool isArena)
+        => isArena
+            ? "还有抽奖次数呢～开局先抽一次嘛，哼！"
+            : "开局先抽一次，路上才不慌呀～哼，才不是担心你呢！";
 
     /// <summary>
     /// 【2026-11-06】正式关/金币本刚进关、玩家还没点「开始战斗」时，在「随机抽奖」按钮上
@@ -254,8 +260,8 @@ public partial class BattleEntryDraftPanel
         var hint = TutorialHintUI.Ensure();
         hint.SetBannerSpriteOnce(BattleManager.DraftHintBubble);
         var bm = BattleManager.InstanceQuiet;
-        string hintText = bm != null && bm.IsArena ? "还有抽奖次数，点这里抽一次！" : "抽奖币够了，先抽一次再开打吧！";
-        hint.Show(hintText, drawRt, 5f);
+        hint.Show(DrawHintText(bm != null && bm.IsArena), drawRt, 5f);
+        hint.ApplyBattleTalkTextStyle();   // 框用主人给的，字与「战斗佣兵说话」同款
         // Show 内部被 BattleHeadTalkUI.IsShowing 闸门静默吞掉时不置位，开打后还能补弹
         if (hint.IsVisible) _liveDrawHintShown = true;
     }

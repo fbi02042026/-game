@@ -22,6 +22,7 @@ public sealed class UiClickSfx : MonoBehaviour
 
     static UiClickSfx _inst;
     static AudioClip _clip;
+    static bool _missingLogged;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Bootstrap()
@@ -33,18 +34,38 @@ public sealed class UiClickSfx : MonoBehaviour
         _inst = go.GetComponent<UiClickSfx>();
     }
 
-    void Awake()
+    /// <summary>
+    /// 点击音效素材唯一取货口：Resources/Audio/SFX/ui_click。
+    /// 2026-11-07 主人「不要在查音效为什么丢了，直接补上一个 ui_click」——
+    /// 不再追究旧链路为何失效，这里在 Awake 与每次点击前都确保素材在手，
+    /// 资源晚导入 / 首次加载没拿到的情况，下一次点击自己就补上（缺素材只报一次错，不静默）。
+    /// </summary>
+    static void EnsureClip()
     {
-        // 路径加载，缺图/缺文件只报错不兜底
+        if (_clip != null) return;
         _clip = Resources.Load<AudioClip>(ClipPath);
         if (_clip == null)
-            Debug.LogError("[UiClickSfx] 缺少点击音效素材：Resources/" + ClipPath +
-                           ".aif（请把文件放进 Assets/Resources/Audio/SFX/，由团结生成 .meta 后提交）");
+        {
+            if (!_missingLogged)
+            {
+                _missingLogged = true;
+                Debug.LogError("[UiClickSfx] 缺少点击音效素材：Resources/" + ClipPath +
+                               "（请把 ui_click 放进 Assets/Resources/Audio/SFX/，由团结生成 .meta 后提交）");
+            }
+            return;
+        }
+        _missingLogged = false;
+        Debug.Log("[UiClickSfx] 点击音效已就位：Resources/" + ClipPath);
+    }
+
+    void Awake()
+    {
+        EnsureClip();
     }
 
     void Update()
     {
-        if (_clip == null || EventSystem.current == null) return;
+        if (EventSystem.current == null) return;
 
         bool up = false;
         Vector2 pos = Vector2.zero;
@@ -65,6 +86,8 @@ public sealed class UiClickSfx : MonoBehaviour
         }
 
         if (!up) return;
+        EnsureClip();                 // 资源晚导入时下一次点击自己补上，不让一次加载失败永久静音
+        if (_clip == null) return;
 
         // 射线判定落点是否指向一个可交互 UI 元素（Button / Selectable）
         var ped = new PointerEventData(EventSystem.current) { position = pos };
@@ -74,7 +97,9 @@ public sealed class UiClickSfx : MonoBehaviour
         {
             var g = hits[i].gameObject;
             if (g == null) continue;
-            if (g.GetComponent<Selectable>() != null)
+            // 沿父链找：Button 常挂在无图的行根/父节点上，命中又落在子 Label、Icon、底图上，
+            // 只判 g 自身会把这类点击全漏掉（点了没音效）。GetComponentInParent 含自身。
+            if (g.GetComponentInParent<Selectable>() != null)
             {
                 GameAudio.PlaySfx(_clip, Volume);
                 break;

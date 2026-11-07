@@ -78,4 +78,44 @@ public static class UiKeyedBackgrounds
 
     public static bool ApplyLogFrame(Image target, string fileNameNoExt, bool preserveAspect = false) =>
         Apply(target, AdventureLogFrames, fileNameNoExt, preserveAspect);
+
+    /// <summary>
+    /// 【2026-11-07 主人拍板】冒险日志「标签底」深色横条底统一 70% 不透明度（alpha=0.7）。
+    /// 图鉴分组头（普通/稀有/传奇、章节名）与冒险日志其它页面用到同款横条底的地方共用这一个出口；
+    /// 只改 Image 的 alpha，图 / RGB / 尺寸 / 文字一律不碰。
+    /// </summary>
+    public const float LogBarAlpha = 0.7f;
+
+    /// <summary>把 Image 换成深色横条底图并套 70% 不透明度。</summary>
+    public static bool ApplyLogBar(Image target)
+    {
+        if (!ApplyLogFrame(target, "标签底", false)) return false;
+        ApplyLogBarAlpha(target);
+        return true;
+    }
+
+    /// <summary>只改 alpha，保留预制体里调好的颜色。</summary>
+    public static void ApplyLogBarAlpha(Image target)
+    {
+        if (target == null) return;
+        var c = target.color;
+        target.color = new Color(c.r, c.g, c.b, LogBarAlpha);
+    }
+
+    /// <summary>
+    /// 冒险日志实例里所有引用「标签底」的静态 Image（含隐藏的行模板，克隆会继承）统一设一次。
+    /// 按 sprite 名认图，不按节点名猜图，也不依赖 guid 映射。
+    /// </summary>
+    public static void ApplyLogBarAlphaToTree(Transform root)
+    {
+        if (root == null) return;
+        var images = root.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < images.Length; i++)
+        {
+            var img = images[i];
+            if (img == null || img.sprite == null) continue;
+            if (img.sprite.name.Contains("标签底"))
+                ApplyLogBarAlpha(img);
+        }
+    }
 }

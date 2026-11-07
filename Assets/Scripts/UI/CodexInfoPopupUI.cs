@@ -72,6 +72,12 @@ public class CodexInfoPopupUI : MonoBehaviour
     Action _onUnlock;
     int _baseDescSize;   // Desc/Lore 基准字号（首次打开时记录，降档排版后用于恢复）
     int _baseLoreSize;
+    /// <summary>top/Name 与 Title 的预制体基准字号（35 / 32）；每次 Show 从基准重算，防 DDOL 弹窗串味。</summary>
+    int _baseTopNameSize;
+    int _baseTitleSize;
+    /// <summary>top/Name 预制体基准颜色（浅黄绿）；佣兵名按稀有度染色后，其它弹窗要还原。</summary>
+    Color _baseTopNameColor;
+    bool _baseTopNameColorRecorded;
     /// <summary>面板基准尺寸（首次打开记录；每次打开从基准重算，拉伸不残留）。</summary>
     Vector2 _basePanelSize;
     /// <summary>标题/简介基准 y（首次打开记录；无立绘弹窗上移填补头像框空位用，2026-11-01）。</summary>
@@ -106,9 +112,11 @@ public class CodexInfoPopupUI : MonoBehaviour
     /// 带大图的重载（2026-10-20 用户拍板）：zoomSprite 非空时点弹窗头像可放大查看，
     /// 深色遮罩铺满、点任意处关闭；传 null 则头像不可点。
     /// </summary>
-    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, Sprite zoomSprite, bool? codexKind = null)
+    public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, Sprite zoomSprite,
+        bool? codexKind = null, string topTitleOverride = null, Color? nameColor = null)
     {
-        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, zoomSprite, codexKind);
+        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, zoomSprite, codexKind, topTitleOverride,
+            nameColor: nameColor);
     }
 
     /// <summary>
@@ -291,7 +299,8 @@ public class CodexInfoPopupUI : MonoBehaviour
 
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
         string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false,
+        Color? nameColor = null)
     {
         BindRefs();
         Wire();
@@ -314,11 +323,16 @@ public class CodexInfoPopupUI : MonoBehaviour
                 if (unlockButtonLabel != null) unlockButtonLabel.text = unlockText;
             }
         }
-        if (titleText != null) titleText.text = title ?? "";   // 这里是怪物/佣兵名字，任何情况都不覆盖（2026-10-20 主人纠正：之前被错改成「怪物图鉴」）
-        // 图鉴入口（2026-10-20 主人拍板）：按怪物/佣兵换 top/icon 图标，顶部头条（top/Name，预制体文案「怪物信息」）同步换成「怪物图鉴/佣兵图鉴」；
-        // 其他调用方（酒馆解锁等）不传 codexKind，保持原样
+        // 【2026-11-07 主人拍板】图鉴详情：头部 top/Name 固定放名字，大字 Title 放出现地点（怪物）/职业（佣兵）。
+        // 所以 title 不再固定是名字（2026-10-20「Title 永远是名字」的旧口径作废）；调用方按新口径传。
+        if (titleText != null) titleText.text = title ?? "";
+        // 图鉴入口（2026-10-20 主人拍板）：按怪物/佣兵换 top/icon 图标；顶部头条先落版块名，
+        // 随后由 topTitleOverride 覆盖成名字（2026-11-07 口径）。其他调用方不传 codexKind，保持原样。
         if (codexKind.HasValue)
         {
+            // 缺名字 = 没按新口径传，报出来让人看见，不静默留着旧版块名
+            if (string.IsNullOrEmpty(topTitleOverride))
+                Debug.LogError("[CodexInfoPopup] 图鉴弹窗头部应传名字（topTitleOverride），当前缺失");
             if (topTitleText != null)
                 topTitleText.text = codexKind.Value ? "佣兵图鉴" : "怪物图鉴";
             if (topIcon != null)
@@ -417,7 +431,45 @@ public class CodexInfoPopupUI : MonoBehaviour
             transform.SetAsLastSibling();
         }
         GameFonts.ApplyToHierarchy(transform);
+        ApplyCodexHeaderStyle(codexKind, nameColor);
         LayoutContent();
+    }
+
+    /// <summary>
+    /// 【2026-11-07 主人拍板】图鉴弹窗头部 / 大字样式，一次 Show 一个出口：
+    /// ① 头部 top/Name 以后固定放名字，预制体该框只有 160 宽 / 35 号字，5 字以上名字会换行被截断
+    ///    → 只按字数缩字号（字体可改，框宽 / x / 锚点一律不动），短名字保持预制体 35 号；
+    /// ② 佣兵名字按稀有度染色（nameColor，调用方走 RarityPalette 取），怪物 / 其它弹窗还原预制体色；
+    /// ③ 佣兵详情大字（职业）比原来名字放大两号：32 → 34；怪物详情大字保持 32；
+    /// ④ 每次 Show 都从基准恢复，任务 / 世界 / 商品等其它弹窗不被串味。
+    /// </summary>
+    void ApplyCodexHeaderStyle(bool? codexKind, Color? nameColor)
+    {
+        if (topTitleText != null)
+        {
+            if (_baseTopNameSize <= 0) _baseTopNameSize = topTitleText.fontSize;
+            if (!_baseTopNameColorRecorded)
+            {
+                _baseTopNameColor = topTitleText.color;
+                _baseTopNameColorRecorded = true;
+            }
+            topTitleText.fontSize = codexKind.HasValue
+                ? FitTopNameSize(topTitleText.text, _baseTopNameSize)
+                : _baseTopNameSize;
+            topTitleText.color = nameColor ?? _baseTopNameColor;
+        }
+        if (titleText != null)
+        {
+            if (_baseTitleSize <= 0) _baseTitleSize = titleText.fontSize;
+            titleText.fontSize = codexKind == true ? _baseTitleSize + 2 : _baseTitleSize;
+        }
+    }
+
+    /// <summary>按名字字数缩到 160 宽一行能放下（每字宽约等于字号，留 10px 余量）。</summary>
+    static int FitTopNameSize(string name, int baseSize)
+    {
+        if (string.IsNullOrEmpty(name) || name.Length <= 4) return baseSize;
+        return Mathf.Max(16, Mathf.Min(baseSize, 150 / name.Length));
     }
 
     public void Close()

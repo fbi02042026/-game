@@ -191,7 +191,10 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         // 撤掉同日早些时候的可见宽自适应钳制：瘦屏按宽匹配时 visibleWidth=720 会把 950 钳回去，
         // 只改系数看不出变化；主人已确认允许左右超出。NextWave/Boss 两图共用此入口一起放大，
         // 开场横幅（StageStartBannerUI）不传宽度不受影响。
-        float bannerTargetWidth = GameConfig.DESIGN_WIDTH * 1.584f;
+        // 【2026-11-07 主人「下一波和首领来袭缩小10%」】在上面 ×1.584 基础上整体 ×0.9：
+        // 1.584×0.9=1.4256（720→1026.4 设计像素），宽高按同比例缩、preserveAspect 不变形；
+        // 两张图（wave_next_incoming / wave_boss_incoming）共用此唯一出口一起缩。
+        float bannerTargetWidth = GameConfig.DESIGN_WIDTH * (1.584f * 0.9f);
         yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, bannerTargetWidth);
 
         _image.enabled = false;

@@ -483,6 +483,11 @@ public partial class BattleManager
             float mx = UnitBase.GetCombatX(m0);
             Debug.Log($"[BattleManager] 开战完成 monsters={monsters.Count} heroX={hx:F2} mon0={m0?.name} monX={mx:F2} dist={Mathf.Abs(hx - mx):F2} monHp={m0?.currentHp:F0} scale={m0?.transform.localScale}");
         }
+        // 【2026-11-07】实时抽改版（2026-10-29）后，正式关/金币本在开战序列结束时首波**故意还没刷**：
+        // EnterLiveStartPhase 非阻塞，要等玩家点「开始战斗」(OnLiveStartFight → ScheduleFirstWaveSpawn)。
+        // 旧判定把「此时无怪」当故障报 LogError，属误报；这里按阶段分流，不改刷怪逻辑、不新增入口。
+        else if (_liveStartAdvancePending)
+            Debug.Log("[BattleManager] 开战完成，首波待玩家点「开始战斗」后触发");
         else if (!Rules.DirectorOwnsWaves)
             Debug.LogError($"[BattleManager] 开战完成仍无怪 monsters={monsters.Count} waves={_waves?.Count ?? 0}");
         else

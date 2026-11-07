@@ -224,6 +224,9 @@ public class UiSpriteRefGuardPost : AssetPostprocessor
             return true;
         if (p.StartsWith("Assets/TapSDK/", StringComparison.Ordinal)) return true;
         if (p.StartsWith("Assets/Plugins/", StringComparison.Ordinal)) return true;
+        // TapSDK 已迁到 UPM 包（Packages/com.taptap.sdk.*），包内 Standalone 预制体
+        // 自带历史悬空引用；旧 Assets/TapSDK/ 豁免已失效，按原「第三方包跳过」口径补上。
+        if (p.StartsWith("Packages/", StringComparison.Ordinal)) return true;
         return false;
     }
 

@@ -79,13 +79,8 @@ public class MercGainCinematicUI : MonoBehaviour
         // × Stand 4 倍）打乱 → 滑入变 4 倍大、位置跑飞。现在不碰 佣兵 画布任何参数，
         // 出场动画照预制体播，代码只换 Stand 的 sprite。
         var mercGo = UiFind.Deep(transform, "\u4F63\u5175");
-        // 【2026-11-03 晚 主人拍板「我动画里就是设定的 4 倍，要我的动画效果」】佣兵 画布上
-        // 残留旧 WorldSpace 时代的 localScale 0.5，把主人按设计空间（720×1280）调好的整条
-        // 出场动画等比压小一半（滑入 4 倍变 2 倍、落定立绘只剩半屏）。运行时归一为 1：
-        // 动画轨道里的数值 = 设计空间数值，任何屏比都按主人调的效果等比渲染。
-        // 只改运行时缩放，预制体文件不动；主人在预制体里把 佣兵 缩放自己改成 1 后此行可删。
-        if (mercGo != null && mercGo.transform is RectTransform mercRt)
-            mercRt.localScale = Vector3.one;
+        // 【2026-11-07】佣兵 画布的缩放/大小完全交给预制体与出场动画，代码一行参数都不写。
+        // 旧实现曾在这里把 localScale 强行归一为 1，覆盖了动画里调好的大小，已删。
 
         var bg = UiFind.Deep(transform, "BG");
         _stand = UiFind.Deep(transform, "Stand");
@@ -98,25 +93,33 @@ public class MercGainCinematicUI : MonoBehaviour
         }
         _bgRt = bg as RectTransform;
 
-        // 【2026-10-29 主人拍板「这个大小要全屏的」】演出整体铺满全屏：
-        // 重做后的预制体 panl 是 100×100 中心小节点，BG 靠 stretch+offset 只摆出 573×1280 的
-        // 中间一块。这里把 panl 拉伸铺满根画布（根由 UICanvasSetup.EnsureRootStretch 铺满），
-        // BG offset 清零铺满 panl → 背景全屏。立绘/名字/特效全是 panl 中心锚固定坐标，中心
-        // 不变位置不动；出场动画 chuchang 只绑 panl 的子节点轨道（BG/…、佣兵/…、NamePlate/…），
-        // 不覆盖 panl 自身，不受影响。BG Image 是 Simple 非保比例 → 自动全屏拉伸；
-        // FitStageAlignment 按新的背景高做贴台补偿（720×1280 时 k=1，预制体值一个像素不动）。
-        // 必须在 FitStageAlignment / SafeAreaFitter 之前执行：先定全屏基准，再算补偿与安全区。
+        // 【2026-11-07 主人拍板「按父节点整体等比缩放」】旧做法把 panl 拉伸铺满根画布，
+        // 只有背景矩形变大；立绘/名字/特效都是 panl 中心锚固定坐标，不跟着父矩形走 →
+        // 「界面放大了、佣兵还是原来大小、和原来位置对不上」。现在 panl 保持预制体原样
+        // （100×100 中心节点，锚点/尺寸一行不写），只给它一次等比 localScale：
+        // 所有子节点（BG/佣兵/NamePlate/特效）一起等比放大，相对位置一个像素不变，
+        // 展示动画里调好的大小数值一个不碰。chuchang.anim 只绑 panl 的子节点轨道，
+        // 没有 panl 自身的 m_LocalScale，不会被 Animator 覆盖。
+        // 背景单独拉伸铺满根画布（offset 按根画布尺寸反算，天然吃掉 panl 的缩放），
+        // 即主人给的「如果有拉伸就只拉伸背景，或者按高度适配」。
+        // 标准屏 s=1 → 与改动前完全一致；瘦屏按逻辑高/设计高等比放大。
         var panlRt = UiFind.Deep(transform, "panl") as RectTransform;
+        var viewRootRt = transform as RectTransform;   // 与下方紫色背景板那段的 rootRt 区分，避免重复声明
         if (panlRt != null)
         {
-            panlRt.anchorMin = Vector2.zero;
-            panlRt.anchorMax = Vector2.one;
-            panlRt.offsetMin = Vector2.zero;
-            panlRt.offsetMax = Vector2.zero;
-            if (_bgRt != null)
+            float s = Mathf.Clamp(
+                UiLayoutStretch.ResolveUiLogicalHeight() / GameConfig.DESIGN_HEIGHT, 1f, 1.3f);
+            panlRt.localScale = new Vector3(s, s, 1f);
+            if (_bgRt != null && viewRootRt != null)
             {
-                _bgRt.offsetMin = Vector2.zero;
-                _bgRt.offsetMax = Vector2.zero;
+                Canvas.ForceUpdateCanvases();
+                // BG 是 anchor 0~1 的 stretch：rect = panl.rect + 两端 offset。
+                // 目标局部尺寸 = 根画布尺寸 / s，乘回 s 后世界尺寸正好等于根画布 → 背景全屏不裁边。
+                float extraW = viewRootRt.rect.width / s - panlRt.rect.width;
+                float extraH = viewRootRt.rect.height / s - panlRt.rect.height;
+                var half = new Vector2(extraW * 0.5f, extraH * 0.5f);
+                _bgRt.offsetMin = -half;
+                _bgRt.offsetMax = half;
             }
         }
 

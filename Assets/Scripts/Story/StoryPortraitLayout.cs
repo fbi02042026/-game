@@ -80,8 +80,10 @@ public static class StoryPortraitLayout
     /// 往上移 80，其他人物剧情照旧）。门槛＝引导档案位未完成（StoryProgress.TutorialDone=false）
     /// 且 id 在坐姿名单 DeskPortraitBottomOffsetPx 内；引导结束后（含主线会长对话）一律 0。
     /// RightPortrait 节点在「单人居中」（Slot.Center 复用右槽图）与「双人右槽」（Slot.Right）两种摆法都会命中。
+    /// 【2026-11-07 主人当场「引导时会长和前台小姐的坐姿立绘往下20」】上抬 80 → 60，
+    /// 即引导期这两张坐姿立绘净下移 20 设计像素；其他人物、引导结束后的剧情一律不受影响。
     /// </summary>
-    public const float TutorialDeskLiftPx = 80f;
+    public const float TutorialDeskLiftPx = 60f;
 
     public static float GetTutorialDeskLiftPx(string portraitId)
     {

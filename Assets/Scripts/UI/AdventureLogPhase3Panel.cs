@@ -59,6 +59,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     readonly List<Text> _actionLabels = new List<Text>();       // Label：只写名称 + 消耗点数
     readonly List<Text> _countTexts = new List<Text>();         // 次数：本周可领次数/总次数
     readonly List<Image> _icons = new List<Image>();            // Icon：物品图标
+    /// <summary>每行当前展示的条目（2026-11-07 图标信息框用；与 _rowPool 下标一一对应，重排后由 FillShopRow 刷新）。</summary>
+    readonly List<ShopEntry> _rowEntries = new List<ShopEntry>();
     readonly List<Color> _countBaseColors = new List<Color>();  // 次数文字原色（置灰后恢复用）
     readonly List<Image> _exchangeImgs = new List<Image>();     // 兑换钮底图（2026-10-20 主人拍板：点数不足/限购完显式置灰用）
     readonly List<Color> _exchangeBaseColors = new List<Color>(); // 兑换钮底图原色（置灰后恢复用）
@@ -312,6 +314,24 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         // 直接禁用组件：点击不再被它吃掉，也不会再有整行变色的假反馈。
         var rowBtn = row.GetComponent<Button>();
         if (rowBtn != null) rowBtn.enabled = false;
+
+        PadRowList(_rowEntries, i);
+
+        // 2026-11-07 主人「点击图标的时候弹出个信息框介绍一下东西内容 用通用的格式」：
+        // 上面那段把行内非兑换钮的 Graphic 射线全关了（防 Label 盖住购买钮），这里单独把 Icon 放回来。
+        // Icon 在行左侧、与右侧兑换钮不重叠，不会抢购买点击；挂 Button 后全局点击音效也认得它。
+        // 不动预制体、不动排版，只补一个点击处理器。
+        var iconImg = _icons[i];
+        if (iconImg != null)
+        {
+            iconImg.raycastTarget = true;
+            var iconBtn = iconImg.GetComponent<Button>() ?? iconImg.gameObject.AddComponent<Button>();
+            iconBtn.targetGraphic = iconImg;
+            iconBtn.transition = Selectable.Transition.None;   // 不改美术观感
+            int rowIdx = i;                                    // 局部拷贝，防闭包捕获循环变量
+            iconBtn.onClick.RemoveAllListeners();
+            iconBtn.onClick.AddListener(() => OnClickRowIcon(rowIdx));
+        }
     }
 
     /// <summary>行池化配套：把平行 List 补齐到可写下标 i（缺节点提前 return 的行也要占位，防错位）。</summary>
@@ -557,6 +577,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     void ClosePanel()
     {
         _mode = Mode.None;
+        CodexInfoPopupUI.HideActive();   // 2026-11-07：图标信息框是 DDOL 单例，关商店时顺手收掉防残页
         if (_panel != null) _panel.SetActive(false);
         if (_dim != null) _dim.SetActive(false);
         if (_renwu != null) _renwu.SetActive(false);
@@ -700,11 +721,78 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         public bool IsDailyGift;
     }
 
+    /// <summary>
+    /// 点行图标 → 通用信息弹窗（CodexInfoPopupUI，与图鉴 / 任务详情同一套格式）。
+    /// 2026-11-07 主人「点击图标的时候弹出个信息框介绍一下东西内容 用通用的格式」。
+    /// 只做介绍、不触发兑换；兑换唯一出口仍是 ExchangeBtn。
+    /// 四类行（杖 / 武器里程奖励 / 每日礼物 / 普通商品）共用这一个出口，不各写一套。
+    /// </summary>
+    void OnClickRowIcon(int rowIdx)
+    {
+        if (rowIdx < 0 || rowIdx >= _rowEntries.Count) return;
+        var e = _rowEntries[rowIdx];
+        string name, meta, desc;
+
+        if (e.IsStaff)
+        {
+            name = SpecialWeapons.InstanceName;
+            meta = "需 " + AdventureLogMileage.LevelThresholds[1] + " 点累计里程";
+            desc = "里程等级 Lv2 的稀有武器奖励。累计里程达到门槛后可领取，领取后直接替换当前武器。";
+        }
+        else if (e.IsWeapon)
+        {
+            var m = AdventureLogMileage.WeaponMilestones[e.WeaponIndex];
+            name = WeaponAffixSystem.RarityPrefix(Rarity.Rare) + m.Label;
+            meta = "需 " + m.NeedPoints + " 点累计里程";
+            desc = "累计里程达到门槛后可领取的稀有武器，领取后直接装备。";
+        }
+        else if (e.IsDailyGift)
+        {
+            var gift = AdventureLogMileageShop.GetDailyLegendaryGift();
+            name = gift != null ? gift.Name : "每日传奇礼物";
+            meta = AdventureLogMileageShop.DailyLegendaryCost + " 点里程 · 每日限 1";
+            desc = "每日刷新的传奇好感礼物，送给佣兵可大幅提升好感度。";
+        }
+        else
+        {
+            var item = AdventureLogMileageShop.Items[e.ItemIndex];
+            name = item.Name;
+            int remain = AdventureLogMileageShop.RemainThisWeek(item);
+            meta = item.CostPoints + " 点里程 · 本周余 " + remain + "/" + item.WeeklyLimit;
+            desc = ShopItemDesc(item.Id);
+        }
+
+        Sprite icon = rowIdx < _icons.Count && _icons[rowIdx] != null ? _icons[rowIdx].sprite : null;
+        // topTitleOverride / topIconPath 走通用弹窗的自定义头部；不传解锁按钮，点暗带或关闭钮即收
+        CodexInfoPopupUI.Show(name, meta, desc, "", icon,
+            topTitleOverride: "商品信息", topIconPath: "");
+    }
+
+    /// <summary>里程商店商品说明（与 ShopIconFor 同范式，按 Id 单一出口；缺文案 LogError 不静默）。</summary>
+    static string ShopItemDesc(string id)
+    {
+        switch (id)
+        {
+            case "gold_bag":       return "打开可获得 50 金币，用于招募佣兵、强化装备等日常开销。";
+            case "mats_3":         return "天赋石 ×3，用于点亮或升级天赋节点。";
+            case "stamina_1":      return "使用后恢复 10 点体力，够再进一次冒险。";
+            case "scroll_c":       return "普通招募卷轴 ×1，在酒馆招募佣兵时消耗。";
+            case "scroll_l":       return "高级招募卷轴 ×1，用于招募传奇品质佣兵。";
+            case "forget_potion":  return "洗点重置天赋时消耗的道具，每周限购 1 瓶。";
+            default:
+                Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺说明文案（ShopItemDesc 未收录）");
+                return "";
+        }
+    }
+
     /// <summary>填充第 rowIdx 行（杖 / 武器里程奖励 / 商品条目），行必激活。</summary>
     void FillShopRow(int rowIdx, ShopEntry e)
     {
         if (rowIdx < 0 || rowIdx >= _rowPool.Count || _rowPool[rowIdx] == null) return;
         _rowPool[rowIdx].SetActive(true);
+        // 图标信息框按「当前这一行展示的条目」取内容；条目会按已兑/未兑重排，必须每次填行时刷新
+        PadRowList(_rowEntries, rowIdx);
+        _rowEntries[rowIdx] = e;
 
         if (e.IsStaff)
         {

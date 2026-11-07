@@ -429,9 +429,9 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
                 SideIslandGuide.TryShowForCurrent(SaveSystem.Instance?.Data);
             }
 
-            // 【2026-10-22 主人原话「进了冒险界面就弹出上一局意外退出 是否继续 然后两个按钮确定和取消」】
-            // 上一场战斗中途断掉的局：进冒险页就问一次。确定 = 继续上一局；取消 = 重新开始（丢局）。
-            TryPromptInterruptedRun();
+            // 【2026-11-07 口径】中断局不再弹「继续上一局 / 重新开始」：
+            // 启动进城镇时已由 BattleStateSaver.SettleInterruptedRun 统一静默判撤离失败结算，
+            // 关号 / 构筑 / 局内金币池一律不保留，这里不再询问。
         }
     }
 
@@ -449,31 +449,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         GlobalToastUI.Show("试炼场已开启，快去看看吧！", true);
     }
 
-    /// <summary>
-    /// 「上一局意外退出」询问（弹窗本体在 <see cref="RunResumeChoiceUI"/>）。
-    /// 只在「有可续局 && 上一场战斗是中途断的（midBattle 标记还在）」时弹；答过一次标记即消，不再重复弹。
-    /// </summary>
-    void TryPromptInterruptedRun()
-    {
-        if (!RunLoadout.HasInterruptedRun()) return;
-        RunResumeChoiceUI.Show(RunLoadout.PeekResumable()?.chapter ?? 1,
-            onConfirm: () =>
-            {
-                // 确定 = 继续上一局：清掉中断标记，并把「被打断那关」的关号 + 局内金币池
-                // 从中断快照接回构筑（见 RunLoadout.ConfirmResumeInterruptedRun），
-                // 之后进本照旧静默续局，从被打断的那一关重打、不重发启动金。
-                // 快照消费完毕一并清：金币已接回构筑，留着会被下次启动结算重复入账。
-                RunLoadout.ConfirmResumeInterruptedRun(BattleStateSaver.PeekInterrupted());
-                BattleStateSaver.ClearInterruptedSave();
-            },
-            onCancel: () =>
-            {
-                // 取消 = 重新开始：丢掉上一局（弹窗文案已写明构筑与金币不保留），快照一并清，
-                // 否则下次启动会被 SettleInterruptedRun 按「撤离失败」再结算一遍。
-                RunLoadout.Clear();
-                BattleStateSaver.ClearInterruptedSave();
-            });
-    }
+    // 「继续上一局 / 重新开始」询问已于 2026-11-07 停用：中断一律在启动进城镇时
+    // 由 BattleStateSaver.SettleInterruptedRun 静默判撤离失败结算，不接回进度。
 
 
     /// <summary>

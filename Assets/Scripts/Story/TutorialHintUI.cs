@@ -55,15 +55,20 @@ public class TutorialHintUI : MonoBehaviour
     /// <summary>
     /// 横幅内边距（文字四周留白）。2026-10-10 主人反馈「横幅要尽量大点，比字大，不要跟字一样大，看着不舒服」
     /// +「字都超出了」：左右 28→56、上下 18/10→40，横幅比文字大一圈，多行也不再顶出框外。
+    /// 2026-11-07 主人当场「上下缩小 边框缩小点」：左右 56→40、上下 40→24 ——
+    /// 框宽同步收窄 32 后文字可用宽度不变、行数不会变多，只是上下留白收掉一大截。
     /// 红线：Build() 与 TryBindFromHierarchy() 两条路径、以及 MeasureBannerHeight() 必须同值。
     /// </summary>
-    const float BannerPadX = 56f;
-    const float BannerPadY = 40f;
+    const float BannerPadX = 40f;
+    const float BannerPadY = 24f;
+    /// <summary>气泡底框带底部尖角，文字整体上抬这么多（只平移，不改文字区高度）。</summary>
+    const float BubbleTextLift = 20f;
     /// <summary>
     /// 引导横幅多行文案的行距（2026-10-10 主人：「多行字的时候字的上下间距拉开一点」）。
     /// Unity 默认 1.0；要再松/再紧改这一个常量。Build() 与 TryBindFromHierarchy() 两条路径都必须设。
+    /// 2026-11-07 主人当场「还有这么多的空隙」：1.3→1.2 小幅收紧，不回退到 1.0。
     /// </summary>
-    const float HintLineSpacing = 1.3f;
+    const float HintLineSpacing = 1.2f;
 
     // ── 一次性自定义底框（【2026-10-31 主人拍板】抽奖引导用「像素风空白对话框指针」当底框）──
     /// <summary>下一次 Show 用的自定义底框；null = 用默认引导底框。Hide 时自动清空，其余引导不受影响。</summary>
@@ -378,6 +383,19 @@ public class TutorialHintUI : MonoBehaviour
 
     public bool IsVisible => _group != null && _group.alpha > 0.05f && _label != null && !string.IsNullOrEmpty(_label.text);
     public string CurrentHint => _label != null ? _label.text : "";
+
+    /// <summary>
+    /// 把本次气泡的文字设置改成「战斗佣兵说话」同款（字号 / 字色 / 字体），底框不动。
+    /// 只影响调用方这一条提示，通用引导的默认字设置（HintFontSize / 浅黄字）不变。
+    /// 在 Show 之后调用，避免被 Show 里的布局刷新盖回去。
+    /// </summary>
+    public void ApplyBattleTalkTextStyle()
+    {
+        if (_label == null) return;
+        _label.fontSize = BattleHeadTalkUI.BubbleFontSize;
+        _label.color = BattleHeadTalkUI.BubbleTextColor;
+        _label.font = GameFonts.GetChinese();
+    }
 
     public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard)
     {
@@ -700,7 +718,9 @@ public class TutorialHintUI : MonoBehaviour
         if (root == null) return;
 
         // 左右各留 8px（2026-10-10 主人要横幅尽量大：原各 12px）
-        float width = Mathf.Max(280f, root.rect.width - 16f);
+        // 2026-11-07 主人当场「边框缩小点」：左右各留 24px，720 逻辑宽下框宽 704→672；
+        // BannerPadX 同步 56→40，文字可用宽度仍是 592，行数不会被挤多。
+        float width = Mathf.Max(280f, root.rect.width - 48f);
         // 2026-09-28 主人反馈：字多时溢出底框 —— 高度改为按文字实测行高自适应（原写死 100）。
         float bannerH = MeasureBannerHeight(width);
         // 【2026-10-31】气泡模式（自定义底框 = 带尖角的气泡）：按原图比例等比放大到 2 倍宽
@@ -721,6 +741,17 @@ public class TutorialHintUI : MonoBehaviour
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
         _bannerRt.sizeDelta = new Vector2(width, bannerH);
+
+        // 【2026-11-07 主人当场「直接让字往上点就行」】气泡底框下方有尖角，文字整体上抬一点；
+        // 上下 offset 同加一个值 = 纯平移，文字区高度不变、两行字不会被挤压。普通引导不上抬。
+        // 放在 PlaceBanner：每次 Show 都经过，Hide 清掉 override 后下一次普通引导自动还原。
+        if (_label != null)
+        {
+            var lrt = _label.rectTransform;
+            float lift = _bannerSpriteOverride != null ? BubbleTextLift : 0f;
+            lrt.offsetMin = new Vector2(BannerPadX, BannerPadY + lift);
+            lrt.offsetMax = new Vector2(-BannerPadX, -BannerPadY + lift);
+        }
 
         bool hasText = _label != null && !string.IsNullOrEmpty(_label.text);
         _bannerRt.gameObject.SetActive(hasText);
@@ -745,7 +776,8 @@ public class TutorialHintUI : MonoBehaviour
     {
         // 2026-10-10 主人反馈：横幅要尽量大、字不能顶出框外 ——
         // 下限 100→150（单行时框也够大，不贴着字），上限 420→460（长文案照样塞得下）。
-        const float minH = 150f;
+        // 2026-11-07 主人当场「上下缩小」：下限 150→120（短文案不再空一大截），上限不动。
+        const float minH = 120f;
         const float maxH = 460f;
         if (_label == null || string.IsNullOrEmpty(_label.text)) return minH;
         float textW = Mathf.Max(40f, bannerWidth - BannerPadX * 2f); // 与 HintText 左右边距对应

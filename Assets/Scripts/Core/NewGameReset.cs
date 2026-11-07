@@ -28,6 +28,11 @@ public static class NewGameReset
         // 引导提示横幅：清档前那句话不该停在新档屏幕上（Hide 幂等，实例没建过就跳过）
         if (TutorialHintUI.Instance != null) TutorialHintUI.Instance.Hide();
 
-        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示）");
+        // 【2026-11-07】BGM 是 DDOL 双声道 + 静态 pending，不随删档文件消失。
+        // 清档后 GoLogin 同步切场景、不走 Loading 流程，旧曲会一路拖到登录页：
+        // 立刻切断并把待恢复曲目钉成登录曲（单一出口在 GameBgm，别在调用点散着写）。
+        GameBgm.ResetForNewGame();
+
+        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM）");
     }
 }

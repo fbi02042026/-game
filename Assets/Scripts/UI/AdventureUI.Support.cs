@@ -331,9 +331,6 @@ public partial class AdventureUI
     /// <summary>【2026-10-31】关卡名右移 10 的一次性守卫（见 ApplyDetailTextStyle）。</summary>
     bool _stageNameShiftedRight10;
 
-    /// <summary>【2026-10-31】「可能掉落」小标题右移 20 的一次性守卫（见 ApplyDetailTextStyle）。</summary>
-    bool _dropTitleShiftedRight20;
-
     /// <summary>
     /// 关卡详情文字样式（溢出 / 位置）的唯一出口 —— Build 与 AutoBind 两条路径都走这里。
     /// 【2026-10-31 主人拍板「信息面板上的字用我预制体里设置的大小，别再改小」】
@@ -361,17 +358,12 @@ public partial class AdventureUI
             stageDescLabel.verticalOverflow = VerticalWrapMode.Overflow;
         }
         // 「可能掉落」关掉换行避免折成两行（字号不动，以预制体为准）
+        // 【2026-11-07 主人当场「可能掉落…往左 20」】撤销原运行时 +20 位移覆盖：
+        // 位置一律以预制体 DropTitle 的 x 为准，代码不再写 anchoredPosition（预制体有值→代码不写）。
+        // 关卡名 stageNameLabel 的位移是另一处拍板，未点名不动。
         if (dropTitleLabel != null)
         {
             dropTitleLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
-            // 【2026-10-31 主人拍板「下面的信息小标题再往右移20」】
-            // 只挪这一次：Build / AutoBind 两条路都会进本方法，用守卫防重复叠加。
-            if (!_dropTitleShiftedRight20)
-            {
-                _dropTitleShiftedRight20 = true;
-                var rt = dropTitleLabel.rectTransform;
-                rt.anchoredPosition = new Vector2(rt.anchoredPosition.x + 20f, rt.anchoredPosition.y);
-            }
         }
     }
 

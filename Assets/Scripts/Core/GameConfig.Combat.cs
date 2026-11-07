@@ -1133,4 +1133,6 @@ public static partial class GameConfig
     public const float KNOCKBACK_MONSTER = 0.35f; // 普通怪受击退移（世界单位）
     public const float KNOCKBACK_ALLY = 0.7f;     // 精英/Boss 命中玩家/俇兵的击退移（世界单位）
     public const float KNOCKBACK_RETRIGGER_INTERVAL = 0.8f; // 同一单位两次击退的最小间隔（2026-11-06）：留出「走回来再交手」的时间；原 0.15s 时连续受击的怪会被钉在击退落点，永远够不着攻击距离
+    /// <summary>击退位移时长（秒）。距离不变、时间越短退得越快；2026-11-07 主人「被击退的速度要快一点」0.15→0.09。</summary>
+    public const float KNOCKBACK_DURATION = 0.09f;
 }

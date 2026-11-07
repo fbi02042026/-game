@@ -947,7 +947,8 @@ public partial class BattleManager
                     ? BattleEntryDraftPanel.Instance.NormalButtonRect : null;
                 var hint = TutorialHintUI.Ensure();
                 hint.SetBannerSpriteOnce(DraftHintBubble);   // 一次性：Hide 后还原默认底框
-                hint.Show("抽奖币够了，先抽一次再开打吧！", coinHintRect, 5f);
+                hint.Show(BattleEntryDraftPanel.DrawHintText(false), coinHintRect, 5f);
+                hint.ApplyBattleTalkTextStyle();
             }
 
             // 面板常驻，给足看构筑的时间；不点就一直不开战（上限 5 分钟防卡死）

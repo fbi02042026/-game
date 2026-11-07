@@ -31,6 +31,9 @@ public class AdventureLogCodexPanel
     // 2026-10-24 主人报「每个标签的页面上面都空了一截」：页签已改挂纸顶（见 PrepareCodexScrollArea），
     // 滚动区顶收到 0.92、章节头只让 PagePad，不再对横幅做二次让位（旧 BannerTopOffset 已删）
 
+    private static readonly Color NormalMonsterNameColor = new Color(0.78f, 0.12f, 0.12f, 1f);
+    private static readonly Color BossMonsterNameColor = new Color(0.55f, 0.20f, 0.78f, 1f);
+
     readonly Transform _frame;
     GameObject _root;
     GameObject _paperTask;
@@ -513,8 +516,9 @@ public class AdventureLogCodexPanel
         rt.anchoredPosition = new Vector2(0f, y);
 
         var img = go.AddComponent<Image>();
-        UiKeyedBackgrounds.ApplyLogFrame(img, "标签底", false);
-        if (img.sprite == null) img.color = new Color(0.35f, 0.22f, 0.14f, 1f);
+        // 2026-11-07 主人拍板：横条底 70% 不透明（单一出口 UiKeyedBackgrounds.LogBarAlpha）
+        UiKeyedBackgrounds.ApplyLogBar(img);
+        if (img.sprite == null) img.color = new Color(0.35f, 0.22f, 0.14f, UiKeyedBackgrounds.LogBarAlpha);
 
         var tGo = new GameObject("Label", typeof(RectTransform));
         tGo.transform.SetParent(go.transform, false);
@@ -532,6 +536,18 @@ public class AdventureLogCodexPanel
 
         _spawned.Add(go);
         return y - HeaderH - 10f;
+    }
+
+    /// <summary>
+    /// 【2026-11-07 主人拍板】图鉴详情里的「出现的位置」只写地点名：
+    /// 去掉「·普通关 / ·精英关 / ·首领关 / ·教学关」等后缀，只留「暮影森林」。
+    /// 怪物 / 佣兵两个详情弹窗共用这一个出口；数据里 Place 原值不动。
+    /// </summary>
+    static string CodexPlaceName(string place)
+    {
+        if (string.IsNullOrEmpty(place)) return "";
+        int i = place.IndexOf('\u00B7');
+        return i > 0 ? place.Substring(0, i) : place;
     }
 
     void SpawnMonsterCell(AdventureLogCatalog.MonsterEntry e, bool chapterUnlocked, Vector2 pos, float cellW, float cellH)
@@ -574,8 +590,12 @@ public class AdventureLogCodexPanel
             string tip = defeated
                 ? e.Lore
                 : "（已遭遇：趣闻已解锁；击败后解锁完整描述）";
-            string meta = string.IsNullOrEmpty(e.Kind) ? e.Place : e.Kind + "  ·  " + e.Place;
-            CodexInfoPopupUI.Show(e.Name, meta, body, tip, AdventureCodex.LoadMonsterSprite(e), codexKind: false);
+            // 【2026-11-07 主人拍板】头部（原「怪物图鉴」）以后固定放怪物名字；大字位置改放出现地点；
+            // 种类（普通/精英/首领）与「·XX关」一律不写，副行清空。
+            // 2026-11-07 图鉴怪物详情：头部怪名普通红/首领紫；大字地点名前加「出现：」前缀
+            CodexInfoPopupUI.Show("出现：" + CodexPlaceName(e.Place), "", body, tip,
+                AdventureCodex.LoadMonsterSprite(e), zoomSprite: null, codexKind: false,
+                topTitleOverride: e.Name, nameColor: isBoss ? BossMonsterNameColor : NormalMonsterNameColor);
         });
         _spawned.Add(go);
     }
@@ -629,14 +649,20 @@ public class AdventureLogCodexPanel
             }
             AdventureCodex.MarkMercViewed(e.Id);
             ApplyRedDot(go.transform, false);
-            string meta = string.IsNullOrEmpty(e.Role) ? e.Place : e.Role + "  ·  " + e.Place;
+            // 【2026-11-07 主人拍板】头部=真名；大字位置=职业（弹窗里比原名字放大两号）；
+            // 副行=地点名（去掉「·教学关」等后缀）。与怪物详情共用 CodexPlaceName 单一出口。
+            if (string.IsNullOrEmpty(e.Role))
+                Debug.LogError($"[Codex] 佣兵 {e.Id} 缺 Role（职业），图鉴大字会空 —— 去 AdventureLogCatalog 补");
             // 佣兵弹窗显示头像；点头像可放大看全身立绘（2026-10-20 用户拍板）
             // 【2026-11-01 主人拍板「点头像出现立绘的功能先注释掉」】不再传立绘大图，头像不可点；
             // 想恢复时把下面注释的三行换回去即可（CodexInfoPopupUI 内部放大层逻辑保留未动）。
-            // CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore,
-            //     AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true);
-            CodexInfoPopupUI.Show(display, meta, e.Desc, e.Lore,
-                AdventureCodex.LoadMercHead(e), null, codexKind: true);
+            // CodexInfoPopupUI.Show(e.Role, CodexPlaceName(e.Place), e.Desc, e.Lore,
+            //     AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true,
+            //     topTitleOverride: display, nameColor: RarityPalette.Get(rarity));
+            // 【2026-11-07 主人拍板】头部名字按稀有度颜色（RarityPalette 全局唯一出口）。
+            CodexInfoPopupUI.Show(e.Role, CodexPlaceName(e.Place), e.Desc, e.Lore,
+                AdventureCodex.LoadMercHead(e), zoomSprite: null, codexKind: true,
+                topTitleOverride: display, nameColor: RarityPalette.Get(rarity));
         });
         _spawned.Add(go);
     }

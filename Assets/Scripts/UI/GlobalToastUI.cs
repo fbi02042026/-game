@@ -30,6 +30,8 @@ public class GlobalToastUI : MonoBehaviour
     RectTransform _rootRt;
     Vector2 _basePos;
     Coroutine _co;
+    Camera _toastCam;
+    Canvas _canvas;
 
     public static bool IsShowing =>
         _instance != null && _instance._root != null && _instance._root.activeSelf;
@@ -91,7 +93,7 @@ public class GlobalToastUI : MonoBehaviour
 
     /// <summary>
     /// 排队播报一条汇总 toast（任务奖励明细专用）。固定走实例 Play：Plain 原文照发、
-    /// 不套 Persona 尾巴、不被 AnyBubbleShowing 压制、不套 Show 的 Loading 攥住逻辑，RefreshPopup 也不丢。
+    /// 不套 Persona 尾巴、不被 AnyBubbleShowing 压制、不套 Show 的 Loading 攥住逻辑，重绑相机也不丢。
     /// 空闲（_co == null）时立即起播，否则只入队；CoPlay 收尾会自动接播下一条。
     /// 已知边界：普通 toast 打断队列播报时，被顶掉的只是「正在播的那条」（后顶前语义不变），
     /// 队列里剩余未播条目会在那条普通 toast 的 CoPlay 结束后接着播，信息不丢。
@@ -221,7 +223,10 @@ public class GlobalToastUI : MonoBehaviour
     void Build()
     {
         var canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Toast);
+        _canvas = canvas;
+        EnsureToastCamera();
+        // 仍是 ScreenSpaceCamera（铁律 4.6），只是绑自己那台不震的相机
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Toast, _toastCam);
         gameObject.AddComponent<GraphicRaycaster>().enabled = false;
 
         _root = new GameObject("Root", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
@@ -261,12 +266,64 @@ public class GlobalToastUI : MonoBehaviour
         _root.SetActive(false);
     }
 
+    /// <summary>
+    /// 【2026-11-07 主人当场「打击震屏的时候toast不要跟着震」】
+    /// 根因：打击震屏 = CameraFollow 移动主相机 position，而 toast 原本绑在这台主相机上，
+    /// 画面一震它就跟着抖。这里给 toast 一台自己的相机（独立 DDOL 根，transform 固定、
+    /// 不参与跟随/震动），仍是 ScreenSpaceCamera（铁律 4.6），只换 worldCamera；
+    /// 其它 UI、战斗画面、震屏幅度一律不动。
+    /// </summary>
+    Camera EnsureToastCamera()
+    {
+        if (_toastCam != null) return _toastCam;
+        int uiLayer = LayerMask.NameToLayer("UI");
+        if (uiLayer < 0)
+            Debug.LogError("[GlobalToastUI] 找不到 UI 层，toast 独立相机无法只渲染 toast");
+        else
+            gameObject.layer = uiLayer;   // canvas 所在层必须落进专用相机的 cullingMask
+
+        var go = new GameObject("ToastCamera");
+        DontDestroyOnLoad(go);   // 独立 DDOL 根：不进 canvas 层级，避免被通用布局规则扫到
+        var cam = go.AddComponent<Camera>();
+        cam.orthographic = true;
+        cam.orthographicSize = GameConfig.CAMERA_ORTHO_SIZE;
+        // 【2026-11-07 修「抽了一次奖后整屏变蓝、只剩 toast」】团结引擎里叠加相机
+        // 用 Depth 会把颜色缓冲清成 backgroundColor（默认蓝灰），主相机画的世界/UI 全被抹掉。
+        // 必须 Nothing：颜色、深度都不清，只在主相机画好的画面上叠 toast。
+        cam.clearFlags = CameraClearFlags.Nothing;
+        cam.backgroundColor = Color.clear;
+        cam.cullingMask = 1 << Mathf.Max(0, uiLayer);
+        cam.depth = PersistentUiCamera.CameraDepth + 10f;  // 110，比持久 UI 相机(100)/主相机都晚画
+        cam.nearClipPlane = 0.1f;
+        cam.farClipPlane = GameConfig.UI_PLANE_DISTANCE + 50f;
+        cam.useOcclusionCulling = false;
+        cam.allowHDR = false;
+        cam.allowMSAA = false;
+        _toastCam = cam;
+        return cam;
+    }
+
+    /// <summary>主相机瘦屏缩放时跟随 orthoSize，保证 toast 与其它 UI 同比例；并锁住绑定不被场景切换抢走。</summary>
+    void LateUpdate()
+    {
+        if (_toastCam == null) return;
+        var main = Camera.main;
+        // 主相机不在（Loading / 切场景空档）时这台也不渲染，避免它单独接管画面
+        bool mainOk = main != null && main.isActiveAndEnabled;
+        _toastCam.enabled = mainOk;
+        if (!mainOk) return;
+        if (main.orthographicSize > 0f)
+            _toastCam.orthographicSize = main.orthographicSize;
+        if (_canvas != null && _canvas.worldCamera != _toastCam)
+            _canvas.worldCamera = _toastCam;
+    }
+
     void Play(string msg)
     {
         if (_label == null || _root == null) Build();
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
-            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Toast);
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Toast, EnsureToastCamera());
         if (_co != null) StopCoroutine(_co);
         _co = StartCoroutine(CoPlay(msg));
     }
@@ -276,7 +333,7 @@ public class GlobalToastUI : MonoBehaviour
         if (_label == null || _root == null) Build();
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
-            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.Toast);
+            UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.Toast, EnsureToastCamera());
         if (_co != null) StopCoroutine(_co);
         _co = StartCoroutine(CoFlythrough(msg));
     }
