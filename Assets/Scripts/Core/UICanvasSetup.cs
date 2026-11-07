@@ -114,7 +114,7 @@ public static class UICanvasSetup
             var c = canvases[i];
             if (c == null || c.renderMode != RenderMode.ScreenSpaceCamera) continue;
             if (!IsDdol(c.gameObject)) continue;
-            // 【2026-11-07】toast 用自己的不震相机（打击震屏时不跟着抖），场景切换不重绑回会震的主相机
+            // GlobalToastUI 每次 Play 都会自行重绑 worldCamera，这里不重复处理
             if (c.GetComponent<GlobalToastUI>() != null) continue;
             c.worldCamera = cam;
             EnsureRootStretch(c.transform as RectTransform);
