@@ -98,14 +98,15 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             // 金币钮图标快照（金币钮顶卷钮位切卷图后要还原金币图，2026-10-19）
             if (c.goldIcon != null && c.goldIconDefault == null)
                 c.goldIconDefault = c.goldIcon.sprite;
+            ApplyCardFontSizes(c);
         }
         CaptureButtonLooks();
         EnsureDiamondRefreshNodes();
     }
 
     /// <summary>
-    /// 绑定刷新按钮「钻石刷新」形态节点（2026-10-23 主人拍板，幂等；2026-10-24 主人改口径）：
-    /// 按钮文字直接写「50刷新」（价格并入 Label）→ 宝石 icon 绑引用，钻石刷新形态显示、免费形态隐藏；
+    /// 绑定刷新按钮「钻石刷新」形态节点（2026-10-23 主人拍板，幂等；2026-11-08 改口径）：
+    /// 按钮文字直接写「50刷新」（价格并入 Label）→ 宝石 icon 绑引用，手动刷新恒为钻石形态、次数用完隐藏；
     /// 独立价格浮标 DiamondCost 已删除（不再运行时创建）；
     /// 「剩余次数」小字 = 主人手建预制体节点，代码只绑引用 + 设字号 20（2026-10-24 主人拍板），不写尺寸/坐标。
     /// </summary>
@@ -181,6 +182,27 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
                 if (c.scrollLabel1 != null) _scrollLabelColor = c.scrollLabel1.color;
             }
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-08】卡片两组文字放大约 50%：名字/职业行 + 技能名/技能信息行。
+    /// prefab 字号不动（铁律：不碰预制体），只在运行时统一设；写死目标值保证幂等，
+    /// 不会因 AutoBind 多次调用而层层放大。括号内是 prefab 实测原值。
+    /// </summary>
+    static void ApplyCardFontSizes(CardView c)
+    {
+        if (c == null) return;
+        SetFontSize(c.nameText, 26);        // 名字 17 → 26
+        SetFontSize(c.nicknameText, 26);    // 外号/职业行 17 → 26
+        SetFontSize(c.skill1Name, 30);      // 技能名 20 → 30
+        SetFontSize(c.skill2Name, 30);
+        SetFontSize(c.skill1Desc, 24);      // 技能信息 16 → 24
+        SetFontSize(c.skill2Desc, 26);      // 技能信息 17 → 26
+    }
+
+    static void SetFontSize(Text t, int size)
+    {
+        if (t != null && t.fontSize != size) t.fontSize = size;
     }
 
     Button FindBtn(string n) => FindDeep(transform, n)?.GetComponent<Button>();

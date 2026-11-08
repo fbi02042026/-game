@@ -309,6 +309,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// </summary>
     public static void RefreshForAscendClosed()
     {
+        // 2026-11-08：升星消耗了碎片/徽记/资金，入口红点（酒馆页队列图标 + 底部导航酒馆）要同步灭。
+        MercStarRedDot.Refresh();
         if (_instance != null && _instance.gameObject.activeInHierarchy)
         {
             _instance.Refresh();

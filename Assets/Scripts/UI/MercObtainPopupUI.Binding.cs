@@ -56,6 +56,17 @@ public partial class MercObtainPopupUI : MonoBehaviour
                 _guideNode = guideTf.gameObject;
                 _guideRt = guideTf as RectTransform;
                 if (_guideRt != null) _guideBasePos = _guideRt.localPosition;   // authored 原位 = 浮动基准
+
+                // 【2026-11-08】进阶指引气泡：文字去掉末字「略」+ 字号缩小，不再撑出气泡/屏幕。
+                // 只改文案与 fontSize，预制体几何（sizeDelta / 位置 / 缩放）一个值不动。
+                var guideLabel = guideTf.Find("Text (Legacy)")?.GetComponent<Text>();
+                if (guideLabel == null)
+                    Debug.LogError("[MercObtainPopup] 缺少节点 Panel/进阶/指引/Text (Legacy)（进阶提示文案）");
+                else
+                {
+                    guideLabel.text = "可进阶";
+                    guideLabel.fontSize = 24;
+                }
             }
         }
 
@@ -70,6 +81,8 @@ public partial class MercObtainPopupUI : MonoBehaviour
 
         // 阵亡复活模式的「护符 icon + 拥有数量」提示行（复活按钮上方；运行时补节点，预制体不动）
         EnsureReviveCharmHint();
+        // 【2026-11-08 主人需求】购买钮货币图标：运行时补建/绑定 KeepButton/icon（默认隐藏，仅招募购买模式显示）
+        EnsureBuyIcon();
 
         _icon = _root.transform.Find("Panel/zuo/Iconmask/Icon")?.GetComponent<Image>();
         _nameText = _root.transform.Find("Panel/zuo/namebg/Name")?.GetComponent<Text>();
@@ -118,6 +131,50 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _skillName = _root.transform.Find("Panel/you/Skill/SkillName")?.GetComponent<Text>();
         _skillInfo = _root.transform.Find("Panel/you/Skill/Skillxinxi")?.GetComponent<Text>();
         _skillIcon = _root.transform.Find("Panel/you/Skill/SkillIcon")?.GetComponent<Image>();
+    }
+
+    /// <summary>
+    /// 购买钮货币图标（2026-11-08 主人需求「购买按钮上放上卷轴的图标 跟其他放卷轴的位置一样」）：
+    /// 先找 KeepButton/icon 现成节点，找不到才运行时补建；默认隐藏，仅招募购买模式由 ApplyBuyIcon 显示。
+    /// <para>⚠️ 补建分支里的几何是【新建节点自身】的初始几何，照抄主人摆好的招募卡 ConfirmButton1/icon
+    /// （sizeDelta 100×100、anchoredPosition(-38.1,0.7)、localScale 0.3、raycastTarget=false），
+    /// 不是修改任何既有节点布局；KeepButton/Label 的几何与颜色一律不碰。</para>
+    /// </summary>
+    void EnsureBuyIcon()
+    {
+        if (_buyIcon != null) return;   // 幂等：已绑定/补建过就不再动
+        if (_keepBtn == null)
+        {
+            Debug.LogError("[MercObtainPopup] KeepButton 为空，购买钮货币图标挂不上（fail closed，不静默）");
+            return;
+        }
+
+        var t = _keepBtn.transform.Find(BuyIconNode);
+        if (t != null)
+        {
+            _buyIcon = t.GetComponent<Image>();
+            if (_buyIcon == null)
+                Debug.LogError("[MercObtainPopup] KeepButton/" + BuyIconNode + " 节点缺 Image 组件（购买钮图标不可用）");
+        }
+        else
+        {
+            // 主人本次只手工摆了招募卡的遮罩，没在预制体摆购买钮的图标节点 → 运行时补建。
+            var go = new GameObject(BuyIconNode, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(_keepBtn.transform, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(-38.1f, 0.7f);
+            rt.sizeDelta = new Vector2(100f, 100f);
+            rt.localScale = new Vector3(0.3f, 0.3f, 0.3f);
+
+            var img = go.GetComponent<Image>();
+            img.raycastTarget = false;
+            img.preserveAspect = true;   // 不写 Image.type
+            _buyIcon = img;
+        }
+
+        // 默认隐藏：只在招募购买模式显示，普通详情 / 复活模式一律隐藏。
+        if (_buyIcon != null) _buyIcon.gameObject.SetActive(false);
     }
 
 }

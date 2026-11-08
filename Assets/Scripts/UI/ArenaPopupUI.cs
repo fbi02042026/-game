@@ -1320,7 +1320,8 @@ public class ArenaPopupUI : MonoBehaviour
             bool owned = ArenaShopGoods.IsOwned(data, good);
             bool soldOut = owned && good.repurchasePrice <= 0;   // 买断（弓）→ 变灰「已拥有」
             priceT.text = soldOut ? "已拥有" : ArenaShopGoods.PriceOf(data, good).ToString();
-            priceT.color = soldOut ? new Color(0.6f, 0.6f, 0.6f, 1f) : Color.white;
+            priceT.color = soldOut ? new Color(0.6f, 0.6f, 0.6f, 1f) : PurchasePriceStyle.NormalColor;
+            PurchasePriceStyle.Apply(priceT);   // 2026-11-08：商店价格统一暖金 + 描边（已拥有灰不变）
         }
     }
     // ───────────────────────── 档案详情弹窗（已整条删除，2026-10-31 主人拍板） ─────────────────────────

@@ -399,6 +399,7 @@ public partial class BattleManager
     bool ShouldPlayPreBattleStory()
     {
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
+        if (IsActivityDungeon) return false;   // 活动副本不播主线战前剧情，也不写 MarkPreStorySeen 污染主线进度
         // 【2026-11-05 难度隔离·必修】难度局不播战前主线剧情 —— 连带 MarkPreStorySeen 也不会被写
         // （标记只在 ShouldPlayPreBattleStory 通过且实际开播后写，见 CoPreBattleStoryThenFirstWave :417）。
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;

@@ -80,6 +80,7 @@ public partial class BattleEntryDraftPanel
                 // 【2026-10-13 #7】币不够：价格数字变红；够了恢复主人调好的原色（懒缓存，不永久覆盖）。
                 if (!s.CostColorDefault.HasValue) s.CostColorDefault = s.CostText.color;
                 s.CostText.color = insufficient ? new Color(1f, 0.42f, 0.42f) : s.CostColorDefault.Value;
+                PurchasePriceStyle.Apply(s.CostText);   // 2026-11-08：抽取消耗统一描边；颜色仍走懒缓存原色 / 不足红，不覆盖美术
             }
             // 【2026-10-13 #7】币不够：价格下方红字「还差 N」（与价格数字三态互斥思路一致）。
             if (s.ShortfallText != null)

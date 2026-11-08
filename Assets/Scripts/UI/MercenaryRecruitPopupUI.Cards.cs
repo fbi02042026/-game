@@ -33,7 +33,10 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         if (c.nameText != null)
             c.nameText.text = string.IsNullOrEmpty(offer.displayName) ? offer.mercId : offer.displayName;
         if (c.rarityText != null)
+        {
             c.rarityText.text = RarityLabel(rarity);
+            c.rarityText.color = RarityPalette.Get(rarity);   // 稀有度标签字色跟稀有度走（色值唯一出口 RarityPalette）
+        }
 
         if (c.roleIcon != null)
         {
@@ -88,9 +91,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         BindSkillTexts(c, offer);
 
-        // 【2026-10-25 主人拍板】已拥有的候选可重复购买 = 转本命碎片（获取碎片的途径，
-        // 与名册解锁 TavernUnlockUI.TryUnlock 的重复口径同源）：卡面不灰显、货币钮照常显示价格，
-        // 保留黄字「已拥有·转碎片」标提示这是重复购买。
+        // 【2026-11-08 主人拍板】已拥有的候选可重复购买 = 转本命碎片（获取碎片的途径，
+        // 与名册解锁 TavernUnlockUI.TryUnlock 的重复口径同源）：卡面不灰显、货币钮照常显示价格；
+        // 已拥有卡用预制体黑罩 + 主人摆好的两行文案提示重复购买（代码不写 text），下方重复购买转碎片的业务不变。
         bool owned = MercHireSession.IsMercOwned(offer);
         ApplyHiredVisual(c, owned);
 
@@ -178,6 +181,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
                 if (_scrollBtnSprite != null) label.color = affordable ? _scrollLabelColor : InsufficientLabelColor;
                 label.text = isLegendary ? "稀有卷×1" : "普通卷×1";
             }
+            PurchasePriceStyle.Apply(label);   // 2026-11-08：招募价格统一描边（颜色仍走快照原色 / 不足红）
         }
     }
 
@@ -242,43 +246,28 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         cg.blocksRaycasts = true;
         cg.interactable = true;
 
-        var badge = EnsureHiredBadge(c.root.transform);
-        if (badge != null)
+        // 【2026-11-08 主人拍板】已拥有卡直接启用预制体摆好的整卡黑罩，不新建节点、不写布局尺寸；
+        // 遮罩下的字整个按预制体来（两行「已拥有 / 购买将转化为碎片」），代码不写 text、不碰位置/字号/颜色。
+        // 按 Text (Legacy) 反查父节点取黑罩：Card0 黑罩叫 mask、Card1/Card2 叫 mask (1)，
+        // 且每张卡还有一个同名的白色立绘区 mask，按节点名猜会绑错，故从黑罩下唯一的文字子节点反查父级。
+        // 黑罩在最上层、Image 默认 raycastTarget=1 会吞掉卡片点击，关掉 raycastTarget，
+        // 保证已拥有的卡仍能点购买按钮转碎片；取不到节点只 LogError、不兜底、不自建。
+        var noteTf = FindDeep(c.root.transform, "Text (Legacy)");
+        var note = noteTf != null ? noteTf.GetComponent<Text>() : null;
+        if (note == null)
         {
-            // 【2026-10-19 主人拍板】显示时压到卡内最上层，防被后创建的构件（MG_Badge 等）盖住
-            if (hired)
-            {
-                badge.transform.SetAsLastSibling();
-                // 【2026-10-28 主人拍板】角标只写「已拥有」；「转碎片」说明挪进 info 概率公示弹窗
-                badge.text = "已拥有";
-            }
-            badge.gameObject.SetActive(hired);
+            Debug.LogError("[MercenaryRecruitPopup] 已拥有遮罩的文字节点 Text (Legacy) 缺失（不兜底）");
+            return;
         }
-    }
-
-    static Text EnsureHiredBadge(Transform cardRoot)
-    {
-        if (cardRoot == null) return null;
-        var existing = cardRoot.Find("HiredBadge");
-        Text t = existing != null ? existing.GetComponent<Text>() : null;
-        if (t != null) return t;
-
-        // 【2026-10-19 主人拍板】「已拥有」加大加粗（原来是 22 号细字缩在中心偏下，
-        // 被下方技能区/按钮区压住看不清）；【2026-10-25】文案「已拥有·转碎片」；
-        // 【2026-10-28 主人拍板】文案改回「已拥有」、位置挪到立绘下面（mask 底边之下、
-        // 稀有度横幅之下、技能区之上：三张卡 mask pos.y=95/半高220 → 底边 -125，
-        // RarityBanner 中心 -128/半高15 → 底边 -143，技能区顶约 -180，取 -160 正好居中空档）。
-        t = CreateTxt(cardRoot, "HiredBadge", "已拥有", 34, TextAnchor.MiddleCenter);
-        t.color = new Color(1f, 0.86f, 0.42f, 1f);
-        t.fontStyle = FontStyle.Bold;
-        var rt = t.rectTransform;
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(0f, -160f);
-        rt.sizeDelta = new Vector2(200f, 44f);
-        t.gameObject.SetActive(false);
-        return t;
+        var maskTf = note.transform.parent;
+        var maskImg = maskTf.GetComponent<Image>();
+        if (maskImg == null)
+        {
+            Debug.LogError("[MercenaryRecruitPopup] 已拥有遮罩 Image 缺失（不兜底）");
+            return;
+        }
+        maskImg.raycastTarget = false;
+        maskTf.gameObject.SetActive(hired);
     }
 
     /// <summary>补挂「佣兵养成构件」：职业徽记角标 + 本命碎片数量（懒创建，reroll 时只刷新不重建）。</summary>

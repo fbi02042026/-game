@@ -109,6 +109,16 @@ public partial class MercObtainPopupUI : MonoBehaviour
     Text _reviveCharmCount;
     Color _keepLabelColor0 = Color.white;
     Text _keepLabel;
+    /// <summary>购买钮上的货币图标（2026-11-08 主人需求「购买按钮上放上卷轴的图标 跟其他放卷轴的位置一样」）：
+    /// 运行时在 KeepButton 下补建/绑定 icon 节点，仅招募购买模式显示，普通详情/复活模式一律隐藏。
+    /// 几何照抄招募卡 ConfirmButton1/icon：100×100、anchoredPosition(-38.1,0.7)、localScale 0.3。</summary>
+    Image _buyIcon;
+    /// <summary>稀有档购买图标（普通卷）Resources 路径，取图失败只 LogError 不兜底。</summary>
+    const string CommonScrollIconPath = "UI/Art/Icons/Common/icon_hire_scroll";
+    /// <summary>传奇档购买图标（稀有卷）Resources 路径，取图失败只 LogError 不兜底。</summary>
+    const string LegendaryScrollIconPath = "UI/Art/Icons/Common/高级招募卷轴";
+    /// <summary>购买钮下货币图标节点名（先 Find 现成节点，找不到才运行时补建）。</summary>
+    const string BuyIconNode = "icon";
     Text _replaceLabel;
     Text _titleText;
     string _keepLabelText0 = "确认";

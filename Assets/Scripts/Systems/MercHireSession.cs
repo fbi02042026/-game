@@ -276,6 +276,12 @@ public static class MercHireSession
         SaveSystem.Instance.Save();
     }
 
+    /// <summary>
+    /// 3 小时自动刷新是否到期（remainSec = 距下次自动刷新的剩余秒）。
+    /// 【2026-11-08 改口径】不再是「玩家可手动免费刷新」的判定：免费手动刷新已取消，
+    /// 到点由 UI 自动重掷候选；手动点刷新一律走钻石刷新（含二次确认弹窗）。
+    /// 计时仍由 MarkRefreshed / TryDiamondRefresh 重置。
+    /// </summary>
     public static bool CanManualRefresh(out int remainSec)
     {
         remainSec = 0;

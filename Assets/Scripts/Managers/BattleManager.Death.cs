@@ -248,6 +248,16 @@ public partial class BattleManager
             TriggerTutorialEvacuateWithSettlement();
             return;
         }
+        // 【2026-11-08 主人拍板「竞技场中途撤离按失败结算」】与阵亡竞技场分支同口径，当场判负落账：
+        // ApplyBattleOutcome 内部会就地消费 PrepareChallenge 写的 pending 标记，下次开弹窗不会再补扣（幂等）。
+        // 不 return —— 后面 TriggerLegacyFlow 的金币写回 / 存档 / 清战斗快照一概不能绕过。
+        if (Mode != null && Mode.Id == BattleModeId.Arena)
+        {
+            var arenaData = SaveSystem.Instance?.Data;
+            ArenaRules.ApplyBattleOutcome(arenaData, ArenaChallengeRowIdx, false, out int arenaPts, out _);
+            GlobalToastUI.Show($"积分 {arenaPts}");
+            ArenaPopupUI.PendingOpenAfterBattle = true;   // 回城回竞技场界面（2026-10-31 拍板）
+        }
         TriggerLegacyFlow(isDeath: false);
     }
 
@@ -378,21 +388,10 @@ public partial class BattleManager
         TownHubController.PendingOpenAdventure = true;
         // 【2026-11-05】章节战（失败/主动撤离）记下本局难度，回城冒险页按该难度真源落位；其它模式不写。
         if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
-        // 【2026-11-05 主人拍板「失败后…不要出现结算界面」】死亡不弹战斗结算（胜利侧 2026-10-27 已同
-        // 口径），直接清临时雇佣、回城；主动撤离保留结算（展示金币/天赋石，2026-10-24 口径不变）。
-        if (isDeath)
-        {
-            MercHireSession.ClearHired();
-            GameSceneManager.Instance?.LoadTownScene();
-        }
-        else
-        {
-            BattleSettlementUI.Show(RunStats, () =>
-            {
-                MercHireSession.ClearHired();
-                GameSceneManager.Instance?.LoadTownScene();
-            });
-        }
+        // 【2026-11-08 主人拍板「中途撤离按失败结算」】阵亡与主动撤离都不弹战斗结算界面，
+        // 直接清临时雇佣、回城；金币/天赋石/清档规则两条路完全同口径，经济不因撤离改变。
+        MercHireSession.ClearHired();
+        GameSceneManager.Instance?.LoadTownScene();
     }
 
     void FillSettlementSnapshot(bool isDeath, int talentGain, bool isVictory = false)

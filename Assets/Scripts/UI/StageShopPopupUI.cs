@@ -192,13 +192,14 @@ public class StageShopPopupUI : MonoBehaviour
         piRt.anchorMin = new Vector2(0.5f, 0f); piRt.anchorMax = new Vector2(0.5f, 0f);
         piRt.pivot = new Vector2(0.5f, 0f);
         piRt.anchoredPosition = new Vector2(-34f, 128f);
-        var priceT = MakeText(go.transform, "Price", 28, TextAnchor.MiddleLeft, new Color(1f, 0.9f, 0.5f));
+        var priceT = MakeText(go.transform, "Price", 28, TextAnchor.MiddleLeft, PurchasePriceStyle.NormalColor);
         var prRt = priceT.GetComponent<RectTransform>();
         prRt.anchorMin = new Vector2(0.5f, 0f); prRt.anchorMax = new Vector2(0.5f, 0f);
         prRt.pivot = new Vector2(0f, 0f);
         prRt.anchoredPosition = new Vector2(-12f, 130f);
         prRt.sizeDelta = new Vector2(120f, 36f);
         cv.price = priceT;
+        PurchasePriceStyle.Apply(priceT);   // 2026-11-08：商店价格统一暖金 + 描边
 
         // 购买按钮
         var buyBtn = MakeButton(go.transform, "Buy", "购买", new Vector2(0f, 58f), new Vector2(150f, 56f));

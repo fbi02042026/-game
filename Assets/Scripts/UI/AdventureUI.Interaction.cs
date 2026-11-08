@@ -444,6 +444,7 @@ public partial class AdventureUI
         }
         RefreshDiffHighlight();
         RefreshAvailableChapters();   // 【2026-11-05 难度落位】按新难度重建可选集合，滑动/箭头不再用旧难度的列表
+        RefreshChapterChrome();
         RefreshDetailPanel();
         RefreshChestNodes();   // 【2026-10-24 难度逐章解锁】难度变了：关卡列灰锁/当前关标识按新难度重算
     }
@@ -841,13 +842,15 @@ public partial class AdventureUI
                 // 每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
                 if (!ActivityDungeonRules.TryConsumeEnter(actKind))
                     return;
-                AdventureUI.PendingBattleChapter = _selectedChapter;
+                // 活动副本章节上下文取固定题材章，不跟冒险页选中章，否则 Loading 背景/章节卡会误用主线第 N 章
+                int actChapter = ActivityDungeonRules.SceneChapter(actKind);
+                AdventureUI.PendingBattleChapter = actChapter;
                 AdventureUI.PendingBattleDifficulty = _selectedDiff;
                 AdventureUI.PendingGoldDungeon = actKind == ActivityDungeonKind.Gold;
                 AdventureUI.PendingBadgeDungeon = actKind == ActivityDungeonKind.Badge;
                 AdventureUI.PendingScrollDungeon = actKind == ActivityDungeonKind.Scroll;
                 AdventureUI.PendingGiftDungeon = actKind == ActivityDungeonKind.Gift;
-                ChapterManager.Instance?.SetChapter(_selectedChapter);
+                ChapterManager.Instance?.SetChapter(actChapter);
             }
             else if (!StaminaSystem.TrySpendForAdventure())
             {

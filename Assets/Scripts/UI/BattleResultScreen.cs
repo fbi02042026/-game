@@ -827,7 +827,10 @@ public class BattleResultScreenUI : MonoBehaviour
         // 结掉 10-25 报过的「广告档下钻石 icon 观感不匹配」遗留；钻石档保持钻石 icon 原样。
         var priceLbl = confirmT.GetComponentInChildren<Text>(true);
         if (priceLbl != null)
+        {
             priceLbl.text = reviveLabel ?? $"{revivePrice}复活";
+            PurchasePriceStyle.Apply(priceLbl);   // 2026-11-08：复活价格统一描边（文字色仍是预制体摆的）
+        }
         if (useAdIcon)
         {
             if (!AdIconUI.Apply(confirmT))

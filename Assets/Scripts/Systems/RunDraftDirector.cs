@@ -424,6 +424,11 @@ public class RunDraftDirector : MonoBehaviour
 
         // 谁会被顶掉 —— 判据只有 BattleBagSystem.FindSameSlotEquip 一处
         var old = bag.FindSameSlotEquip(eq);
+        // 【2026-11-08 主人拍板】无限裂隙抽中同部位装备：不折抽奖币、不弹折币提示，
+        // 只弹「替换成功」，战斗内装备增减照常（裂隙每层免费抽、币无消费出口）。
+        // 空槽（old == null）不受影响 —— 那是「自动穿上」，本来就没有折币这一步。
+        var bm = BattleManager.Instance;
+        bool riftSameSlotReplace = old != null && bm != null && bm.IsEndlessRift;
         bool replace = true;
         // 【2026-10-29 主人拍板·实时抽改版】空槽（old == null）→ 跳过弹窗直接穿（replace 保持 true）；
         // 有旧件才弹确认（old != eq 防同实例重入的语义保留）。
@@ -445,8 +450,8 @@ public class RunDraftDirector : MonoBehaviour
             //
             // 真正「穿上」的出口是 <c>TryEquipDirect</c>：走 <c>EquipItem</c> → 写穿戴槽 +
             // <c>NotifyCostumeChanged()</c>（内含 <c>HeroCostumeManager.RefreshCostume</c> 刷 SPUM 时装），
-            // 顺带把顶下来的旧件 <c>ScrapEquip</c> 折成局内币（2026-10-18 拆分改币，不再发材料）——
-            // 正好就是主人定的「低级的变成钱」。
+            // 顺带把顶下来的旧件 <c>ScrapEquip</c> 折成抽奖币（2026-10-18 拆分改币，不再发材料）——
+            // 正好就是主人定的「低级的变成钱」。裂隙里 GrantScrapGold 返回 0，只移除旧件不发币。
             if (!bag.TryEquipDirect(eq))
             {
                 done?.Invoke(false, $"{NameOf(card, eq)} 穿戴失败");
@@ -461,16 +466,23 @@ public class RunDraftDirector : MonoBehaviour
             // 这条 msg 同时喂三处出口：战斗内抽奖 Toast + 「等玩家点继续」硬引导文案 + 通关结算 Toast。
             // 【2026-10-29 主人拍板·实时抽改版】空槽自动穿上时文案明说「已自动穿上」，
             // 让玩家知道这件为什么没弹窗就直接装身了（有旧件走弹窗，文案不带这句）。
-            done?.Invoke(true, old == null
-                ? $"恭喜获得 {ColoredName(card, eq)}（已自动穿上）"
-                : $"恭喜获得 {ColoredName(card, eq)}");
+            // 【2026-11-08】裂隙同部位替换统一文案「替换成功」，不再提折币（根本没折）。
+            done?.Invoke(true, riftSameSlotReplace
+                ? "替换成功"
+                : old == null
+                    ? $"恭喜获得 {ColoredName(card, eq)}（已自动穿上）"
+                    : $"恭喜获得 {ColoredName(card, eq)}");
             yield break;
         }
 
-        // 玩家选择留着旧的：新件折成局内币（【2026-10-18 主人拍板】拆分改币，ScrapEquip → GrantScrapGold
-        // 自带提示与发币；不再发 DecomposeMat）
+        // 玩家选择留着旧的：新件折成抽奖币（【2026-10-18 主人拍板】拆分改币，ScrapEquip → GrantScrapGold
+        // 自带发币与提示；不再发 DecomposeMat）。
+        // 【2026-11-08 主人拍板】裂隙里 GrantScrapGold 返回 0 → 不发币、不弹折币提示，
+        // 装备照常丢弃，统一只弹「替换成功」。
         bag.ScrapEquip(eq);
-        done?.Invoke(true, $"{NameOf(card, eq)} 已折成抽奖币");   // 【2026-10-31 主人拍板】统一叫抽奖币
+        done?.Invoke(true, riftSameSlotReplace
+            ? "替换成功"
+            : $"{NameOf(card, eq)} 已折成抽奖币");   // 【2026-10-31 主人拍板】统一叫抽奖币
     }
 
     static string NameOf(DraftCard card, EquipInstance eq)

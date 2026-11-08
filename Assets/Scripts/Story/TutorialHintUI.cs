@@ -53,6 +53,11 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     const int HintFontSize = 34;
     /// <summary>
+    /// 通用引导默认字色（浅黄 #FCFDBE）。Build() / TryBindFromHierarchy() /
+    /// ApplyDefaultTextStyle() 三处共用这一个真值 —— 样式还原不许在别处再抄一份色值。
+    /// </summary>
+    static readonly Color HintTextColor = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
+    /// <summary>
     /// 横幅内边距（文字四周留白）。2026-10-10 主人反馈「横幅要尽量大点，比字大，不要跟字一样大，看着不舒服」
     /// +「字都超出了」：左右 28→56、上下 18/10→40，横幅比文字大一圈，多行也不再顶出框外。
     /// 2026-11-07 主人当场「上下缩小 边框缩小点」：左右 56→40、上下 40→24 ——
@@ -207,7 +212,7 @@ public class TutorialHintUI : MonoBehaviour
                 _label.lineSpacing = HintLineSpacing;   // 2026-10-10 主人：多行时上下间距拉开一点
                 if (_label.font == null)
                     _label.font = GameFonts.GetChinese();
-                _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
+                _label.color = HintTextColor;
                 // 拉伸锚点：Top=10 / Bottom=18 / Left=Right=28（仅改 sizeDelta 且 pos=0 会变成上下各 14）
                 var lrt = _label.rectTransform;
                 lrt.anchorMin = Vector2.zero;
@@ -280,7 +285,7 @@ public class TutorialHintUI : MonoBehaviour
         // 红线：不改预制体，字号在代码里统一指定（与 TryBindFromHierarchy() 共用 HintFontSize）
         _label = CreateText(banner.transform, "HintText", "", HintFontSize, TextAnchor.MiddleCenter);
         _label.font = GameFonts.GetChinese();
-        _label.color = new Color(0xFC / 255f, 0xFD / 255f, 0xBE / 255f, 1f);
+        _label.color = HintTextColor;
         var lrt = _label.rectTransform;
         lrt.anchorMin = Vector2.zero;
         lrt.anchorMax = Vector2.one;
@@ -385,9 +390,29 @@ public class TutorialHintUI : MonoBehaviour
     public string CurrentHint => _label != null ? _label.text : "";
 
     /// <summary>
+    /// 还原通用引导默认字样式（【2026-11-08 方案 A】样式泄漏的根治口）。
+    /// <para>根因：TutorialHintUI 是单例、_label 是同一个 Text。抽奖引导在 Show 之后调
+    /// ApplyBattleTalkTextStyle 把字改成 26 号深灰，而 Hide() 只清底框 override、不清字样式，
+    /// Show() 也只还原底框 → 下一次 Show（「拖动技能改顺序」那条）沿用被污染的深灰小字。</para>
+    /// <para>修法：把 ApplyBattleTalkTextStyle 做成<b>一次性语义</b> —— Show() 与 Hide() 都从这里
+    /// 无条件还原默认（字号 / 字色 / 字体三项与 ApplyBattleTalkTextStyle 一一对应），
+    /// 特殊样式只在「本次 Show 之后被显式覆盖」期间有效。抽奖引导三处调用点仍是 Show 后调
+    /// ApplyBattleTalkTextStyle，一行都不用改；也不在 SkillOrderGuide 里另设第二套字样式。</para>
+    /// </summary>
+    void ApplyDefaultTextStyle()
+    {
+        if (_label == null) return;
+        _label.fontSize = HintFontSize;
+        _label.color = HintTextColor;
+        if (_label.font == null) _label.font = GameFonts.GetChinese();
+    }
+
+    /// <summary>
     /// 把本次气泡的文字设置改成「战斗佣兵说话」同款（字号 / 字色 / 字体），底框不动。
-    /// 只影响调用方这一条提示，通用引导的默认字设置（HintFontSize / 浅黄字）不变。
-    /// 在 Show 之后调用，避免被 Show 里的布局刷新盖回去。
+    /// 【2026-11-08 方案 A】一次性语义：效果只到下一次 Show() 或 Hide() 为止
+    /// （两者都会走 ApplyDefaultTextStyle 还原默认），通用引导的字设置永远回到 HintFontSize / HintTextColor。
+    /// 调用方在 Show 之后调 —— 不改这三处调用顺序；Show 里的布局刷新已按默认字号量过，
+    /// 这里改完再刷一次横幅高度，避免气泡按 34 号量、却显示 26 号字的偏大空框。
     /// </summary>
     public void ApplyBattleTalkTextStyle()
     {
@@ -395,6 +420,7 @@ public class TutorialHintUI : MonoBehaviour
         _label.fontSize = BattleHeadTalkUI.BubbleFontSize;
         _label.color = BattleHeadTalkUI.BubbleTextColor;
         _label.font = GameFonts.GetChinese();
+        RefreshLayout();
     }
 
     public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard)
@@ -403,6 +429,7 @@ public class TutorialHintUI : MonoBehaviour
             return;
 
         EnsureBuilt();
+        ApplyDefaultTextStyle();      // 【2026-11-08 方案 A】本次 Show 从默认字起步，杜绝上次抽奖气泡的深灰小字泄漏
         ApplyBannerSpriteForShow();   // 【2026-10-31】有 override 换自定义底框，没有且上次换过 → 还原默认
         bool targetChanged = highlight != _follow;
         string prevHint = _label != null ? _label.text : "";
@@ -482,6 +509,7 @@ public class TutorialHintUI : MonoBehaviour
     public void Hide()
     {
         _hard = false;
+        ApplyDefaultTextStyle();        // 【2026-11-08 方案 A】一次性字样式到此为止（自动隐藏也走这里）
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         if (_group != null)
         {

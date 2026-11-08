@@ -711,8 +711,8 @@ public class CodexInfoPopupUI : MonoBehaviour
         // 2026-10-31 主人报「怪物信息排版优化」：Meta 与正文、描述与趣闻两段间距拉开
         // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
         // 【2026-11-04 任务弹窗排版（主人拍板「统一左边界 / 进度不再单独一行 / 奖励贴紧说明 / 收掉空地」）】
-        // 任务类弹窗（主线/支线，_taskLayout）：说明与进度挤在【同一行】（说明靠左、进度靠右，同基线，
-        // 行高取两者较大者）；奖励行紧跟说明下方、与说明同一左边界，间距 22；面板按内容收高。
+        // 任务类弹窗（主线/支线，_taskLayout）：说明独占上部；状态字与奖励行同一 y，
+        // 左对齐状态字、右对齐奖励图标，互不重叠；面板按内容收高。
         float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
         float metaGap = 12f;            // Meta 与 Desc 的间距
         float rewardGapAbove = 10f;     // Desc 与奖励行间距
@@ -770,7 +770,7 @@ public class CodexInfoPopupUI : MonoBehaviour
         if (!_baseDescAlign.HasValue) _baseDescAlign = descText.alignment;
         if (!_baseLoreAlign.HasValue) _baseLoreAlign = loreText.alignment;
         descText.alignment = task ? TextAnchor.UpperLeft : _baseDescAlign.Value;
-        loreText.alignment = task ? TextAnchor.UpperRight : _baseLoreAlign.Value;
+        loreText.alignment = task ? TextAnchor.UpperLeft : _baseLoreAlign.Value;
 
         // 奖励图标行高度（active 才占位）
         float rewardH = 0f;
@@ -862,10 +862,10 @@ public class CodexInfoPopupUI : MonoBehaviour
             _rewardRowRt.anchoredPosition = new Vector2(
                 _rewardRowRt.anchoredPosition.x, top - rowH - rewardGapAbove);
             var hlg = _rewardRow.GetComponent<HorizontalLayoutGroup>();
-            if (hlg != null) hlg.childAlignment = task ? TextAnchor.MiddleLeft : TextAnchor.MiddleCenter;
+            if (hlg != null) hlg.childAlignment = task ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
         }
-        // 任务弹窗：进度与说明同一行（同 y、同基线），不再另起一行
-        float loreY = task ? top : top - descH - rewardBlock - loreGap;
+        // 任务弹窗：状态字与奖励行同一 y，左对齐状态字、右对齐奖励图标，互不重叠
+        float loreY = task ? top - rowH - rewardGapAbove : top - descH - rewardBlock - loreGap;
         loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, loreY);
     }
 

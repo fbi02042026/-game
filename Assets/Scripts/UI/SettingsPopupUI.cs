@@ -316,8 +316,9 @@ public class SettingsPopupUI : MonoBehaviour
 
     void OnEvacuate()
     {
-        // 不再二次确认，直接撤离
-        DoEvacuate();
+        // 2026-11-08 主人拍板：撤离先二次确认，取消回设置弹窗继续战斗。
+        if (root != null) root.SetActive(false);
+        EvacuateConfirmPopupUI.Show(ConfirmEvacuate, OnEvacuateCancelled);
     }
 
     void OnEvacuateCancelled()

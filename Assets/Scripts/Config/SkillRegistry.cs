@@ -286,14 +286,21 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         // 远程单位放物攻技能时：专属多为近战 slash（挂在自身），跳过改走弓/法球弹道
         if (prefab != null && !(rangedCaster && kit != AttackVfxKit.Heal))
         {
+            // 2026-11-08 主人「星落同理」：星落是定点 AOE，伤害瞬间结算完，特效一轮 2.53s 就 destroyOnFinish 自毁；
+            // 与龙卷同口径延长到 5.5s 并让 sheet 循环播放（见下面 SetLooping）。
+            // 只认真 id：调用方传的是运行时别名 ally_starfall（SkillCastService 注释口径）。
+            bool starfallSkill = PlayerSkillDefs.ResolveRealSkillId(skillId) == "starfall";
             float life = 2.5f;
-            if (shieldSkill)
+            if (starfallSkill)
+                life = 5.5f;
+            else if (shieldSkill)
                 life = (cfg != null && cfg.duration > 0.5f) ? cfg.duration : 6.2f;
             else if (cfg != null && cfg.duration > 0.5f)
                 life = Mathf.Max(2.5f, cfg.duration + 0.2f);
 
+            GameObject fxGo;
             if (BattleVFXSystem.Instance != null)
-                BattleVFXSystem.Instance.PlaySkillPrefab(
+                fxGo = BattleVFXSystem.Instance.PlaySkillPrefab(
                     prefab, toPos, facingDir, life, attach,
                     shieldSkill ? 0.8f : 1f, shieldSkill);
             else
@@ -313,6 +320,13 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
                     go.transform.localScale = s;
                 }
                 Object.Destroy(go, life);
+                fxGo = go;
+            }
+            // 星落专属：一轮播完不自毁、继续循环，到 life 到期由池回收（单一出口，不开第二条销毁路径）。
+            if (starfallSkill && fxGo != null)
+            {
+                var sheet = fxGo.GetComponent<PixelFxSheetPlayer>();
+                if (sheet != null) sheet.SetLooping();
             }
             return;
         }

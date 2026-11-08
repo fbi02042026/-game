@@ -209,7 +209,8 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// 概率公示按钮（美术图「提示」金币问号）：贴在「普通抽奖」按钮右边，点了弹 <see cref="DraftOddsPopupUI"/>。
+    /// 概率公示按钮（美术图「提示」金币问号）：贴在抽奖按钮这一排的右上角，点了弹 <see cref="DraftOddsPopupUI"/>。
+    /// 【2026-11-08 拍板】位置改到「最下面这排抽奖按钮的右边角落里」，下面 10-05 的「按钮旁边」口径作废。
     ///
     /// 2026-10-05 主人拍板：「概率需要告诉玩家……可以再（抽）按钮旁边加个感叹号之类的，
     /// 点击弹出弹窗上面写的概率」「可以加到 DraftRoot 节点里」。预制体里没有这个节点
@@ -221,8 +222,38 @@ public partial class BattleEntryDraftPanel
     void BuildOddsButton()
     {
         if (_draftRt == null || _slots.Count == 0) return;
-        var normal = _slots[0].Root;
-        if (normal == null) return;
+
+        // 【2026-11-08 拍板】概率公示改放到「最下面这排抽奖按钮的右边角落里」：
+        // 取这一排可见按钮整棵子树的世界角点 → 换成 DraftRoot 本地坐标 → 求包围盒右上角。
+        // 不绑某一张卡、不写死坐标；只显示一个按钮或竖屏重锚都照贴这一排的右上角。
+        var corners = new Vector3[4];
+        float rowRight = 0f, rowTop = 0f;
+        bool hasVisible = false;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var root = _slots[i].Root;
+            if (root == null || !root.gameObject.activeSelf) continue;
+            // 占位节点只有 100×100，卡片美术（icon 200×271）会溢出 ——
+            // 必须连子节点一起算，否则按占位框取到的「右上角」实际还在卡片中间。
+            var rects = root.GetComponentsInChildren<RectTransform>(true);
+            for (int j = 0; j < rects.Length; j++)
+            {
+                if (!rects[j].gameObject.activeSelf) continue;
+                rects[j].GetWorldCorners(corners);
+                Vector2 corner = _draftRt.InverseTransformPoint(corners[2]);   // 右上角
+                if (!hasVisible) { rowRight = corner.x; rowTop = corner.y; hasVisible = true; }
+                else
+                {
+                    rowRight = Mathf.Max(rowRight, corner.x);
+                    rowTop = Mathf.Max(rowTop, corner.y);
+                }
+            }
+        }
+        if (!hasVisible)
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 抽奖按钮全不可见，概率公示按钮不建");
+            return;
+        }
 
         var go = new GameObject("BtnOdds", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         go.transform.SetParent(_draftRt, false);
@@ -234,15 +265,9 @@ public partial class BattleEntryDraftPanel
         // 【2026-10-13 #6】58 → 88：顺手修触摸目标不达标（美术规格 §5.5）。
         // 【2026-10-16 主人口令】图标有点大 → 缩小 30%（88 → 61.6）。
         rt.sizeDelta = new Vector2(61.6f, 61.6f);
-        // 用世界角点换成容器本地坐标，抽奖按钮是什么锚点都不影响（直接读 anchoredPosition 会被锚点坑）。
-        var corners = new Vector3[4];
-        normal.GetWorldCorners(corners);
-        Vector2 center = _draftRt.InverseTransformPoint((corners[0] + corners[2]) * 0.5f);
-        Vector2 right = _draftRt.InverseTransformPoint(corners[2]);
-        float halfW = Mathf.Abs(right.x - center.x);
-        // 【2026-10-13 #6】按钮更宽，间隙从 38 拉到 60，免得贴着普通按钮。
-        // 【2026-10-16 主人口令】往上移 10 像素。
-        rt.anchoredPosition = new Vector2(center.x + halfW + 60f, center.y + 10f);
+        // 图标完整落在这排右上角内侧：中心往里收半个自身尺寸，不压到排外。
+        rt.anchoredPosition = new Vector2(rowRight - rt.sizeDelta.x * 0.5f,
+                                          rowTop - rt.sizeDelta.y * 0.5f);
 
         var img = go.GetComponent<Image>();
         // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），

@@ -218,17 +218,17 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 + "（namebg 图加载为空）");
         }
 
-        // 2026-10-16 主人拍板：已获得里在队的佣兵，右上角绿「已入队」标（原「已上架」，2026-10-17 改名）
+        // 2026-10-16 主人拍板：已获得里在队的佣兵，卡片正中「已入队」标，避开右上角升阶提示（原「已上架」，2026-10-17 改名）；2026-11-08 去底色只写字、淡黄字样式照三选一界面；文案与字号按 2026-11-08 主人当场指令改回「已入队」并调大
         if (owned && _picked.Contains(hireId))
         {
-            var tag = NewImage(card.transform, "OnShelfTag", new Color(0.16f, 0.62f, 0.28f, 0.95f));
+            var tag = MakeText(card.transform, "OnShelfTag", "已入队", 32);
             var trt = tag.rectTransform;
-            trt.anchorMin = new Vector2(1f, 1f);
-            trt.anchorMax = new Vector2(1f, 1f);
-            trt.pivot = new Vector2(1f, 1f);
-            trt.anchoredPosition = new Vector2(-4f, -4f);
+            trt.anchorMin = new Vector2(0.5f, 0.5f);
+            trt.anchorMax = new Vector2(0.5f, 0.5f);
+            trt.pivot = new Vector2(0.5f, 0.5f);
+            trt.anchoredPosition = Vector2.zero;
             trt.sizeDelta = new Vector2(110f, 36f);
-            MakeText(tag.transform, "Label", "已入队", 21);   // Label 铺满角标、不拦点击
+            tag.color = new Color(0.990566f, 0.98382103f, 0.54668033f, 1f);
         }
 
         // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补：
@@ -267,7 +267,14 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 if (aBtn == null) aBtn = ascendNode.gameObject.AddComponent<Button>();   // 无 Button 运行时补（先例同 quxiao）
                 if (aBtn.targetGraphic == null && aImg != null) aBtn.targetGraphic = aImg;
                 aBtn.onClick.RemoveAllListeners();
-                if (aImg != null) aImg.color = CanActuallyAscend(hireId) ? Color.white : AscendDimColor;
+                // 2026-11-08 需求：可升星时给这个升阶标志加缩放呼吸 + 流光；判定只算一次，
+                // 与上面亮/灰同一个值，状态唯一出口 = MercAscendBadgeFx.SetState。
+                // 红点不在这里：只挂入口（酒馆页队列图标 + 底部导航酒馆），见 MercStarRedDot。
+                bool canAscend = CanActuallyAscend(hireId);
+                if (aImg != null) aImg.color = canAscend ? Color.white : AscendDimColor;
+                var fx = ascendNode.GetComponent<MercAscendBadgeFx>();
+                if (fx == null) fx = ascendNode.gameObject.AddComponent<MercAscendBadgeFx>();
+                fx.SetState(canAscend);
                 string ascHid = hireId;   // 与上方查看钮的 hid 同名会撞 CS0136，故单名
                 aBtn.onClick.AddListener(() => MercAscendUI.Show(ascHid));
             }

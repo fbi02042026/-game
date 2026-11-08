@@ -179,6 +179,9 @@ public static class RedDot
         var data = SaveSystem.Instance?.Data;
         Set(Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
         Set(DailyLogin, DailyLoginSystem.HasClaimable());
+        // 2026-11-08：酒馆入口红点 = 有佣兵能升星（底部导航「酒馆」+ 酒馆页「佣兵队列」入口共用 Tavern 键）。
+        // 判定/刷新收口在 MercStarRedDot，别在这里抄第二份 CanStarUp 遍历。
+        MercStarRedDot.Refresh();
         // 2026-10-31：看广告送佣兵活动（艾拉）——入口键 + 4 个礼盒键一起刷（内部已判存档未就绪）。
         AdMercEventSystem.RefreshRedDots();
         AdventureCodex.RefreshRedDots();

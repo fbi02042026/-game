@@ -300,6 +300,9 @@ public static class MercGrowInventory
         data.TownBagAdd(itemId, amount);
         r.bagCount = amount;
         SaveSystem.Instance?.Save();
+        // 【2026-11-08】碎片到账即重算「有佣兵能升星」入口红点（唯一出口 MercStarRedDot.Refresh），
+        // 覆盖战斗掉落 / 酒馆重复招募 / 邮件 / 每日登录等所有发放路径，不用等回城或重进酒馆页。
+        MercStarRedDot.Refresh();
         // 【2026-11-01 主人拍板】提示里的道具名用 item_defs 真名（如「塔克碎片」），不再写「塔克·重盾的本命碎片」；
         // 查不到道具名才回退花名册旧文案（防御，正常配表都能查到）。
         var itemDef = ItemDefs.Get(itemId);

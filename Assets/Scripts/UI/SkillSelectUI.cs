@@ -5,11 +5,11 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 技能选择弹层（参考 Art/UI/Character/skill_select_reference.png）。
-/// 6 个技能格 + 说明；由角色页右侧「技能」或左侧独立按钮打开。
+/// 9 个技能格 + 说明；由角色页右侧「技能」或左侧独立按钮打开。
 /// </summary>
 public class SkillSelectUI : MonoBehaviour
 {
-    /// <summary>城镇技能选择页只展示前 6 个基础技能，其余 18 个是局内抽卡池专用。</summary>
+    /// <summary>【2026-11-08 主人拍板】9 格 = 全部玩家技能，按稀有度从低到高排。</summary>
     public const int MaxSkills = PlayerSkillDefs.TownSelectCount;
 
     public static SkillSelectUI Instance { get; private set; }
@@ -79,6 +79,7 @@ public class SkillSelectUI : MonoBehaviour
     {
         EnsureArrays();
         if (closeButton == null || skillButtons[0] == null) AutoBind();
+        if (EnsureSlots()) _wired = false;   // 新补的格子必须再走一次 Wire() 这一处单一出口
         Wire();
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
@@ -142,26 +143,24 @@ public class SkillSelectUI : MonoBehaviour
 
     static readonly Color LockedTint = new Color(0.42f, 0.42f, 0.42f, 1f);
 
-    // 【2026-10-19 主人拍板】技能名颜色的唯一真源：CharacterUI.prefab 里 Skill_0..Skill_5 的
-    // Label 是主人手涂的 6 种颜色，运行时曾被 ApplySlotTint 刷白覆盖；现在恢复手涂色，
-    // 并通过 NameColorOf 开放给战斗技槽（BattleUI.Skills）共用，保证两处颜色一致。
-    // 下标 = 弹窗槽位（2026-11-05 起槽序按稀有度从低到高，见 RebuildSlotOrder）。
-    // 当前 6 技对齐后顺序恰好不变：治愈之泉/圣盾壁垒/战意爆发(普通) → 疾风架势/致命专注(稀有) → 天雷裁决(传奇)。
-    static readonly Color[] SkillNameColors =
-    {
-        new Color(1f, 1f, 1f),                    // 0 治愈之泉 白
-        new Color(0.55899715f, 1f, 0.3726415f),   // 1 圣盾壁垒 浅绿
-        new Color(0f, 0.60335493f, 1f),           // 2 战意爆发 蓝
-        new Color(0.6794996f, 0f, 1f),            // 3 疾风架势 紫
-        new Color(0.64063966f, 1f, 0f),           // 4 致命专注 绿
-        new Color(1f, 0.1503219f, 0f),            // 5 天雷裁决 红
-    };
+    // 【2026-11-08 主人拍板】技能名颜色改按稀有度三档上色，字色跟图标稀有度档位对齐。
+    // 色值唯一真源 = RarityPalette（经 SkillRarityUtil.Tint 转发），本文件不再抄第二份色表；
+    // 稀有度唯一真源 = SkillDraftMeta.Rarity(技能 id)。旧的 6 技手涂色表 / 3 技白色占位整段删除。
+    // 🔴 下标 = PlayerSkillDefs.All 的下标（**不是弹窗槽位**）。2026-11-08 扩到 9 格后槽序按稀有度
+    // 重排为 [0,1,2,3,4,6,5,7,8]，与 All 顺序不再一致；ApplySlotTint 必须先把槽位换成 All 下标，
+    // 否则同一个技能在角色面板和战斗技槽（BattleUI.Skills / SkillObtainPopupUI）会显示两种颜色。
+    // 本函数是「技能名颜色」的单一出口，三处共用，改色只改这里。
 
-    /// <summary>第 index 个技能的名字颜色（角色界面弹窗与战斗技槽共用，越界回退白）。</summary>
+    /// <summary>
+    /// 技能名颜色。index = <b>PlayerSkillDefs.All 下标</b>（非弹窗槽位）；
+    /// 颜色 = 该技能稀有度档（普通灰白 / 稀有蓝 / 传奇橙金，来自 RarityPalette），
+    /// 角色界面弹窗 / 战斗技槽 / 技能获得弹窗共用；查不到技能回退普通档。
+    /// </summary>
     public static Color NameColorOf(int index)
     {
-        if (index < 0 || index >= SkillNameColors.Length) return Color.white;
-        return SkillNameColors[index];
+        var def = PlayerSkillDefs.Get(index);
+        if (def == null) return SkillRarityUtil.Tint(SkillRarity.Common);
+        return SkillRarityUtil.Tint(SkillDraftMeta.Rarity(def.id));
     }
 
     static Sprite LoadSkillIcon(string skillId)
@@ -210,8 +209,15 @@ public class SkillSelectUI : MonoBehaviour
     PlayerSkillDefs.Def DefOfSlot(int slot)
     {
         if (_slotToAll == null) RebuildSlotOrder();
-        int allIdx = (slot >= 0 && slot < _slotToAll.Length) ? _slotToAll[slot] : -1;
+        int allIdx = AllIndexOfSlot(slot);
         return allIdx >= 0 ? PlayerSkillDefs.Get(allIdx) : null;
+    }
+
+    /// <summary>弹窗槽位 → PlayerSkillDefs.All 下标；未映射返回 -1（NameColorOf 回退白）。</summary>
+    int AllIndexOfSlot(int slot)
+    {
+        if (_slotToAll == null) RebuildSlotOrder();
+        return slot >= 0 && slot < _slotToAll.Length ? _slotToAll[slot] : -1;
     }
 
     /// <summary>PlayerSkillDefs.All 下标 → 槽位；查不到（抽卡池专属技等）回退 0。</summary>
@@ -302,7 +308,7 @@ public class SkillSelectUI : MonoBehaviour
         if (skillIcons[i] != null)
             skillIcons[i].color = tint;
         if (skillNames[i] != null)
-            skillNames[i].color = unlocked ? NameColorOf(i) : LockedTint;
+            skillNames[i].color = unlocked ? NameColorOf(AllIndexOfSlot(i)) : LockedTint;
     }
 
     void ApplySelectedMarks(int index)
@@ -397,6 +403,41 @@ public class SkillSelectUI : MonoBehaviour
             if (skillIcons[i] == null)
                 EnsureSkillIcon(i);
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-08 主人拍板】城镇技能页扩到 9 格。
+    /// 预制体由主人手摆、AI 不改（铁律 3）：CharacterUI.prefab 的 Panel/Skills 下只有 Skill_0..Skill_5，
+    /// 且 skillButtons[0] 已序列化导致 AutoBind 平时根本不会被调用。这里在运行时以 Skill_0 为模板补齐后 3 格，
+    /// 几何 / localScale 0.8 / 子节点全部继承，GridLayoutGroup 自动排位 —— 不写任何 sizeDelta、anchoredPosition。
+    /// 模板缺失时 LogError 退出（fail closed），不静默留空格。返回是否新建过格子（新建需让 Wire() 重绑）。
+    /// </summary>
+    bool EnsureSlots()
+    {
+        if (skillButtons == null || skillButtons.Length < MaxSkills) return false;
+        bool created = false;
+        for (int i = 0; i < MaxSkills; i++)
+        {
+            if (skillButtons[i] != null) continue;
+            var template = skillButtons[0];
+            if (template == null)
+            {
+                Debug.LogError("[SkillSelectUI] Skill_0 模板缺失，无法补齐 9 格");
+                return created;
+            }
+            GameObject go = Instantiate(template.gameObject, template.transform.parent);
+            go.name = "Skill_" + i;
+            var t = go.transform;
+            skillButtons[i] = t.GetComponent<Button>();
+            skillIcons[i] = t.Find("Icon")?.GetComponent<Image>()
+                            ?? t.Find("icon")?.GetComponent<Image>();
+            skillNames[i] = t.Find("Label")?.GetComponent<Text>();
+            var mark = t.Find("选中") ?? t.Find("Selected") ?? t.Find("Select");
+            selectedMarks[i] = mark != null ? mark.gameObject : null;
+            if (skillIcons[i] == null) EnsureSkillIcon(i);
+            created = true;
+        }
+        return created;
     }
 
     Text FindTxt(string path)

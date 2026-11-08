@@ -179,7 +179,14 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // → 提前剧透主线 + 和岛名黑幕（「迷雾屿 · 雾有面包味」）连播两套字幕。
         // 这里在切场景前先取值（PendingSideIsland 会被 BattleManager.Start 读后即清）。
         bool sideIslandRun = AdventureUI.PendingSideIsland > 0;
+        // 副本类玩法（四个活动副本 + 羁绊副本）不演主线章节卡；它们没有专属章节 Loading 图，
+        // 固定用唯一那张占位章图，不再按题材章请求不存在的 beijing0N。
+        // 战斗场景章节仍由 ChapterManager 按题材章决定，此处只管 Loading 图与章节卡。
+        bool activityRun = AdventureUI.PendingGoldDungeon || AdventureUI.PendingBadgeDungeon
+                        || AdventureUI.PendingScrollDungeon || AdventureUI.PendingGiftDungeon
+                        || AdventureUI.PendingBondDungeon;
         int battleChapter = (arenaChallenge || sideIslandRun) ? 0
+            : activityRun ? LoadingUI.FallbackChapter
             : ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
@@ -189,7 +196,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // 无限裂隙照旧不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
         // 竞技场挑战同样不演（2026-10-31 主人拍板，上面 arenaChallenge 归零口径）。
         // 支线岛同样不演（2026-10-31）：章节卡归零口径同上，岛自己的开场由 IslandStoryBeats 负责。
-        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift && !arenaChallenge && !sideIslandRun;
+        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift && !arenaChallenge && !sideIslandRun && !activityRun;
         yield return null;
 
         // 战斗场景先在 Loading 底下静默加载（allowSceneActivation=false 时 progress 停在 0.9，到位即放行）。
@@ -240,7 +247,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
         // 【2026-10-31 主人拍板】竞技场挑战不演章节卡（无限裂隙同口径）；支线岛同（理由见上 battleChapter 归零处）。
-        var splash = AdventureUI.PendingEndlessRift || arenaChallenge || sideIslandRun
+        var splash = AdventureUI.PendingEndlessRift || arenaChallenge || sideIslandRun || activityRun
             ? null
             : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
 

@@ -105,14 +105,36 @@ public partial class AdventureUI
         }
     }
 
+    Sprite[] _diffSprites;
+
     void RefreshDiffHighlight()
     {
         bool playable = IsModePlayable(_selectedMode);
+        if (_diffSprites == null)
+        {
+            _diffSprites = new Sprite[difficultyButtons.Length];
+            for (int i = 0; i < difficultyButtons.Length; i++)
+            {
+                if (difficultyButtons[i] == null) continue;
+                _diffSprites[i] = difficultyButtons[i].GetComponent<Image>()?.sprite;
+            }
+        }
         for (int i = 0; i < difficultyButtons.Length; i++)
         {
             if (difficultyButtons[i] == null) continue;
             bool unlocked = playable && IsDiffUnlockedForSelectedMode(i);
-            SetChildSelected(difficultyButtons[i].transform, playable && i == _selectedDiff && unlocked);
+            bool on = playable && i == _selectedDiff && unlocked;
+            // 2026-11-08 主人拍板：选中统一用普通绿图
+            var img = difficultyButtons[i].GetComponent<Image>();
+            if (img != null)
+            {
+                if (on && _diffSprites[0] != null) img.sprite = _diffSprites[0];
+                else if (!on && i == 0 && _diffSprites[1] != null) img.sprite = _diffSprites[1];
+                else if (!on && i != 0 && _diffSprites[i] != null) img.sprite = _diffSprites[i];
+            }
+            var selImg = difficultyButtons[i].transform.Find("选中")?.GetComponent<Image>();
+            if (selImg != null && _diffSprites[0] != null) selImg.sprite = _diffSprites[0];
+            SetChildSelected(difficultyButtons[i].transform, on);
             SetGraphicDim(difficultyButtons[i].transform, !unlocked);
         }
     }
@@ -434,13 +456,16 @@ public partial class AdventureUI
 
     /// <summary>排行榜文字节点名（挂在 无限/关卡 容器下；不是「数字-数字」不会混进槽位识别）。</summary>
     const string RiftRankLabelName = "虚拟排行";
-    /// <summary>排行榜文字与顶槽位的间距（纵向 y 排版属必要介入：y 跟顶槽位现算，不写死坐标）。</summary>
-    const float RiftRankLabelGapY = 92f;
+    /// <summary>排行榜文字与顶槽位的纵向关系：0 = 与顶槽齐平、右侧并排（不挡中间的岛；补第 5 槽后顶槽升到 bandTop，再 +92 会撞 TitleBar）。y 跟顶槽现算，不写死坐标。</summary>
+    const float RiftRankLabelGapY = 0f;
+    /// <summary>排行榜半透底框节点名（不是「数字-数字」不会混进槽位识别）。</summary>
+    const string RiftRankFrameName = "虚拟排行底框";
 
-    /// <summary>刷新无限页：4 张层数牌写「第N层」+ 出生点头像指示 + 两点排行榜（RefreshAll 调，仅无限模式）。</summary>
+    /// <summary>刷新无限页：5 张层数牌写「第N层」+ 出生点头像指示 + 两点排行榜（RefreshAll 调，仅无限模式）。</summary>
     void RefreshRiftPage()
     {
-        var right = transform.Find("RightContent");
+        // 2026-11-08 主人拍板：右边缘 x 要用 right.rect.xMax 运行时换算，显式转 RectTransform
+        var right = transform.Find("RightContent") as RectTransform;
         var endless = right != null ? right.Find(EndlessNodeName) : null;
         var guanka = endless != null ? endless.Find("关卡") as RectTransform : null;
         if (guanka == null)
@@ -449,6 +474,7 @@ public partial class AdventureUI
             return;
         }
 
+        EnsureRiftSlotCount(guanka, GameConfig.STAGES_PER_GRAND);
         var slots = CollectNumberedSlots(guanka);
         // 【2026-11-02 晚·直达预览】进本确认里点了「直达第 N 层」后，层数牌窗口停在预览起点
         //（N 层），让玩家在二次确认期间亲眼看到「自己要跳到哪」。弹窗已关（点暗底直接关掉、
@@ -458,7 +484,7 @@ public partial class AdventureUI
         int start = _riftPreviewStart > 0 ? _riftPreviewStart : EndlessRiftRules.StartStage();
         ApplyRiftPlateNumbers(slots, start);
 
-        // 虚拟排行榜：y 跟顶槽位走（瘦屏重排后 RefreshRiftPage 会重算，不脱节）
+        // 虚拟排行榜：与最上面那个岛齐平、右侧并排（GapY=0；瘦屏重排后 RefreshRiftPage 会重算，不脱节）
         var data = SaveSystem.Instance?.Data;
         var label = EnsureRiftRankLabel(guanka);
         if (label != null)
@@ -469,23 +495,30 @@ public partial class AdventureUI
             // 【2026-11-02 晚·主人拍板「都可以」】百分比 ±1 微波动：固定数字显得假，虚拟榜每次进页
             // 略有浮动更像活的榜单（纯展示，不动 RankPercentOf 真源）。
             int pct = Mathf.Clamp(EndlessRiftRules.RankPercentOf(data) + UnityEngine.Random.Range(-1, 2), 0, 100);
+            // 【2026-11-08 主人拍板】文案精简：一行短句，best==0 显示「未挑战」。
             label.text = best > 0
-                ? $"最高层数：第 {best} 层\n已超过 {pct}% 的玩家"
-                : "最高层数：尚未挑战\n挑战无限裂隙后生成您的排名";
+                ? $"第{best}层 · 超过{pct}%"
+                : "未挑战";
             // 【2026-11-02 晚·主人拍板「都可以」】打破生涯纪录 → 追加一行「◆ 新纪录！」，
             // 保留到下次进本（TryConsumeEnter 清账）。rich text 金色与 ◆ 用法同 DraftPool 对比箭头先例。
             if (EndlessRiftRules.NewRecordPendingShow && best > 0)
                 label.text += "\n<size=26><color=#FFD97A>◆ 新纪录！</color></size>";
+            ApplyRiftRankLabelSize(label);   // 文案定稿后才量宽度（黑底跟着收缩）
             if (slots.Count > 0)
             {
                 var top = slots[slots.Count - 1];
                 var lrt = label.rectTransform;
-                lrt.anchoredPosition = new Vector2(top.anchoredPosition.x, top.anchoredPosition.y + RiftRankLabelGapY);
+                // 2026-11-08 主人拍板：x 不写死，取 RightContent 右边缘(留 12)现算成「关卡」局部坐标；y 与顶槽齐平（GapY=0）
+                float rightEdgeLocalX = guanka.InverseTransformPoint(
+                    right.TransformPoint(new Vector3(right.rect.xMax - 12f, 0f, 0f))).x;
+                lrt.anchoredPosition = new Vector2(rightEdgeLocalX, top.anchoredPosition.y + RiftRankLabelGapY);
             }
+            // 【2026-11-08 主人拍板】label 位置定稿后再复制几何给半透底框，保证与文字同框
+            EnsureRiftRankFrame(guanka, label);
         }
 
         // 【2026-11-02 主人拍板】玩家头像指向所在的层（= 出生点 = 底槽 = 保存点 + 1）。
-        // 直达预览期间底槽位置不变（4 张牌是固定布局），箭头跟着预览窗口的底槽 —— 「一直指向」。
+        // 直达预览期间底槽位置不变（5 张牌是固定布局），箭头跟着预览窗口的底槽 —— 「一直指向」。
         UpdateRiftStageMarker(guanka, slots.Count > 0 ? slots[0] : null);
         // 【2026-11-02 晚·主人拍板「都可以」】死亡回城 → 箭头连脉冲两下，把视线引到「你从这里继续」
         //（主动撤离不置位）。读后即清：只在对账消费一次。
@@ -498,13 +531,64 @@ public partial class AdventureUI
         RefreshEndlessResetButton(true);
     }
 
+    /// <summary>
+    /// 无限页层数牌补足到与主线可见 5 关同位（2026-11-08 16:0x 确认改成 5 个岛）。
+    /// 预制体「无限/关卡」只有 4 槽，按主线 EnsureSlotCount 同款口径克隆顶槽补第 5 槽：
+    /// 名字沿用「9-9」（能被 CollectNumberedSlots 的 ^\d+-\d+$ 收进去）、x 用源槽原值不写、
+    /// y 从现有相邻两槽的间距现算（纵向 y 排版属必要介入）；幂等，重复进页不重复克隆。
+    /// </summary>
+    void EnsureRiftSlotCount(RectTransform guanka, int want)
+    {
+        want = Mathf.Min(want, GameConfig.STAGES_PER_GRAND);
+        var slots = CollectNumberedSlots(guanka);
+        if (slots.Count >= want) return;
+        if (slots.Count < 2)
+        {
+            Debug.LogError("[AdventureUI] 无限/关卡 槽位不足 2 个，现算不出节奏，不补第 5 槽（缺真值不兜底）");
+            return;
+        }
+        float rhythm = slots[1].anchoredPosition.y - slots[0].anchoredPosition.y;
+        if (rhythm <= 1f)
+        {
+            Debug.LogError("[AdventureUI] 无限/关卡 槽位节奏异常，不补第 5 槽（缺真值不兜底）");
+            return;
+        }
+        while (slots.Count < want)
+        {
+            var top = slots[slots.Count - 1];
+            var clone = Instantiate(top, guanka) as RectTransform;
+            if (clone == null)
+            {
+                Debug.LogError("[AdventureUI] 无限/关卡 克隆第 5 槽失败（缺真值不兜底）");
+                return;
+            }
+            clone.name = "9-9";
+            var p = top.anchoredPosition;   // x 取源槽原值，只写 y（铁律 20）
+            clone.anchoredPosition = new Vector2(p.x, p.y + rhythm);
+            slots.Add(clone);
+        }
+    }
+
+    /// <summary>
+    /// 排行榜文字框按文案实际宽高收缩（2026-11-08 16:0x「黑底也收缩一下」）：
+    /// label 几何的唯一出口，黑底框由 EnsureRiftRankFrame 从这里现读复制，不另开位置出口。
+    /// 必须在 label.text 完全定稿之后调用（preferredWidth/Height 要读到最终文本）；
+    /// 高度按内容算，避免「◆ 新纪录！」两行被固定高度截断。
+    /// </summary>
+    static void ApplyRiftRankLabelSize(Text label)
+    {
+        float w = Mathf.Clamp(label.preferredWidth + 20f, 96f, 240f);
+        float h = Mathf.Clamp(label.preferredHeight + 8f, 48f, 72f);   // 两行「◆ 新纪录！」也不被截断
+        label.rectTransform.sizeDelta = new Vector2(w, h);
+    }
+
     /// <summary>存档点编号的金色（10 的倍数的层）；Rich gold 与排行榜角标同一颗暖金。</summary>
     static readonly Color RiftSaveStageColor = new Color(1f, 0.85f, 0.42f, 1f);
     /// <summary>非存档层用预制体原色 —— 颜色只捕获一次（首次刷新时牌还是预制体原值，之后只读不写）。</summary>
     static Color? _riftPlateBaseColor;
 
     /// <summary>
-    /// 4 张层数牌写编号（底槽 = start，往上 +1；从 RefreshRiftPage 抽出，直达预览翻滚也走这里，
+    /// 5 张层数牌写编号（底槽 = start，往上 +1；从 RefreshRiftPage 抽出，直达预览翻滚也走这里，
     /// 保证两条路写出的牌面完全一致）。
     /// 【2026-11-02 晚·主人拍板「都可以」】10 的倍数（保存点）编号变金色 —— 翻滚扫过 20/30/40 时
     /// 存档点一颗颗闪过，玩家对「打到这张牌就能存档」建立直觉。非存档层每次刷回预制体原色。
@@ -550,12 +634,42 @@ public partial class AdventureUI
             txt.horizontalOverflow = HorizontalWrapMode.Overflow;
             txt.raycastTarget = false;
         }
+        // 【2026-11-08 主人拍板】锚点回到 (0.5,0.5) 与槽位同一坐标参照（关卡容器中心）：
+        // 「关卡」是 100×100 小容器、右缘只到屏幕 x≈521，锚其右缘 (1,0.5) 反让文字往左跑约 66px；
+        // 真正右侧靠边的 x 改由 RefreshRiftPage 用 RightContent 右边缘运行时换算（此处不写死坐标）。
+        // pivot 右下、fontSize/alignment 保持不变；框尺寸由 ApplyRiftRankLabelSize 在文案定稿后按实际宽度收缩
+        //（此处不写 sizeDelta，避免同一值两处出口；黑底框由 EnsureRiftRankFrame 现读复制跟着收缩）。
         var rt = txt.rectTransform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);   // 与槽位同一坐标参照（关卡容器中心）
-        rt.pivot = new Vector2(0.5f, 0f);                        // 底边贴间距往上长，不压顶槽
-        rt.sizeDelta = new Vector2(460f, 84f);                   // 两行字的高度
+        rt.pivot = new Vector2(1f, 0f);
         txt.fontSize = 24;
         txt.alignment = TextAnchor.MiddleCenter;
         return txt;
+    }
+
+    /// <summary>排行榜纯色半透底框（运行时建一次；纯 Image 无新图）。
+    /// 【2026-11-08 主人拍板】文字右靠边后加纯黑半透底框衬底，几何每次从 label 现读复制（label 唯一位置出口）。</summary>
+    Image EnsureRiftRankFrame(RectTransform guanka, Text label)
+    {
+        var found = guanka.Find(RiftRankFrameName);
+        Image img = found != null ? found.GetComponent<Image>() : null;
+        if (img == null)
+        {
+            var go = new GameObject(RiftRankFrameName, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(guanka, false);
+            go.transform.SetSiblingIndex(label.transform.GetSiblingIndex());   // 排在 label 之前 → 画在文字下面，不盖字
+            img = go.GetComponent<Image>();
+            img.raycastTarget = false;                          // 不吃点击，别挡层节点
+            img.color = new Color(0f, 0f, 0f, 0.5f);            // 纯黑半透（sprite 保持 null、type 不写）
+        }
+        // 每次刷新从 label 现读复制 5 个几何参数：label 定稿后调用，底框与文字同框不脱节
+        var src = label.rectTransform;
+        var dst = img.rectTransform;
+        dst.anchorMin = src.anchorMin;
+        dst.anchorMax = src.anchorMax;
+        dst.pivot = src.pivot;
+        dst.anchoredPosition = src.anchoredPosition;
+        dst.sizeDelta = src.sizeDelta;
+        return img;
     }
 }

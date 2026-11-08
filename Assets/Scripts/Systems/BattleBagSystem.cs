@@ -587,9 +587,10 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
             _equippedBySlot.Remove(wearSlot);
         }
 
-        // 【2026-10-18 主人拍板】拆分旧武器改发局内币（不再发分解材料）
+        // 【2026-11-08 主人拍板】折币进「战斗中用于抽奖的资源」（GrantScrapGold 唯一出口）。
+        // 返回 0 = 没发币（无限裂隙不折币），此时不弹折币提示 —— 裂隙只弹「替换成功」，装备增减照常。
         int gold = WeaponLoadoutRules.GrantScrapGold(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
+        if (gold > 0) UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
         Hero.Instance?.RecalcAttr();
     }
 
@@ -849,6 +850,8 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     /// <summary>
     /// 直接分解一件装备，**不要求它在背包里**（替换下来的旧件、没穿的掉落件都走这里）。
     /// 【2026-10-18 主人拍板】产出 = 局内币（GrantScrapGold 统一出口）；不会回流背包。
+    /// 【2026-11-08 主人拍板】无限裂隙不发币（GrantScrapGold 返回 0）：装备照常移除，
+    /// 折币提示也一并跳过，只由抽奖结果弹「替换成功」。
     /// 分解即消失，不做二次确认（2026-09-15 需求）。
     /// </summary>
     public void ScrapEquip(EquipInstance equip)
@@ -870,9 +873,10 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
                 _equippedBySlot.Remove(keys[i]);
         }
 
-        // 【2026-10-18 主人拍板】拆分旧武器改发局内币（不再发分解材料）
+        // 【2026-11-08 主人拍板】折币进「战斗中用于抽奖的资源」（GrantScrapGold 唯一出口）。
+        // 返回 0 = 没发币（无限裂隙不折币），此时不弹折币提示 —— 裂隙只弹「替换成功」，装备增减照常。
         int gold = WeaponLoadoutRules.GrantScrapGold(equip, save: false);
-        UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
+        if (gold > 0) UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
         OnBackpackChanged?.Invoke();
     }
 

@@ -17,12 +17,15 @@ public static class BackpackGridVisual
     /// <summary>
     /// 【2026-11-05 根治】展示位图标相对格子的缩放真源：全项目只此一处。
     /// None=0 保留给非展示位（struct 默认值），收集层只传类型语义，不再背像素参数。
-    /// 边界：碎片卡根 100×100 × 基缩放 0.78，1.05 倍后 81.9 < 82 格（余量仅 0.1px）；
-    /// 格子 spacing=0 且无 Mask，再放大必须先加格子或改基缩放。
+    /// 【2026-11-08 主人拍板】碎片在 1.05 基础上再放大 3% → 1.0815（= 1.05 × 1.03）：
+    /// 卡根 100×100 × 基缩放 0.78 × 1.0815 = 84.36 > 82 格，透明 root 每边越界约 1.18px；
+    /// 可见框体 70×70 缩放后约 59px 仍在格内，spacing=0 且无 Mask 也不会压到邻格可见内容。
+    /// ⚠ 已知红灯：Editor/UiLayoutInvariantSelfCheck.cs 的 0.82 断言未同步放宽，
+    ///    跑 Tools/自检/UI 布局不变式 会 FAIL（主人 2026-11-08 拍板「自检先不动」）。
     /// </summary>
     public enum DisplayIconKind { None = 0, Fragment = 1, JobBadge = 2, Scroll = 3, LogFragment = 4, Other = 5 }
 
-    static readonly float[] IconScaleByKind = { 1f, 1.05f, 0.95f, 1f, 1f, 1f };
+    static readonly float[] IconScaleByKind = { 1f, 1.0815f, 0.95f, 1f, 1f, 1f };   // 2026-11-08 碎片 1.05 × 1.03，其余档位不动
 
     static float ResolveIconScale(DisplayIconKind kind)
     {
@@ -340,7 +343,7 @@ public static class BackpackGridVisual
 
         float side = Mathf.Min(hostRt.rect.width, hostRt.rect.height);
         if (side > 1f)
-            card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f) * iconScale;   // 2026-11-05 本命碎片 +5% 由真源表给出
+            card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f) * iconScale;   // 碎片倍率由真源表给出（2026-11-08 起再 +3%）
         return true;
     }
 

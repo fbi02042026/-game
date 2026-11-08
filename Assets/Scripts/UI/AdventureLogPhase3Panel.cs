@@ -779,6 +779,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             case "scroll_c":       return "普通招募卷轴 ×1，在酒馆招募佣兵时消耗。";
             case "scroll_l":       return "高级招募卷轴 ×1，用于招募传奇品质佣兵。";
             case "forget_potion":  return "洗点重置天赋时消耗的道具，每周限购 1 瓶。";
+            // 2026-11-08 每周轮换职业徽记：职业名按当周 key 取（与货架 Name 同源）
+            case "badge_weekly":
+                return AdventureLogMileageShop.CurrentBadgeJobKey()
+                    + "徽记（低级）×10，用于普通品质佣兵升星。每周轮换一个职业，每周限购 1 次。";
             default:
                 Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺说明文案（ShopItemDesc 未收录）");
                 return "";
@@ -1003,6 +1007,11 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 return adv != null ? adv : CommonIconSprites.Load("icon_hire_scroll");
             // 遗忘药水（2026-10-21 主人拍板：洗天赋消耗道具，里程商店 500 点/周限 1）
             case "forget_potion": return LoadResIcon("UI/Art/Icons/Common/yiwangyaoshui");
+            // 2026-11-08 每周轮换职业徽记：档位 = 普通档，文件名「{职业}普通.png」（6 职业 × 3 档已齐）
+            case "badge_weekly":
+                return LoadResIcon(ContentPaths.Icons.JobBadge + "/"
+                    + AdventureLogMileageShop.CurrentBadgeJobKey()
+                    + MercStarDefs.BadgeTierOf(MercRosterDefs.MercRarity.Common));
             default:
                 Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺图标配置（ShopIconFor 未收录）");
                 return null;

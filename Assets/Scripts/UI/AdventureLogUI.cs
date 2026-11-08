@@ -791,10 +791,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             default: FillWorld(out title, out desc, out objective, out progress, rows); break;
         }
 
-        // 2026-11-01 主人拍板：世界页顶部插图只做装饰，条目详情走弹窗 —— 顶部标题/描述不再写条目信息。
-        bool worldDeco = _tab == LogTab.World;
-        if (_activeTitle != null) _activeTitle.text = worldDeco ? "" : title;
-        if (_activeDesc != null) _activeDesc.text = worldDeco ? "" : desc;
+        // 顶部插图只做装饰，不写任务名与简介；非图鉴页标题/描述置空，条目详情走弹窗。
+        bool deco = !IsCodexTab(_tab);
+        if (_activeTitle != null) _activeTitle.text = deco ? "" : title;
+        if (_activeDesc != null) _activeDesc.text = deco ? "" : desc;
         if (_activeObj != null) _activeObj.text = objective;
         if (_activeProg != null) _activeProg.text = progress;
 
@@ -838,6 +838,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         chapters.Sort();
 
         int doneCount = 0, totalCount = 0;
+        var doneRows = new List<LogRow>();
         for (int c = 0; c < chapters.Count; c++)
         {
             int ch = chapters[c];
@@ -854,13 +855,14 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     : !reachable ? "未开启"
                     : v.need > 1 ? v.progress + "/" + v.need
                     : "进行中";
-                AddRow(rows, name, status,
+                AddRow(v.done ? doneRows : rows, name, status,
                     "第" + ch + "章 · " + how,
                     !reachable,
                     v.done ? "已完成：" + how : how,
                     questId: v.def.id, questMain: true);
             }
         }
+        rows.AddRange(doneRows);
 
         title = current != null
             ? (string.IsNullOrEmpty(current.def.title) ? MainQuestDefs.AutoDesc(current.def) : current.def.title)
@@ -1268,7 +1270,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 hint = "完成后自动发放奖励";
                 break;
         }
-        return string.IsNullOrEmpty(objective) ? hint : objective + "\n" + hint;
+        return string.IsNullOrEmpty(objective) ? hint : objective + "\n\n" + hint;
     }
 
     /// <summary>
@@ -1346,8 +1348,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
 
     void ApplyActiveCard(string title, string desc, string objective, string progress)
     {
-        if (_activeTitle != null) _activeTitle.text = title ?? "";
-        if (_activeDesc != null) _activeDesc.text = desc ?? "";
+        bool deco = !IsCodexTab(_tab);
+        if (_activeTitle != null) _activeTitle.text = deco ? "" : (title ?? "");
+        if (_activeDesc != null) _activeDesc.text = deco ? "" : (desc ?? "");
         if (_activeObj != null) _activeObj.text = objective ?? "";
         if (_activeProg != null) _activeProg.text = progress ?? "";
     }

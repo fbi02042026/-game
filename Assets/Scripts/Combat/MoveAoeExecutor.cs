@@ -13,7 +13,16 @@ using UnityEngine;
 public class MoveAoeExecutor : MonoBehaviour
 {
     const float ScanInterval = 0.1f;
-    const float MoveSpeed = 3.2f;
+    // 2026-11-08 主人拍板「龙卷时间太短还没看到就没了」：漂移 3.2 → 1.0 单位/秒，
+    // 与下面钳进镜头的漂移距离配合，龙卷在屏内稳定停留约 3.5 秒（原 2.2s，且命满 4 只即秒销毁）。
+    const float MoveSpeed = 1.0f;
+    // 漂移距离上限：战斗镜头半屏宽 ≈ CAMERA_ORTHO_SIZE × 720/1280 ≈ 3.04，取 3.5 保证走完仍在屏内。
+    // 原样吃表半径(风7/火8)会一路飘出镜头，而 Scan 对屏外怪直接 continue —— 后半程纯空跑还看不见。
+    const float MaxTravelDist = 3.5f;
+    // 判定结束后的「余韵」（2026-11-08 主人追加「触发完了也可以再转一会消失」）：
+    // 不再移动、不再结算伤害，只让 loop 特效再转一整轮才收。2 秒 = sheet 60 帧 @30fps 的完整一轮；
+    // 总展示 3.5+2=5.5s < 两个龙卷 prefab 的 autoDestroyAfter=8s 保险丝，不会中途被掐掉。
+    const float LingerDuration = 2f;
 
     float _damage = 1f;
     UnitBase _caster;
@@ -23,6 +32,8 @@ public class MoveAoeExecutor : MonoBehaviour
     Vector2 _dir = Vector2.right;
     readonly HashSet<UnitBase> _hit = new HashSet<UnitBase>();
     float _scanTimer;
+    /// <summary>≥0 = 已进入余韵（判定结束、只播特效）；-1 = 仍在漂移判定。</summary>
+    float _lingerTimer = -1f;
 
     /// <summary>生成移动判定锚点。damage 由 SkillSystem.CalculateDamage 先算好（含攻击基底/星级）。</summary>
     public static void Spawn(SkillSystem.ActiveSkill skill, UnitBase caster, float damage)
@@ -40,7 +51,7 @@ public class MoveAoeExecutor : MonoBehaviour
         // 判定盒半径：表半径的缩小档（漂移的是「路径」，不是一锤子大圆），钳在 2~3.5
         ex._hitRadius = Mathf.Clamp(skill.aoeRadius > 0f ? skill.aoeRadius * 0.4f : 2.5f, 2f, 3.5f);
         if (skill.aoeMaxTargets > 0) ex._maxTargets = skill.aoeMaxTargets;
-        ex._remainDist = skill.aoeRadius > 0f ? skill.aoeRadius : 7f;
+        ex._remainDist = Mathf.Min(skill.aoeRadius > 0f ? skill.aoeRadius : 7f, MaxTravelDist);
 
         // 生成瞬间锁「身边怪最密的那只」的方向 = 直冲怪群（与 SkillSystem.PickAoeCenter 同思想，简化成方向）
         Vector2 self = caster.transform.position;
@@ -98,6 +109,18 @@ public class MoveAoeExecutor : MonoBehaviour
         }
 
         float dt = Time.deltaTime;
+
+        // 余韵阶段：判定已结束，不移动、不 Scan（伤害结算已在判定阶段收口，绝不多打一次），
+        // 只让挂在锚点上的 VFX 继续 loop 播完 LingerDuration 才销毁锚点。
+        if (_lingerTimer >= 0f)
+        {
+            // 沿用原语义：施法者已销毁则判定作废，余韵一并作废，不留无主特效。
+            if (_caster == null) { Destroy(gameObject); return; }
+            _lingerTimer -= dt;
+            if (_lingerTimer <= 0f) Destroy(gameObject);
+            return;
+        }
+
         Vector2 step = _dir * (MoveSpeed * dt);
         transform.position += (Vector3)step;
         _remainDist -= step.magnitude;
@@ -109,8 +132,10 @@ public class MoveAoeExecutor : MonoBehaviour
             Scan();
         }
 
-        if (_remainDist <= 0f || _hit.Count >= _maxTargets)
-            Destroy(gameObject);
+        // 2026-11-08：命满名单不提前销毁、走完漂移也不立刻销毁 —— 进余韵再转一整轮。
+        // 伤害上限由 _hit 名单 + Scan 的 _maxTargets 判断保证，与展示时长彻底解耦。
+        if (_remainDist <= 0f)
+            _lingerTimer = LingerDuration;
     }
 
     void Scan()

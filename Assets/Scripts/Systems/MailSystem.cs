@@ -207,16 +207,13 @@ public static class MailSystem
             var att = mail.attachments[i];
             if (att == null || att.amount <= 0) continue;
 
-            // 碎片走主人碎片预制体卡片（与每日登录弹窗同口径），名字与详情窗一致「XX的本命碎片」
+            // 碎片走主人碎片预制体卡片（与每日登录弹窗同口径），名字与详情窗一致「XX碎片」（统一走 FragmentDisplayName 唯一出口）
             if (att.type == "mercfrag")
             {
                 var rarity = MercRosterDefs.MercRarity.Rare;
-                string fragName = "本命碎片";
                 if (!string.IsNullOrEmpty(att.hireId) && MercRosterDefs.TryGetByHireId(att.hireId, out var fdef))
-                {
                     rarity = fdef.Rarity;
-                    if (!string.IsNullOrEmpty(fdef.Name)) fragName = fdef.Name + "的本命碎片";
-                }
+                string fragName = FragmentDisplayName(att.hireId);   // 唯一出口，别再自己拼
                 items.Add(RewardPopupUI.Entry.Fragment(rarity, att.hireId, $"{fragName} ×{att.amount}"));
                 continue;
             }
@@ -244,7 +241,12 @@ public static class MailSystem
             {
                 var parts = att.defId.Substring(prefix.Length).Split(':');
                 if (parts.Length == 2 && !string.IsNullOrEmpty(parts[0]))
-                    return parts[0] + "徽记·" + parts[1];
+                {
+                    // 【2026-11-08 主人拍板「把普通换一行」】档位词前插换行：
+                    // 「剑盾徽记·」/「普通」各自成行，免得 Label 的 Wrap 把「普通」拆成「普」+「通」。
+                    // 只影响领取弹窗名；详情格 BadgeDisplayName 与邮件正文仍是单行口径（铁律 23，未扩大范围）。
+                    return parts[0] + "徽记·\n" + parts[1];
+                }
             }
             return "职业徽记";
         }
@@ -260,6 +262,22 @@ public static class MailSystem
             case "scrollLegendary": return "高级招募卷轴";
             default: return att.type;
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-08 主人拍板】碎片道具显示名的全局唯一出口：统一收成「XX碎片」（如「路加碎片」），
+    /// 不再各处各拼一份「XX的本命碎片」。领取弹窗 / 邮件详情页附件格 / 邮件正文一律调这里。
+    /// 查不到花名册或名字 → LogError 并退回「本命碎片」（fail closed，不猜、不静默兜底）。
+    /// </summary>
+    public static string FragmentDisplayName(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId) || !MercRosterDefs.TryGetByHireId(hireId, out var def)
+            || string.IsNullOrEmpty(def.Name))
+        {
+            Debug.LogError($"[Mail] 碎片显示名查不到花名册或名字：hireId={hireId}，退回「本命碎片」");
+            return "本命碎片";
+        }
+        return def.Name + "碎片";
     }
 
     // ── 体力浪费预检（2026-10-18 主人拍板：领取会超出上限先弹确认「多余的会浪费」）──
@@ -338,7 +356,7 @@ public static class MailSystem
         {
             id = Guid.NewGuid().ToString("N"),
             title = $"{mercName}抽奖碎片",
-            body = $"冒险者的包裹里放不下「{mercName}的本命碎片」×{amount}，先寄存在这里。\n去角色界面腾出背包格子后再来领取。",
+            body = $"冒险者的包裹里放不下「{FragmentDisplayName(hireId)}」×{amount}，先寄存在这里。\n去角色界面腾出背包格子后再来领取。",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             claimed = false,
             type = MailType.Reward,
@@ -511,6 +529,153 @@ public static class MailSystem
         data.mileageBowMailSent = true;
         SaveSystem.Instance?.Save();
         Debug.Log("[Mail] 里程·猎手长弓补偿邮件已发（测试版临时，正式上线删除）");
+    }
+
+    /// <summary>
+    /// 【2026-11-08 主人拍板·v2 拆分版】升星流程测试补给：拆成 6 封，每封最多 3 个附件格。
+    /// 起因：v1 一封塞 14 格，MailDetailUI.RebuildRewardCells 是单排横排（96px×13≈1248 > 逻辑宽 720），
+    /// 图标会横向溢出详情页。拆开后单封最多 3 格（192px），详情页/领取弹窗都不再溢出。
+    /// 口径（主人原话「每次一个佣兵和碎片还有徽记」）：每封对应一个佣兵，含该佣兵的满星徽记 +
+    /// 满星本命碎片；本次新发的 H013 莫娜 / H017 莉娜另加佣兵本体（已拥有的 3 白不重复发本体）。
+    /// 另 1 封单独放资金：1000 钻 + 5000 金（2026-11-08 主人「金币改成5000吧」），不塞进佣兵封，
+    /// 保持「一封一个佣兵」的口径。
+    /// 徽记 id / 档位 / 数量 / 碎片数全部走真源（MercGrowSprites.JobKey + MercStarDefs.BadgeTierOf +
+    /// MercGrowInventory.BadgeId + MercStarDefs.BadgeCost / FullStarFragTotal），不写死任何 id 与数量；
+    /// 花名册或职业认不出 → LogError 并跳过该封（fail closed，不发不吞）。
+    /// 附件口径沿用既有 TryClaim 分支：merc→解锁佣兵、badge→MercGrowInventory.Add、mercfrag→GrantFragments。
+    /// 触发点：TownSceneBootstrap.TryDailyLoginOnce（与欢迎信/补偿信同链路，要求引导已完成）。
+    /// 逐封固定 id 幂等（v2 前缀）；v1 那封旧大杂烩若还在测试档里先清掉，避免两版叠加把奖励发两遍。
+    /// 🔴 测试版临时，正式上线删除：调用行 + 本方法。改奖励需升版 id 前缀（如 v3）才会重发。
+    /// </summary>
+    public static void EnsureStarUpTestMail(bool notifyToast = true)
+    {
+        Ensure();
+        const string IdPrefix = "starup_test_mail_v2_";
+        const string LegacyId = "starup_test_mail_v1";
+        const int TestDiamond = 1000;
+        const int TestGold = 5000;
+        var inbox = SaveSystem.Instance.Data.mailInbox;
+
+        // 旧版 v1（一封 14 格）已在部分测试档入箱：清掉，避免与 v2 叠加重复发奖励。
+        int removed = 0;
+        for (int i = inbox.Count - 1; i >= 0; i--)
+        {
+            var m = inbox[i];
+            if (m != null && m.id == LegacyId) { inbox.RemoveAt(i); removed++; }
+        }
+        if (removed > 0)
+        {
+            SaveSystem.Instance.Save();
+            RedDot.RefreshCommon();
+            MailListUI.NotifyInboxChanged();
+        }
+
+        // 本版每封独立幂等：一次收集现有 id（Enqueue 会往同一个 list 追加，本集合只用于查重）
+        var existingIds = new HashSet<string>();
+        for (int i = 0; i < inbox.Count; i++)
+            if (inbox[i] != null && !string.IsNullOrEmpty(inbox[i].id)) existingIds.Add(inbox[i].id);
+
+        const string LegendaryMage = "H013";   // 莫娜·雷系法师（传奇）
+        const string RarePriest = "H017";      // 莉娜·牧师（稀有）
+        var newMercs = new HashSet<string> { LegendaryMage, RarePriest };
+
+        // 一封一个佣兵：默认已拥有 3 白 + 本次新发 2 人
+        var badgeMercs = new List<string>(SaveData.DefaultUnlockedMercIds) { LegendaryMage, RarePriest };
+
+        int sent = 0;
+        for (int i = 0; i < badgeMercs.Count; i++)
+        {
+            string hireId = badgeMercs[i];
+            string mailId = IdPrefix + hireId;
+            if (existingIds.Contains(mailId)) continue;   // 该佣兵那封已发过
+
+            if (!MercRosterDefs.TryGetByHireId(hireId, out var def))
+            {
+                Debug.LogError($"[Mail] 升星测试邮件：花名册查不到 {hireId}，该封未发放");
+                continue;
+            }
+            string job = MercGrowSprites.JobKey(def.JobName);
+            if (string.IsNullOrEmpty(job))
+            {
+                Debug.LogError($"[Mail] 升星测试邮件：{def.Name} 职业名「{def.JobName}」识别不出徽记大类，该封未发放");
+                continue;
+            }
+            string tier = MercStarDefs.BadgeTierOf(def.Rarity);
+            int badgeCount = 0;
+            for (int s = 1; s <= MercStarDefs.MaxOutStar; s++)
+                badgeCount += MercStarDefs.BadgeCost(def.Rarity, s);
+            int fragCount = MercStarDefs.FullStarFragTotal(def.Rarity);
+            bool isNew = newMercs.Contains(hireId);
+
+            var attachments = new List<MailAttachment>();
+            if (isNew)   // 默认 3 白已拥有，不重复发本体
+            {
+                attachments.Add(new MailAttachment
+                {
+                    type = "merc",
+                    amount = 1,
+                    hireId = hireId,
+                    iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,
+                });
+            }
+            attachments.Add(new MailAttachment
+            {
+                type = "badge",
+                amount = badgeCount,
+                defId = MercGrowInventory.BadgeId(job, tier),
+                iconOverride = ContentPaths.Icons.JobBadge + "/" + job + tier,
+            });
+            attachments.Add(new MailAttachment
+            {
+                type = "mercfrag",
+                amount = fragCount,
+                hireId = hireId,
+                iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,
+            });
+
+            string body = $"{def.Name}（{def.JobName}）的升星补给：\n" +
+                          $"· {job}徽记·{tier} ×{badgeCount}\n" +
+                          $"· {FragmentDisplayName(hireId)} ×{fragCount}\n" +
+                          (isNew ? "· 附赠该佣兵本体\n" : "") +
+                          "徽记与碎片够升满 3 星；升星仍需另扣金币/钻石。\n" +
+                          "—— 像素冒险制作组";
+
+            Enqueue(new MailEntry
+            {
+                id = mailId,
+                title = "升星补给·" + def.Name,
+                sender = "制作组",   // 不用「开发组」：DevGiftMail 清理判据就是它，会被当场删掉
+                body = body,
+                createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                type = MailType.Reward,
+                attachments = attachments,
+            }, notifyToast);
+            existingIds.Add(mailId);
+            sent++;
+        }
+
+        // 资金单独一封（2 个 flat 货币格），不塞进佣兵封
+        string fundId = IdPrefix + "fund";
+        if (!existingIds.Contains(fundId))
+        {
+            Enqueue(new MailEntry
+            {
+                id = fundId,
+                title = "升星补给·资金",
+                sender = "制作组",
+                body = "升星要花不少钱，先给你备上：\n" +
+                       $"· 钻石 ×{TestDiamond}\n· 金币 ×{TestGold}\n\n" +
+                       "升星仍会按稀有度另扣金币/钻石。\n\n—— 像素冒险制作组",
+                createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                type = MailType.Reward,
+                diamond = TestDiamond,
+                gold = TestGold,
+            }, notifyToast);
+            sent++;
+        }
+
+        if (sent > 0 || removed > 0)
+            Debug.Log($"[Mail] 升星补给 v2：本次发 {sent} 封（{badgeMercs.Count} 封佣兵材料 + 1 封资金 {TestDiamond}钻/{TestGold}金），清理旧 v1 {removed} 封（测试版临时）");
     }
 
     /// <summary>打开详情即记已读（只标记，不动领取状态）。</summary>

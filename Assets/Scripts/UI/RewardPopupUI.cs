@@ -351,6 +351,13 @@ public class RewardPopupUI : MonoBehaviour
 
         // 子节点（Text (Legacy) 等）只做展示，关掉射线
         SetRaycastOff(btnT, false);
+
+        // 2026-11-08 主人拍板：确定字往上 3。本方法只在 BuildFromPrefab/BuildFallback 调一次，
+        // 在预制体原值基础上 +3f 一次性生效，不会累积；不动按钮本体几何、不改 prefab。
+        // 找不到文字节点直接 LogError，不静默跳过（fail closed）。
+        var txtT = FindChild(btnT, "Text (Legacy)") as RectTransform;
+        if (txtT != null) txtT.anchoredPosition += new Vector2(0f, 3f);
+        else Debug.LogError("[RewardPopup] 确定按钮缺 Text (Legacy) 子节点，字没法上移 3");
     }
 
     /// <summary>
@@ -838,8 +845,20 @@ public class RewardPopupUI : MonoBehaviour
                 }
                 t.text = namePart;
                 if (_base.LabelFont > 0) t.fontSize = _base.LabelFont;
-                t.horizontalOverflow = HorizontalWrapMode.Overflow;
-                t.verticalOverflow = VerticalWrapMode.Overflow;
+                t.horizontalOverflow = HorizontalWrapMode.Wrap;      // 长名自动折行，不溢出成一行把两格文字粘起来
+                t.verticalOverflow = VerticalWrapMode.Overflow;       // 第二行画到框外，无需改任何 sizeDelta
+                // 2026-11-08：碎片名按稀有度上色（色源唯一出口 RarityPalette）；徽记名保持预制体原色
+                if (e.isFragment)
+                {
+                    t.color = RarityPalette.Get(e.fragRarity);
+                    // 【2026-11-08 主人拍板「佣兵的名字加个黑色描边 现在看不清」】
+                    // 预制体 Label 只挂了 RectTransform/CanvasRenderer/Text，没有描边 → 代码补一个；
+                    // 色值走 RarityPalette.Outline（名牌/文字描边色的唯一出口），不另造第二份黑。
+                    var ol = lblT.GetComponent<Outline>();
+                    if (ol == null) ol = lblT.gameObject.AddComponent<Outline>();
+                    ol.effectColor = RarityPalette.Outline;
+                    ol.effectDistance = new Vector2(1.5f, -1.5f);
+                }
             }
             // 文字只做展示：关掉射线，避免它压在确定按钮上方时把点击吃掉
             var lg = lblT.GetComponent<Graphic>();
@@ -848,11 +867,13 @@ public class RewardPopupUI : MonoBehaviour
 
         if (e.isFragment)
         {
-            // B5：碎片走主人碎片预制体 —— 底框里的 Icon 让位（enabled=false，别留白框）
+            // B5：碎片走主人碎片预制体 —— 只关 Icon 自身的 Image（enabled=false，别留白框），
+            // 不影响挂到它下面的子节点（碎片卡/数量角标）正常渲染。
             if (iconImg != null) { iconImg.enabled = false; iconImg.raycastTarget = false; }
 
-            // 卡片挂在格子根下；MercFragmentCardUI.Create 只换 sprite，卡片的 RectTransform（100×100）一个值都不改
-            var card = MercFragmentCardUI.Create(cell, "FragmentCard", e.fragRarity, e.fragHireId);
+            // 卡片改挂 Icon 节点下：与徽记共用 Icon 的 anchor/pivot/中心基准（不写任何坐标/尺寸常量覆盖预制体）；
+            // Create 只换 sprite，卡片的 RectTransform（100×100）一个值都不改。
+            var card = MercFragmentCardUI.Create(iconT, "FragmentCard", e.fragRarity, e.fragHireId);
             if (card != null)
             {
                 // 卡片是纯展示层，关掉射线，保证确定按钮永远点得到
@@ -874,7 +895,7 @@ public class RewardPopupUI : MonoBehaviour
             ApplyIconSprite(iconImg, e.icon);
         }
 
-        // 数量角标最后建（与碎片卡同级且在其后 → 永远在最上层，碎片条目不被盖）。
+        // 数量角标最后建（与碎片卡同挂 Icon 下、且在其后 → 永远在最上层，碎片条目不被盖）。
         // 碎片分支原先直接 return，拆出的 ×N 到不了这里，截图上就只剩名字没有数量；
         // 现在碎片/非碎片两路共用这一处出口，单一出口不重复建角标。
         if (!string.IsNullOrEmpty(countPart)) EnsureCountBadge(cell.transform, countPart);
@@ -882,9 +903,11 @@ public class RewardPopupUI : MonoBehaviour
 
     /// <summary>
     /// 【2026-11-05 主人拍板「数量写到图标框里」】图标框右下角数量角标（×N）。
-    /// 挂格子根（与碎片卡同级且后建 → 永远在最上层）；按 Icon 框世界四角落位，
-    /// 文字右下基准 = Icon 右下角内 8px。字号 24（fusion-pixel 12px 点阵取 12 的倍数），
-    /// 白字黑描边保证压在任意图标上可读。每次 Show 全量重建格子，无残留。
+    /// 【2026-11-08 改】挂到 Icon 节点下（与碎片卡同级且后建 → 永远在最上层），
+    /// 锚定 Icon 右下角内缩 8px；不再用世界坐标定位 —— 挂在 Icon 下随 Panel/CoImpact 整体缩放一起动，
+    /// 避免被 ApplyPanelScale / 入场动画二次缩放漂移。
+    /// 字号 24（fusion-pixel 12px 点阵取 12 的倍数），白字黑描边保证压在任意图标上可读。
+    /// 每次 Show 全量重建格子，无残留。
     /// </summary>
     void EnsureCountBadge(Transform cell, string countText)
     {
@@ -894,12 +917,12 @@ public class RewardPopupUI : MonoBehaviour
             Debug.LogError("[RewardPopup] 格子缺 Icon 节点，数量角标放不了");
             return;
         }
-        // 仍挂格子根（与碎片卡同级且在其后 → 永远在最上层），只修两处：
+        // 挂到 Icon 节点下（与碎片卡同级且后建 → 永远在最上层），只修两处：
         // ① 运行时 new 的 Text 默认 font=null，不显式给字体整串不渲染；
         // ② 节点名不带「Count」，避免 Open 末尾 GameFonts.ApplyToHierarchy 按数字规则换成
         //    PixelFont（PixelFont 没有「×」字形，×N 会整串不显示）。
         var go = new GameObject("QtyBadge", typeof(RectTransform), typeof(Text), typeof(Outline));
-        go.transform.SetParent(cell.transform, false);
+        go.transform.SetParent(iconT, false);
         var t = go.GetComponent<Text>();
         t.text = countText;
         t.font = GameFonts.GetChinese();
@@ -909,12 +932,12 @@ public class RewardPopupUI : MonoBehaviour
         t.raycastTarget = false;
         go.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.85f);
         var rt = (RectTransform)go.transform;
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+        // 右下角锚定 Icon 右下角内缩 8px（运行时新建节点的初值，不覆盖任何预制体几何）；
+        // 挂在 Icon 下随整体缩放一起动，彻底弃用旧的世界坐标（世界四角 + 硬设 z）定位。
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-8f, 8f);
         rt.sizeDelta = new Vector2(120f, 30f);
-        var ic = new Vector3[4];
-        iconT.GetWorldCorners(ic);                                // ic[2]=右上 ic[0]=左下
-        Vector3 anchorWorld = new Vector3(ic[2].x - 8f, ic[0].y + 8f, 0f);   // Icon 右下角内 8px
-        rt.position = anchorWorld + new Vector3(-60f, 15f, 0f);   // badge 中心 = 右下基准左移半宽/上移半高
     }
 
 

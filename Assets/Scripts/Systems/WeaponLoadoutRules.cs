@@ -120,21 +120,32 @@ public static class WeaponLoadoutRules
 
     /// <summary>
     /// 拆分/替换旧装备的产出（唯一出口）。【2026-10-18 主人拍板：拆分旧的武器先换成局内币】——
-    /// 不再发分解材料（DecomposeMat）。战斗内发抽奖币（GrantRunGold，结算「抽奖币」栏可见）；
-    /// 战斗外（城镇拆分）发城镇金币钱包。返回实发金额（0 = 没发），调用方拿去拼提示文案。
+    /// 不再发分解材料（DecomposeMat）。战斗内发<b>抽奖币</b>（currentGold，战斗中用于抽奖的资源）；
+    /// 战斗外（城镇拆分）发城镇金币钱包。返回实发金额（0 = 没发），调用方拿去拼提示文案、
+    /// 并据此决定要不要弹折币提示（单一出口，不在别处再判一次）。
     /// 【2026-10-31 主人拍板「替换掉的道具转换成抽奖币 要整十数根据稀有度和部位来」】
     /// 金额改走 <see cref="GameConfig.EquipScrapDraftCoin"/>：整十数、按稀有度 + 部位
     /// （槽位解析走 <see cref="ResolveLogicalSlot"/> 唯一出口）。返回 0 = 没发。
+    /// 【2026-11-08 主人拍板·两条口径】
+    /// ① 折币改走 BattleManager.AddRunGold(g, false) 进<b>抽奖币池 currentGold</b>：
+    ///    顶栏 DraftDisplay 与抽奖按钮置灰同步重算。旧实现走 GrantRunGold 进的是
+    ///    「本局获得金币」GoldEarned（抽奖花不到），玩家报「折成抽奖币后就不能再抽」即此因。
+    ///    countsAsEarned=false：抬高 _goldAtRunStart，局内循环资源、带不出本局（铁律 21）。
+    /// ② 无限裂隙一律不折币：裂隙每层免费抽（GoldAllowed 恒 false）、抽满即收面板，
+    ///    币在裂隙里没有消费出口 —— 发币 + 弹「折成抽奖币」只会误导玩家以为还能抽。
+    ///    装备增减照常（调用方照旧 ScrapEquip / TryEquipDirect），只是不发钱、不弹折币提示。
     /// </summary>
     public static int GrantScrapGold(EquipInstance equip, bool save = false)
     {
         if (equip == null) return 0;
+        var bm = BattleManager.Instance;
+        // 裂隙不发抽奖币（口径 ②）；返回 0 由调用方抑制折币提示，装备移除照常。
+        if (bm != null && bm.IsEndlessRift) return 0;
         int g = GameConfig.EquipScrapDraftCoin(equip.rarity, ResolveLogicalSlot(equip));
         if (g <= 0) return 0;
-        var bm = BattleManager.Instance;
         if (bm != null)
         {
-            bm.GrantRunGold(g);
+            bm.AddRunGold(g, false);
         }
         else
         {

@@ -155,6 +155,18 @@ public class PixelFxSheetPlayer : MonoBehaviour
         ApplyFrame();
     }
 
+    /// <summary>
+    /// 运行时把 once 型 sheet 改成循环播放（2026-11-08 主人「星落同理：触发完了也可以再转一会消失」）。
+    /// 只改内存实例、不动 prefab；关掉播完自毁，存活交给宿主的 ScheduleRelease / Destroy 单一出口回收。
+    /// 仅由 SkillRegistry.PlaySkillVfx 对 starfall 调用，其它特效默认不走这里。
+    /// </summary>
+    public void SetLooping()
+    {
+        _loop = true;
+        _finished = false;
+        destroyOnFinish = false;
+    }
+
     void ApplyFrame()
     {
         if (_sr == null || _frames == null || _frames.Length == 0) return;

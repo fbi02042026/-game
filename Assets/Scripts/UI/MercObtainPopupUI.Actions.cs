@@ -256,6 +256,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _recruitMode = false;
         _tryBuy = null;
         ApplyRecruitButtons(false, null);
+        _buyIcon?.gameObject.SetActive(false);   // 【2026-11-08】购买钮图标只在招募购买模式显示，退出即隐藏
         // 【2026-10-31】招募模式可能把购买钮标红（买不起），还原快照原色防串味（与 ExitFallenMode 同口径）
         if (_keepLabel != null) _keepLabel.color = _keepLabelColor0;
     }
@@ -266,6 +267,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _fallenMode = false;
         _tryRevive = null;
         ApplyRecruitButtons(false, null);
+        _buyIcon?.gameObject.SetActive(false);   // 【2026-11-08】同上：复活/普通详情入口也先隐藏，防串味
         // 提示行收掉 + 复活钮颜色还原，普通详情/招募入口不残留
         if (_reviveCharmHint != null) _reviveCharmHint.SetActive(false);
         if (_keepLabel != null) _keepLabel.color = _keepLabelColor0;
@@ -323,12 +325,16 @@ public partial class MercObtainPopupUI : MonoBehaviour
         FillSkill(skillId);
 
         ApplyRecruitButtons(true, BuildBuyLabel(offer));
+        ApplyBuyIcon(offer);   // 【2026-11-08】购买钮货币图标：只在招募购买模式显示（ApplyRecruitButtons 不管显隐）
         // 【2026-10-31 主人需求】买不起 → 购买钮文字变红（判定与招募卡同一出口
         // MercHireSession.CanAffordOffer，红色同一常量 MercHireSession.InsufficientPriceColor）
         if (_keepLabel != null)
+        {
             _keepLabel.color = MercHireSession.CanAffordOffer(offer)
                 ? _keepLabelColor0
                 : MercHireSession.InsufficientPriceColor;
+            PurchasePriceStyle.Apply(_keepLabel);   // 2026-11-08：购买数字统一描边（颜色仍走预制体原色 / 不足红）
+        }
     }
 
     /// <summary>购买钮文案（【2026-10-19 主人拍板】货币跟稀有度走）：
@@ -340,6 +346,42 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (rarity == MercRosterDefs.MercRarity.Common)
             return MercHireSession.GoldCost(offer) + "金币";
         return rarity == MercRosterDefs.MercRarity.Legendary ? "稀有卷×1" : "普通卷×1";
+    }
+
+    /// <summary>
+    /// 招募购买模式：给购买钮挂货币图标（2026-11-08 主人需求「购买按钮上放上卷轴的图标」）。
+    /// 稀有度唯一出口 MercHireSession.OfferRarity；三档图源全走 Resources / CommonIconSprites，
+    /// 取不到只 LogError + 隐藏，不兜底换别的图。不碰按钮 Label 文案、不碰颜色。
+    /// </summary>
+    void ApplyBuyIcon(MercenaryData offer)
+    {
+        if (offer == null || _buyIcon == null)
+        {
+            Debug.LogError("[MercObtainPopup] 购买钮图标不显示：offer=" + (offer == null ? "null" : "ok") +
+                           "、icon 节点=" + (_buyIcon == null ? "缺失（EnsureBuyIcon 未补建/绑定）" : "ok"));
+            _buyIcon?.gameObject.SetActive(false);
+            return;
+        }
+
+        Sprite sp;
+        var rarity = MercHireSession.OfferRarity(offer);
+        if (rarity == MercRosterDefs.MercRarity.Common)
+            sp = CommonIconSprites.Load("icon_gold");
+        else if (rarity == MercRosterDefs.MercRarity.Legendary)
+            sp = Resources.Load<Sprite>(LegendaryScrollIconPath);
+        else
+            sp = Resources.Load<Sprite>(CommonScrollIconPath);
+
+        if (sp == null)
+        {
+            Debug.LogError("[MercObtainPopup] 购买钮图标取图失败（rarity=" + rarity + "），按约定隐藏不兜底");
+            _buyIcon.gameObject.SetActive(false);
+            return;
+        }
+
+        _buyIcon.sprite = sp;
+        _buyIcon.enabled = true;
+        _buyIcon.gameObject.SetActive(true);
     }
 
     /// <summary>招募模式按钮/标题文案切换：on=true 双钮并排（购买/取消）+ 标题「佣兵信息」；

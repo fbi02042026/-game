@@ -24,6 +24,23 @@ public class MailDetailUI : MonoBehaviour
     const string SpriteStampClaimed = ArtDir + "/信件已领取2";
     const string StickerDir = "UI/Art/Stickers";
     const int MaxStickers = 5;
+    // 【2026-11-08 主人拍板】右下角配图位只放表情包：邮件没写 detailImagePath 时统一用「高兴」
+    //（图在 Icons/表情包/ 目录，主人当场指的路径），不再拿附件图标顶这个位置。
+    const string DefaultStickerPath = "UI/Art/Icons/表情包/高兴";
+    // 【2026-11-08 主人拍板·授权代码改几何】附件格图标/佣兵头像放大系数：
+    // 预制体 Icon 是拉伸锚 + sizeDelta(-16,-24) → 相对 88×88 底框实际 72×64，preserveAspect 后按 64 方形显示。
+    // 只走 localScale + y 偏移（不碰 sizeDelta / anchoredPosition.x，铁律 20）。
+    // 1.2 → 1.35：视觉 64×1.35≈86.4，占满 88 底框留约 1.6px 边（主人「把这排放大一点」）。
+    const float RewardIconScale = 1.35f;
+    // 【2026-11-08 主人拍板「把这排放大一点」】名字视觉放大系数：只改 Name 节点 localScale，
+    // Text 排版宽度仍是预制体 83.53 → 折行位置不变（徽记仍是「XX徽记·」/「档位」两行），
+    // 不写 fontSize / sizeDelta / anchoredPosition，字号仍以预制体 18 为准。
+    const float RewardNameScale = 1.12f;
+    // 【2026-11-08 主人拍板「可以往上移点」】附件格整排上移量（相对预制体 RewardText 的 y 现读值加增量，不写死绝对坐标）。
+    // 名字改两行后按 Overflow 画到框外，下边界约 y=-348.8 会压到「领取」按钮顶 y=-330；
+    // 上移 24 → 下边界约 -324.8，离按钮顶留约 5px。表头「附件：」在 x≈-279~-213，与格子 x -92~92 横向不重叠。
+    // 只动纵向 y（铁律 20：纵向 y 排版属必要介入），不碰 sizeDelta / anchoredPosition.x / Image.type。
+    const int RewardRowLiftY = 24;
 
     /// <summary>正文贴纸标签：[sticker:生气] → 贴纸名「生气」。</summary>
     static readonly Regex StickerRegex = new Regex(@"\[sticker:([^\]]+)\]");
@@ -43,7 +60,7 @@ public class MailDetailUI : MonoBehaviour
     MailEntry _mail;
     Text _title, _sender, _body, _rewardText;
     RectTransform _stickerRow;
-    Image _detailImage;          // 配图：detailImagePath 优先，否则第一项附件的 iconOverride（共用一个图位，避免与附件文本重叠）
+    Image _detailImage;          // 配图（右下角表情包位）：detailImagePath 优先，没写就用默认表情包「高兴」
     Button _actionBtn;
     Text _actionLabel;
     Image _actionBtnImg;
@@ -348,7 +365,7 @@ public class MailDetailUI : MonoBehaviour
         _stickerRow.sizeDelta = new Vector2(600f, 88f);
         _stickerRow.gameObject.SetActive(false);
 
-        // 配图（detailImagePath 优先，否则第一项附件 iconOverride —— 共用一个图位）
+        // 配图（右下角表情包位）：detailImagePath 优先，否则默认「高兴」
         var dimg = new GameObject("DetailImage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         dimg.transform.SetParent(go.transform, false);
         var drt = (RectTransform)dimg.transform;
@@ -435,19 +452,14 @@ public class MailDetailUI : MonoBehaviour
         _body.text = StickerRegex.Replace(rawBody, "").Trim();
         RebuildStickers(stickers);
 
-        // 配图：detailImagePath 优先；没有则用第一项附件的 iconOverride（共用同一图位，避免与附件文本重叠）
-        string imagePath = !string.IsNullOrEmpty(m.detailImagePath) ? m.detailImagePath : FirstIconOverride(m);
-        if (!string.IsNullOrEmpty(imagePath))
-        {
-            var sp = Resources.Load<Sprite>(imagePath);
-            if (sp == null) Debug.LogError("[MailDetail] 缺少配图: " + imagePath);
-            _detailImage.sprite = sp;
-            _detailImage.gameObject.SetActive(sp != null);
-        }
-        else
-        {
-            _detailImage.gameObject.SetActive(false);
-        }
+        // 【2026-11-08 主人拍板】右下角只放表情包，都用「高兴」：
+        // 邮件自带 detailImagePath 就用它（都是表情包），没写就补默认高兴。
+        // 旧 FirstIconOverride 回退（拿第一项附件图标顶表情位）已删，不留开关（铁律 10）。
+        string imagePath = !string.IsNullOrEmpty(m.detailImagePath) ? m.detailImagePath : DefaultStickerPath;
+        var sp = Resources.Load<Sprite>(imagePath);
+        if (sp == null) Debug.LogError("[MailDetail] 缺少表情包配图: " + imagePath);
+        _detailImage.sprite = sp;
+        _detailImage.gameObject.SetActive(sp != null);
 
         // 2026-10-16 主人要求「给的奖励都要有图标」：flat 货币不再走文本行，统一进下方物品格带图标渲染；
         // RewardText 只当「附件：」表头用（字面在预制体里摆好），有奖励才显示。
@@ -504,6 +516,7 @@ public class MailDetailUI : MonoBehaviour
         public string name;
         public long amount;
         public bool isMerc; // 2026-10-16 主人拆分：佣兵附件走 RewardCellTemplate (1) 头像格
+        public Color? nameColor; // 2026-11-08 主人拍板：本体/碎片格「名字 + 框体」共用该佣兵稀有度色（仅 merc/mercfrag 填）
     }
 
     /// <summary>按奖励清单克隆物品格（RewardCellTemplate 当模板），已领取则整格变灰盖印章。</summary>
@@ -524,7 +537,9 @@ public class MailDetailUI : MonoBehaviour
         // 【2026-10-17 修·主人报「附件图标和领取按钮重叠」】cellY 原硬编码 -330，没跟预制体附件区走：
         // 主人把 RewardText/lingqu 在预制体里上移后，格子仍停在 -330，正好压在领取按钮上。
         // 改为取预制体 RewardText 的 y（附件区以主人预制体摆位为准），绑定缺失才退回 -330。
-        int cellY = _rewardText != null ? Mathf.RoundToInt(_rewardText.rectTransform.anchoredPosition.y) : -330;
+        // 2026-11-08：两行名字画到框外后整排上移 RewardRowLiftY，免得压「领取」按钮（见常量注释）。
+        int cellY = (_rewardText != null ? Mathf.RoundToInt(_rewardText.rectTransform.anchoredPosition.y) : -330)
+                    + RewardRowLiftY;
 
         // 【2026-10-24 修·主人报「附件图标不居中」】旧式 -((cellW*count)-8)/2 多减 8、又按 count 而非 count-1 算，
         // 4 格整排左偏 44px、单格也偏 44px。改为格心对称分布：startX = -cellW*(n-1)/2。
@@ -564,9 +579,55 @@ public class MailDetailUI : MonoBehaviour
                 iconImg.preserveAspect = true;
             }
 
+            // 【2026-11-08 主人拍板·授权】图标/头像居中 + 放大（物品格与佣兵格共用同名 Icon 节点）：
+            // 预制体 pos.y=4 让图标上偏，这里只把 y 归零；放大走 localScale，不碰 sizeDelta / x（铁律 20）。
+            var iconRt = icon as RectTransform;
+            if (iconRt != null)
+            {
+                var p = iconRt.anchoredPosition;
+                p.y = 0f;
+                iconRt.anchoredPosition = p;
+                iconRt.localScale = new Vector3(RewardIconScale, RewardIconScale, 1f);
+            }
+
             // 名称 / 数量（2026-10-18 主人拍板：去掉「x」，只显示数量）
-            if (nameTxt != null) nameTxt.text = item.name;
+            if (nameTxt != null)
+            {
+                nameTxt.text = item.name;
+                // 【2026-11-08 主人拍板「把这排放大一点」】详情格 Name 预制体 83.53×20 且 VerticalOverflow=Truncate，
+                // 长名 Wrap 出的第二行被裁 → 看着「变成一排显示不全」。按「获得奖励」弹窗 FillCell 同口径：
+                // 第二行画到框外（Overflow），零 sizeDelta；名字整体走 localScale 放大，排版宽度不变、折行位置不变。
+                nameTxt.verticalOverflow = VerticalWrapMode.Overflow;
+                var nameRt = name as RectTransform;
+                if (nameRt != null) nameRt.localScale = new Vector3(RewardNameScale, RewardNameScale, 1f);
+            }
             if (countTxt != null) countTxt.text = item.amount.ToString();
+            // 【2026-11-08 主人拍板】本体 / 碎片格：名字 + 框体同走该佣兵稀有度色（唯一色源 RarityPalette）；
+            // 名字补黑描边（预制体 Name 没挂 Outline），描边色走 RarityPalette.Outline 唯一出口，与奖励弹窗同款。
+            // 已领取的 grey 在下面分支自然盖掉；徽记 / 货币格一律不动。
+            if (item.nameColor.HasValue)
+            {
+                var rarityColor = item.nameColor.Value;
+                if (nameTxt != null)
+                {
+                    nameTxt.color = rarityColor;
+                    var ol = name.GetComponent<Outline>();
+                    if (ol == null) ol = name.gameObject.AddComponent<Outline>();
+                    ol.effectColor = RarityPalette.Outline;
+                    ol.effectDistance = new Vector2(1.5f, -1.5f);
+                }
+                if (cellImg != null)
+                {
+                    // 本体格模板默认挂蓝框，先统一成碎片格同款框（取普通模板现成 sprite，不新增美术资源、不碰 prefab/meta），
+                    // 再按稀有度染色：传奇 = 橙金，与同封碎片格一致。
+                    if (item.isMerc && _rewardCellTemplate != null)
+                    {
+                        var baseImg = _rewardCellTemplate.GetComponent<Image>();
+                        if (baseImg != null && baseImg.sprite != null) cellImg.sprite = baseImg.sprite;
+                    }
+                    cellImg.color = rarityColor;
+                }
+            }
 
             // 已领取：整格变灰 + 盖章
             if (m.claimed)
@@ -616,16 +677,27 @@ public class MailDetailUI : MonoBehaviour
             string attName = att.type == "merc" && !string.IsNullOrEmpty(att.hireId)
                 ? MercDisplayName(att.hireId)
                 : att.type == "mercfrag" && !string.IsNullOrEmpty(att.hireId)
-                    ? MercDisplayName(att.hireId) + "的本命碎片"   // 【2026-10-22 施工单 T12】碎片附件名
+                    ? MailSystem.FragmentDisplayName(att.hireId)   // 【2026-11-08 主人拍板】碎片名走唯一出口
                     : att.type == "badge"
                         ? BadgeDisplayName(att.defId)              // 【2026-10-24】徽记附件名：badge:{职业}:{档位} → 剑盾徽记·稀有
                         : RewardTypeName(att.type);
+            // 【2026-11-08 主人拍板】本体 / 碎片格都按该佣兵稀有度取色（名字 + 框体共用这一个值）；
+            // 查不到花名册 → LogError 不填色不换框（fail closed）；徽记 / 货币格保持 null。
+            Color? nameColor = null;
+            if (att.type == "mercfrag" || att.type == "merc")
+            {
+                if (MercRosterDefs.TryGetByHireId(att.hireId, out var def))
+                    nameColor = RarityPalette.Get(def.Rarity);
+                else
+                    Debug.LogError($"[MailDetail] 本体/碎片附件格上色：花名册查不到 {att.hireId}，不上色不换框");
+            }
             items.Add(new RewardItem
             {
                 icon = Resources.Load<Sprite>(att.iconOverride),
                 name = attName,
                 amount = att.amount,
                 isMerc = att.type == "merc",
+                nameColor = nameColor,
             });
         }
     }
@@ -674,17 +746,6 @@ public class MailDetailUI : MonoBehaviour
         return null;
     }
 
-    static string FirstIconOverride(MailEntry m)
-    {
-        if (m.attachments == null) return null;
-        for (int i = 0; i < m.attachments.Count; i++)
-        {
-            var att = m.attachments[i];
-            if (att != null && !string.IsNullOrEmpty(att.iconOverride)) return att.iconOverride;
-        }
-        return null;
-    }
-
     static string RewardTypeName(string key)
     {
         switch (key)
@@ -709,7 +770,9 @@ public class MailDetailUI : MonoBehaviour
         return hireId;
     }
 
-    /// <summary>🆕 徽记附件名（2026-10-24）：defId = badge:{职业}:{档位} → 「剑盾徽记·稀有」；解析不出退「职业徽记」。</summary>
+    /// <summary>徽记附件名（2026-10-24）：defId = badge:{职业}:{档位} → 「剑盾徽记·\n稀有」；解析不出退「职业徽记」。
+    /// 2026-11-08：档位前插换行，与「获得奖励」弹窗 MailSystem.AttachmentPopupName 同款两行，
+    /// 免得 83.53 宽的 Wrap 把档位词拆成「普」/「通」。只作用于邮件详情格。</summary>
     static string BadgeDisplayName(string defId)
     {
         if (string.IsNullOrEmpty(defId)) return "职业徽记";
@@ -717,7 +780,7 @@ public class MailDetailUI : MonoBehaviour
         if (!defId.StartsWith(prefix)) return "职业徽记";
         var parts = defId.Substring(prefix.Length).Split(':');
         if (parts.Length != 2 || string.IsNullOrEmpty(parts[0])) return "职业徽记";
-        return parts[0] + "徽记·" + parts[1];
+        return parts[0] + "徽记·\n" + parts[1];
     }
 
     // ────────────────────────────────────────────────────────────────────────

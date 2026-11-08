@@ -185,35 +185,42 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 候选批次保鲜（2026-11-03 补缺口①）：开窗与每秒倒计时协程共用。
-    /// 0 点日切 → 就地重掷三张卡（弹窗开着跨天也当场换批，不再要关开一次）；
-    /// 非日切且存档有当前批次 → 原样恢复（2026-10-19 主人拍板：重启不许换批）。
-    /// 返回是否发生了「日切换批」（首掷/恢复不算，用于协程里决定要不要提示）。
-    /// 免费冷却口径见 MercHireSession.MarkDayRerolled：日切重掷【不重置】3 小时冷却。
+    /// 候选批次保鲜（2026-11-03 补缺口①；2026-11-08 改口径）：开窗与每秒倒计时协程共用。
+    /// ① 0 点日切 → 就地重掷三张卡（弹窗开着跨天也当场换批，不再要关开一次）；
+    /// ② 3 小时到期 → 自动重掷（免费手动刷新已取消，候选到点自己换，不靠玩家点按钮）；
+    /// ③ 其余情况存档有当前批次 → 原样恢复（2026-10-19 主人拍板：重启不许换批）。
+    /// 返回是否发生了「自动换批」（首掷/恢复不算，用于协程里决定要不要提示）。
     /// </summary>
     bool EnsureOffersFresh()
     {
         MercHireSession.EnsureDailyOfferRefresh();
         var data = SaveSystem.Instance?.Data;
         bool dayRefresh = data != null && data.mercOfferDirty;
-        if (!(dayRefresh || _offers == null || _offers.Count == 0)) return false;
-        if (!dayRefresh && data != null && TryLoadOffersFromSave(data))
+        // 冷启动（没记过刷新时刻）交给下面的首掷分支，不误判成「3 小时到点自动刷新」。
+        bool timeRefresh = data != null && data.mercOfferRefreshUtc > 0
+                           && MercHireSession.CanManualRefresh(out _);
+        bool reroll = dayRefresh || timeRefresh;
+        if (!(reroll || _offers == null || _offers.Count == 0)) return false;
+        if (!reroll && data != null && TryLoadOffersFromSave(data))
         {
             data.mercOfferDirty = false;
             return false;
         }
         RerollOffers();
+        if (timeRefresh)
+        {
+            MercHireSession.MarkRefreshed();   // 重置 3 小时计时 + 落盘（内部一并清日切 dirty）
+            return true;
+        }
         if (dayRefresh)
         {
             MercHireSession.MarkDayRerolled();
             return true;
         }
-        // 首掷（冷启动无批次）不算日切换批：照旧立刻落盘，杀进程也不丢
+        // 首掷（冷启动无批次）不算自动换批：落盘并从这一刻起算 3 小时自动刷新周期。
+        // 不写刷新时刻的话 mercOfferRefreshUtc 永远是 0，新号永远等不到自动刷新。
         if (data != null)
-        {
-            data.mercOfferDirty = false;
-            SaveSystem.Instance.Save();
-        }
+            MercHireSession.MarkRefreshed();   // 内部落盘 + 设日键 + 清 dirty
         return false;
     }
 
@@ -291,7 +298,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             remainText.text = $"本局雇佣：{hired}/{max}";
 
         if (autoRefreshText != null)
-            autoRefreshText.text = "每日 0 点自动刷新";
+            autoRefreshText.text = "每 3 小时自动刷新";
 
         // 左下角两种卷轴数量绑存档（2026-10-18 主人拍板）：沿用静态文案的「X{数量}」格式
         var data = SaveSystem.Instance?.Data;
@@ -308,33 +315,32 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 刷新按钮两态（2026-10-23 主人拍板；2026-10-24 主人改口径）：
-    /// 免费可刷 → Label「刷新佣兵」，按钮下方常显今日剩余次数；
-    /// 冷却中且还有钻刷次数 → Label 直接写「50刷新」（价格并入文字，钻石图标随形态显示，不挂独立价格浮标），按钮保持可点；
-    /// 冷却中且次数用完 → 回「刷新佣兵」灰显但保持可点：顶上照旧倒计时、点击弹「已无刷新次数 请明天再试」。
+    /// 刷新按钮两态（2026-10-23 主人拍板；2026-11-08 改口径：取消免费手动刷新）：
+    /// 还有钻石次数 → Label「{cost}刷新」+ 钻石图标常显，按钮保持可点，点击走二次确认弹窗；
+    /// 次数用完 → 回「刷新佣兵」灰显但保持可点：点击弹「已无刷新次数 请明天再试」。
+    /// 顶上倒计时 = 距下次 3 小时自动刷新的剩余时间；候选到点由 EnsureOffersFresh 自动重掷，不靠点击。
     /// </summary>
     void UpdateRefreshCostText()
     {
-        bool canFree = MercHireSession.CanManualRefresh(out int remainSec);
+        bool autoRefreshReady = MercHireSession.CanManualRefresh(out int remainSec);
         bool canDiamond = MercHireSession.CanDiamondRefresh(out int usedToday, out int diamondCost);
         int leftToday = MercHireSession.DiamondRefreshPerDay - usedToday;
-        bool diamondMode = !canFree && canDiamond;
 
         if (refreshCostText != null)
-            refreshCostText.text = canFree ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
+            refreshCostText.text = autoRefreshReady ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
         if (refreshButton != null)
         {
             // 【2026-10-24 主人拍板】次数用光也保持可点（仅灰显）：点了走 OnRefresh 弹「已无刷新次数 请明天再试」
             refreshButton.interactable = true;
             var img = refreshButton.targetGraphic as Image;
             if (img != null)
-                img.color = (canFree || canDiamond) ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
+                img.color = canDiamond ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
             var label = refreshButton.GetComponentInChildren<Text>();
             if (label != null && label != _diamondLeftText && label != refreshCostText)
-                label.text = diamondMode ? $"{diamondCost}刷新" : "刷新佣兵";
+                label.text = canDiamond ? $"{diamondCost}刷新" : "刷新佣兵";
         }
         if (_diamondIcon != null)
-            _diamondIcon.gameObject.SetActive(diamondMode);   // 2026-10-24 主人拍板：钻石刷新形态显示钻石图标（免费形态无价格不显图）
+            _diamondIcon.gameObject.SetActive(canDiamond);   // 手动刷新恒为钻石形态，图标常显（次数用完随按钮灰显）
         if (_diamondLeftText != null)
             _diamondLeftText.text = leftToday > 0 ? $"今日剩{leftToday}次" : "今日已用完";
     }
@@ -371,11 +377,11 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         while (true)
         {
             UpdateRefreshCostText();
-            // 【2026-11-03 补缺口①】弹窗开着跨 0 点：就地换批 + 提示，不再等关开一次
+            // 0 点换批 / 3 小时到点自动刷新：就地换批 + 提示，不再等关开一次
             if (EnsureOffersFresh())
             {
                 RefreshAll();
-                UIManager.Instance?.ShowToast("已到 0 点，候选佣兵已刷新");
+                UIManager.Instance?.ShowToast("候选佣兵已自动刷新");
             }
             yield return wait;
         }

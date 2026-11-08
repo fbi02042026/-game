@@ -4,7 +4,7 @@ using System.Globalization;
 using UnityEngine;
 
 /// <summary>
-/// 里程商店：用日志里程点数兑换资源/招募卷，周限购（计划三期）。
+/// 里程商店：用日志里程点数兑换资源/招募卷/职业徽记，周限购（计划三期）。
 /// 不出装备。
 /// </summary>
 public static class AdventureLogMileageShop
@@ -20,7 +20,9 @@ public static class AdventureLogMileageShop
         ScrollLegendary,
         Item,
         /// <summary>好感礼物（2026-10-27 主人拍板：里程商店每日随机刷 1 件传奇礼物，限量 1，调 SaveData.AddFavorGift 发放）。</summary>
-        Gift
+        Gift,
+        /// <summary>职业徽记（2026-11-08 主人拍板：每周轮换 1 个职业的低级徽记，500点/10个/周限1）。</summary>
+        Badge
     }
 
     public class ShopItem
@@ -31,7 +33,7 @@ public static class AdventureLogMileageShop
         public int WeeklyLimit;
         public RewardKind Kind;
         public int Amount;
-        /// <summary>item_defs.csv 的道具 id（仅 RewardKind.Item 用；非 Item 类商品留空）。</summary>
+        /// <summary>item_defs.csv 的道具 id（RewardKind.Item）；徽记 id badge:{职业}:{档位}（RewardKind.Badge）；其余留空。</summary>
         public string DefId;
     }
 
@@ -55,7 +57,63 @@ public static class AdventureLogMileageShop
         new ShopItem { Id = "scroll_l", Name = "高级招募卷轴", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
         // 【2026-10-21 主人拍板】遗忘药水：洗天赋消耗道具，500 点/周限 1；发放口 = townBagItems（角色页可见）
         new ShopItem { Id = "forget_potion", Name = "遗忘药水", CostPoints = 500, WeeklyLimit = 1, Kind = RewardKind.Item, Amount = 1, DefId = "item_forget_potion" },
+        // 【2026-11-08 主人拍板】每周轮换 1 个职业的低级徽记：500 点 / 10 个 / 周限 1。
+        // 职业名与 defId 由 MakeBadgeItem 按 ISO 周 key 生成（确定性），跨周由 RefreshWeeklyBadge 刷新。
+        // 🔴 恒放数组末尾：现有 6 件索引 0~5 不变，存档 mileageShopBought 按 Id 计数不受影响。
+        MakeBadgeItem(),
     };
+
+    // ── 每周轮换职业徽记（2026-11-08 主人拍板：6 职业轮换、每周只上 1 个）──────────────
+    // 档位 = 普通档（界面显示「低级」），只服务普通品质佣兵升星；稀有佣兵（塔克 H003）吃「中级」
+    // 徽记，那份仍由每日登录 D3 发放（本次每日链路不动）。
+    // 职业全集真源 = MercGrowInventory.BadgeJobKeys、档位 = MercStarDefs.BadgeTierOf、
+    // 显示名 = MercStarSystem.BadgeTierDisplayName、徽记 id = MercGrowInventory.BadgeId，均不在此抄一份。
+
+    /// <summary>本周轮换的职业 key（确定性：同一 ISO 周恒定，跨周按序号换下一个，6 职业循环）。</summary>
+    public static string CurrentBadgeJobKey()
+    {
+        var keys = MercGrowInventory.BadgeJobKeys;
+        if (keys == null || keys.Length == 0) return null;
+        return keys[WeekRotationIndex(keys.Length)];
+    }
+
+    /// <summary>ISO 周 key（yyyy-Www）→ 稳定序号：年×53+周 取模。跨周必变；跨年周号回卷可能跳号，不影响确定性。</summary>
+    static int WeekRotationIndex(int count)
+    {
+        string key = CurrentWeekKey();
+        int dash = key.IndexOf('-');
+        int year = int.Parse(key.Substring(0, dash));
+        int week = int.Parse(key.Substring(dash + 2));   // 跳过 'W'
+        int n = year * 53 + week;
+        return ((n % count) + count) % count;
+    }
+
+    /// <summary>构造本周徽记商品（静态初始化 + 跨周刷新共用；不读存档、不写存档）。</summary>
+    static ShopItem MakeBadgeItem()
+    {
+        const int amount = 10;
+        string job = CurrentBadgeJobKey();
+        string tier = MercStarDefs.BadgeTierOf(MercRosterDefs.MercRarity.Common);
+        return new ShopItem
+        {
+            Id = "badge_weekly",
+            Name = job + "徽记（" + MercStarSystem.BadgeTierDisplayName(tier) + "）×" + amount,
+            CostPoints = 500,
+            WeeklyLimit = 1,
+            Kind = RewardKind.Badge,
+            Amount = amount,
+            DefId = MercGrowInventory.BadgeId(job, tier),
+        };
+    }
+
+    /// <summary>跨周把徽记商品的职业名 / defId 刷成本周值（幂等；只改字段，数组与索引不变）。</summary>
+    static void RefreshWeeklyBadge()
+    {
+        var cur = MakeBadgeItem();
+        var slot = Items[Items.Length - 1];
+        slot.Name = cur.Name;
+        slot.DefId = cur.DefId;
+    }
 
     public static string CurrentWeekKey()
     {
@@ -68,6 +126,7 @@ public static class AdventureLogMileageShop
 
     public static void EnsureWeek()
     {
+        RefreshWeeklyBadge();   // 2026-11-08：每周轮换徽记（幂等；周 key 没变也刷，保证静态初始化后一定对）
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
         string key = CurrentWeekKey();
@@ -100,7 +159,7 @@ public static class AdventureLogMileageShop
             return false;
         }
         var item = Items[index];
-        if (item.Kind == RewardKind.Item && string.IsNullOrEmpty(item.DefId))
+        if ((item.Kind == RewardKind.Item || item.Kind == RewardKind.Badge) && string.IsNullOrEmpty(item.DefId))
         {
             reason = "配置错误";
             return false;
@@ -170,6 +229,10 @@ public static class AdventureLogMileageShop
             case RewardKind.Item:
                 data.TownBagAdd(item.DefId, item.Amount);
                 break;
+            case RewardKind.Badge:
+                // 徽记 id = badge:{职业}:{档位}，与徽记副本 / 每日登录 / 邮件附件同仓同出口
+                MercGrowInventory.Add(item.DefId, item.Amount);
+                break;
         }
 
         SaveSystem.Instance.Save();
@@ -179,6 +242,9 @@ public static class AdventureLogMileageShop
             msg += $"（卷轴库存 普通{data.mercScrollCommon}/高级{data.mercScrollLegendary}）";
         if (item.Kind == RewardKind.Item)
             msg += $"（持有 {data.TownBagCount(item.DefId)}）";
+        // 徽记存隐藏养成仓（背包不显示），toast 带持有数才看得见到账
+        if (item.Kind == RewardKind.Badge)
+            msg += $"（持有 {MercGrowInventory.Get(item.DefId)}）";
         return true;
     }
 

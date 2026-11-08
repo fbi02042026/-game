@@ -176,9 +176,8 @@ public partial class AdventureUI
     void RefreshEndlessResetButton(bool endless)
     {
         var data = SaveSystem.Instance?.Data;
-        // 从没打过裂隙的玩家没有「重置」的语义 → 整颗钮不出现（也不建节点）
-        bool worthShowing = endless && data != null
-                            && (data.endlessRiftClearedStage > 0 || data.endlessRiftBestStage > 0);
+        // 【2026-11-08 主人拍板】新号也常驻显示重置徽章，灰态不可点；切到主线页仍由 endless=false 关掉。
+        bool worthShowing = endless && data != null;
 
         if (_endlessResetBtn == null)
         {
@@ -192,10 +191,12 @@ public partial class AdventureUI
         // 每次刷新重摆一次：主线列被 FitMainColumnStretch 重排后，徽章仍跟得住世界地图位置
         PositionEndlessResetBadge();
 
-        bool canReset = EndlessRiftRules.CanResetThisWeek(data);
+        // 【2026-11-08 主人拍板】新号无进度 → 灰态不可点，不白烧周额度（data 非空已由 worthShowing 保证）。
+        bool hasProgress = data.endlessRiftClearedStage > 0 || data.endlessRiftBestStage > 0;
+        bool canReset = hasProgress && EndlessRiftRules.CanResetThisWeek(data);
         // 图标本身没字，下面挂一行小字说明「这是重置」，顺便承载「本周用过了」的冷却信息
         if (_endlessResetLbl != null)
-            _endlessResetLbl.text = canReset
+            _endlessResetLbl.text = !hasProgress || canReset
                 ? "重置"
                 : $"{EndlessRiftRules.DaysUntilReset(data)}天后";
 

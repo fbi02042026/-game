@@ -1009,11 +1009,11 @@ public partial class AdventureUI
         // 基准/内容高重写后滚动余量变了：把当前关重新滚进视口（无标识或内容不比视口高时内部 no-op）
         ScrollChestToCurrent(_markerCurrentSlot);
 
-        // ── 3.6) 无限页关卡列与主线同带重排【2026-10-24 主人「无限裂隙节点有点偏下了 要和主线一样的」；
-        //          2026-11-01 主人「无限关卡有点偏下了 要和主线一样的位置」改对齐顶 n 槽】
-        // 无限/关卡 与 主线/关卡 同构（1-1..1-4 同名同基准），主线列瘦屏被拉进带内后无限列还在预制体位 → 显偏下。
-        // 修 = 无限/TitleBar 随主线同一 tbShift 钉顶；无限槽位按序号对齐主线可见带「顶 n 槽」的根帧位
-        // （顶槽贴 bandTop 往下按 rhythm 铺，与主线顶槽同位；主线第 5 槽是增补槽，无限保持预制体 4 槽不增补）。x 不动。
+        // ── 3.6) 无限页关卡列与主线同带重排【2026-11-08 主人拍板「无限的列表偏上了 要和关卡一样位置的」；
+        //          同日 16:0x 起改为 5 个岛，与主线可见 5 关同位，排行榜靠右不挡中间的岛】
+        // 无限/关卡 与 主线/关卡 同构（1-1..1-4 同名同基准），主线列瘦屏被拉进带内后无限列还在预制体位 → 位置对不齐。
+        // 修 = 无限/TitleBar 随主线同一 tbShift 钉顶；无限槽位按序号对齐主线可见带的根帧位
+        // （5 槽铺 bandTop … bandTop-4r，顶槽与主线顶关同位；补槽由 RefreshRiftPage.EnsureRiftSlotCount 负责）。x 不动。
         // 幂等：槽位基准首触记录、目标每次从 bandTop/rhythm 现算；标准屏/关开关由 RestoreRiftColumnFit 还原。
         var endlessNode = right.Find(EndlessNodeName) as RectTransform;
         if (endlessNode != null)
@@ -1028,24 +1028,31 @@ public partial class AdventureUI
                 _adventureUiBase[riftTitle.GetInstanceID()] = rtb;
             }
             var riftGuanKa = endlessNode.Find("关卡") as RectTransform;
-            if (riftGuanKa != null
-                && TryResolveMainChildFrames(right, endlessNode, riftGuanKa, H, out _, out float eCenterNow))
+            if (riftGuanKa != null)
             {
-                var riftSlots = CollectNumberedSlots(riftGuanKa);
-                EnsureRiftSlotBase(riftSlots);
-                // 【2026-11-01 主人「无限关卡有点偏下了 要和主线一样的位置」】
-                // 主线可见带 5 关：顶槽贴 bandTop 往下铺；无限 4 槽此前对齐带内「底 4 槽」
-                // （顶上空一格）→ 整列比主线低一档。改对齐「顶 n 槽」：顶节点与主线顶槽同贴 bandTop，
-                // 往下按同 rhythm 铺（排行榜文字跟顶槽位 +92 走，自动跟上）。
-                int n = Mathf.Min(riftSlots.Count, GameConfig.STAGES_PER_GRAND);
-                for (int i = 0; i < n; i++)
+                // 【2026-11-08 修「无限列表偏上、与关卡列不对齐」】补槽必须发生在本次同带重排之前：
+                // 主线模式进页时 RefreshAll 不跑 RefreshRiftPage，预制体只有 4 槽 → 本段只排了 4 槽；
+                // 等切到无限标签，RefreshRiftPage 才克隆第 5 槽，按「顶槽 + 当前节奏」往上堆，
+                // 绕过了重排 → 顶牌顶进 TitleBar、整列往上偏。EnsureRiftSlotCount 幂等，
+                // 在这里补一次即可让 Fit 一次把 5 张牌全排进主线同带；切页时那边发现已够 5 槽直接 return。
+                EnsureRiftSlotCount(riftGuanKa, GameConfig.STAGES_PER_GRAND);
+                if (TryResolveMainChildFrames(right, endlessNode, riftGuanKa, H, out _, out float eCenterNow))
                 {
-                    var srt = riftSlots[i];
-                    float bandYRoot = bandTop - (n - 1 - i) * rhythm;
-                    float targetY = bandYRoot - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
-                    var p = srt.anchoredPosition;
-                    if (!Mathf.Approximately(p.y, targetY))
-                        srt.anchoredPosition = new Vector2(p.x, targetY);
+                    var riftSlots = CollectNumberedSlots(riftGuanKa);
+                    EnsureRiftSlotBase(riftSlots);
+                    // 5 槽与主线可见 5 关同位：bandTop, bandTop-r … bandTop-4r。
+                    // 老 4 槽的 y 与改前逐项相同（bandTop-4r … bandTop-r），只多出最上面一档 bandTop，
+                    // 底槽不动 → 出生点头像箭头零位移；排行榜与顶槽齐平靠右，不再压岛也不撞 TitleBar。
+                    int n = Mathf.Min(riftSlots.Count, GameConfig.STAGES_PER_GRAND);
+                    for (int i = 0; i < n; i++)
+                    {
+                        var srt = riftSlots[i];
+                        float bandYRoot = bandTop - (n - 1 - i) * rhythm;
+                        float targetY = bandYRoot - eCenterNow;   // 槽位中心锚：根帧目标 − 容器中心
+                        var p = srt.anchoredPosition;
+                        if (!Mathf.Approximately(p.y, targetY))
+                            srt.anchoredPosition = new Vector2(p.x, targetY);
+                    }
                 }
             }
         }

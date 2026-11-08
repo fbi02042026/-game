@@ -47,9 +47,9 @@ public class MercAscendUI : MonoBehaviour
     /// <summary>竖屏适配（2026-10-23）：Panel 宽超 720 逻辑宽时整体等比缩放系数，Open 时按预制体 sizeDelta 现算。</summary>
     float _fitK = 1f;
 
-    /// <summary>升阶按钮消耗数字颜色（2026-10-24 主人拍板二改：能升阶=白、不能升阶=红；满星禁用压灰）。
-    /// 「能不能升阶」唯一出口 = MercStarSystem.CanStarUp（碎片/徽记/资金一体预检），不另写第二份判断。</summary>
-    static readonly Color CostOkColor = Color.white;
+    /// <summary>升阶按钮消耗数字颜色（2026-11-08：正常态走 PurchasePriceStyle 全局暖金 + 深描边；
+    /// 不能升阶=红、满星禁用压灰）。「能不能升阶」唯一出口 = MercStarSystem.CanStarUp，不另写第二份判断。</summary>
+    static readonly Color CostOkColor = PurchasePriceStyle.NormalColor;
     static readonly Color CostShortColor = new Color(1f, 0.4f, 0.4f, 1f);
     static readonly Color CostDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
 
@@ -67,6 +67,7 @@ public class MercAscendUI : MonoBehaviour
     Text _nameText;
     Image _roleImage;
     Image _iconImage;
+    Image _nameBg;            // 名字底牌随稀有度换三档图（2026-11-08 主人拍板，与「佣兵信息」弹窗一致；立绘卡框不动）
 
     Text[] _leftVals;          // 左（当前）七行数值，下标 = RowValueNames 顺序
     Text[] _rightVals;         // 右（下一星预览）七行数值
@@ -74,6 +75,11 @@ public class MercAscendUI : MonoBehaviour
     GameObject[] _rightRowRoots;  // 右七行 Root 节点（同上）
     GameObject[] _leftStars;   // 满星1→满星2→满星3 顺序
     GameObject[] _rightStars;
+
+    /// <summary>技能行（2026-11-08）：zuo/you 各两行。预制体里是「技能名字 / 为自身及周围友军恢复生命值。」占位文案，
+    /// 按佣兵真实技能填名字/说明/图标；升星不改技能，左右两侧同值。真源 = MercSkillTable + MercRosterDefs.Def。</summary>
+    struct SkillRow { public GameObject Root; public Text Name; public Text Info; public Image Icon; }
+    SkillRow[] _skillRows;   // 顺序：zuo/Skill、zuo/Skill (2)、you/Skill、you/Skill (1)
 
     Text _fragCountText;       // 碎片/碎片数量（两行：佣兵名+碎片 / 需{}/{有}）
     MercFragmentCardUI _fragCard;
@@ -103,6 +109,8 @@ public class MercAscendUI : MonoBehaviour
     RectTransform _successRt;      // 进阶成功（弹出动画只动它的 localScale）
     ParticleSystem[] _successFx;   // effect 子树下粒子（Build 时统一关 playOnAwake，播放只走 Clear+Play）
     Coroutine _popCo;              // 成功弹出协程（Close/Fill 停）
+    RectTransform _dimRt;          // 进阶成功/Dim 黑幕（按当前逻辑高等比铺满）
+    Vector3 _dimBaseScale;         // Dim 预制体 authored 缩放，适配系数只乘在它上面
 
     /// <summary>七行行名（左/右两侧同名）：顺序按主人 dump：Hp/Spd/MagicDef/Crit/Def/Atk/MagicAtk。</summary>
     static readonly string[] RowRootNames =
@@ -176,6 +184,8 @@ public class MercAscendUI : MonoBehaviour
         // ---- top：佣兵名 / 职业徽记 / 大立绘 ----
         _nameText = FindDeep(p, "Name")?.GetComponent<Text>();
         if (_nameText == null) Debug.LogError("[MercAscend] 缺节点 top/namebg/Name（佣兵名 Text）");
+        _nameBg = FindDeep(p, "namebg")?.GetComponent<Image>();
+        if (_nameBg == null) Debug.LogError("[MercAscend] 缺节点 top/namebg（名字底牌不随稀有度变化）");
         _roleImage = FindDeep(p, "Role")?.GetComponent<Image>();
         if (_roleImage == null) Debug.LogError("[MercAscend] 缺节点 top/Role（职业徽记 Image）");
         _iconImage = FindDeep(p, "Icon")?.GetComponent<Image>();
@@ -188,6 +198,13 @@ public class MercAscendUI : MonoBehaviour
         if (you == null) Debug.LogError("[MercAscend] 缺节点 you（升星预览栏）");
         BindSide(zuo, out _leftVals, out _leftRowRoots, out _leftStars, "zuo");
         BindSide(you, out _rightVals, out _rightRowRoots, out _rightStars, "you");
+
+        // ---- 技能行（2026-11-08）：左右各两行，第二行节点名两侧不同，按预制体实际名字绑 ----
+        _skillRows = new SkillRow[4];
+        BindSkillRow(zuo, "Skill", 0);
+        BindSkillRow(zuo, "Skill (2)", 1);
+        BindSkillRow(you, "Skill", 2);
+        BindSkillRow(you, "Skill (1)", 3);
 
         // ---- 碎片区（2026-10-23 改局部查找：徽记行也有同名「碎片数量」，全局深搜会串绑到徽记行）----
         var suipianNode = FindDeep(p, "碎片");
@@ -229,6 +246,45 @@ public class MercAscendUI : MonoBehaviour
             }
         }
 
+        // ---- 升星成功层排序（2026-11-08）----
+        // 层级从下到上（主人 16:37 拍板「特效应该在图片的下方的」＝特效压在「成功」横幅下面）：
+        //   根 Canvas 935（弹窗 UI）→ 进阶成功 Canvas 936（Dim 黑幕）→ effect 粒子 937 → 「成功」横幅 938。
+        // 开窗时 UICanvasSetup.RefreshPopup 把根 Canvas 抬到 SortOrder(935)，预制体「进阶成功」嵌套 Canvas 只有
+        // 930、effect 下粒子 929/931 —— 全低于 935，成功层被弹窗 UI 盖住（16:2x 主人报「特效被挡住」）。
+        // 这里只改排序值：几何、节点、播放入口、预制体一个不动；缺预置 Canvas 只 LogError，不运行时补建。
+        // 横幅那层 Canvas 在 PlaySuccessFx（节点已激活）补挂 —— 未激活对象 AddComponent<Canvas> 会产僵尸画布
+        //（BattleBossHpBar.cs:142-157 同口径）。
+        var fxCanvas = _successRt != null ? _successRt.GetComponent<Canvas>() : null;
+        if (fxCanvas == null)
+            Debug.LogError("[MercAscend] 进阶成功节点缺预置 Canvas（升星特效无法抬到弹窗上层）");
+        else
+        {
+            fxCanvas.overrideSorting = true;
+            fxCanvas.sortingOrder = SortOrder + 1;
+            // 【2026-11-08】升阶成功层是纯展示层，不接点击：预制体自带的 GraphicRaycaster 随本层抬到
+            // SortOrder+1 后压过根 Canvas，其全屏 Dim（raycastTarget=1 + 空 Button）把点击全吞掉，
+            // 「取消」/点黑幕/上层 X 都收不到事件，弹窗关不掉。只关掉本层 raycaster，让点击穿透回根 Canvas；
+            // 不动预制体、不动排序、不动特效播放入口（与 EnsureSuccessBannerOnTop 的纯排序层同口径）。
+            var fxRay = fxCanvas.GetComponent<GraphicRaycaster>();
+            if (fxRay != null) fxRay.enabled = false;
+        }
+        if (_successFx != null)
+        {
+            for (int i = 0; i < _successFx.Length; i++)
+            {
+                var ps = _successFx[i];
+                if (ps == null) continue;
+                var psr = ps.GetComponent<ParticleSystemRenderer>();
+                if (psr == null) continue;
+                psr.sortingOrder = SortOrder + 2;
+            }
+        }
+
+        // ---- 成功层黑幕（2026-11-08 主人拍板「黑幕没铺满、上下露边」）----
+        _dimRt = _successRt != null ? FindDeep(_successRt, "Dim") as RectTransform : null;
+        if (_dimRt == null) Debug.LogError("[MercAscend] 缺节点 进阶成功/Dim（黑幕无法按逻辑高铺满）");
+        else _dimBaseScale = _dimRt.localScale;   // 现读 authored 值，适配系数只乘在它上面
+
         // ---- 按钮 ----
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
         if (_starUpBtn != null)
@@ -237,7 +293,7 @@ public class MercAscendUI : MonoBehaviour
             if (_starUpImg != null) _starUpImgBase = _starUpImg.color;   // 记 authored 底色，灰显还原用
             _costLabel = _starUpBtn.transform.Find("Label")?.GetComponent<Text>();
             if (_costLabel == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/Label（消耗数字 Text）");
-            else EnsureCostLabelShadow(_costLabel);   // 2026-10-24 主人拍板：消耗数字加阴影（字号/排版一个值不动）
+            else PurchasePriceStyle.Apply(_costLabel);   // 2026-11-08：购买数字统一样式（暖金由 Fill 设；字号/排版一个值不动）
             _costIcon = _starUpBtn.transform.Find("icon")?.GetComponent<Image>();
             if (_costIcon == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/icon（金币/钻石图标 Image）");
         }
@@ -366,6 +422,63 @@ public class MercAscendUI : MonoBehaviour
     }
 
     // ============================================================
+    // 技能行（2026-11-08）：占位文案换成真实技能数据
+    // ============================================================
+
+    /// <summary>绑一行技能节点（SkillName / Skillxinxi / SkillIcon），缺节点 LogError 不兜底建。</summary>
+    void BindSkillRow(Transform side, string rowName, int idx)
+    {
+        if (side == null || _skillRows == null) return;
+        var row = side.Find(rowName);
+        if (row == null)
+        {
+            Debug.LogError("[MercAscend] 缺技能行节点 " + side.name + "/" + rowName);
+            return;
+        }
+        _skillRows[idx].Root = row.gameObject;
+        _skillRows[idx].Name = row.Find("SkillName")?.GetComponent<Text>();
+        _skillRows[idx].Info = row.Find("Skillxinxi")?.GetComponent<Text>();
+        _skillRows[idx].Icon = row.Find("SkillIcon")?.GetComponent<Image>();
+        if (_skillRows[idx].Name == null || _skillRows[idx].Info == null || _skillRows[idx].Icon == null)
+            Debug.LogError("[MercAscend] 技能行 " + side.name + "/" + rowName + " 缺 SkillName/Skillxinxi/SkillIcon");
+    }
+
+    /// <summary>4 行技能填真实数据：每侧第 1 行 = 主动、第 2 行 = 被动；升星不改技能，左右同值。
+    /// 名字/说明/图标真源唯一 = MercSkillTable（与「佣兵信息」弹窗 FillSkill 同口径）；
+    /// 技能 id 为空 = 该佣兵没这门技能，整行隐藏；表里查不到 = LogError + 整行隐藏（fail closed，不留占位文案）。</summary>
+    void FillSkillRows(MercRosterDefs.Def def)
+    {
+        if (_skillRows == null) return;
+        string[] ids = { def.ActiveSkillId, def.PassiveSkillId, def.ActiveSkillId, def.PassiveSkillId };
+        for (int i = 0; i < _skillRows.Length; i++)
+        {
+            var r = _skillRows[i];
+            if (r.Root == null) continue;
+            string id = ids[i];
+            if (string.IsNullOrEmpty(id))
+            {
+                r.Root.SetActive(false);
+                continue;
+            }
+            if (!MercSkillTable.TryGet(id, out var skill))
+            {
+                Debug.LogError("[MercAscend] 佣兵技能表查不到 " + id);
+                r.Root.SetActive(false);
+                continue;
+            }
+            r.Root.SetActive(true);   // DDOL 复用：切佣兵时显式点亮，防上一次隐藏残留
+            if (r.Name != null) r.Name.text = skill.DisplayName ?? "";
+            if (r.Info != null) r.Info.text = skill.RecruitDesc ?? "";
+            if (r.Icon != null)
+            {
+                var sp = MercSkillTable.LoadIcon(id);
+                r.Icon.sprite = sp;
+                r.Icon.enabled = sp != null;
+            }
+        }
+    }
+
+    // ============================================================
     // 数据填充
     // ============================================================
 
@@ -392,6 +505,19 @@ public class MercAscendUI : MonoBehaviour
 
         // ---- 头部 ----
         if (_nameText != null) _nameText.text = def.Name;
+        // 【2026-11-08 主人拍板】只统一名字文字色与 namebg 三档底牌，立绘卡框不动：
+        // 立绘卡框尺寸 175.9×315.6 与酒馆头像框 204×248 不符，故不改立绘（Iconmask/Icon/top 几何一律不动）。
+        if (_nameText != null) _nameText.color = RarityPalette.Get(def.Rarity);
+        if (_nameBg != null)
+        {
+            var plate = MercHireSession.LoadTavernNamePlate(def.Rarity);
+            if (plate != null)
+            {
+                _nameBg.sprite = plate;
+                _nameBg.color = Color.white;
+            }
+            else Debug.LogError("[MercAscend] 取不到稀有度名字底牌图：Rarity=" + def.Rarity);
+        }
         // 【2026-10-24 主人拍板】Role 位 = 佣兵类型（物攻/法术/防御/恢复 四分类徽标），
         // 不是养成徽记那套图（MercGrowSprites.LoadJobBadge 是升星消耗用图，别混进来）。
         // 唯一出口 = JobIconResolver.CombatBadge；取不到隐藏节点，不换图兜底（JobIconResolver R2 口径）。
@@ -478,13 +604,14 @@ public class MercAscendUI : MonoBehaviour
         SetStars(_leftStars, cur);
         SetStars(_rightStars, maxed ? cur : cur + 1);
 
-        // ---- 碎片区：两行「{佣兵名}碎片\n{当次需要}/{拥有}」（需要在前拥有在后，主人原话 44/55）----
+        // ---- 碎片区：两行「{佣兵名}碎片\n{拥有}/{当次需要}」----
+        // 【2026-11-08 主人拍板】拥有在前需要在后，覆盖旧口径「需要在前拥有在后（主人原话 44/55）」。
         int have = MercStarSystem.GetBagFragCount(_hireId);
         int need = MercStarSystem.GetNextStarCost(_hireId);   // 满星返回 0
         if (_fragCountText != null)
             _fragCountText.text = maxed
                 ? def.Name + "碎片\n" + have
-                : def.Name + "碎片\n" + need + "/" + have;
+                : def.Name + "碎片\n" + have + "/" + need;
         if (_fragCard != null) _fragCard.Apply(def.Rarity, _hireId);
 
         // ---- 升阶消耗（2026-10-23 主人拍板二改：数字挪到升阶按钮 Label=×N，icon 随之换金币/钻石）----
@@ -499,7 +626,7 @@ public class MercAscendUI : MonoBehaviour
         if (_costLabel != null)
         {
             _costLabel.text = "×" + cost;
-            // 【2026-10-24 主人拍板二改】能升阶=白、不能升阶=红（碎片/徽记/资金一体预检走 CanStarUp 唯一出口）；
+            // 【2026-11-08】能升阶=全局暖金、不能升阶=红（碎片/徽记/资金一体预检走 CanStarUp 唯一出口）；
             // 满星禁用压灰不变。只换颜色，字号一个值不动（铁律 32）。
             _costLabel.color = maxed ? CostDimColor
                 : MercStarSystem.CanStarUp(_hireId, out _) ? CostOkColor : CostShortColor;
@@ -523,15 +650,17 @@ public class MercAscendUI : MonoBehaviour
             }
         }
 
-        // ---- 徽记行（2026-10-23 主人拍板）：两行「{低级/中级/高级}徽记\n{需}/{有}」。
-        // 【2026-10-24 主人拍板】徽记 = 升阶必备道具，未满星就常显（废除旧「0 消耗整行隐藏」——
-        // 普通/稀有升 1 星徽记消耗为 0，整行藏掉导致普通佣兵进阶看不到徽记）；
-        // need=0 照常显示「低级徽记 0/{有}」。满星仍隐藏（升阶已不存在）。
+        // ---- 徽记行（2026-10-23 主人拍板）：两行「{职业}·{档位}徽记\n{有}/{需}」。
+        // 【2026-11-08 主人拍板】第一行补职业名（直接取 MercGrowSprites.JobKey 唯一出口，职业用词「游侠」），
+        // 档位名保留不丢（删档位会丢实用信息）；数量改「有/需」，与碎片区同口径。
+        // 【2026-11-08 主人拍板】「不需要就不显示徽记」：本次升星不需要徽记（badgeNeed==0）时整行不显示，
+        // 避免普通/稀有 0→1 星出现「低级徽记 50/0」这类分母为 0 的文案；满星同样隐藏（升阶已不存在）。
+        // 仅当本次需要徽记（badgeNeed>0）时才显示「{职业}·{档位}徽记\n{有}/{需}」。
         // 图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底；档位名唯一出口 = MercStarSystem.BadgeTierDisplayName。
         if (_badgeRow != null)
         {
             int badgeNeed = maxed ? 0 : MercStarDefs.BadgeCost(def.Rarity, cur + 1);
-            if (maxed)
+            if (maxed || badgeNeed == 0)
             {
                 _badgeRow.SetActive(false);
             }
@@ -539,9 +668,17 @@ public class MercAscendUI : MonoBehaviour
             {
                 _badgeRow.SetActive(true);
                 int badgeHave = MercStarSystem.GetBadgeCount(_hireId);
-                string badgeName = MercStarSystem.BadgeTierDisplayName(MercStarDefs.BadgeTierOf(def.Rarity)) + "徽记";
+                string tierName = MercStarSystem.BadgeTierDisplayName(MercStarDefs.BadgeTierOf(def.Rarity));
+                string job = MercGrowSprites.JobKey(def.JobName);
+                string badgeName;
+                if (string.IsNullOrEmpty(job))
+                {
+                    Debug.LogError("[MercAscend] 徽记职业名识别失败：JobName=" + def.JobName + "（不兜底）");
+                    badgeName = tierName + "徽记";   // 沿用旧文案占位（fail closed，不瞎编职业名）
+                }
+                else badgeName = job + "·" + tierName + "徽记";
                 if (_badgeCountText != null)
-                    _badgeCountText.text = badgeName + "\n" + badgeNeed + "/" + badgeHave;
+                    _badgeCountText.text = badgeName + "\n" + badgeHave + "/" + badgeNeed;
                 if (_badgeIconImage != null)
                 {
                     var badgeSprite = MercGrowSprites.LoadJobBadge(def.JobName, def.Rarity);
@@ -551,6 +688,9 @@ public class MercAscendUI : MonoBehaviour
                 }
             }
         }
+
+        // ---- 技能行：占位文案换成当前佣兵真实技能（2026-11-08）----
+        FillSkillRows(def);
 
         // ---- 升阶按钮：满星灰显 + 点击提示已满星（2026-10-24 主人拍板）----
         // 灰显只调底图颜色（与卡内升阶钮 MercDrawPoolUI.AscendDimColor 同灰值 0.5）；
@@ -578,8 +718,9 @@ public class MercAscendUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 攻/魔攻行二选一显示（2026-10-22 主人拍板）：RowRootNames 顺序下 5=AttrAtkRoot、6=AttrMagicAtkRoot。
+    /// 攻/魔攻行二选一显示（2026-10-22 主人拍板；2026-11-08 主人拍板修正显隐写反）：RowRootNames 顺序下 5=AttrAtkRoot、6=AttrMagicAtkRoot。
     /// 物攻佣兵（magic=false）隐藏魔攻行；魔攻佣兵隐藏物攻行；保留的一侧显式 SetActive(true) 防复用残留。
+    /// 口径唯一出口同 MercObtainPopupUI.Fill：!magic → AttrAtkRoot，magic → AttrMagicAtkRoot。
     /// 行 Root 缺节点（绑定时报过错）不兜底、直接跳过 —— fail closed。
     /// </summary>
     void SetAtkRowVisible(GameObject[] rowRoots, bool magic)
@@ -587,8 +728,8 @@ public class MercAscendUI : MonoBehaviour
         if (rowRoots == null) return;
         const int idxAtk = 5, idxMagicAtk = 6;
         if (rowRoots.Length <= idxMagicAtk) return;
-        if (rowRoots[idxAtk] != null) rowRoots[idxAtk].SetActive(magic);
-        if (rowRoots[idxMagicAtk] != null) rowRoots[idxMagicAtk].SetActive(!magic);
+        if (rowRoots[idxAtk] != null) rowRoots[idxAtk].SetActive(!magic);
+        if (rowRoots[idxMagicAtk] != null) rowRoots[idxMagicAtk].SetActive(magic);
     }
 
     /// <summary>存档里该佣兵等级（无实例按 1 级显示；口径同 MercDrawPoolUI.ShowMercDetail）。</summary>
@@ -653,19 +794,7 @@ public class MercAscendUI : MonoBehaviour
 
     void Toast(string s) => UIManager.Instance?.ShowToast(s, true);
 
-    /// <summary>
-    /// 消耗数字加阴影（2026-10-24 主人拍板）：只补 Shadow 组件，字号/排版/rect 一个值不动（铁律 32）。
-    /// 预制体里已有 Shadow 的只有 tihaunButton/Label；shengjieButton/Label 没有 → 缺才补、有就不碰 authored 值。
-    /// </summary>
-    static void EnsureCostLabelShadow(Text label)
-    {
-        var sh = label.GetComponent<Shadow>();
-        if (sh != null) return;
-        sh = label.gameObject.AddComponent<Shadow>();
-        sh.effectColor = new Color(0f, 0f, 0f, 0.55f);
-        sh.effectDistance = new Vector2(1.5f, -1.5f);
-        sh.useGraphicAlpha = true;
-    }
+    // 【2026-11-08】消耗数字的阴影实现整条删除，统一走 PurchasePriceStyle.Apply（单一出口，不留旧开关）。
 
     // 【2026-10-23 主人拍板】资金预检本体已挪到 MercStarSystem.FundEnough（与扣费同事务的唯一出口），
     // 本类不再有自己的实现；Fill 的消耗数字变色（2026-10-24 二改）转调 MercStarSystem.CanStarUp
@@ -703,6 +832,43 @@ public class MercAscendUI : MonoBehaviour
     // 升阶成功动效（2026-10-24 主人拍板：进阶成功节点从无到有猛的弹出，effect 特效一起播）
     // ============================================================
 
+    /// <summary>成功层黑幕按当前逻辑高/宽等比铺满（2026-11-08 主人拍板「黑幕没铺满、上下露边」）。
+    /// 预制体 Dim 是 stretch + sizeDelta(472.58,1180) → 实际 572×1280 写死设计高，Panel 又按 720/800 缩 0.9
+    /// → 只盖到 1152 逻辑高，瘦屏上下露边。这里只动 Dim 自身 localScale（等比，不 stretch），
+    /// 基准 = 预制体现读尺寸 × authored 缩放 × _fitK，取高/宽两个方向所需系数的大者一次铺满；
+    /// 不写任何 sizeDelta / anchoredPosition，逻辑高唯一出口 UiLayoutStretch.ResolveUiLogicalHeight。</summary>
+    void ApplySuccessDimFit()
+    {
+        if (_dimRt == null || _fitK <= 0f) return;
+        float w = Mathf.Abs(_dimRt.rect.width) * Mathf.Abs(_dimBaseScale.x) * _fitK;
+        float h = Mathf.Abs(_dimRt.rect.height) * Mathf.Abs(_dimBaseScale.y) * _fitK;
+        if (w < 1f || h < 1f)
+        {
+            Debug.LogError("[MercAscend] 进阶成功/Dim 尺寸异常，黑幕不铺满");
+            return;
+        }
+        float k = Mathf.Max(UiLayoutStretch.ResolveUiLogicalHeight() / h, GameConfig.DESIGN_WIDTH / w);
+        _dimRt.localScale = _dimBaseScale * k;
+    }
+
+    /// <summary>「成功」横幅压在特效之上（2026-11-08 主人拍板「特效应该在图片的下方的」）。
+    /// 只给横幅节点补挂一层纯排序 Canvas，不动几何 / 节点结构 / 播放入口；节点已激活才补（僵尸画布口径）。
+    /// 纯排序用嵌套 Canvas 不补 GraphicRaycaster —— 横幅 raycastTarget=1，补了会拦掉下方按钮点击。</summary>
+    void EnsureSuccessBannerOnTop()
+    {
+        if (_successRt == null) return;
+        var banner = FindDeep(_successRt, "成功");
+        if (banner == null)
+        {
+            Debug.LogError("[MercAscend] 缺节点 进阶成功/成功（横幅无法压在特效之上）");
+            return;
+        }
+        var cv = banner.GetComponent<Canvas>();
+        if (cv == null) cv = banner.gameObject.AddComponent<Canvas>();
+        cv.overrideSorting = true;
+        cv.sortingOrder = SortOrder + 3;
+    }
+
     /// <summary>播成功动效：节点显形 + 猛的弹出 + effect 粒子/音效齐播。
     /// 缺节点绑定期已 LogError，这里 fail closed 直接返回（不兜底建、不静默）。</summary>
     void PlaySuccessFx()
@@ -710,6 +876,8 @@ public class MercAscendUI : MonoBehaviour
         if (_successRt == null) return;
         _successRt.localScale = Vector3.zero;               // 先归零再显形：防激活后第一帧满尺寸闪一下
         _successRt.gameObject.SetActive(true);
+        EnsureSuccessBannerOnTop();   // 横幅压在特效之上（节点激活后才补画布，避僵尸画布）
+        ApplySuccessDimFit();         // 黑幕按当前逻辑高/宽等比铺满
         if (_successFx != null)
         {
             for (int i = 0; i < _successFx.Length; i++)

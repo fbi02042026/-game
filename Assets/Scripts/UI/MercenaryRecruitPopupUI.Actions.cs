@@ -89,18 +89,8 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
     void OnRefresh()
     {
-        // 【2026-10-23 主人拍板】免费冷却好了 → 原免费刷新；冷却中 → 走钻石刷新（每天 2 次，50/100 钻）。
-        if (MercHireSession.CanManualRefresh(out int remain))
-        {
-            RerollOffers();
-            MercHireSession.MarkRefreshed();
-            RefreshAll();
-            if (!MaybeToastAppearBanter(force: false, avoidLast: true))
-                UIManager.Instance?.ShowToast("已刷新候选佣兵");
-            ScheduleNextIdleBanter();
-            return;
-        }
-
+        // 手动刷新一律走钻石刷新（每天 2 次，50/100 钻）+ 二次确认弹窗；
+        // 免费手动刷新已取消 —— 候选由 3 小时到点自动重掷，见 EnsureOffersFresh。
         if (!MercHireSession.CanDiamondRefresh(out _, out int cost))
         {
             // 【2026-10-24 主人拍板】钻石/广告次数用光：按钮保持可点，点击弹这句

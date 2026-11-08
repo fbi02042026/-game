@@ -8,8 +8,12 @@ using UnityEngine;
 /// </summary>
 public static class PlayerSkillDefs
 {
-    /// <summary>城镇技能选择页（SkillSelectUI）只展示前 6 个基础技能；其余全部是局内抽卡池专用。</summary>
-    public const int TownSelectCount = 6;
+    /// <summary>
+    /// 城镇技能选择页（SkillSelectUI）的格子数。
+    /// 【2026-11-08 主人拍板】扩到 9 格 = 全部玩家技能，按 SkillDraftMeta 稀有度从低到高排；
+    /// 槽位数唯一真源就是这里，SkillSelectUI.MaxSkills 只转发。以后再加技能必须同步改本值。
+    /// </summary>
+    public const int TownSelectCount = 9;
 
     public enum Kind
     {
