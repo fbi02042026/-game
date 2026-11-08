@@ -66,21 +66,22 @@ public static class ArenaRules
     /// 身边永远有同分的人；「越远越多」由分差（曲线越陡越大）+ 距离奖励双保险。
     /// </summary>
     // 【2026-10-30 拍板作废】原「吃分差 + 距离奖励 5/10/15」积分口径随积分版商店改版退役
-    //（新口径 = 赢 +30 基础 + 连赢加成、输 +10，见 WinBasePoints / StreakBonusStep / StreakBonusCap）。
+    //（计分口径见 WinBasePoints / StreakBonusStep / StreakBonusCap / LosePointsDelta 常量区）。
     // public static readonly int[] ChallengeBonusPoints = { 5, 10, 15 };
 
     // ── 机器人积分分布（2026-10-29 主人拍板：开局一大群 0 分，越往前同分的人越少）──
-    /// <summary>榜首积分（天花板）。</summary>
-    public const int SeasonTopScore = 1500;
+    /// <summary>分数曲线归一化基准，不是天花板。</summary>
+    public const int CurveScoreReference = 1500;
     /// <summary>分布曲线顶端值（rank 2 处，量化后 1400）。</summary>
     public const float CurveTopScore = 1450f;
     /// <summary>曲线凸度 &gt;1：底部平缓（同分多）、顶部陡（同分少）。</summary>
     public const float CurveExponent = 2.2f;
     /// <summary>机器人垫底保底分（2026-10-31 主人拍板「0 分太多」：曲线尾部量化到 0 的由保底接住，机器人不再有 0 分）。</summary>
     public const int BotMinScore = 10;
-    /// <summary>积分分布/规则版本：调分布或积分规则时 +1，老档自动整榜重建（玩家按当前积分重新插位，进度不丢）。
+    /// <summary>机器人分布版本：调分布时 +1，老档自动整榜重建（玩家按当前积分重新插位，进度不丢）；
+    /// 只改积分/名次规则而不动分布初值时无需升版（受控升名只依赖积分序）。
     /// v4（2026-10-29 17:28）：机器人加战力+阵容种子，老档重生成（战力按新曲线、估计值重新起步）。</summary>
-    public const int DistVersion = 7;   // v7（2026-10-31）：删零分区+垫底保底 10 分（主人拍板「0 分太多」）+删每日随机换位（「只有积分变动排名才变」），老档整榜重建生效。v6（2026-10-30 20:10）：分布天花板随玩家累计场次（开局 200 每场 +15 封顶 1500）。v5：首进竞技场玩家垫底到第 101 名
+    public const int DistVersion = 7;   // 保持 v7：受控升名只依赖积分序，不依赖机器人分布初值，老档沿用现有榜单即可生效，无需整榜重建（重建会让老档玩家按当前积分直接插到榜首）。v7 历史：删零分区 + 垫底保底 10 分 + 删每日随机换位；v6：天花板随累计场次；v5：首进垫底到第 101 名。
     /// <summary>输了掉的积分（0 分保护：积分不足只扣到 0，垫底 0 分群不会被扣成负数）。
     /// 2026-10-29 晚主人拍板「积分可以扣的再多点」：2 → 5。</summary>
     // 【2026-10-30 拍板作废】原「输一场 -5」退役：新口径输一场也 +10（安慰奖，鼓励天天来打卡）。
@@ -88,11 +89,15 @@ public static class ArenaRules
 
     // ── 积分新口径（2026-10-30 主人拍板「竞技场积分版商店」：积分 = 排名数字 + 商店消费货币）──
     /// <summary>赢一场基础积分。</summary>
-    public const int WinBasePoints = 30;
-    /// <summary>连赢加成：本场前连赢数 ≥1 时每场 +10。</summary>
-    public const int StreakBonusStep = 10;
-    /// <summary>连赢加成封顶 +30（本场前连赢 3 场起赢一场 = 60 分）。</summary>
-    public const int StreakBonusCap = 30;
+    public const int WinBasePoints = 20;
+    /// <summary>连赢加成：本场前连赢数 ≥1 时按连赢数叠加的每场步长。</summary>
+    public const int StreakBonusStep = 5;
+    /// <summary>连赢加成累计上限。</summary>
+    public const int StreakBonusCap = 15;
+    /// <summary>胜局单场最多升名位数（等于可挑战窗口上方人数）。</summary>
+    public const int RankGainMax = ChallengeableCount;
+    /// <summary>前 10 名内胜局固定升 1 名的名次阈值。</summary>
+    public const int TopTenRank = 10;
     /// <summary>输一场的积分变化（负=扣分；扣到 0 为止的守卫在落账处 Mathf.Max(0,…)）。
     /// 演变：-5 → +10 安慰奖（2026-10-30 拍板作废 -5）→ -10（2026-10-30 20:00 主人拍板
     /// 「失败减10、败局掉名、名次按积分」：+10 按积分排不可能掉名，扣分才掉名；低分保底兜底）。</summary>
@@ -325,9 +330,8 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 机器人每日积分漂移：涨多跌少（2026-10-31 主人拍板「只有积分有变动的时候排名才会变」：
-    /// 漂移 = 积分变动 → 漂移完立即按分重排，名次恒=积分序；重排位移丢弃——机器人涨分导致的
-    /// 玩家位被动变化不播动效，动效只跟战斗结算走）。原「名次由 ShuffleBots 动」口径随换位制删除作废。
+    /// 机器人每日积分漂移：涨多跌少。漂移后按原名次对齐积分序，玩家名次保持不变；
+    /// 机器人涨分不再带动玩家位被动变化，名次动效只跟战斗结算走。
     /// 0 分不漂移——守卫保留（垫底保底分之下没有 0 分机器人，此分支正常走不到）。
     /// </summary>
     static void DriftBots(SaveData data)
@@ -339,25 +343,23 @@ public static class ArenaRules
             if (b == null || b.points <= 0) continue;
             b.points = Mathf.Max(0, b.points + UnityEngine.Random.Range(BotDriftMin, BotDriftMax + 1));
         }
-        RepositionByPoints(data);   // 积分变 → 名次才变（唯一重排口复用）
+        RepositionByPoints(data, 0);   // 只把积分序对齐回原位次，玩家名次不变（唯一重排口复用）
     }
 
     /// <summary>
-    /// 机器人分数天花板：开局 StartTopPoints，每打一场（累计）+TopPerBattle，封顶 SeasonTopScore。
+    /// 机器人分数天花板：开局 StartTopPoints，每打一场（累计）+TopPerBattle，随累计场次线性增长，不设硬封顶。
     /// 场次只增不减 → 天花板单调不减；开局榜单贴近玩家分数，避免「一进来榜首 1500」的失落感
     /// （2026-10-30 20:10 主人拍板「一开始分差别太大…根据玩家玩的次数改变」）。
     /// </summary>
     public static int TopTargetFor(SaveData data)
     {
         int battles = data != null ? data.arenaBattlesTotal : 0;
-        return Mathf.Min(SeasonTopScore, StartTopPoints + battles * TopPerBattle);
+        return StartTopPoints + battles * TopPerBattle;
     }
 
     /// <summary>
-    /// 游玩中机器人分数刷新（2026-10-30 20:10 主人拍板「机器人分值要有变化，可以一个时间刷一下，不要不变」）：
-    /// 距上次刷新超过 BotRefreshSeconds 就把每个非垫底机器人向「当前天花板下的标准曲线」收敛一步
-    /// （BotRefreshLerp；每日漂移 DriftBots 照旧，收敛保证整体不离曲线），再按分重排——名次恒=积分序，
-    /// 机器人涨分导致玩家位被动变化不写动效标记（动效只跟战斗结算走）。
+    /// 游玩中机器人分数刷新：距上次刷新超过 BotRefreshSeconds 就把每个非垫底机器人向「当前天花板下的标准曲线」收敛一步
+    /// （BotRefreshLerp；每日漂移 DriftBots 照旧，收敛保证整体不离曲线），再按原名次对齐积分序，玩家名次不变。
     /// 调用口 = ArenaPopupUI.Open / ApplyBattleOutcome（到点才刷，幂等）。垫底保底分以下不再有 0 分（2026-10-31 主人拍板「0 分太多」）。
     /// </summary>
     public static void RefreshBotScoresIfDue(SaveData data)
@@ -373,9 +375,9 @@ public static class ArenaRules
             var b = data.arenaBots[i];
             if (b == null || b.points <= 0) continue;
             int target = ScoreForRankScaled(i + 1, top);   // 按当前链序排名取目标分（刷新末尾重排，下一轮自然对齐）
-            b.points = Mathf.RoundToInt(Mathf.Lerp(b.points, target, BotRefreshLerp));
+            b.points = Mathf.Max(b.points, Mathf.RoundToInt(Mathf.Lerp(b.points, target, BotRefreshLerp)));
         }
-        RepositionByPoints(data);   // 名次恒=积分序（唯一重排口复用）
+        RepositionByPoints(data, 0);   // 只把积分序对齐回原位次，玩家名次不变（唯一重排口复用）
         SaveSystem.Instance?.Save();
         FireChanged();
     }
@@ -419,7 +421,7 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 榜单第 rank 名在给定天花板 top 下的标准积分。曲线：score = top×(CurveTopScore/SeasonTopScore) × t^CurveExponent，
+    /// 榜单第 rank 名在给定天花板 top 下的标准积分。曲线：score = top×(CurveTopScore/CurveScoreReference) × t^CurveExponent，
     /// t = 离榜首的归一化距离（全榜铺满 rank2~BotCount）——底部平缓（同分多）、顶部陡（同分少）。
     /// 【2026-10-31 主人拍板「0 分太多」】原「rank ≥ ZeroZoneStartRank 强制 0 分」的零分区删除，
     /// 曲线改铺满全榜 + 垫底保底 <see cref="BotMinScore"/> 分（量化到 0 的尾巴由保底接住），机器人不再有 0 分。
@@ -430,7 +432,7 @@ public static class ArenaRules
     {
         if (rank <= 1) return top;
         float t = Mathf.Clamp01((BotCount + 1 - rank) / (float)(BotCount - 1));   // rank2≈0.99 → rankBotCount=0
-        float raw = top * (CurveTopScore / SeasonTopScore) * Mathf.Pow(t, CurveExponent);
+        float raw = top * (CurveTopScore / CurveScoreReference) * Mathf.Pow(t, CurveExponent);
         return Mathf.Max(BotMinScore, QuantizeScore(raw));
     }
 
@@ -1137,8 +1139,8 @@ public static class ArenaRules
 
     /// <summary>
     /// 真战斗结算（2026-10-30 主人拍板「竞技场真战斗」，替代原掷骰制 <c>ResolveChallenge</c>——已删）：
-    /// 【2026-10-30 晚积分版商店拍板】积分新口径：赢 = +30 基础 + 连赢加成（本场前连赢 ≥1 时
-    ///     min(30, 连赢数×10)——本场前连赢 0/1/2/3 场 = 30/40/50/60）；
+    /// 【2026-10-30 晚积分版商店拍板】积分口径：赢 = WinBasePoints 基础 + 连赢加成（本场前连赢 ≥1 时
+    ///     min(StreakBonusCap, 连赢数×StreakBonusStep)；具体数值见常量区）；
     /// 【2026-10-30 20:00 主人拍板】输 = -10（扣分掉名；原「输 +10 不掉名」口径随「名次按积分」一并作废）；
     /// 【2026-10-30 16:45 主人拍板】金币照发 +200（WinGold，走 ResourceWallet 入账；
     ///     胜局结算面板金币格在 BattleManager.SettleArenaVictoryCells）。
@@ -1146,8 +1148,9 @@ public static class ArenaRules
     ///     arenaFreshWinsLeft/arenaLowPityLeft/arenaWinCapTarget/arenaPityTarget——
     ///     不掷骰判胜负，门状态改由 <see cref="GetValvePowerMultiplier"/> 在组队路径给敌方战力乘系数
     ///     （🔴 严禁进 IsChallengeable/CanEnter 等查询函数）；胜负仍由真实战斗产出。
-    /// 【2026-10-30 20:00 主人拍板「名次根据积分改变」】换位制退役：胜/输积分落账后统一
-    ///     <see cref="RepositionByPoints"/> 按分重排（机器人按积分降序、玩家按分插位），位移写 LastBattleAnim 动效标记。
+    /// 换位制退役：胜/输积分落账后统一走 <see cref="RepositionByPoints"/>，按目标位次驱动重排——
+    ///     胜局机器人同步加本场积分、升名 1~RankGainMax（前 TopTenRank 固定 1 名、第 1 名 0），败局掉名 1~RankGainMax；
+    ///     重排后机器人降序、玩家位次与积分序一致，位移写 LastBattleAnim 动效标记。
     /// 公共：AddBattleRecord / CountArenaBattle / Save / FireChanged。
     /// </summary>
     public static void ApplyBattleOutcome(SaveData data, int ladderIdx, bool won, out int pts, out int powerDelta)
@@ -1181,7 +1184,7 @@ public static class ArenaRules
             // 上一把若是踩着保底线赢的（来时连输已达标）→ 保底消费完毕，重掷目标（只掷「场次」，不定胜负）
             bool pityConsumed = data.arenaLossStreak >= data.arenaPityTarget;
 
-            // 连赢加成用「本场前」的连赢数：0/1/2/3 场 → 30/40/50/60（封顶 60）
+            // 连赢加成用「本场前」的连赢数：min(StreakBonusCap, 连赢数 × StreakBonusStep) 叠加到 WinBasePoints
             int streakBonus = data.arenaWinStreak >= 1
                 ? Mathf.Min(StreakBonusCap, data.arenaWinStreak * StreakBonusStep)
                 : 0;
@@ -1205,7 +1208,7 @@ public static class ArenaRules
         }
         else
         {
-            pts = LosePointsDelta;   // 输一场 -10（2026-10-30 20:00 主人拍板「失败减10」：扣分后按积分重排自然掉名；低分保底兜底）
+            pts = LosePointsDelta;   // 输一场 -10（2026-10-30 20:00 主人拍板「失败减10」：扣分后按受控位数掉名；低分保底兜底）
             powerDelta = -Mathf.RoundToInt(myPower * PowerDropOnLose);
             data.arenaPlayerPower = Mathf.Max(100, myPower + powerDelta);
             data.arenaWinStreak = 0;    // 连赢清零（输一把断连）
@@ -1214,7 +1217,16 @@ public static class ArenaRules
         }
         // 低分保底（armed 口径）：积分落账后仍 ≤ LowScorePityAt 且无进行中保底 → 再送 N 场必赢（橡皮筋，直到爬出低分区）
         data.arenaPoints = Mathf.Max(0, data.arenaPoints + pts);   // 守卫：积分永不扣成负数
-        LastBattleAnim = RepositionByPoints(data);   // 积分定名次（2026-10-30 20:00 主人拍板）：落账即重排，位移写动效标记（正=升/负=降/0=没动）
+        if (won)
+        {
+            for (int i = 0; i < data.arenaBots.Count; i++)
+                if (data.arenaBots[i] != null) data.arenaBots[i].points += pts;
+        }
+        // 目标位次驱动重排：胜局升名 1~RankGainMax（前 TopTenRank 固定 1、第 1 名 0），败局掉名 1~RankGainMax；
+        // 已垫底时目标位次钳到机器人总数、位移为 0。位移写 LastBattleAnim 动效标记（正=升 / 负=降 / 0=没动）。
+        int step = (pos + 1) <= TopTenRank ? 1 : UnityEngine.Random.Range(1, RankGainMax + 1);
+        int desiredGain = won ? Mathf.Min(step, pos) : -UnityEngine.Random.Range(1, RankGainMax + 1);
+        LastBattleAnim = RepositionByPoints(data, desiredGain);
         data.arenaBattlesTotal++;                    // 累计场次（机器人分数天花板驱动，2026-10-30 20:10 主人拍板「根据玩家玩的次数改变」）
         RefreshBotScoresIfDue(data);                 // 游玩中到点刷机器人分（Open/结算双口幂等；到点才刷）
         if (data.arenaPoints <= LowScorePityAt && data.arenaLowPityLeft <= 0)
@@ -1226,26 +1238,47 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 积分定名次（2026-10-30 20:00 主人拍板「名次根据积分改变，玩家只要积分有变动就会改变名次」唯一重排口）：
-    /// 机器人按积分降序重排链序，玩家按积分插位（同分玩家排同分机器人之后，垫底 0 分群口径与既有分布一致）。
-    /// 返回名次位移（正=上升位数 / 负=下降 / 0=没动）。两个调用口：战斗结算（位移写 LastBattleAnim 播名次动效）、
-    /// 游玩中机器人分刷新 RefreshBotScoresIfDue（位移丢弃——机器人涨分导致玩家位被动变化不播动效，动效只跟战斗结算走）。
+    /// 按目标位次重排机器人积分序（唯一重排口）：desiredGain &gt; 0 升名、&lt; 0 降名、= 0 名次完全不变。
+    /// 先按分降序排好，再把夹在旧位次与目标位次之间的机器人分数压到玩家分之下（升名）或抬到玩家分之上（降名），
+    /// 最后降序重排。结束后数组按分降序，且分数 ≥ 玩家分的机器人个数恰等于 arenaPlayerPos。
+    /// 返回名次位移（正=上升 / 负=下降 / 0=没动）：战斗结算按胜负给出升/降位数并写 LastBattleAnim 动效；
+    /// 跨天漂移、游玩中刷新、商店消费传 0，只把积分序对齐回原位次、玩家名次不变。
     /// </summary>
-    static int RepositionByPoints(SaveData data)
+    static int RepositionByPoints(SaveData data, int desiredGain)
     {
         int oldPos = Mathf.Clamp(data.arenaPlayerPos, 0, data.arenaBots.Count);
-        data.arenaBots.Sort((a, b) => b.points.CompareTo(a.points));
-        int newPos = 0;
-        for (int i = 0; i < data.arenaBots.Count; i++)
+        data.arenaBots.Sort((a, b) => (b == null ? 0 : b.points).CompareTo(a == null ? 0 : a.points));
+        int count = data.arenaBots.Count;
+        int targetPos = Mathf.Clamp(oldPos - desiredGain, 0, count);
+        int rawPos = 0;
+        for (int i = 0; i < count; i++)
         {
-            // 【2026-10-31】同分判定用 >=：与上面注释「同分玩家排同分机器人之后」一致。
-            // 原来是 >（玩家排在同分机器人之前），同分场景名次会比设计口径高 1 位。
-            if (data.arenaBots[i].points >= data.arenaPoints) newPos++;
+            var b = data.arenaBots[i];
+            if ((b == null ? 0 : b.points) >= data.arenaPoints) rawPos++;
             else break;
         }
-        newPos = Mathf.Clamp(newPos, 0, data.arenaBots.Count);
-        data.arenaPlayerPos = newPos;
-        return oldPos - newPos;
+        if (targetPos < rawPos)
+        {
+            if (data.arenaPoints <= 0)
+            {
+                // 玩家 0 分：机器人分非负，不可能压到玩家分之下；按积分序落位（fail closed，纠正失序存档）
+                Debug.LogError("[Arena] 玩家 0 分却要求升名，按积分序落位（失序存档）");
+                targetPos = Mathf.Clamp(rawPos, 0, count);
+            }
+            else
+            {
+                for (int j = targetPos; j < rawPos; j++)
+                    if (data.arenaBots[j] != null)
+                        data.arenaBots[j].points = Mathf.Max(0, data.arenaPoints - 1 - (j - targetPos));
+            }
+        }
+        else if (targetPos > rawPos)
+            for (int j = rawPos; j < targetPos; j++)
+                if (data.arenaBots[j] != null)
+                    data.arenaBots[j].points = Mathf.Max(data.arenaBots[j].points, data.arenaPoints + 1 + (targetPos - 1 - j));
+        data.arenaBots.Sort((a, b) => (b == null ? 0 : b.points).CompareTo(a == null ? 0 : a.points));
+        data.arenaPlayerPos = targetPos;
+        return oldPos - targetPos;
     }
 
     /// <summary>
@@ -1273,22 +1306,23 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 竞技场商店扣积分（2026-10-30 积分版商店唯一扣费出口）：
-    /// 余额不足返回 false（调用方弹「积分不足」），守卫禁负数；扣积分<b>不动换位链/排名</b>
-    /// （排名真源 = arenaPlayerPos，EnsureLadder 只在版本升级/新赛季重建时按分插位，平时不读积分）。
+    /// 竞技场商店扣积分（积分版商店唯一扣费出口）：
+    /// 余额不足返回 false（调用方弹「积分不足」），守卫禁负数；扣积分后按原名次对齐积分序、排名不变
+    /// （扣分后会有更多机器人达到玩家分，需把它们压回玩家分之下，避免后续刷新时莫名掉名）。
     /// </summary>
     public static bool TrySpendPoints(SaveData data, int amount)
     {
         if (data == null || amount <= 0) return false;
         if (data.arenaPoints < amount) return false;   // 守卫：不足不扣，禁负数
         data.arenaPoints -= amount;
+        RepositionByPoints(data, 0);
         SaveSystem.Instance?.Save();
         FireChanged();
         return true;
     }
 
     /// <summary>记一条对战记录（新→旧，超出 BattleRecordMax 裁尾）。只记 对手头像/名字/胜败/分值/时间。
-    /// 【2026-10-30 20:00 拍板】points = 当场积分变化（胜 30~60 正 / 败 -10 负），显示侧统一带符号。</summary>
+    /// 【2026-10-30 20:00 拍板】points = 当场积分变化（胜 = WinBasePoints + 连赢加成（封顶 StreakBonusCap）为正 / 败 = LosePointsDelta 为负），显示侧统一带符号。</summary>
     static void AddBattleRecord(SaveData data, ArenaBotEntry bot, bool won, int points)
     {
         if (bot == null) return;
@@ -1298,7 +1332,7 @@ public static class ArenaRules
             name = bot.name,
             avatar = bot.avatar,
             won = won,
-            points = points,   // 胜 30~60（正）/ 败 -10（负），显示侧带符号（2026-10-30 20:00 拍板）
+            points = points,   // 当场积分变化（胜局为正、败局为 LosePointsDelta），显示侧带符号
             time = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         });
         if (data.arenaBattleRecords.Count > BattleRecordMax)

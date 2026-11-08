@@ -179,6 +179,19 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // → 提前剧透主线 + 和岛名黑幕（「迷雾屿 · 雾有面包味」）连播两套字幕。
         // 这里在切场景前先取值（PendingSideIsland 会被 BattleManager.Start 读后即清）。
         bool sideIslandRun = AdventureUI.PendingSideIsland > 0;
+        // 裂隙标记同样要切场景前先取值：BattleManager 初始化对 PendingEndlessRift 读后即清
+        //（StartNewRunInternal「读完即清」段），而下方章节卡判定在 WaitForBattleInitComplete 之后才跑，
+        // 实时再读会拿到已被清掉的 false → 误演主线章节卡（复现：撤离第 3 章后进裂隙弹「第三章」黑底字）。
+        // 与上方 arenaChallenge / sideIslandRun / activityRun 的快照口径对齐（2026-10-31 同类修法补齐裂隙）。
+        bool endlessRun = AdventureUI.PendingEndlessRift;
+        // 【2026-11-08 不留隐患】终章追查关同样没有「进本前的真实章节」：ChapterManager 还没重建，
+        // 实时读 currentChapter 拿到的是上一局残留章号 → 会演「第 N 章」主线章节卡 + 加载不存在的 beijing0N。
+        // 与 endlessRun 同口径在切场景前快照（PendingFinaleStage 会被 StartNewRunInternal 读后即清）。
+        bool finaleRun = AdventureUI.PendingFinaleStage > 0;
+        // 【2026-11-08 玩法隔离】主线/非主线的唯一判据，切场景前快照。
+        // 必须快照：下方章节卡判定在 WaitForBattleInitComplete 之后，那时 Pending 已被 StartNewRunInternal 读后即清
+        //（19:23 裂隙同类坑）。5 个玩法快照仍只用于 Loading 图，不再各自判「演不演章节卡」。
+        bool mainlineRun = !AdventureUI.HasNonMainlineIntent;
         // 副本类玩法（四个活动副本 + 羁绊副本）不演主线章节卡；它们没有专属章节 Loading 图，
         // 固定用唯一那张占位章图，不再按题材章请求不存在的 beijing0N。
         // 战斗场景章节仍由 ChapterManager 按题材章决定，此处只管 Loading 图与章节卡。
@@ -186,7 +199,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
                         || AdventureUI.PendingScrollDungeon || AdventureUI.PendingGiftDungeon
                         || AdventureUI.PendingBondDungeon;
         int battleChapter = (arenaChallenge || sideIslandRun) ? 0
-            : activityRun ? LoadingUI.FallbackChapter
+            : (activityRun || finaleRun || endlessRun) ? LoadingUI.FallbackChapter
             : ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
@@ -196,7 +209,8 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // 无限裂隙照旧不演正式关的章节剧情卡 —— 刷图玩法直接进战斗。
         // 竞技场挑战同样不演（2026-10-31 主人拍板，上面 arenaChallenge 归零口径）。
         // 支线岛同样不演（2026-10-31）：章节卡归零口径同上，岛自己的开场由 IslandStoryBeats 负责。
-        ChapterSplashOverlay.BattleSplashPending = !AdventureUI.PendingEndlessRift && !arenaChallenge && !sideIslandRun && !activityRun;
+        // 【2026-11-08 玩法隔离】章节卡只属于主线正式关：非主线玩法（含漏登记的新玩法）一律不演。
+        ChapterSplashOverlay.BattleSplashPending = mainlineRun;
         yield return null;
 
         // 战斗场景先在 Loading 底下静默加载（allowSceneActivation=false 时 progress 停在 0.9，到位即放行）。
@@ -247,7 +261,7 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
         // 【2026-10-31 主人拍板】竞技场挑战不演章节卡（无限裂隙同口径）；支线岛同（理由见上 battleChapter 归零处）。
-        var splash = AdventureUI.PendingEndlessRift || arenaChallenge || sideIslandRun || activityRun
+        var splash = !mainlineRun
             ? null
             : ChapterSplashOverlay.ShowBattleChapter(battleChapter, splashTutorial);
 

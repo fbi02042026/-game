@@ -427,15 +427,15 @@ public class TavernUI : MonoBehaviour, ITownPage
             });
             RetitleCard(questButton.transform, "佣兵队列", "配置下场战斗可雇佣的佣兵");   // 2026-10-18 主人拍板改名
             CacheCardDesc(questButton);
-            // 2026-11-08 需求：可升星红点挂在「佣兵队列」入口的卷轴图标上（不是队列界面内部）。
+            // 2026-11-08 需求：可升星红点挂在「佣兵队列」入口卡右上角（不是队列界面内部）。
             // 与底部导航「酒馆」按钮共用 RedDot.Tavern 键，亮灭由 MercStarRedDot 唯一出口统一刷。
-            var questIcon = questButton.transform.Find("Icon");
-            if (questIcon != null) RedDot.Bind(questIcon, RedDot.Tavern);
-            else Debug.LogError("[TavernUI] 佣兵队列卡缺 Icon 节点，升星红点无处可挂（不兜底）");
+            // 【19:1x 主人拍板「整张卡右上角」】不挂 prefab 的 Icon——它 m_IsActive:0（历史空节点），
+            // 挂它下面整棵子树不渲染，是红点看不见的根因；改挂整卡根节点（active，子节点渲染在最上层）。
+            RedDot.Bind(questButton.transform, RedDot.Tavern);
 
-            // 2026-11-08 主人当场「佣兵列队整体可以放大2%」→「再放大1%再往上2」：
+            // 2026-11-08 主人当场「佣兵列队整体可以放大2%」→「再放大1%再往上2」→「+3」（19:1x 拍板）：
             // 整张入口卡累计等比放大 3%（从基准算，不做 1.02×1.01 叠乘），并在
-            // ApplyFeatureCardLayout 落位之后整体上移 2 逻辑像素。只改 localScale 与纵向 y，
+            // ApplyFeatureCardLayout 落位之后整体上移 3 逻辑像素。只改 localScale 与纵向 y，
             // 不碰 sizeDelta / anchoredPosition.x / Image.type / 贴图 / prefab。
             // 基准首读一次，之后按基准绝对赋值：防 WireClicks 重入累乘，也防布局重排抹掉偏移。
             var qrt = questButton.transform as RectTransform;
@@ -449,7 +449,7 @@ public class TavernUI : MonoBehaviour, ITownPage
                 }
                 qrt.localScale = new Vector3(_questBaseScale.x * 1.03f, _questBaseScale.y * 1.03f, _questBaseScale.z);
                 var p = qrt.anchoredPosition;   // x 原样带回，只改 y
-                p.y = _questBaseY + 2f;
+                p.y = _questBaseY + 3f;
                 qrt.anchoredPosition = p;
             }
         }

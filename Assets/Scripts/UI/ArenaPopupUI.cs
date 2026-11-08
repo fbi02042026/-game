@@ -1427,7 +1427,11 @@ public class ArenaPopupUI : MonoBehaviour
             var panelSp = LoadArt("_0000_底框", 40f);
             if (panelSp != null) { rPanelImg.sprite = panelSp; rPanelImg.type = Image.Type.Sliced; }
         }
-        var rowStripSp = LoadArt("_0008_条2", 10f);
+        // 2026-11-08 主人报「这个底框的横条右边比例不对」「可以参考排行榜的横条」：
+        // 原 _0008_条2 只有 83×33、meta 切片 28/10/32/12，代码却按均匀 10f 建 9-slice，
+        // 右端装饰被划进拉伸区，再拉到 prefab 行的 488.1×60 → 右端比例变形。改排行榜行同款
+        // _0009_条1（488×106，切片照 meta 68/38/79/36），与 BuildRows 同参数同缓存。
+        var rowStripSp = LoadArt("_0009_条1", new Vector4(68f, 38f, 79f, 36f));
         for (int ri = 1; ri <= 5; ri++)
         {
             var rowImg = UiFind.Deep(root.transform, "RowTemplate" + ri)?.GetComponent<Image>();
@@ -1509,10 +1513,6 @@ public class ArenaPopupUI : MonoBehaviour
             return;
         }
 
-        // 2026-11-03 主人拍板「记录界面条变形，用跟排行榜一样的条」：换 _0009_条1（排行榜行同款，切片照 meta
-        // 68/38/79/36，与 BuildRows 完全一致）。原 _0008_条2 用均匀 10f 建切片，与 meta 实际 28/10/32/12 不符，
-        // 左右两端圆角弧面被划进拉伸区 → 条一拉就变形（旧注「条1 是拼图大图不可用」已过时，BuildRows 已在用）。
-        var rowStrip = LoadArt("_0009_条1", new Vector4(68f, 38f, 79f, 36f));
         for (int i = 0; i < n; i++)
         {
             var rec = list[i];
@@ -1523,12 +1523,12 @@ public class ArenaPopupUI : MonoBehaviour
             row.anchoredPosition = new Vector2(0f, -(i * RecRowStep + 4f));
             row.gameObject.SetActive(true);
 
+            // 2026-11-08 主人「对战记录不要横条了 只要字就行了」：行底条整块停用——不再 LoadArt 铺条，
+            // 直接关掉行自身的 Image（prefab 里这颗 Image 还带着旧 sprite 引用，只不设图会露出底图，必须关 enabled）。
+            // 子节点的字 / 头像 / 胜败章一律不动，不改预制体、不改任何尺寸与坐标。
             var rowImg = row.GetComponent<Image>();
-            if (rowImg != null && rowStrip != null)
-            {
-                rowImg.sprite = rowStrip;
-                rowImg.type = Image.Type.Sliced;   // 克隆图运行时设 sprite，切片吃 9-slice
-            }
+            if (rowImg != null) rowImg.enabled = false;
+            else Debug.LogError("[Arena] 记录行缺 Image（行底条关不掉，报主人）");
 
             var head = UiFind.Deep(row, "Head")?.GetComponent<Image>();
             if (head != null)

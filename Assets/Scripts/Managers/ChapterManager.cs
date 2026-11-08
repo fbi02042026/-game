@@ -456,6 +456,10 @@ public class ChapterManager : Singleton<ChapterManager>
     /// </summary>
     public void OnStageComplete()
     {
+        // 【2026-11-08 玩法隔离·单一出口】主线进度 / 每日通关经验 / 章推进 / 支线派定只认主线正式关。
+        // 任何副本、裂隙、竞技场、支线岛、终章（含未登记的新玩法）一律不进本方法；
+        // 下方逐模式的旧 if 保留为防御纵深，行为不变。
+        if (BattleManager.Instance != null && !BattleManager.Instance.IsFormalMainRun) return;
         if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
             return;
         // 徽记副本（2026-10-23 拍板）：同金币本，通关不走主线首通/章节奖励（掉落全走自己的发放链）
@@ -482,6 +486,11 @@ public class ChapterManager : Singleton<ChapterManager>
         // 胜场被 TryDailyClearTaskExp 算进「今日通关 3 关」→ 满 3 场发 50 经验（DAILY_CLEAR_TASK_EXP）
         // → 升级弹窗（主人报「竞技场是不是也给经验了」，查实就是这条链）。
         if (BattleManager.Instance != null && BattleManager.Instance.IsArena)
+            return;
+        // 羁绊副本（2026-11-08 同类漏口补齐）：单场 Elite 关，通关标记/钻石全在 BondDungeonBattleMode.SettleStageClear。
+        // 此前漏挡 → 统一门 FinishStageAfterPortalReached 会把第 7 章第 1 关写成主线首通（clearedStages）、
+        // 累计 TryDailyClearTaskExp 每日通关经验、甚至推进章节/派支线。非主线模式一律不进本方法。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsBondDungeon)
             return;
 
         // 【2026-11-05 难度隔离】本局难度：0 普通 / 1 困难 / 2 噩梦。

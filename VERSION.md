@@ -10,6 +10,16 @@ git show v0.3.3:VERSION.md
 
 ---
 
+## 1.0.6 正式包 — 2026-11-07（自动清档口径）
+
+- 主人当场拍板：**让所有装到这一版的玩家自动清档** → `SaveSystem.WipeLocalDataOnNewVersion` 由 11-03 的 `false` 重新翻回 **`true`**（`Assets/Scripts/Systems/SaveSystem.cs:34`）。
+- 触发仍只认 `Application.version` 变化：商店线上当前是 **1.0.5 / 5**（VERSION.md 下节），升到本机预备的 **1.0.6 / 6** 即触发。**本次打包版本号保持不动，不再 +1**。
+- 时序：`SaveSystem.Awake()`（进登录页之前）→ `PlayerPrefs.DeleteAll()` + 删 `player.dat` / `player.bak` / 旧 `save*.json` → `Load()` 建新档。公告已读期号被一并清掉，登录页「注意：老存档已经清空」的公告正好重弹一次，文案与机制一致，**UI 侧本轮未改**。设置里手动「清除数据」按钮不受影响。
+- ⚠ 边界：已装过 1.0.6 测试包、且 `PlayerPrefs["save_wipe_app_version"]` 已写成 `1.0.6` 的设备不会重清（`stored == current` 直接 return）。要连这批设备也清，需换标记键或再递增版本号，待拍板。
+- 其余正式包口径：不开广告（`ADS_ENABLED=false`）、只留 TapTap 登录（`TAPSDK_ENABLED=ON`）、项目自写主动联网已关（`AdKillSwitch.ConfigUrl=""`）、活动副本测试总闸已关（`TEST_OPEN_ALL=false`）。
+
+---
+
 ## 版本号对齐 — 2026-11-06
 
 - 商店线上实际已是 **1.0.5 / APK 版本号 5**（2026-10-21 上传，当时在另一台机器 `E:/xiangsumaoxian` 工程上改的号，递增记录未回流本仓库）

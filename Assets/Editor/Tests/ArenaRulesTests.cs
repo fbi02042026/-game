@@ -9,8 +9,9 @@ using UnityEngine.TestTools;
 ///   - 每日 5 次免费 + 每看 1 次广告 +3、广告每天 2 次封顶（2026-10-31）
 ///   - 可挑战窗口 = 上方 3 名、下方 0 名（2026-10-31「能挑战的改成上面3个」）
 ///   - 名次按积分重排（2026-10-30 20:00）、同分玩家排在同分机器人之后（2026-10-31）
-///   - 积分新口径：赢 30 基础 + 连赢加成 10/场封顶 30；输 -10；积分永不负（2026-10-30）
-///   - 机器人无 0 分、垫底保底 10 分（2026-10-31「0 分太多」）；DistVersion=7
+///   - 积分新口径：赢 WinBasePoints 基础 + 连赢加成（每场 StreakBonusStep、封顶 StreakBonusCap）；输 LosePointsDelta；积分永不负（2026-10-30）
+///   - 机器人无 0 分、垫底保底 10 分（2026-10-31「0 分太多」）；DistVersion 当前值由专门用例断言
+///   - 胜局升名 1~3 名、前 10 名 1 名（RankGainMax / TopTenRank）
 ///   - 阀门战力系数：新手/连输保底/低分保底 ×0.35、连赢熔断 ×1.9（2026-10-30 晚 + 10-31 重校准）
 ///   - 赛季奖励档与预制体面板同值（2026-10-29 深夜）
 /// </summary>
@@ -100,7 +101,7 @@ public class ArenaRulesTests
         int rowIdx = data.arenaPlayerPos - 1;   // 上方第 1 名（合法目标）
         ExpectWalletNoSaveWarning();            // 赢局发金币，EditMode 无存档 → 预期警告 1 条
         ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out int pts, out _);
-        Assert.AreEqual(ArenaRules.WinBasePoints, pts, "首胜无连赢加成 = 基础 30");
+        Assert.AreEqual(ArenaRules.WinBasePoints, pts, "首胜无连赢加成 = 基础分");
         Assert.AreEqual(ArenaRules.WinBasePoints, data.arenaPoints);
         Assert.AreEqual(1, data.arenaWinStreak);
         Assert.AreEqual(ArenaRules.NewbieWinsPerSeason - 1, data.arenaFreshWinsLeft, "新手必赢应消耗 1 场");
@@ -110,17 +111,18 @@ public class ArenaRulesTests
     public void ApplyBattleOutcome_Win_StreakBonus_StepAndCap()
     {
         var data = NewSave();
-        // 连赢 2 场后第 3 胜：加成 = min(30, 2×10) = 20 → 共 50
+        // 本场前连赢 2 场：加成按 StreakBonusStep 叠加、封顶 StreakBonusCap
         data.arenaWinStreak = 2;
         int rowIdx = data.arenaPlayerPos - 1;
         ExpectWalletNoSaveWarning();            // 第 1 次赢局
         ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out int pts, out _);
-        Assert.AreEqual(ArenaRules.WinBasePoints + 20, pts, "本场前连赢 2 场 → +20 加成");
-        // 连赢 5 场后再赢：加成封顶 30 → 共 60（本场前连赢 5 ≥ 3）
+        Assert.AreEqual(ArenaRules.WinBasePoints + Mathf.Min(ArenaRules.StreakBonusCap, 2 * ArenaRules.StreakBonusStep),
+            pts, "本场前连赢 2 场 → 按步长叠加加成");
+        // 本场前连赢 5 场：加成封顶 StreakBonusCap
         data.arenaWinStreak = 5;
         ExpectWalletNoSaveWarning();            // 第 2 次赢局
         ArenaRules.ApplyBattleOutcome(data, data.arenaPlayerPos - 1, won: true, out pts, out _);
-        Assert.AreEqual(ArenaRules.WinBasePoints + ArenaRules.StreakBonusCap, pts, "连赢加成应封顶 +30");
+        Assert.AreEqual(ArenaRules.WinBasePoints + ArenaRules.StreakBonusCap, pts, "连赢加成应封顶");
     }
 
     [Test]
@@ -136,6 +138,83 @@ public class ArenaRulesTests
         Assert.AreEqual(0, data.arenaWinStreak, "输一把连赢清零");
         Assert.AreEqual(1, data.arenaLossStreak);
         Assert.AreEqual(ArenaRules.LowScorePityWins, data.arenaLowPityLeft, "积分 ≤30 应武装低分保底 3 场");
+    }
+
+    [Test]
+    public void ApplyBattleOutcome_WinFive_GainWithinCap_AndRankMatchesPoints()
+    {
+        var data = NewSave();
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离胜局重排
+        for (int n = 0; n < 5; n++)
+        {
+            int rowIdx = data.arenaPlayerPos - 1;   // 上方第 1 名（合法目标）
+            ExpectWalletNoSaveWarning();
+            ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out _, out _);
+            Assert.That(ArenaRules.LastBattleAnim, Is.InRange(1, ArenaRules.RankGainMax),
+                $"第 {n + 1} 场胜局升名位数应在 1..{ArenaRules.RankGainMax}");
+            int atOrAbove = 0;
+            foreach (var b in data.arenaBots)
+                if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+            Assert.AreEqual(atOrAbove, data.arenaPlayerPos,
+                $"第 {n + 1} 场后积分序与 arenaPlayerPos 应一致");
+        }
+    }
+
+    [Test]
+    public void ApplyBattleOutcome_Win_TopTenRank_GainAlwaysOne()
+    {
+        var data = NewSave();
+        // 构造与 arenaPlayerPos 一致的积分序：前 5 个机器人高于玩家分，其余低于（避免测到一个真实存档不会出现的失序状态）
+        for (int i = 0; i < data.arenaBots.Count; i++)
+            data.arenaBots[i].points = i < 5 ? 1000 : 10;
+        data.arenaPoints = 500;
+        data.arenaPlayerPos = 5;                                   // 玩家排名 6（前 10 名内）
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        int rowIdx = data.arenaPlayerPos - 1;
+        ExpectWalletNoSaveWarning();
+        ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out _, out _);
+        Assert.AreEqual(1, ArenaRules.LastBattleAnim, "前 10 名内胜局升名位数恒为 1");
+        int atOrAbove = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+        Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "前 10 名场景积分序仍一致");
+    }
+
+    [Test]
+    public void ApplyBattleOutcome_Win_BotsRiseByPts_AndSumUp()
+    {
+        var data = NewSave();
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离单场抬升
+        long sumBefore = 0;
+        foreach (var b in data.arenaBots) if (b != null) sumBefore += b.points;
+        int topBefore = data.arenaBots[0].points;   // 榜首机器人不会落入胜局下调区间
+        int rowIdx = data.arenaPlayerPos - 1;
+        ExpectWalletNoSaveWarning();
+        ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out int pts, out _);
+        long sumAfter = 0;
+        foreach (var b in data.arenaBots) if (b != null) sumAfter += b.points;
+        Assert.Greater(sumAfter, sumBefore, "胜局后机器人分数整体上升");
+        Assert.AreEqual(pts, data.arenaBots[0].points - topBefore,
+            "单个机器人单场增量应等于 pts");
+    }
+
+    [Test]
+    public void RefreshBotScoresIfDue_OldTimestamp_KeepsRankConsistent_NoBounce()
+    {
+        var data = NewSave();
+        int rowIdx = data.arenaPlayerPos - 1;
+        ExpectWalletNoSaveWarning();
+        ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out _, out _);
+        int posBefore = data.arenaPlayerPos;
+
+        data.arenaBotRefreshAt = 1;   // 很旧的时间戳，强制触发刷新
+        ArenaRules.RefreshBotScoresIfDue(data);
+
+        int atOrAbove = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+        Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "刷新后积分序与 arenaPlayerPos 仍一致");
+        Assert.AreEqual(posBefore, data.arenaPlayerPos, "刷新后名次不回跳");
     }
 
     // ---------- 阀门战力系数 ----------
@@ -217,12 +296,16 @@ public class ArenaRulesTests
     }
 
     [Test]
-    public void TopTargetFor_ScalesWithBattles_CapsAtSeasonTop()
+    public void TopTargetFor_ScalesWithBattles_NoHardCap()
     {
-        var fresh = new SaveData();
-        Assert.AreEqual(ArenaRules.StartTopPoints, ArenaRules.TopTargetFor(fresh), "0 场时榜首天花板 = 200（榜单贴近玩家）");
-        var veteran = new SaveData { arenaBattlesTotal = 100 };
-        Assert.AreEqual(ArenaRules.SeasonTopScore, ArenaRules.TopTargetFor(veteran), "足够场次后封顶 1500");
+        // 新口径：top = StartTopPoints + 场次×TopPerBattle，随累计场次线性增长、不设硬封顶。
+        var fresh = new SaveData { arenaBattlesTotal = 0, arenaPoints = 0 };
+        Assert.AreEqual(ArenaRules.StartTopPoints,
+            ArenaRules.TopTargetFor(fresh), "0 场 = 开局天花板");
+        var veteran = new SaveData { arenaBattlesTotal = 100, arenaPoints = 0 };
+        int expected = ArenaRules.StartTopPoints + 100 * ArenaRules.TopPerBattle;
+        Assert.AreEqual(expected, ArenaRules.TopTargetFor(veteran), "按累计场次线性增长，不再封顶");
+        Assert.Greater(expected, ArenaRules.CurveScoreReference, "足够场次后应超过 CurveScoreReference，证明无硬封顶");
     }
 
     // ---------- 商店扣积分 ----------
@@ -232,6 +315,10 @@ public class ArenaRulesTests
     {
         var data = NewSave();
         data.arenaPoints = 100;
+        data.arenaBots.Sort((a, b) => b.points.CompareTo(a.points));
+        data.arenaPlayerPos = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) data.arenaPlayerPos++;
         Assert.IsFalse(ArenaRules.TrySpendPoints(data, 0), "0 扣费应拒绝");
         Assert.IsFalse(ArenaRules.TrySpendPoints(data, -5), "负数扣费应拒绝");
         Assert.IsFalse(ArenaRules.TrySpendPoints(data, 101), "余额不足应拒绝且不动账");
@@ -265,5 +352,82 @@ public class ArenaRulesTests
         Assert.AreEqual(600, ArenaRules.SeasonGoldRank11_50);
         Assert.AreEqual(0, ArenaRules.SeasonDiamondRank11_50);
         Assert.AreEqual(50, ArenaRules.SeasonRewardTopRank);
+    }
+
+    // ---------- 目标位次驱动重排：名次与积分序 ----------
+
+    [Test]
+    public void TrySpendPoints_KeepsRank_AndPointsOrder()
+    {
+        var data = NewSave();
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离重排
+        ExpectWalletNoSaveWarning();                       // 打过 1 场（赢局发金币，EditMode 无存档 → 预期警告）
+        ArenaRules.ApplyBattleOutcome(data, data.arenaPlayerPos - 1, won: true, out _, out _);
+        data.arenaPoints = 100;                           // 设够余额
+        // 同步积分序，避免测到真实存档不会出现的失序状态（另两处测试同口径）
+        data.arenaBots.Sort((a, b) => b.points.CompareTo(a.points));
+        data.arenaPlayerPos = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) data.arenaPlayerPos++;
+        int posBefore = data.arenaPlayerPos;
+
+        Assert.IsTrue(ArenaRules.TrySpendPoints(data, 50), "余额充足应扣费成功");
+        Assert.AreEqual(posBefore, data.arenaPlayerPos, "商店消费当场名次不变");
+        int atOrAbove = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+        Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "扣费后积分序与 arenaPlayerPos 一致");
+
+        data.arenaBotRefreshAt = 1;                       // 强制触发刷新
+        ArenaRules.RefreshBotScoresIfDue(data);
+        Assert.AreEqual(posBefore, data.arenaPlayerPos, "刷新后名次仍不变");
+        atOrAbove = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+        Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "刷新后积分序与 arenaPlayerPos 仍一致");
+    }
+
+    [Test]
+    public void DriftBots_KeepsRank()
+    {
+        var data = NewSave();
+        int posBefore = data.arenaPlayerPos;
+        data.arenaDayKey = "1970-01-01";   // 改成昨天（旧值）以触发跨天漂移
+        ArenaRules.EnsureDay(data);
+        Assert.AreEqual(posBefore, data.arenaPlayerPos, "跨天漂移后玩家名次不变");
+        int atOrAbove = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+        Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "漂移后积分序与 arenaPlayerPos 一致");
+    }
+
+    [Test]
+    public void ApplyBattleOutcome_Lose_DropsWithinCap()
+    {
+        var data = NewSave();
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离重排
+        for (int n = 0; n < 3; n++)                       // 先赢 3 场把名次从垫底升上来
+        {
+            ExpectWalletNoSaveWarning();
+            ArenaRules.ApplyBattleOutcome(data, data.arenaPlayerPos - 1, won: true, out _, out _);
+        }
+        // 构造与 arenaPlayerPos=50 一致的积分序：前 50 个机器人高于玩家分，其余低于
+        for (int i = 0; i < data.arenaBots.Count; i++)
+            data.arenaBots[i].points = i < 50 ? 1000 : 10;
+        data.arenaPoints = 500;
+        data.arenaPlayerPos = 50;
+
+        for (int n = 0; n < 3; n++)                       // 连输 3 场
+        {
+            int rowIdx = data.arenaPlayerPos - 1;         // 上方第 1 名（合法窗口内）
+            ArenaRules.ApplyBattleOutcome(data, rowIdx, won: false, out _, out _);   // 输局不发金币，不登记钱包警告
+            Assert.That(ArenaRules.LastBattleAnim, Is.InRange(-ArenaRules.RankGainMax, -1),
+                $"第 {n + 1} 场败局掉名位数应在 -{ArenaRules.RankGainMax}..-1");
+            int atOrAbove = 0;
+            foreach (var b in data.arenaBots)
+                if (b != null && b.points >= data.arenaPoints) atOrAbove++;
+            Assert.AreEqual(atOrAbove, data.arenaPlayerPos,
+                $"第 {n + 1} 场败局后积分序与 arenaPlayerPos 一致");
+        }
     }
 }

@@ -19,10 +19,12 @@ using UnityEngine.Networking;
 public static class AdKillSwitch
 {
     /// <summary>ads.json 的 Gitee raw 直链（仓库→文件→「原始数据」复制）。
-    /// 【2026-10-28 已接入】仓库 https://gitee.com/fbi0204/xiangsumaoxianliexizhiren（公开）；
-    /// 急停 = 网页编辑该文件改 {"ads_off": true} 提交，对下次启动的玩家生效；改回 false 恢复。
+    /// 【2026-11-07 主人拍板】正式包「不开广告、不接网络」：留空 = EnsureStarted 走「URL 未配置」分支，
+    /// 只读本地缓存、不发任何 HTTP 请求。这是本项目唯一的主动联网出口，要关就关这一处，别在别处另开拉取路径。
+    /// 要恢复急停通道时把 https://gitee.com/fbi0204/xiangsumaoxianliexizhiren/raw/master/ads.json 填回来即可
+    /// （网页改 {"ads_off": true} 提交，对下次启动生效；改回 false 恢复）。
     /// 注：gitee.com/raw 会 302 到 raw.giteeusercontent.com 签名 CDN 链接，UnityWebRequest 默认跟随重定向。</summary>
-    public const string ConfigUrl = "https://gitee.com/fbi0204/xiangsumaoxianliexizhiren/raw/master/ads.json";
+    public const string ConfigUrl = "";
 
     const string CacheKey = "AdKillSwitch.AdsOff";
     const int TimeoutSeconds = 8;

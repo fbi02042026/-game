@@ -122,6 +122,18 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         PendingEndlessRift = false;
     }
 
+    /// <summary>
+    /// 【2026-11-08 玩法隔离】本局是否带「非主线玩法」的进本意图。
+    /// 单一出口：主线正式关只置 PendingBattleChapter / PendingBattleDifficulty，恒为 false；
+    /// 任何副本/裂隙/竞技场/支线岛/终章都至少命中一项，恒为 true。
+    /// ResolveMode 与 GameSceneManager 共用它区分「主线」与「非主线」，不再各自列模式黑名单。
+    /// 新增进本标记时只在这里补一行（与 ResetPendingFlags 的清零清单并列，同一文件）。
+    /// </summary>
+    public static bool HasNonMainlineIntent =>
+        PendingEndlessRift || PendingArenaRowIdx >= 0 || PendingSideIsland > 0
+        || PendingFinaleStage > 0 || PendingGoldDungeon || PendingBadgeDungeon
+        || PendingScrollDungeon || PendingGiftDungeon || PendingBondDungeon;
+
     [Header("可替换资源")]
     public Sprite mapBackgroundSprite;
     public Sprite[] chapterBackgrounds = new Sprite[8]; // 可选覆盖 MapBg；空则只切换 StageNodes/Node_1..8

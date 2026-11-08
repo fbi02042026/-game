@@ -29,9 +29,9 @@ id,name,icon,type,stackMax,canUseInBattle,canDrop,useEffect,useTarget,desc,rarit
 item_talent_stone,天赋石,UI/Icons/Common/icon_talent_stone,Material,9999,0,0,,Self,用于解锁与升级右侧天赋。,2
 item_mat_decompose,分解材料,UI/Icons/Common/icon_decompose_mat,Material,9999,0,1,,Self,装备分解所得，用于强化装备。,0
 item_enchant_stone,附魔石,UI/Icons/Common/icon_enchant_stone,Material,999,0,1,,Self,用于装备附魔。,1
-item_scroll_merc_common,佣兵招募卷·普通,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募普通佣兵时抵扣。,1
-item_scroll_merc_rare,佣兵招募卷·稀有,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募稀有佣兵时抵扣。,2
-item_scroll_merc_legendary,佣兵招募卷·传奇,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,酒馆招募传奇佣兵时抵扣。,3
+item_scroll_merc_common,佣兵招募卷·普通,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,用于酒馆普通卷招募。,1
+item_scroll_merc_rare,佣兵招募卷·稀有,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,已并入普通招募卷，不再单独使用。,2
+item_scroll_merc_legendary,佣兵招募卷·传奇,UI/Icons/Common/icon_hire_scroll,Consumable,99,0,1,,Self,用于酒馆高级卷招募。,3
 item_fragment_birth,本命碎片,,Material,99,0,1,,Self,佣兵本命碎片（通用占位行，2026-10-22 起实际发放用 item_frag_H0xx 按佣兵分行）。,2
 # 2026-11-01 主人拍板：技能残卷没有这个道具、佣兵养成道具（实际走职业徽记等，道具都有）→ 两行删除（代码零引用，stage_drop 引用均为注释行）。
 item_fragment_log,日志碎片,UI/Icons/Item/icon_log_fragment,Material,999,0,1,,Self,冒险日志碎片，可合成完整条目。,0

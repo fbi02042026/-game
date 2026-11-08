@@ -196,10 +196,15 @@ public class TownHubController : MonoBehaviour
         if (!PendingOpenAdventure) return;
         PendingOpenAdventure = false;
         if (Instance == null) return;
-        Instance.OpenAdventure();
+        Instance.OpenAdventure(suppressGuide: true);
     }
 
-    public void OpenAdventure()
+    /// <param name="suppressGuide">
+    /// true = 这次是撤离/返回城镇的「自动开页」，不是玩家自己点进冒险页。
+    /// 与进镇预热 CoWarmupPages 的 SuppressGuideOnce 同一口径：跳过本页插播的支线岛情报指引
+    /// 等玩家可见弹窗，且不写已播标记，等玩家自己点进冒险页时照常播。
+    /// </param>
+    public void OpenAdventure(bool suppressGuide = false)
     {
         TownSaveAlign.AlignAll();
         EnsureWired();
@@ -209,6 +214,7 @@ public class TownHubController : MonoBehaviour
         _tavern?.HidePage();
         _character?.HidePage();
         _log?.HidePage();
+        if (suppressGuide && _adventure != null) _adventure.SuppressGuideOnce = true;
         _adventure?.ShowPage();
         _current = MainNavTab.Adventure;
         Debug.Log($"[BgmDiag] OpenAdventure before Town current={GameBgm.Current}");

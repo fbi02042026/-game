@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 /// <summary>
@@ -7,9 +8,8 @@ using NUnit.Framework;
 ///   - 体力：金币/徽记/礼物 10、卷轴 15（2026-10-24 拍板；礼物 10-26 未单独给价按同价）
 ///   - 章节门槛：金币=第1章、徽记=第2章、卷轴=第3章、礼物=第1章（FeatureUnlock 唯一出口）
 ///   - 战斗场景章：金=1 森林 / 徽=2 亡灵 / 卷=6 洞穴 / 礼=6 暂同洞穴（2026-10-24 拍板）
-///   - TEST_OPEN_ALL=true（2026-10-31 拍板：测试期三本全开、难度全开、显示层不旁路）
-///     → 翻 false 恢复开放日/章节门槛/难度逐级解锁后，IsOpenToday/IsDiffUnlocked 用例会红，
-///       到时按正式口径改期望值，不许删测试绕过。
+///   - TEST_OPEN_ALL=false（2026-11-07 主人拍板：正式包恢复开放日 + 难度逐级解锁）
+///     → 回测试期翻 true 时，下面两条正式口径用例要按测试口径改回期望值，不许删测试绕过。
 /// </summary>
 public class ActivityDungeonRulesTests
 {
@@ -21,7 +21,7 @@ public class ActivityDungeonRulesTests
         Assert.AreEqual(2, ActivityDungeonRules.DAILY_TRIES, "每日每本 2 次（10-24 拍板）");
         Assert.AreEqual(10, ActivityDungeonRules.ENTRY_STAMINA_COST, "金币/徽记进本 10 体力");
         Assert.AreEqual(15, ActivityDungeonRules.SCROLL_ENTRY_STAMINA_COST, "卷轴进本 15 体力");
-        Assert.AreEqual(true, ActivityDungeonRules.TEST_OPEN_ALL, "测试总闸当前=开（10-31 拍板，打包前改回）");
+        Assert.AreEqual(false, ActivityDungeonRules.TEST_OPEN_ALL, "正式包测试总闸=关（11-07 拍板改回）");
     }
 
     [Test]
@@ -33,25 +33,33 @@ public class ActivityDungeonRulesTests
         Assert.AreEqual(10, ActivityDungeonRules.EntryStaminaCost(ActivityDungeonKind.Gift), "礼物本未单独给价，按金币同价（10-26 口径）");
     }
 
-    // ---------- 测试总闸旁路（翻 false 后这两条按正式口径重写） ----------
+    // ---------- 正式口径：按开放日 + 难度逐级解锁 ----------
 
     [Test]
-    public void IsOpenToday_TestGateOpen_AllKinds()
+    public void IsOpenToday_FormalGate_ByWeekday()
     {
-        Assert.IsTrue(ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Gold));
-        Assert.IsTrue(ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Badge));
-        Assert.IsTrue(ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Scroll));
-        Assert.IsTrue(ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Gift));
+        var d = DateTime.Now.DayOfWeek;
+        Assert.AreEqual(d == DayOfWeek.Monday || d == DayOfWeek.Wednesday || d == DayOfWeek.Saturday,
+            ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Gold), "金币本=周一/三/六");
+        Assert.AreEqual(d == DayOfWeek.Tuesday || d == DayOfWeek.Thursday || d == DayOfWeek.Sunday,
+            ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Badge), "徽记本=周二/四/日");
+        Assert.AreEqual(d == DayOfWeek.Friday,
+            ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Scroll), "卷轴本=周五");
+        Assert.AreEqual(d == DayOfWeek.Saturday,
+            ActivityDungeonRules.IsOpenToday(ActivityDungeonKind.Gift), "礼物本=周六");
     }
 
     [Test]
-    public void IsDiffUnlocked_TestGateOpen_AllDifficulties()
+    public void IsDiffUnlocked_FormalGate_Progressive()
     {
         var data = new SaveData();   // activityDungeonClearedDiff 默认 -1（未通任何难度）
-        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(data, 0), "总闸开：初级开");
-        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(data, 1), "总闸开：中级不看进度");
-        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(data, 2), "总闸开：高级不看进度");
-        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(null, 2), "null 存档不炸（总闸开恒真）");
+        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(data, 0), "初级恒开");
+        Assert.IsFalse(ActivityDungeonRules.IsDiffUnlocked(data, 1), "没通初级 → 中级锁");
+        Assert.IsFalse(ActivityDungeonRules.IsDiffUnlocked(data, 2), "没通中级 → 高级锁");
+        Assert.IsFalse(ActivityDungeonRules.IsDiffUnlocked(null, 2), "null 存档不炸且 fail-closed");
+        data.activityDungeonClearedDiff = 0;
+        Assert.IsTrue(ActivityDungeonRules.IsDiffUnlocked(data, 1), "通了初级 → 中级开");
+        Assert.IsFalse(ActivityDungeonRules.IsDiffUnlocked(data, 2), "还没通中级 → 高级仍锁");
     }
 
     // ---------- 场景章 / 名称 / 提示（单一出口） ----------

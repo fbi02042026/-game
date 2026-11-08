@@ -258,7 +258,7 @@ public static class HeroVaultSystem
         }
 
         // ⑥ 招募卷轴（存档独立字段 mercScrollCommon / mercScrollLegendary；
-        //    酒馆三选一招募时金币/卷轴双支付可抵扣；邮件补偿、里程商店、Boss 掉落可获得）
+        //    酒馆招募：普通=金币、稀有=普通卷、传奇=高级卷，卷轴不抵扣金币；邮件补偿、里程商店、Boss 掉落可获得）
         if (data.mercScrollCommon > 0)
         {
             entries.Add(new DisplayEntry
@@ -266,7 +266,7 @@ public static class HeroVaultSystem
                 category = 2,
                 rarityRank = 0,
                 name = "普通招募卷轴",
-                info = ItemNoticeText.Build("酒馆招募佣兵时可抵扣金币。", "持有", data.mercScrollCommon),
+                info = ItemNoticeText.Build("用于酒馆普通卷招募。", "持有", data.mercScrollCommon),
                 icon = ItemDefs.LoadIcon("item_scroll_merc_common"),
                 count = data.mercScrollCommon
             });
@@ -279,7 +279,7 @@ public static class HeroVaultSystem
                 category = 2,
                 rarityRank = 1,
                 name = "高级招募卷轴",
-                info = ItemNoticeText.Build("酒馆招募传奇佣兵专用，可抵扣金币。", "持有", data.mercScrollLegendary),
+                info = ItemNoticeText.Build("用于酒馆高级卷招募。", "持有", data.mercScrollLegendary),
                 icon = advIcon != null ? advIcon : ItemDefs.LoadIcon("item_scroll_merc_common"),
                 count = data.mercScrollLegendary
             });

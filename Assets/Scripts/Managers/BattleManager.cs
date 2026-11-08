@@ -75,6 +75,14 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 无限裂隙（冒险界面下标 2）
         if (AdventureUI.PendingEndlessRift) return BattleModes.Endless;
 
+        // 【2026-11-08 玩法隔离】走到这里＝没有任何已登记玩法分支命中。
+        // 若本局带着非主线进本意图，说明新玩法漏登记（或旧标记残留）→ 绝不静默按主线开局，
+        // 否则副本会拿 Normal 身份写主线进度/播主线剧情（历史上多次发生）。
+        if (AdventureUI.HasNonMainlineIntent)
+        {
+            Debug.LogError("[BattleManager] 进本意图未匹配任何玩法，拒绝按主线开局（检查 ResolveMode 是否漏登记新玩法）");
+            return BattleModes.Placeholder;
+        }
         return BattleModes.Normal;
     }
 

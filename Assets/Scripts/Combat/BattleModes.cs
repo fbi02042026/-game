@@ -370,7 +370,11 @@ public sealed class SideIslandBattleMode : BattleMode
             Debug.LogError("[BattleMode] 支线岛 BuildChapter 失败：ChapterManager 为空");
             return;
         }
-        cm.StartSideIsland(AdventureUI.PendingSideIsland);
+        // 【2026-11-08 同类坑补齐（照 endlessRun 快照口径）】PendingSideIsland 在 StartNewRunInternal
+        // 里已被读后即清（捕获进 SideIslandId，见 BattleManager「读完即清」段），而本方法在其之后才跑
+        //（BattleManager.cs Mode.BuildChapter）→ 实时再读恒为 0，永远钳到岛1（派到岛2/3/4 进本也全是岛1）。
+        // 改读进本捕获值 SideIslandId，与结算链同源。
+        cm.StartSideIsland(BattleManager.Instance != null ? BattleManager.Instance.SideIslandId : 0);
     }
 
     /// <summary>岛结算：发岛奖励（金币/天赋石/标记通关/派第二岛）→ 胜利结算面板 → 回城。</summary>
@@ -458,7 +462,9 @@ public sealed class FinaleBattleMode : BattleMode
             Debug.LogError("[BattleMode] 追查关 BuildChapter 失败：ChapterManager 为空");
             return;
         }
-        cm.StartFinaleStage(AdventureUI.PendingFinaleStage);
+        // 【2026-11-08 同类坑补齐（照支线岛同款）】PendingFinaleStage 已被 StartNewRunInternal 读后即清
+        //（捕获进 FinaleStageId），此处实时再读恒为 0 → 永远钳到关1。改读进本捕获值，与结算链同源。
+        cm.StartFinaleStage(BattleManager.Instance != null ? BattleManager.Instance.FinaleStageId : 0);
     }
 
     /// <summary>
@@ -520,9 +526,10 @@ public static class ActivityDungeonRules
     /// 活动副本测试总闸（2026-10-31 主人拍板：活动副本先全部开放测试）。
     /// true = 三本不区分开放日、进本不看章节通关门槛、三难度全开，方便随时进任意副本/难度测试；
     /// 显示层不受此闸旁路（主人「没达到开放条件的不要显示」），每日次数与体力消耗照常计。
-    /// 正式打包前改回 false 即恢复：按开放日（金=一三六 / 徽=二四日 / 卷=五）+ 章节门槛 + 难度逐级解锁。
+    /// 【2026-11-07 主人拍板】正式包改回 false：按开放日（金=一三六 / 徽=二四日 / 卷=五 / 礼=六）
+    /// + 章节门槛 + 难度逐级解锁。要回测试期把这一个值改回 true 即可，别在别处另开旁路。
     /// </summary>
-    public const bool TEST_OPEN_ALL = true;
+    public const bool TEST_OPEN_ALL = false;
 
     /// <summary>每日进入次数（2026-10-24 主人拍板「都是2次」，三本各自独立计数）。</summary>
     public const int DAILY_TRIES = 2;

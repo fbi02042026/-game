@@ -24,11 +24,14 @@ public class SaveSystem : Singleton<SaveSystem>
     /// 【2026-10-21 00:45 主人拍板：关掉】本次打包不清数据，玩家覆盖安装新版保留存档。
     /// 【2026-10-24 主人拍板：打开】本次打包清数据，玩家装上即从新档开始。
     /// 【2026-11-03 主人拍板：关掉】安装包不再默认清玩家数据，覆盖安装保留存档；要恢复置回 true。
+    /// 【2026-11-07 主人拍板：打开】1.0.6 正式包让装到这一版的玩家自动清档，与登录页公告
+    /// 「老存档已经清空」对齐。线上当前是 1.0.5，升到 1.0.6 时 Application.version 变化即触发。
     /// 只清一次的保证：PlayerPrefs 记 Application.version，每次启动比对，一致即 return；
     /// 版本标记在删存档文件【之前】写入并 Save，即使删档失败也不会下次重复清。
-    /// ⚠ 只对 bundleVersion（Application.version）变化生效——正式出包必须递增版本号才触发。
+    /// ⚠ 只对 bundleVersion（Application.version）变化生效——正式出包必须递增版本号才触发；
+    ///   已装过 1.0.6 测试包、且标记已写成 1.0.6 的设备不会重清（stored == current 直接 return）。
     /// </summary>
-    public const bool WipeLocalDataOnNewVersion = false;
+    public const bool WipeLocalDataOnNewVersion = true;
 
     protected override void Awake()
     {

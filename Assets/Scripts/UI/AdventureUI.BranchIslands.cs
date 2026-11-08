@@ -16,8 +16,8 @@ using UnityEditor;
 // · 岛壳（本文件，原「2 岛依次解锁」UI 保留）：主线窗口旁 2 个岛槽，依次解锁；
 //   不打则岛一直在（固定位置，不随主线窗口滑动定位而消失）
 // · 岛内容（2026-10-23 合并方案换装）：岛不再是「切到支线章打整章」——派定值 branchRoll1/2
-//   现在记**支线岛 id（1..8，SideIslandDefs）**；点岛 → 确认弹窗（10 体力 + 奖励预览）→
-//   进**单 Boss 特殊关**（SideIslandBattleMode），产出 = 固定局外金币 + 天赋石 + 装备掉落，
+//   现在记**支线岛 id（1..8，SideIslandDefs）**；点岛 → 确认弹窗（岛名 + 10 体力，不写奖励）→
+//   进**单 Boss 特殊关**（SideIslandBattleMode），产出 = 固定局外金币 + 天赋石（装备 2026-10-30 起不给），
 //   一次性打完锁（跨周目持久，SaveData.clearedSideIslandIds）
 // · 派定真源：ChapterRouteTable.EnsureForkRoll（洗牌袋，通关第 1 章派岛 1、通关该岛派岛 2；
 //   8 岛全通后洗牌袋重置开新一轮）
@@ -332,9 +332,8 @@ public partial class AdventureUI
             return;
         }
 
-        // 确认弹窗（硬规则：双按钮确认框一律走 StaminaConfirmPopup.Show）——预览消耗与产出
-        string body = $"消耗体力 {StaminaSystem.SIDE_ISLAND_COST}\n"
-                    + $"通关奖励：金币 {isl.goldReward} ＋ 天赋石 {isl.talentReward} ＋ 装备掉落";
+        // 确认弹窗（硬规则：双按钮确认框一律走 StaminaConfirmPopup.Show）——只写岛名（标题）与体力消耗，不写奖励
+        string body = $"消耗体力 {StaminaSystem.SIDE_ISLAND_COST}";
         StaminaConfirmPopup.Show($"支线岛·{isl.name}", body, "出航", () =>
         {
             // 体力不足：TrySpend 内已弹「体力不足」，这里只终止

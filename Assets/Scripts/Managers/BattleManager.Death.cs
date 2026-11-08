@@ -220,6 +220,9 @@ public partial class BattleManager
 
     public void TriggerEvacuation()
     {
+        // 默认弹窗是 DontDestroyOnLoad：玩家没点「取消」就直接撤离，框会跟着回主界面一直挂着
+        // （支线岛出航确认等）。与 FinalizeHeroDeath 死亡收尾同一口径，撤离收尾统一收掉；Close 幂等。
+        StaminaConfirmPopup.Close();
         ArenaBattleSkip.Restore();   // 跳过加速随撤离收尾恢复（timeScale=1，防带进结算/回城）
         TryGrantStageQuestGoldIfQuestComplete();
         isInBattle = false;

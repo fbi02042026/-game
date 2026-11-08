@@ -4,7 +4,7 @@ using UnityEngine;
 /// <summary>
 /// 竞技场商店（2026-10-30 主人拍板「积分版」，覆盖 v1 竞技币方案）：
 /// · 唯一货币 = 竞技场积分（SaveData.arenaPoints），🔴 禁新增第二种货币字段；
-///   扣分唯一出口 = <see cref="ArenaRules.TrySpendPoints"/>（守卫禁负数），扣积分不动换位链/排名；
+///   扣分唯一出口 = <see cref="ArenaRules.TrySpendPoints"/>（守卫禁负数），扣积分后按原名次对齐积分序、排名不变；
 /// · 货架 8 件（§三）：逐风长弓（买断）+ 莉娜/索尔/伊芙（首购本体、复购转本命碎片）+ 金币包 + 徽记包×3（周限）；
 /// · 逐风长弓 = 运行时注册的稀有弓模板（照 <see cref="ArenaSeasonWeapons.BuildTemplate"/> 先例改 baseRarity=Rare），
 ///   不落 Resources 目录 → 掉落/抽奖池（Resources.LoadAll）永远扫不到，天然「竞技场独占」；
@@ -279,7 +279,7 @@ public static class ArenaShopGoods
 
     /// <summary>
     /// 购买执行（货架点击确认后的唯一入口）：
-    /// 校验（买断/满星/周限/余额）→ 扣积分（ArenaRules.TrySpendPoints，守卫禁负数、不动排名）
+    /// 校验（买断/满星/周限/余额）→ 扣积分（ArenaRules.TrySpendPoints，守卫禁负数；扣后按原名次对齐积分序、排名不变）
     /// → 按货架发放（弓=GrantEquip 进 legacyEquipPool；佣兵首购=UnlockMerc 入册、复购=转本命碎片；
     ///   金币=ResourceWallet；徽记=MercGrowInventory）→ 落盘。
     /// 发放失败退回积分不落账，可重试（照里程商店口径）。msg 带结果文案给调用方 toast。

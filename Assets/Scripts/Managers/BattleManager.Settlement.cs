@@ -111,10 +111,11 @@ public partial class BattleManager
     void GrantStageClues()
     {
         if (currentStage == null) return;
-        // 【2026-10-31】支线岛不发主线线索页：岛的 currentChapter 只是「背景篇」，不是玩家进度。
-        // 目前 OnStageCleared 各 case 都带 stageIndex>=1 的门槛（岛恒为 0）才没漏，
-        // 但那是巧合 —— 以后谁加一条不带门槛的 case，打岛就会白送主线线索。这里显式挡住。
-        if (IsSideIsland) return;
+        // 【2026-11-08 不留隐患】主线线索页只属于主线正式关（Mode=Normal）。
+        // 原写法只挡支线岛 + 难度，靠「OnStageCleared 各 case 带 stageIndex>=1 门槛」巧合没漏；
+        // 但 OnEliteFirstKill(chapter) 没有门槛（StoryClue.cs:231），徽记本(ch2)/卷轴·礼物本(ch6)/
+        // 羁绊本(ch7) 单场 Elite 通关会白送 C04/C15/C19。改按模式身份单一出口，不靠关型巧合。
+        if (!IsFormalMainRun) return;
         // 【2026-11-05 难度隔离·必修】困难/噩梦局不发主线线索页：该局的 currentChapter 只是「打哪篇」的玩法参数，
         // 不是普通主线进度。线索页属于普通主线内容，难度局一律不写（唯一出口见 NormalOnlyContentAllowed）。
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return;
@@ -223,10 +224,19 @@ public partial class BattleManager
 
     bool ShouldPlayChapter1Ending()
     {
+        // 【2026-11-08 玩法隔离】只放行主线正式关与引导局（引导局第 1 章结局是设计内，故不能用 !IsFormalMainRun）。
+        if (Mode == null || (Mode.Id != BattleModeId.Normal && Mode.Id != BattleModeId.Tutorial)) return false;
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：Boss 记录点层直接发奖励
+        // 【2026-11-08 不留隐患】竞技场/活动本（含羁绊本）不接第 1 章结局剧情。
+        // 原来靠「副本关都是 Elite、本判定要求 Boss」巧合挡住；不能用 !IsFormalMainRun ——
+        // 引导局（Tutorial）是设计内要播第 1 章结局的，只能按副本模式显式挡。
+        if (IsArena || IsActivityDungeon) return false;
         // 【2026-11-05 难度隔离·必修】困难/噩梦局不播主线剧情：难度只改变怪物强度与奖励，
         // 不是主线进度。剧情状态（TutorialDone/Chapter1ChoiceDone/endingChoice/PreStorySeen）只允许普通局写。
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
+        // 【2026-11-08 口径统一】与 ShouldPlayChapterStory 的 IsFinale 门对齐：终章两关 act=8+Boss，
+        // 原判据靠 Chapter1ChoiceDone / CurrentChapter>1 天然挡住；补显式门不再依赖章号巧合，零行为变化。
+        if (IsFinale) return false;
         // 【2026-10-31 修】支线岛 1 的 currentChapter 也是 1 + Boss 关，条件里只看「第 1 章选边做完没」——
         // 一旦哪天派岛早于选边，打岛 1 就会把第 1 章结局整段演出来。支线岛一律不接主线节点。
         if (IsSideIsland) return false;
@@ -284,7 +294,14 @@ public partial class BattleManager
     /// <summary>叙事 V2.0：第 2–8 章 Boss 后的关键对话节点（含第 7 章转折点与第 8 章结局）。</summary>
     bool ShouldPlayChapterStory()
     {
+        // 【2026-11-08 玩法隔离·单一出口】主线战后剧情只属于主线正式关（Mode=Normal）。
+        // 非主线玩法一律走自己的链（支线岛 IslandStoryBeats / 终章 FinaleBattleMode），下方旧 if 保留为纵深。
+        if (!IsFormalMainRun) return false;
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：记录点层只弹「撤离/继续」双选
+        // 【2026-11-08 不留隐患】竞技场/活动本（含羁绊本）不接主线战后剧情。
+        // 原来只靠「非主线关都是 Elite、本判定要求 Boss」巧合挡住；哪天某副本改 Boss 型就会串 N6/N8，
+        // 甚至触发第 7 章不可逆的 endingChoice。按模式身份显式挡（与 ShouldPlayChapter1Ending 同口径）。
+        if (IsArena || IsActivityDungeon) return false;
         // 【2026-11-05 难度隔离·必修】难度局不播 ChapterStoryBeats（其中包括第 7 章 N7 三选一）——
         // endingChoice 是不可逆字段，绝不能被困难/噩梦写掉。
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
@@ -398,8 +415,16 @@ public partial class BattleManager
     /// </summary>
     bool ShouldPlayPreBattleStory()
     {
+        // 【2026-11-08 玩法隔离·单一出口】主线战前剧情只属于主线正式关（Mode=Normal）。
+        // 副本/裂隙/竞技场/支线岛/终章/未登记新玩法一律不播，也不写 MarkPreStorySeen；
+        // 下方逐模式旧 if 保留为防御纵深，行为不变。
+        if (!IsFormalMainRun) return false;
         if (IsEndlessRift) return false;   // 无限裂隙不播剧情（2026-10-18 主人拍板）：进层直接开抽奖
         if (IsActivityDungeon) return false;   // 活动副本不播主线战前剧情，也不写 MarkPreStorySeen 污染主线进度
+        // 【2026-11-08】竞技场场景章由 StartArena 随机 1~8 且 currentStageIndex=0，
+        // 不挡会误命中主线战前剧情（随机到 8 就是「永霜雪境」剧透，还会写 MarkPreStorySeen 污染主线进度）。
+        // 与无限裂隙 / 活动副本 / 支线岛同属「非主线章节进本归零」口径。
+        if (IsArena) return false;
         // 【2026-11-05 难度隔离·必修】难度局不播战前主线剧情 —— 连带 MarkPreStorySeen 也不会被写
         // （标记只在 ShouldPlayPreBattleStory 通过且实际开播后写，见 CoPreBattleStoryThenFirstWave :417）。
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;
@@ -2246,9 +2271,10 @@ public partial class BattleManager
         Analytics.StageEnd(ch, currentStage != null ? currentStage.stageIndex : 0, true,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡通关（胜利）
         bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
-        // 竞技场不接主线冒险日志碎片（2026-10-31：它的章号是 1~8 随机场景，白掉碎片会污染主线收集进度）
-        // 【2026-11-05 难度隔离·必修】难度局同样不掉：碎片属普通主线收集内容（唯一出口 NormalOnlyContentAllowed）。
-        if (!IsArena && NormalOnlyContentAllowed(BattleDifficulty))
+        // 【2026-11-08 不留隐患】冒险日志碎片是普通主线收集内容，只认主线正式关（Mode=Normal）。
+        // 原写法只挡竞技场（10-31：随机章号会污染收集进度），活动本/羁绊/支线岛/终章/裂隙的题材章号
+        // 同样不是玩家进度。难度局仍由 NormalOnlyContentAllowed 唯一出口挡。
+        if (IsFormalMainRun && NormalOnlyContentAllowed(BattleDifficulty))
             AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
 
         // 通关结算交给模式：核心不需要知道一共有几种玩法、各自发什么、之后去哪。
