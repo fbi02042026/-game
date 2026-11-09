@@ -29,6 +29,11 @@ public class GlobalToastUI : MonoBehaviour
     GameObject _root;
     RectTransform _rootRt;
     Vector2 _basePos;
+    // 【2026-11-09】普通 toast（含任务奖励汇总队列）整体上移 30 设计像素；
+    // 战斗飞字 ShowFlythrough 仍走 _basePos 原位。两个基准都在 Build 里一次算好，
+    // CoPlay 用 _toastBasePos、CoFlythrough 用 _basePos，不再各写偏移。
+    const float ToastLiftPx = 30f;
+    Vector2 _toastBasePos;
     Coroutine _co;
     Canvas _canvas;
 
@@ -48,7 +53,7 @@ public class GlobalToastUI : MonoBehaviour
         }
         if (_instance._cg != null) _instance._cg.alpha = 0f;
         if (_instance._root != null) _instance._root.SetActive(false);
-        if (_instance._rootRt != null) _instance._rootRt.anchoredPosition = _instance._basePos;
+        if (_instance._rootRt != null) _instance._rootRt.anchoredPosition = _instance._toastBasePos;
     }
 
     public static void Show(string msg) => Show(msg, false, ToastTone.Plain);
@@ -246,6 +251,7 @@ public class GlobalToastUI : MonoBehaviour
         _rootRt.pivot = new Vector2(0.5f, 0.5f);
         _rootRt.sizeDelta = new Vector2(560f, 72f);
         _basePos = new Vector2(0f, 20f);
+        _toastBasePos = _basePos + new Vector2(0f, ToastLiftPx);
         _rootRt.anchoredPosition = _basePos;
         var plate = _root.GetComponent<Image>();
         plate.color = new Color(0.08f, 0.07f, 0.1f, 0.6f);
@@ -312,7 +318,7 @@ public class GlobalToastUI : MonoBehaviour
             plate.color = new Color(0.08f, 0.07f, 0.1f, 0.6f);
         _root.SetActive(true);
         _root.transform.SetAsLastSibling();
-        if (_rootRt != null) _rootRt.anchoredPosition = _basePos;
+        if (_rootRt != null) _rootRt.anchoredPosition = _toastBasePos;
 
         _cg.alpha = 0f;
         float t = 0f;
@@ -340,12 +346,12 @@ public class GlobalToastUI : MonoBehaviour
             float ease = 1f - (1f - u) * (1f - u);
             _cg.alpha = 1f - u;
             if (_rootRt != null)
-                _rootRt.anchoredPosition = _basePos + new Vector2(0f, rise * ease);
+                _rootRt.anchoredPosition = _toastBasePos + new Vector2(0f, rise * ease);
             yield return null;
         }
 
         _cg.alpha = 0f;
-        if (_rootRt != null) _rootRt.anchoredPosition = _basePos;
+        if (_rootRt != null) _rootRt.anchoredPosition = _toastBasePos;
         _root.SetActive(false);
         _co = null;
         PlayNextQueued();   // 【2026-11-06】coroutine 收尾：队列非空就接播下一条（上飘淡出后从原位淡入）

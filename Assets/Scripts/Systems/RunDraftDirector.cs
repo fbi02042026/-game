@@ -739,37 +739,41 @@ public class RunDraftDirector : MonoBehaviour
         if (bm == null || !bm.IsBondDungeon) return;
         string hid = bm.BondMercHireId;
         if (string.IsNullOrEmpty(hid) || !MercRosterDefs.TryGetByHireId(hid, out var def)) return;
-        if (RunLoadout.HasMerc(hid)) return;   // 玩家本就带着 → 不动
 
-        // 【2026-11-03 修正】养成等级不再塞进局内 level：局内基底恒 Lv1，养成等级只由 trainLevel 承载；
-        // 养成收益唯一生效口 = Mercenary.ApplyGrowBonus（按 hireId 读存档累计资质），避免等级基底与资质乘区双吃。
-        int trainLevel = Mathf.Max(1, MercGrowSystem.LevelOf(hid));
-        // 星级与战斗抽卡同一出口（MercStarSystem.InRunStarOf）：0 星/未拥有按 ★1 档，项目统一口径；
-        // 局外星级带来的攻防加成另由 Mercenary.ApplyOutStarBonus 按存档 outStar 乘（0 星 = 不加成）。
-        int star = MercStarSystem.InRunStarOf(hid);
-        var md = BuildMercData(def.AssetId, hid, 1, star);
-        if (md == null) return;
-        var entry = new RunMercEntry
-        {
-            hireId = md.hireId, mercId = md.mercId, displayName = md.displayName,
-            nickname = md.nickname, level = md.level, star = md.star, trainLevel = trainLevel,
-            skillId = md.skillId, passiveSkillId = md.passiveSkillId
-        };
+        // 【T7 2026-11-09】队伍只有玩家 + 该佣兵：RestoreRunMercs 恢复出来的其它佣兵
+        // 连账本带场上单位一起清掉（ClearAllMercs 只清佣兵，不碰玩家 Hero）。
+        var existing = RunLoadout.Mercs();
+        RunMercEntry bond = null;
+        for (int i = 0; i < existing.Count; i++)
+            if (existing[i] != null && existing[i].hireId == hid) { bond = existing[i]; break; }
+        existing.Clear();
+        MercenaryManager.Instance?.ClearAllMercs();
 
-        if (RunLoadout.TryAddMerc(entry))
+        RunMercEntry entry = bond;
+        if (entry == null)
         {
-            SpawnRunMerc(entry);
-        }
-        else if (RunLoadout.IsMercFull)
-        {
-            // 满员：顶掉最后一位，保证羁绊佣兵必在场上（一次性专属关，可接受）
-            var mercs = RunLoadout.Mercs();
-            if (mercs.Count > 0)
+            // 【2026-11-03 修正】养成等级不再塞进局内 level：局内基底恒 Lv1，养成等级只由 trainLevel 承载；
+            // 养成收益唯一生效口 = Mercenary.ApplyGrowBonus（按 hireId 读存档累计资质），避免等级基底与资质乘区双吃。
+            int trainLevel = Mathf.Max(1, MercGrowSystem.LevelOf(hid));
+            // 星级与战斗抽卡同一出口（MercStarSystem.InRunStarOf）：0 星/未拥有按 ★1 档，项目统一口径；
+            // 局外星级带来的攻防加成另由 Mercenary.ApplyOutStarBonus 按存档 outStar 乘（0 星 = 不加成）。
+            int star = MercStarSystem.InRunStarOf(hid);
+            var md = BuildMercData(def.AssetId, hid, 1, star);
+            if (md == null) return;
+            entry = new RunMercEntry
             {
-                RunLoadout.ReplaceMercAt(mercs.Count - 1, entry);
-                SpawnRunMerc(entry);
-            }
+                hireId = md.hireId, mercId = md.mercId, displayName = md.displayName,
+                nickname = md.nickname, level = md.level, star = md.star, trainLevel = trainLevel,
+                skillId = md.skillId, passiveSkillId = md.passiveSkillId
+            };
         }
+
+        if (!RunLoadout.TryAddMerc(entry))
+        {
+            Debug.LogError("[RunDraftDirector] 羁绊副本清空队伍后仍无法加入 " + hid + "（账本被改过？）");
+            return;   // 缺真值 LogError，不兜底
+        }
+        SpawnRunMerc(entry);
     }
 
     static Mercenary FindOutMerc(string hireIdOrMercId)

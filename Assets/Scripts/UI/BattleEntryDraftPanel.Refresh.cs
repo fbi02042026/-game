@@ -41,8 +41,8 @@ public partial class BattleEntryDraftPanel
         bool free = freeLeft > 0;
         bool arenaQuotaMode = BattleManager.Instance != null && BattleManager.Instance.IsArena;
         // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本（金币/徽记/卷轴/礼物）全免费：
-        // 随机抽共用模式免费额度（5 次），定向各限 1 次（真源 SlotMachineSystem.ActivityFocusLeft）；
-        // 用完即置灰（「抽一次后变灰」），全程不显示币价/币图标/「还差N」。
+        // 所有抽奖（随机 + 三个定向）共用模式给的 5 次总名额，定向另受每类 1 次限制
+        //（真源 SlotMachineSystem.ActivityFocusLeft）；名额用完即置灰，全程不显示币价/币图标/「还差N」。
         bool activityQuotaMode = BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon;
         for (int i = 0; i < _slots.Count; i++)
         {
@@ -51,7 +51,7 @@ public partial class BattleEntryDraftPanel
             bool isRandom = !s.Cat.HasValue;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
             bool slotFree = activityQuotaMode
-                ? has && (isRandom ? freeLeft > 0 : SlotMachineSystem.ActivityFocusLeft(s.Cat.Value) > 0)
+                ? has && freeLeft > 0 && (isRandom || SlotMachineSystem.ActivityFocusLeft(s.Cat.Value) > 0)
                 : free && (arenaQuotaMode || isRandom);
             // 价格与余额都按<b>各自币种</b>算：
             // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
@@ -151,7 +151,6 @@ public partial class BattleEntryDraftPanel
         var bm = BattleManager.Instance;
         if (bm != null && bm.IsTutorialRun) return;
         StopIdleGuide();
-        _idleGuideCo = StartCoroutine(CoIdleGuide());
     }
 
     void OnContinueClicked()

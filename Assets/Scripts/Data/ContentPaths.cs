@@ -75,6 +75,8 @@ public static class ContentPaths
         public const string DailyLogin = "Data/Tables/daily_login";
         /// <summary>节日 / 特定日登录奖励覆盖（CSV → .bytes，见 daily_login_special.csv）。仅覆盖新手格当天奖励，命中当天整条替换；date 支持 MM-DD（年年生效）与 YYYY-MM-DD（仅该年）。</summary>
         public const string DailyLoginSpecial = "Data/Tables/daily_login_special";
+        /// <summary>跑酷配表（run_track.csv）：地形 / 数值 / 7 种波次模板，加载器 RunTrackTable.cs。</summary>
+        public const string RunTrack = "Data/Tables/run_track";
     }
 
     public static class Icons

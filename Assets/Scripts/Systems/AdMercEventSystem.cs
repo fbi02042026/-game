@@ -8,7 +8,7 @@ using UnityEngine;
 /// 🔴 计数铁律（主人原话「看广告这个一定要累计好 没有功能的不要累计」）：
 ///   ① 只有 <see cref="RewardedAdBridge"/> 回调 success（核验通过）才计数——点击按钮、
 ///      拉起广告、中途关闭统统不算；
-///   ② 每看满 <see cref="AdMercEventDefs.AdsPerDay"/>(3) 个成功广告 +1 天，**当天再看不累计**
+///   ② 每看满当天所需的成功广告（2026-11-09 拍板：3 起步每天 +2，按累计已计天数）才 +1 天，**当天再看不累计**
 ///      （每天最多记 1 天，2026-10-31 主人修正「当天看够3个累计1天再看也不累计」）；
 ///      累计制【非】连续制——某天没看不清零不扣减，之后哪天看了接着 +1 天（隔天看也算，
 ///      2026-10-31 主人原话「第二天没看 第三天看了也算第二天」）；
@@ -62,16 +62,19 @@ public static class AdMercEventSystem
         {
             d.adMercEventDayKey = TodayKey();
             d.adMercEventTodayAds = 0;
+            d.adMercEventTodayNeed = 0;
         }
+        if (d.adMercEventTodayNeed <= 0)
+            d.adMercEventTodayNeed = AdMercEventDefs.AdsNeededForDays(d.adMercEventDays);
         d.adMercEventTodayAds++;
-        // 看满 3 个 → 计 1 天（当天只记这一次）
-        if (d.adMercEventTodayAds == AdMercEventDefs.AdsPerDay
+        // 看满当天所需 → 计 1 天（当天只记这一次）
+        if (d.adMercEventTodayAds >= TodayNeed()
             && d.adMercEventDays < AdMercEventDefs.MaxDay)
         {
             d.adMercEventDays++;
         }
         SaveSystem.Instance.Save();
-        Debug.Log($"[AdMercEvent] 广告累计（placement={placement}）今日 {d.adMercEventTodayAds}/{AdMercEventDefs.AdsPerDay} 个，累计天数 = {d.adMercEventDays}（累计制：隔天看也接着算）");
+        Debug.Log($"[AdMercEvent] 广告累计（placement={placement}）今日 {d.adMercEventTodayAds}/{d.adMercEventTodayNeed} 个，累计天数 = {d.adMercEventDays}（累计制：隔天看也接着算）");
         RefreshRedDots();
     }
 
@@ -79,20 +82,30 @@ public static class AdMercEventSystem
     // 状态查询（UI / 红点共用）
     // ============================================================
 
-    /// <summary>当日已看成功的活动广告次数（每天最多涨到 AdsPerDay——CanWatchToday 在记满 1 天后封口；跨天读 0，不回写存档）。</summary>
+    /// <summary>当日已看成功的活动广告次数（每天最多涨到当天所需——CanWatchToday 在记满 1 天后封口；跨天读 0，不回写存档）。</summary>
     public static int TodayAdCount()
     {
         var d = Data;
         return d != null && d.adMercEventDayKey == TodayKey() ? d.adMercEventTodayAds : 0;
     }
 
-    /// <summary>今日轮内已看次数（0..AdsPerDay，即「当天已看广告 x/3」的 x；记满 1 天后停在 3 不再涨）。</summary>
-    public static int TodayAdProgress()
-        => Mathf.Min(TodayAdCount(), AdMercEventDefs.AdsPerDay);
+    /// <summary>今天计 1 天所需的成功广告次数：当天已开始计数则读跨天锁定的 adMercEventTodayNeed，否则按累计已计天数现算（老档 need==0 的迁移路径）。</summary>
+    public static int TodayNeed()
+    {
+        var d = Data;
+        if (d == null) return AdMercEventDefs.AdsNeededForDays(0);
+        return d.adMercEventDayKey == TodayKey() && d.adMercEventTodayNeed > 0
+            ? d.adMercEventTodayNeed
+            : AdMercEventDefs.AdsNeededForDays(d.adMercEventDays);
+    }
 
-    /// <summary>今天是否已看满 3 个（= 今日的 1 天已记上）。记满后当天再点看广告也不累计。</summary>
+    /// <summary>今日轮内已看次数（0..当天所需，即「当天已看广告 x/N」的 x；记满 1 天后停在当天所需不再涨）。</summary>
+    public static int TodayAdProgress()
+        => Mathf.Min(TodayAdCount(), TodayNeed());
+
+    /// <summary>今天是否已看满当天所需（= 今日的 1 天已记上）。记满后当天再点看广告也不累计。</summary>
     public static bool IsDayCountedToday()
-        => TodayAdCount() >= AdMercEventDefs.AdsPerDay;
+        => TodayAdCount() >= TodayNeed();
 
     /// <summary>
     /// 累计天数 → 进度条 fillAmount（主人在 AdMercEventPanel 手调的锚点 0.15/0.4/0.65/0.95，
@@ -164,7 +177,7 @@ public static class AdMercEventSystem
         if (!GameConfig.ADS_ENABLED) return false;   // 广告未接入期间活动整体折叠（入口也点不动）
         var d = Data;
         if (d == null) return false;
-        if (d.adMercEventDayKey == TodayKey() && d.adMercEventTodayAds >= AdMercEventDefs.AdsPerDay)
+        if (d.adMercEventDayKey == TodayKey() && d.adMercEventTodayAds >= TodayNeed())
             return false;   // 今日 1 天已记满，明天再来看（当天多看不计）
         if (d.adMercEventDays >= AdMercEventDefs.MaxDay) return false;   // 攒满了，无可攒
         if (AllClaimed()) return false;                                  // 全领完，双保险

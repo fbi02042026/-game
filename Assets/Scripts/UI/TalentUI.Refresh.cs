@@ -426,7 +426,7 @@ public partial class TalentUI
             var rt = dot.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(36f, 36f);
+            rt.sizeDelta = new Vector2(RedDot.DefaultSize, RedDot.DefaultSize);
             rt.anchoredPosition = new Vector2(-12f, -12f);
             var img = dot.GetComponent<Image>();
             img.sprite = RedDot.Sprite;

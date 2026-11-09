@@ -9,11 +9,20 @@ using UnityEditor;
 /// <summary>
 /// 红点键：谁需要提醒就 Set(key, true)。
 /// 图标上挂 UIRedDot 并填 key，或运行时 RedDot.Bind(icon, key)。
+/// 【2026-11-09 主人「必须统一 以后都统一」】全工程红点只有两个出口：
+/// 贴图 = <see cref="Sprite"/>、尺寸 = <see cref="DefaultSize"/>。
+/// 新增红点一律走这两个，禁止另设 sprite、禁止写死尺寸、禁止再引入第三张红点图；
+/// prefab 里手摆的红点图也由代码按本出口覆盖，不另开加载路径。
 /// </summary>
 public static class RedDot
 {
     const string ArtPath = "Assets/Art/UI/Common/红点.png";
     const string ResourcesPath = "UI/Common/红点";
+
+    /// <summary>入口红点统一尺寸：以「冒险日志」入口 30.8 为准
+    /// （2026-11-09 主人「把其他地方的大小按冒险日志统一」）。
+    /// 单一真源：RedDot.Bind 默认尺寸与 UIRedDot.size 都读它，调用处不再写死数字。</summary>
+    public const float DefaultSize = 30.8f;
 
     static readonly Dictionary<string, bool> _flags = new Dictionary<string, bool>();
     static readonly Dictionary<string, List<UIRedDot>> _views = new Dictionary<string, List<UIRedDot>>();
@@ -131,7 +140,7 @@ public static class RedDot
     }
 
     /// <summary>给任意图标右上角挂红点（没有则创建）</summary>
-    public static UIRedDot Bind(Transform icon, string key, Vector2? offset = null, float size = 44f)
+    public static UIRedDot Bind(Transform icon, string key, Vector2? offset = null, float size = DefaultSize)
     {
         if (icon == null || string.IsNullOrEmpty(key)) return null;
         var existing = icon.GetComponentInChildren<UIRedDot>(true);

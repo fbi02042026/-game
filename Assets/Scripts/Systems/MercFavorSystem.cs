@@ -6,9 +6,9 @@ using System.Collections.Generic;
 ///
 /// 单一出口原则：
 /// - 好感值本体 = SaveData.mercTrust（与酒馆闲话 +1 共用一套成长，加值只走 SaveData.AddMercTrust）。
-/// - 每日对话（2026-10-26 晚拍板修订）：每名佣兵每天 <see cref="MercFavorDefs.TalksPerDay"/> 次机会、
-///   一次选一个答案；分值不展示——每天轮换一个「特殊答案」（+<see cref="MercFavorDefs.SpecialFavor"/>），
-///   其余为普通答案（+<see cref="MercFavorDefs.NormalFavor"/>）；跨天按本地日历日 0 点清零
+/// - 每日对话（2026-11-09 口径）：一天一轮、一轮一问、一次只选一个答案；三个答案分别对应
+///   +10 / +5 / +0 三档回报（<see cref="MercFavorDefs.TalkTierAt"/>），按 天+佣兵 轮换挂槽、分值不展示、
+///   选完才揭晓；+10 档额外回 1 个普通品质礼物。跨天按本地日历日 0 点清零
 ///   （日键 <c>SaveData.favorTalkDayKey</c>，已聊记录 = "hireId:序号"，一次一条）。
 /// - 送礼：扣 <c>SaveData.favorGifts</c> 加好感（礼物表 <see cref="MercFavorDefs.Gifts"/>）。
 /// - 羁绊地图：好感满 <see cref="MercFavorDefs.FavorMax"/> 解锁；通关标记 <c>SaveData.favorBondClearedIds</c>
@@ -59,32 +59,34 @@ public static class MercFavorSystem
         => TalkedCount(d, hireId) < MercFavorDefs.TalksPerDay;
 
     /// <summary>
-    /// 今天的「特殊答案」在哪个槽（0..2）：按 天+佣兵 确定性轮换，同一天内不变、跨天换位，
-    /// 玩家无法靠记位置刷分，只能猜哪个答案最对佣兵胃口。
+    /// 今天三档回报分别落在哪个答案槽：按 天+佣兵 确定性轮换（循环移位，保证 +10/+5/+0 各占一槽），
+    /// 同一天内不变、跨天换位；界面不展示分值，选中后才揭晓。
     /// </summary>
-    public static int SpecialSlotOf(SaveData d, string hireId)
+    public static int TalkTierOfSlot(SaveData d, string hireId, int slot)
     {
-        int h = 0;
-        for (int i = 0; i < hireId.Length; i++) h = h * 31 + hireId[i];
-        return (Math.Abs(TodayKey() + h)) % MercFavorDefs.DialogueOptionCount;
+        long h = 0;
+        if (!string.IsNullOrEmpty(hireId))
+            for (int i = 0; i < hireId.Length; i++) h = h * 31 + hireId[i];
+        long seed = (long)TodayKey() * 31 + h;
+        if (seed < 0) seed = -seed;
+        return (int)((slot + seed) % MercFavorDefs.DialogueOptionCount);
     }
 
-    /// <summary>指定答案槽本次加多少好感（特殊槽 = SpecialFavor，其余 = NormalFavor）。</summary>
+    /// <summary>指定答案槽本次加多少好感（三档每天轮换，唯一出口）。</summary>
     public static int FavorOfSlot(SaveData d, string hireId, int slot)
-        => slot == SpecialSlotOf(d, hireId) ? MercFavorDefs.SpecialFavor : MercFavorDefs.NormalFavor;
+        => MercFavorDefs.TalkTierAt(TalkTierOfSlot(d, hireId, slot));
 
     /// <summary>
-    /// 执行一次对话：加好感 + 记一次（2026-10-26 晚口径：每天 3 次、一次选一个）。
-    /// 返回本次实际增量（加完后的总好感 - 加之前的总好感）；-1 = 今天次数已用完 / 好感已满（不可执行）。
-    /// 【2026-10-26 主人拍板「对话完可以随机获得」】当日第 3 次聊完时随机回 1 个礼物
-    /// （grantedGiftId 带出，Toast 由 GrantRandomGift 自己弹；无回礼 = null）。
+    /// 执行一次对话：加好感 + 记一次（一天一轮、一次选一个答案）。
+    /// 返回本次实际增量（加完后的总好感 - 加之前的总好感）；-1 = 今天已聊 / 好感已满（不可执行）。
+    /// +10 档额外回 1 个普通品质礼物（grantedGiftId 带出，Toast 由 GrantRandomGift 自己弹）。
     /// 调用方负责存档（SaveSystem.Instance.Save()）与刷新 UI。
     /// </summary>
     public static int Talk(SaveData d, string hireId, int slot, out string grantedGiftId)
     {
         grantedGiftId = null;
         if (d == null || string.IsNullOrEmpty(hireId)) return -1;
-        // 【2026-11-04 主人拍板】好感已满：对话不再吃次数、不加好感（返回 -1，调用方提示「好感已满」）
+        // 好感已满：对话不再吃次数、不加好感（返回 -1，调用方提示「好感已满」）
         if (IsBondOpen(d, hireId)) return -1;
         if (!CanTalk(d, hireId)) return -1;
         if (slot < 0 || slot >= MercFavorDefs.DialogueOptionCount) return -1;
@@ -92,12 +94,13 @@ public static class MercFavorSystem
         int before = d.GetMercTrust(hireId);
 
         d.favorTalkedToday.Add(TalkKey(hireId, TalkedCount(d, hireId)));
-        // 【2026-11-04 主人拍板】对话加值同样封顶 60（差 1 点选 +5 特殊答案只加 1）
+        // 对话加值同样封顶 60（差 1 点选 +10 档只加 1）
+        int tierFavor = FavorOfSlot(d, hireId, slot);
         int room = MercFavorDefs.FavorMax - before;
-        int after = d.AddMercTrust(hireId, Math.Min(FavorOfSlot(d, hireId, slot), room));
+        int after = d.AddMercTrust(hireId, Math.Min(tierFavor, room));
 
-        // 今日 3 次全部聊完 → 随机回礼 1 个（发放口 = GrantRandomGift 唯一出口）
-        if (TalkedCount(d, hireId) >= MercFavorDefs.TalksPerDay) grantedGiftId = GrantRandomGift();
+        // 最高档额外回 1 个普通品质礼物（发放口 = GrantRandomGift 唯一出口，不多开第二条发放链）
+        if (tierFavor == MercFavorDefs.BestTalkFavor) grantedGiftId = GrantRandomGift(commonOnly: true);
         return after - before;
     }
 
@@ -106,13 +109,14 @@ public static class MercFavorSystem
     // —— 礼物 ——
 
     /// <summary>
-    /// 随机发 1 个礼物（唯一发放口；【2026-10-26 主人拍板】来源 = 每日对话聊完回礼 + 礼物副本掉落）。
+    /// 随机发 1 个礼物（唯一发放口；来源 = 对话 +10 档回礼 + 礼物副本掉落）。
     /// 每日回礼默认 <c>includeLegendary=false</c>：传奇礼物只在副本 / 里程商店获得，不走对话回礼。
+    /// <paramref name="commonOnly"/> = true 时只从普通品质池抽（对话最高档回礼用）。
     /// 发放 + 落盘 + force Toast。返回礼物 id；null = 存档未就绪（不发不吞，照副本掉落口径）。
     /// </summary>
-    public static string GrantRandomGift()
+    public static string GrantRandomGift(bool commonOnly = false)
     {
-        var granted = GrantRandomGifts(1, false);
+        var granted = GrantRandomGifts(1, false, commonOnly);
         if (granted == null || granted.Count == 0) return null;
         foreach (var kv in granted) return kv.Key;   // count=1 只有一个
         return null;
@@ -122,9 +126,10 @@ public static class MercFavorSystem
     /// 随机发 n 个礼物（批量发放唯一出口；礼物副本结算用，一次结算只弹一条 Toast）。
     /// <paramref name="includeLegendary"/> = false 时跳过传奇礼物（每日对话回礼用）；
     /// = true 时全品质都可掉（礼物副本 / 羁绊副本等「副本」来源用，传奇只在副本获得）。
+    /// <paramref name="commonOnly"/> = true 时只发普通品质（对话 +10 档回礼用）。
     /// 发放 + 落盘 + force Toast「获得礼物 面包×2、苹果×1」。返回 各礼物发放数（id→数量）；null = 存档未就绪。
     /// </summary>
-    public static Dictionary<string, int> GrantRandomGifts(int count, bool includeLegendary)
+    public static Dictionary<string, int> GrantRandomGifts(int count, bool includeLegendary, bool commonOnly = false)
     {
         if (count <= 0) return null;
         var d = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
@@ -132,11 +137,17 @@ public static class MercFavorSystem
         var gifts = MercFavorDefs.Gifts;
         // 【2026-10-27 主人拍板】传奇礼物只在副本获得：回礼时只从非传奇池抽
         int[] pool = null;
-        if (!includeLegendary)
+        if (!includeLegendary || commonOnly)
         {
             var tmp = new System.Collections.Generic.List<int>();
             for (int i = 0; i < gifts.Length; i++)
-                if (!MercFavorDefs.IsLegendary(gifts[i])) tmp.Add(i);
+            {
+                if (commonOnly)
+                {
+                    if (gifts[i].Quality == MercFavorDefs.GiftQuality.Common) tmp.Add(i);
+                }
+                else if (!MercFavorDefs.IsLegendary(gifts[i])) tmp.Add(i);
+            }
             pool = tmp.Count > 0 ? tmp.ToArray() : null;   // 极端情况（表里全传奇）兜底退全池
         }
         var granted = new Dictionary<string, int>();
@@ -183,5 +194,8 @@ public static class MercFavorSystem
         return after - before;
     }
 
-    static int TodayKey() => int.Parse(DateTime.Now.ToString("yyyyMMdd"));
+    /// <summary>按本地日历日算日键（唯一出口；题库按日轮换与跨天清零共用）。</summary>
+    public static int DayKey(DateTime day) => int.Parse(day.ToString("yyyyMMdd"));
+    public static int TodayKey() => DayKey(DateTime.Now);
+    public static int TomorrowKey() => DayKey(DateTime.Now.AddDays(1));
 }

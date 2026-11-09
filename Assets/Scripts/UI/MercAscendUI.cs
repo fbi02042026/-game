@@ -293,7 +293,7 @@ public class MercAscendUI : MonoBehaviour
             if (_starUpImg != null) _starUpImgBase = _starUpImg.color;   // 记 authored 底色，灰显还原用
             _costLabel = _starUpBtn.transform.Find("Label")?.GetComponent<Text>();
             if (_costLabel == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/Label（消耗数字 Text）");
-            else PurchasePriceStyle.Apply(_costLabel);   // 2026-11-08：购买数字统一样式（暖金由 Fill 设；字号/排版一个值不动）
+            else PurchasePriceStyle.Apply(_costLabel, outlineColor: PurchasePriceStyle.SoftOutlineColor);   // 2026-11-09：亮黄绿底上纯黑描边偏硬，只这个「×N」走半透浅描边；字号/排版/三态文字色一个值不动
             _costIcon = _starUpBtn.transform.Find("icon")?.GetComponent<Image>();
             if (_costIcon == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/icon（金币/钻石图标 Image）");
         }
@@ -718,9 +718,13 @@ public class MercAscendUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 攻/魔攻行二选一显示（2026-10-22 主人拍板；2026-11-08 主人拍板修正显隐写反）：RowRootNames 顺序下 5=AttrAtkRoot、6=AttrMagicAtkRoot。
-    /// 物攻佣兵（magic=false）隐藏魔攻行；魔攻佣兵隐藏物攻行；保留的一侧显式 SetActive(true) 防复用残留。
-    /// 口径唯一出口同 MercObtainPopupUI.Fill：!magic → AttrAtkRoot，magic → AttrMagicAtkRoot。
+    /// 攻/魔攻、防/魔防两组各二选一显示（2026-10-22 主人拍板；2026-11-08 主人拍板修正显隐写反）；
+    /// RowRootNames 顺序下 2=AttrMagicDefRoot、4=AttrDefRoot、5=AttrAtkRoot、6=AttrMagicAtkRoot。
+    /// 物攻佣兵（magic=false）显示攻击/防御、隐藏魔攻/魔防；法术佣兵反之。保留的一侧显式 SetActive(true) 防复用残留。
+    /// 口径唯一出口同 MercObtainPopupUI.Fill.cs:237-240（法术型只换标签，数值同源）。
+    /// 【2026-11-09】补防/魔防这一组：预制体 AttrDefRoot 与 AttrMagicDefRoot 的 y 都是 -1.5（完全重叠），
+    /// 两行同时激活会把「防御」「魔防」两段 Label + 两段数值叠成一团；数值又恰好同源相等，
+    /// 所以只表现为文字重叠、看不出重复数值。只做二选一显隐，预制体几何、数值、文案一个不动。
     /// 行 Root 缺节点（绑定时报过错）不兜底、直接跳过 —— fail closed。
     /// </summary>
     void SetAtkRowVisible(GameObject[] rowRoots, bool magic)
@@ -730,6 +734,9 @@ public class MercAscendUI : MonoBehaviour
         if (rowRoots.Length <= idxMagicAtk) return;
         if (rowRoots[idxAtk] != null) rowRoots[idxAtk].SetActive(!magic);
         if (rowRoots[idxMagicAtk] != null) rowRoots[idxMagicAtk].SetActive(magic);
+        const int idxDef = 4, idxMagicDef = 2;
+        if (rowRoots[idxDef] != null) rowRoots[idxDef].SetActive(!magic);
+        if (rowRoots[idxMagicDef] != null) rowRoots[idxMagicDef].SetActive(magic);
     }
 
     /// <summary>存档里该佣兵等级（无实例按 1 级显示；口径同 MercDrawPoolUI.ShowMercDetail）。</summary>

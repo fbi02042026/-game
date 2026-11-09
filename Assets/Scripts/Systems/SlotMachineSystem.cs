@@ -434,6 +434,9 @@ public static class SlotMachineSystem
         // 【2026-10-31 主人拍板「金币也不用了」】竞技场同口径：抽奖吃 5 次额度、不吃金币，
         // 场内金币没有消费出口（竞技场商店走积分），抽回金币卡 = 白占一次额度，不出。
         if (BattleManager.Instance != null && BattleManager.Instance.IsArena) return false;
+        // 【2026-11-09 口径调整】资源副本（金币/徽记/卷轴/礼物）全免费、场内无抽奖币消费出口，
+        // 抽到抽奖币方向等于白占一次免费额度，与裂隙/竞技场同口径不出。概率公示走本函数，自动同源。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon) return false;
         if (InGuaranteeWindow()) return false;
         if (MercGuaranteeActive() && AvailableCategories().Contains(DraftCategory.Merc))
             return false;

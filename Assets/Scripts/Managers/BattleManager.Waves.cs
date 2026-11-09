@@ -433,6 +433,11 @@ public partial class BattleManager
         }
 
         // 章节开场卡已由 GameSceneManager 在 Loading 关闭后演出完毕（2026-10-20 起顺序：Loading → 章节卡 → 开打）。
+        // 【2026-11-09】走进场必须等 Loading 遮罩真正收起再播：开场定位与相机跳位仍留在遮罩底下执行，
+        // 遮罩收起后画面是「空战斗场景 + 队伍在屏外」，再连续走进来 —— 位置变更全程不可见。
+        // 非主线玩法没有章节卡（GameSceneManager 里 splash=null），原先这里没有任何人等 Loading，
+        // 走进场在黑罩底下就走完了，揭幕瞬间直接切到已就位的画面，表现为「闪一下 + 位置被重置」。
+        yield return CoWaitForLoadingOverlayGone();
         yield return CoPartyWalkInFromLeft(startX, z);
 
         FinishBattleIntro(follow);
@@ -461,7 +466,8 @@ public partial class BattleManager
         // 🔴【2026-10-29 实时抽改版】正式关/金币本进关阶段非阻塞（CoPreBattleStoryThenFirstWave
         // 在 EnterLiveStartPhase 后即返回，不等玩家点「开始战斗」）→ 队伍出发挪到 OnLiveStartFight，
         // follow 暂存下面两个字段；无限裂隙（旧面板阻塞等玩家）与引导局照旧这里直接出发。
-        if (!IsEndlessRift && !IsTutorialRun)
+        // 2026-11-09 口径调整：资源副本走旧面板、不进 LiveMode 回调，因此必须在这里直接出发。
+        if (!IsEndlessRift && !IsTutorialRun && !IsResourceDungeon)
         {
             _liveStartFollow = follow;
             _liveStartAdvancePending = true;
@@ -901,6 +907,21 @@ public partial class BattleManager
             // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
             // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
             string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
+
+            // 【T10】羁绊副本 Boss 前剧情：Boss 波刷出前播，播完再走「首领来袭」大图 + 刷怪。
+            // 本协程期间 _waveAnnounceRunning=true，SpawnNextPendingWave 不会被提前触发（沿用既有闸门）。
+            if (boss && IsBondDungeon)
+            {
+                bool bondDone = false;
+                BondDungeonStoryBeats.PlayBeforeBoss(() => bondDone = true);
+                float watchdog = 0f;
+                while (!bondDone && watchdog < 300f)
+                {
+                    watchdog += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                if (!bondDone) Debug.LogWarning("[BattleManager] 羁绊副本 Boss 前剧情 5 分钟未完成，强制放行 Boss 波");
+            }
 
             yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
         }

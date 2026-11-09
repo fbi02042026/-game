@@ -587,11 +587,28 @@ public class DraftRewardDetailUI : MonoBehaviour
         // 只有「升星」拍才动★；纯升级拍★不变（旧值按同★算，持平不套色）
         int oldStar = card.Kind == DraftCardKind.MercStarUp ? Mathf.Max(1, card.Star - 1) : newStar;
 
-        MercRosterDefs.ApplyCombatStats(def.AssetId, newLv, out float hp, out float atk, out float def0, out _, out _, out _);
+        // 【2026-11-09】按 hireId 取行：羁绊乘区在属性公式内按 hireId 判，
+        // 共用 asset 的佣兵各判各的（H015 艾拉 / H005 米娅共用 gongshou101）。
+        string statHireId = MercKeyOf(card);
+        if (!MercRosterDefs.TryApplyCombatStatsByHire(statHireId, newLv,
+                out float hp, out float atk, out float def0, out _, out _, out _))
+        {
+            // 卡面只有 assetId（MercKeyOf 的既有形态）属正常回退，不刷日志；
+            // 有 hireId 却查不到花名册行才是异常，要报出来。
+            if (!string.IsNullOrEmpty(card.HireId))
+                Debug.LogError("[DraftRewardDetailUI] 按 hireId 取属性失败：" + statHireId + "，退回 assetId 首行");
+            MercRosterDefs.ApplyCombatStats(def.AssetId, newLv,
+                out hp, out atk, out def0, out _, out _, out _);
+        }
         var sb = new StringBuilder();
         if (compare)
         {
-            MercRosterDefs.ApplyCombatStats(def.AssetId, oldLv, out float ohp, out float oatk, out float odef, out _, out _, out _);
+            if (!MercRosterDefs.TryApplyCombatStatsByHire(statHireId, oldLv,
+                    out float ohp, out float oatk, out float odef, out _, out _, out _))
+            {
+                MercRosterDefs.ApplyCombatStats(def.AssetId, oldLv,
+                    out ohp, out oatk, out odef, out _, out _, out _);
+            }
             sb.AppendLine(CompareLine("生命", Mathf.RoundToInt(hp).ToString(), Mathf.RoundToInt(ohp).ToString(), hp, ohp, true));
             sb.AppendLine(CompareLine("攻击", Mathf.RoundToInt(atk).ToString(), Mathf.RoundToInt(oatk).ToString(), atk, oatk, true));
             sb.AppendLine(CompareLine("防御", Mathf.RoundToInt(def0).ToString(), Mathf.RoundToInt(odef).ToString(), def0, odef, true));

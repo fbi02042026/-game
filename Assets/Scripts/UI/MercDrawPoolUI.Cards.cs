@@ -144,6 +144,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
         var suo = card.transform.Find("suo");
         if (suo != null) suo.gameObject.SetActive(false);
 
+        // 【2026-11-09】羁绊角标：列表卡左上角，与战斗内佣兵头像左上角同款（共用 BondBadge 出口）。
+        // 卡片走 _ownedCardPool 复用，Apply 内每轮显式复位显隐，不残留、不重复叠。
+        BondBadge.Apply(card.GetComponent<RectTransform>(), hireId);
+
         // 【2026-10-16 主人拍板】列表卡边框按稀有度换三档卡框（传奇金 / 稀有蓝 / 普通银，
         // 与池格同款：Resources/Art/UI/Tavern/酒馆头像/，唯一入口 MercHireSession.LoadTavernCardFrame）。
         // 模板根图就是卡框（Sliced）；首版误用三选一高卡插画底（frame_common 等，219×789），
@@ -219,9 +223,20 @@ public partial class MercDrawPoolUI : MonoBehaviour
         }
 
         // 2026-10-16 主人拍板：已获得里在队的佣兵，卡片正中「已入队」标，避开右上角升阶提示（原「已上架」，2026-10-17 改名）；2026-11-08 去底色只写字、淡黄字样式照三选一界面；文案与字号按 2026-11-08 主人当场指令改回「已入队」并调大
-        if (owned && _picked.Contains(hireId))
+        // 【2026-11-09】列表卡走 _ownedCardPool 复用（RecycleCards 只隐藏不销毁），旧标会随卡留下来；
+        // MakeText 每次都 new 一个同名节点，未入队时不隐藏就残留、反复刷新还会叠字。
+        // 改法：每轮先把所有同名标隐藏，只复用其中一个（没有才建），显隐只认 inQueue 这一个出口。
+        Text tag = null;
+        for (int i = 0; i < card.transform.childCount; i++)
         {
-            var tag = MakeText(card.transform, "OnShelfTag", "已入队", 32);
+            var child = card.transform.GetChild(i);
+            if (child == null || child.name != "OnShelfTag") continue;
+            child.gameObject.SetActive(false);
+            if (tag == null) tag = child.GetComponent<Text>();
+        }
+        if (inQueue)
+        {
+            if (tag == null) tag = MakeText(card.transform, "OnShelfTag", "已入队", 32);
             var trt = tag.rectTransform;
             trt.anchorMin = new Vector2(0.5f, 0.5f);
             trt.anchorMax = new Vector2(0.5f, 0.5f);
@@ -229,6 +244,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
             trt.anchoredPosition = Vector2.zero;
             trt.sizeDelta = new Vector2(110f, 36f);
             tag.color = new Color(0.990566f, 0.98382103f, 0.54668033f, 1f);
+            tag.gameObject.SetActive(true);
         }
 
         // 模板本身没有 Button（Slot 只有 Image），克隆后运行时补：

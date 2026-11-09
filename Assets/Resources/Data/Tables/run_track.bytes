@@ -1,0 +1,64 @@
+# 《跑酷小游戏》V1 跑酷配表
+# 数值真源：Docs/《跑酷小游戏》_待办任务清单.md §3 首版标定量、§4 波次模板、§2 已拍板定稿
+# 表头固定 key,value,note；key 小写下划线；区间值拆 _min/_max 两行
+# wave_1..wave_7 见 §4：value 用 | 分隔「只数|间隔秒|只数...」，elite=精英波，coin_arc=跨沟金币弧线预告
+# 本表 .bytes = 本表去 UTF-8 BOM 的逐字副本（CRLF 保留）
+key,value,note
+pixels_per_meter,100,1m=100 逻辑像素（里程换算）
+world_scroll_speed,300,世界卷速 px/s（起步）
+monster_move_speed,120,怪左行速度 px/s
+relative_speed,420,世界与怪相对速度 px/s（300+120）
+sword_attack_range,120,剑盾攻距 px
+attack_cd,0.62,攻击 CD 秒
+wave_group_gap,130,组内间距 D px
+wave_5_length,520,5 只波长 px
+jump_height,180,跳跃高度 px
+jump_air_time,0.8,滞空 秒
+jump_land_stun,0.2,落地硬直 秒
+input_buffer,0.15,输入缓冲 秒
+platform_len_min,400,平台段最短 px（400~900）
+platform_len_max,900,平台段最长 px（400~900）
+gap_min,120,断沟最窄 px（120~200）
+gap_max,200,断沟最宽 px（120~200）
+high_platform_height,180,高台 +高度 px
+coin_density,100,金币基础密度 枚/100m
+bg_scroll_multiplier,0.30,背景滚动倍率
+fg_scroll_multiplier,1.00,前景滚动倍率
+render_scale,0.7,人物/平台/怪渲染缩放（判定不动）
+player_hp,3,玩家血量（爱心数）
+exp_per_level,100,升级每级所需 runExp
+atk_per_level,40,每级攻击 ATK=40×Lv
+enemy_hp_base,40,敌人 HP 基数
+enemy_hp_per_100m,40,敌人 HP 每 100m 增量
+daily_tries,3,每日次数
+portal_interval_min,200,传送门间隔最短 m（200~300）
+portal_interval_max,300,传送门间隔最长 m（200~300）
+chest_interval,100,宝箱间隔 m
+portal_blackout,0.25,传送门黑屏 秒
+wave_interval_min,1.0,波间隔最短 秒（1.0~2.0）
+wave_interval_max,2.0,波间隔最长 秒（1.0~2.0）
+wave_count_min,1,一波只数下限
+wave_count_max,5,一波只数上限（硬上限）
+merc_drop_time,0.35,新佣兵天降 秒
+merc_replace_jump_time,0.4,被替换者往后跳出消失 秒
+queue_refill_time,0.25,补位平滑 秒
+hit_invincible_time,0.35,受击/掉沟后无敌 秒
+no_protection_time,0.3,佣兵消失后无保护 秒
+follow_jump_delay,0.10,跟跳延迟基数 秒（×序号）
+levelup_font_size,24,升级提示字号（12 的倍数）
+levelup_duration,1.8,升级提示持续 秒
+chunk_width_px,720,T2 框架结构参数（非 §3 标定量）：Chunk 逻辑宽度 px
+ground_height_px,160,T2 框架结构参数（非 §3 标定量）：地面块高度 px
+player_x_px,-120,T2 框架结构参数（非 §3 标定量）：玩家固定 x 逻辑 px
+ground_top_y_px,-400,T2 框架结构参数（非 §3 标定量）：地面顶 y 逻辑 px
+view_margin_px,480,T2 框架结构参数（非 §3 标定量）：视口外扩余量 px
+chunk_pool_size,24,T2 框架结构参数（非 §3 标定量）：Chunk 池预分配数量（GetInt）
+melee_range,96,文档 §2.2 拍板定稿：近战射程 px（§3 的 sword_attack_range=120 与此语义冲突，待裁决）
+ranged_range,288,文档 §2.2 拍板定稿：远程射程 px = 近战 3 倍
+wave_1,2|2.0|3,双响 0~100m
+wave_2,1|1.5|2|1.5|3,三连 100~250m
+wave_3,2|2.0|4,压场 全段
+wave_4,4|1.2|1,先难后松 250~450m
+wave_5,2|1.0|3|1.0|2,极限连跳 450m+
+wave_6,2|1.5|elite|1.2|3,精英插队 300m+ elite
+wave_7,coin_arc|1.0|3,沟后接波 250m+

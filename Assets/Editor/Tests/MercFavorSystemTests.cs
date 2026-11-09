@@ -2,10 +2,11 @@ using NUnit.Framework;
 
 /// <summary>
 /// MercFavorSystem 纯逻辑单测（EditMode，传 SaveData 直测）。
-/// 锚定 2026-10-26/27/31 拍板口径：
+/// 锚定 2026-10-26/27/31 + 2026-11-09 拍板口径：
 ///   - 好感真源 SaveData.mercTrust，唯一加值出口 AddMercTrust（下限钳 0；上不封顶，解锁线是 ≥60 判定）
 ///   - 满值 60 = 6 颗心 × 10 分/颗；≥60 开羁绊地图
-///   - 对话：每天 3 次、一次一个答案（3 槽）；特殊答案 +5、普通 +2，特殊位按 天+佣兵 确定性轮换
+///   - 对话（11-09 口径）：一天一轮、一轮一问、一次只选一个答案；三槽分别 +10 / +5 / +0，
+///     按 天+佣兵 确定性轮换、分值不展示、选完才揭晓；+10 档额外回 1 个普通品质礼物
 ///   - 礼物三档：普通 2 / 稀有 4 / 传奇 8；20 种礼物；查不到 id = fail closed
 ///   - 羁绊首通钻石按稀有度：普通 50 / 稀有 100 / 传奇 200（2026-11-03 拍板）
 /// 发礼/回礼依赖 SaveSystem 与 Toast，归人工验收（测试文档 §4.3 M6/M7）。
@@ -60,56 +61,77 @@ public class MercFavorSystemTests
     // ---------- 每日对话 ----------
 
     [Test]
-    public void TalksPerDay_IsThree_NormalFavorIsTwo_SpecialIsFive()
+    public void TalkTiers_OneRoundPerDay_ThreeTiers()
     {
-        Assert.AreEqual(3, MercFavorDefs.TalksPerDay, "10-26 晚拍板：每天 3 次");
+        Assert.AreEqual(1, MercFavorDefs.TalksPerDay, "11-09 口径：一天一轮、一轮一问、一次只选一个答案");
         Assert.AreEqual(3, MercFavorDefs.DialogueOptionCount);
-        Assert.AreEqual(2, MercFavorDefs.NormalFavor);
-        Assert.AreEqual(5, MercFavorDefs.SpecialFavor);
+        Assert.AreEqual(10, MercFavorDefs.BestTalkFavor);
+        Assert.AreEqual(5, MercFavorDefs.MidTalkFavor);
+        Assert.AreEqual(0, MercFavorDefs.NoTalkFavor);
+        Assert.AreEqual(10, MercFavorDefs.TalkTierAt(0));
+        Assert.AreEqual(5, MercFavorDefs.TalkTierAt(1));
+        Assert.AreEqual(0, MercFavorDefs.TalkTierAt(2));
+        Assert.AreEqual(10, MercFavorDefs.TalkTierAt(3), "档位序号按 3 循环，不越界");
     }
 
     [Test]
-    public void SpecialSlot_StableWithinDay_InRange()
+    public void TalkTierOfSlot_StableWithinDay_AllThreeTiersPresent()
     {
         var d = NewSave();
-        int slot = MercFavorSystem.SpecialSlotOf(d, H001);
-        Assert.GreaterOrEqual(slot, 0);
-        Assert.Less(slot, MercFavorDefs.DialogueOptionCount);
-        Assert.AreEqual(slot, MercFavorSystem.SpecialSlotOf(d, H001), "同一天同佣兵特殊位应稳定（防刷新换位）");
+        int tier0 = MercFavorSystem.TalkTierOfSlot(d, H001, 0);
+        Assert.GreaterOrEqual(tier0, 0);
+        Assert.Less(tier0, MercFavorDefs.DialogueOptionCount);
+        Assert.AreEqual(tier0, MercFavorSystem.TalkTierOfSlot(d, H001, 0), "同一天同佣兵档位应稳定（防刷新换位）");
+
+        var seen = new bool[MercFavorDefs.DialogueOptionCount];
+        for (int slot = 0; slot < MercFavorDefs.DialogueOptionCount; slot++)
+        {
+            int tier = MercFavorSystem.TalkTierOfSlot(d, H001, slot);
+            Assert.GreaterOrEqual(tier, 0);
+            Assert.Less(tier, MercFavorDefs.DialogueOptionCount);
+            Assert.IsFalse(seen[tier], "档位不应重复：" + tier);
+            seen[tier] = true;
+        }
     }
 
     [Test]
-    public void FavorOfSlot_ExactlyOneSpecialSlot()
+    public void FavorOfSlot_ThreeTiersExactlyOnce()
     {
         var d = NewSave();
-        int special = MercFavorSystem.SpecialSlotOf(d, H001);
-        int specialCount = 0;
+        int best = 0, mid = 0, none = 0;
         for (int slot = 0; slot < MercFavorDefs.DialogueOptionCount; slot++)
         {
             int favor = MercFavorSystem.FavorOfSlot(d, H001, slot);
-            if (slot == special) { Assert.AreEqual(5, favor); specialCount++; }
-            else Assert.AreEqual(2, favor);
+            if (favor == MercFavorDefs.BestTalkFavor) best++;
+            else if (favor == MercFavorDefs.MidTalkFavor) mid++;
+            else if (favor == MercFavorDefs.NoTalkFavor) none++;
+            else Assert.Fail("未知档位：" + favor);
         }
-        Assert.AreEqual(1, specialCount, "3 槽中应恰有 1 个特殊答案");
+        Assert.AreEqual(1, best, "+10 档恰 1 槽");
+        Assert.AreEqual(1, mid, "+5 档恰 1 槽");
+        Assert.AreEqual(1, none, "+0 档恰 1 槽");
     }
 
     [Test]
-    public void Talk_ThreeTalksThenBlocked()
+    public void Talk_OneRoundThenBlocked()
     {
         var d = NewSave();
-        int expected = 0;
-        for (int i = 0; i < 3; i++)
+        // 选 +5 档槽：好感确实增加，又不触发 +10 档回礼（EditMode 无存档，不依赖 SaveSystem 状态）
+        int slot = -1;
+        for (int s = 0; s < MercFavorDefs.DialogueOptionCount; s++)
         {
-            Assert.IsTrue(MercFavorSystem.CanTalk(d, H001), $"第 {i + 1} 次应可聊");
-            int slot = i;   // 特殊位只有一个，i=0/1/2 覆盖
-            expected += MercFavorSystem.FavorOfSlot(d, H001, slot);
-            int delta = MercFavorSystem.Talk(d, H001, slot, out string gift);
-            Assert.AreEqual(MercFavorSystem.FavorOfSlot(d, H001, slot), delta, "本次增量应等于所选槽分值");
-            Assert.IsNull(gift, "EditMode 无存档，回礼应为 null（不吞不发）");
+            if (MercFavorSystem.FavorOfSlot(d, H001, s) == MercFavorDefs.MidTalkFavor) { slot = s; break; }
         }
-        Assert.AreEqual(expected, d.GetMercTrust(H001), "三次聊天累计好感应一致");
-        Assert.IsFalse(MercFavorSystem.CanTalk(d, H001), "3 次后当天不可再聊");
-        Assert.AreEqual(-1, MercFavorSystem.Talk(d, H001, 0, out _), "超次对话应拒绝并返回 -1");
+        Assert.GreaterOrEqual(slot, 0, "三槽中应存在 +5 档");
+
+        int expected = MercFavorSystem.FavorOfSlot(d, H001, slot);
+        Assert.IsTrue(MercFavorSystem.CanTalk(d, H001), "当天第一轮应可聊");
+        int delta = MercFavorSystem.Talk(d, H001, slot, out string gift);
+        Assert.AreEqual(expected, delta, "本次增量应等于所选槽分值");
+        Assert.IsNull(gift, "非最高档不发回礼");
+        Assert.AreEqual(expected, d.GetMercTrust(H001), "一轮对话累计好感应一致");
+        Assert.IsFalse(MercFavorSystem.CanTalk(d, H001), "1 轮后当天不可再聊");
+        Assert.AreEqual(-1, MercFavorSystem.Talk(d, H001, slot, out _), "超次对话应拒绝并返回 -1");
     }
 
     [Test]

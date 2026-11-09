@@ -309,6 +309,7 @@ public partial class BattleUI : MonoBehaviour
         {
             slot.SetJobIcon(null);
             slot.ShowUnavailable(MercLockedHint);
+            slot.SetBondBadge(null);   // 【2026-11-09】未解锁槽清掉复用残留的羁绊角标
             return;
         }
         if (index < mercIds.Count)
@@ -356,6 +357,8 @@ public partial class BattleUI : MonoBehaviour
             slot.SetJobIcon(JobIconResolver.CombatBadge(job));
             // 右上角小图标=该佣兵的技能：2026-10-06 主人拍板 → 佣兵技能角标全部隐藏（技能自动释放，不用手点）
             slot.SetSkillBadge(null);
+            // 【2026-11-09】左上角「羁绊」角标：与佣兵队列列表卡同款（共用 BondBadge 出口）
+            slot.SetBondBadge(hireId);
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {

@@ -177,6 +177,32 @@ public partial class AdventureUI
         RefreshAll();
         // 【2026-10-23 主人要求】切模式后新页面弹出（见 AdventureUI.Anim.cs）
         PlayRightModePopIn();
+        // 【2026-11-09】首次点进无限裂隙：一次性玩法说明（每 10 层才有保存点，
+        // 免得玩家打完第 1 层看到出生点没变，以为进度没记上）
+        if (IsEndlessMode(idx))
+            TryShowEndlessIntro();
+    }
+
+    /// <summary>
+    /// 【2026-11-09】无限裂隙首次进入的一次性玩法说明。
+    /// 账号全局只弹一次，标记落 SaveData（换机/重开/清档都按存档走，不重弹）。
+    /// 弹窗复用「出生点已保存」同款告知窗（StaminaConfirmPopup.ShowNotice），零新增 UI / 预制体 / 图片。
+    /// </summary>
+    void TryShowEndlessIntro()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || data.endlessRiftIntroShown) return;
+        StaminaConfirmPopup.ShowNotice(
+            title: "无限裂隙玩法",
+            body: "一层层往上打，越深越强。\n" +
+                  "每 10 层设一个保存点，\n" +
+                  "打通它才记录进度。",
+            okLabel: "知道了",
+            onClose: null);
+        // 只有弹窗真显示出来才记档（照 MercStarReadyHint 口径），建不出来下次还能弹
+        if (!StaminaConfirmPopup.IsOpen) return;
+        data.endlessRiftIntroShown = true;
+        SaveSystem.Instance?.Save();
     }
 
     // ────────────────────────────────────────────────────

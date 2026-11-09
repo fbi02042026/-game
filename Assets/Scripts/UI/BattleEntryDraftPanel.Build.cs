@@ -47,8 +47,6 @@ public partial class BattleEntryDraftPanel
             AddSlot("BtnEquip", DraftCategory.Equip);
             AddSlot("BtnSkill", DraftCategory.Skill);
 
-            // 概率公示按钮（见 BuildOddsButton 注释）
-            BuildOddsButton();
             // 【2026-10-13 #9】连抽提示（见 BuildComboText 注释）
             BuildComboText();
             // 【2026-10-21 主人拍板「抽奖数都在顶部」】原 BuildPoolChip（按钮上方抽奖币计数）已拆，
@@ -208,101 +206,6 @@ public partial class BattleEntryDraftPanel
             slot.Btn.onClick.AddListener(() => OnDraftClicked(captured));
         }
         _slots.Add(slot);
-    }
-
-    /// <summary>
-    /// 概率公示按钮（美术图「提示」金币问号）：贴屏幕右边缘，点了弹 <see cref="DraftOddsPopupUI"/>。
-    /// 【2026-11-09 主人拍板「放到屏幕边上」】11-08 那版按「整排抽奖按钮右上角内收」定位，
-    /// 图标整块压在最后一张抽奖卡上，把抽奖按钮挡住了 —— 该口径作废。现在 x 锚到根画布右边缘，
-    /// y 仍取这一排上沿；右边放不下时把图标抬到整排上方，绝不盖住任何一张抽奖卡。
-    ///
-    /// 2026-10-05 主人拍板：「概率需要告诉玩家……可以再（抽）按钮旁边加个感叹号之类的，
-    /// 点击弹出弹窗上面写的概率」「可以加到 DraftRoot 节点里」。预制体里没有这个节点
-    ///（主人没摆，也不许我们改 prefab），所以运行时建一个挂到 <c>DraftRoot</c> 下 ——
-    /// 跟抽奖按钮<b>同层</b>，抽奖按钮自己被置灰 / 缩放 / 换锚点都不会带着「!」一起跑。
-    ///
-    /// ⚠ 2026-10-15 主人拍板换成美术图（Resources.Load 路径加载，原图 80x72 非正方开 preserveAspect），不碰主人在预制体里调好的任何美术。
-    /// </summary>
-    void BuildOddsButton()
-    {
-        if (_draftRt == null || _slots.Count == 0) return;
-
-        // 【2026-11-09 拍板】贴屏幕右边缘；仍挂在 DraftRoot 下，面板收起时跟着一起藏。
-        // 下面仍算出这一排的包围盒右上角，只用来定 y 和校验「会不会压到抽奖卡」。
-        var corners = new Vector3[4];
-        float rowRight = 0f, rowTop = 0f;
-        bool hasVisible = false;
-        for (int i = 0; i < _slots.Count; i++)
-        {
-            var root = _slots[i].Root;
-            if (root == null || !root.gameObject.activeSelf) continue;
-            // 占位节点只有 100×100，卡片美术（icon 200×271）会溢出 ——
-            // 必须连子节点一起算，否则按占位框取到的「右上角」实际还在卡片中间。
-            var rects = root.GetComponentsInChildren<RectTransform>(true);
-            for (int j = 0; j < rects.Length; j++)
-            {
-                if (!rects[j].gameObject.activeSelf) continue;
-                rects[j].GetWorldCorners(corners);
-                Vector2 corner = _draftRt.InverseTransformPoint(corners[2]);   // 右上角
-                if (!hasVisible) { rowRight = corner.x; rowTop = corner.y; hasVisible = true; }
-                else
-                {
-                    rowRight = Mathf.Max(rowRight, corner.x);
-                    rowTop = Mathf.Max(rowTop, corner.y);
-                }
-            }
-        }
-        if (!hasVisible)
-        {
-            Debug.LogError("[BattleEntryDraftPanel] 抽奖按钮全不可见，概率公示按钮不建");
-            return;
-        }
-
-        // 【2026-11-09 拍板】根画布右上角 → DraftRoot 本地坐标 = 屏幕右边缘。
-        // 不写死 720，竖屏/缩放都跟着走；仍挂 DraftRoot 下（不改成挂 Canvas 根），面板收起时一起藏。
-        var canvas = _draftRt.GetComponentInParent<Canvas>();
-        var rootCanvas = canvas != null ? canvas.rootCanvas : null;
-        var canvasRt = rootCanvas != null ? rootCanvas.transform as RectTransform : null;
-        if (canvasRt == null)
-        {
-            Debug.LogError("[BattleEntryDraftPanel] 找不到根画布，概率公示按钮不建");
-            return;
-        }
-        var canvasCorners = new Vector3[4];
-        canvasRt.GetWorldCorners(canvasCorners);
-        float screenRight = _draftRt.InverseTransformPoint(canvasCorners[2]).x;
-        var go = new GameObject("BtnOdds", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-        go.transform.SetParent(_draftRt, false);
-
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0.5f, 0.5f);
-        // 【2026-10-13 #6】58 → 88：顺手修触摸目标不达标（美术规格 §5.5）。
-        // 【2026-10-16 主人口令】图标有点大 → 缩小 30%（88 → 61.6）。
-        rt.sizeDelta = new Vector2(61.6f, 61.6f);
-        // 图标右边界离屏幕右边 16；y 取这一排上沿。
-        float half = rt.sizeDelta.x * 0.5f;
-        float x = screenRight - 16f - half;
-        float y = rowTop - half;
-        // 右边空位不够（会压到抽奖卡）时抬到整排上方：宁可靠上，也不挡按钮。
-        if (x - half < rowRight) y = rowTop + half + 8f;
-        rt.anchoredPosition = new Vector2(x, y);
-
-        var img = go.GetComponent<Image>();
-        // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），
-        // 不再用「深色圆底 + ! 文本」；取不到图 LogError，不兜底造图。
-        var iconSp = Resources.Load<Sprite>("UI/Art/Common/提示");
-        if (iconSp == null)
-            Debug.LogError("[BattleEntryDraftPanel] 缺少美术图 Art/UI/Common/提示（概率按钮图标不显示）");
-        img.sprite = iconSp;
-        img.preserveAspect = true; // 原图 80x72 非正方，防拉变形
-        img.color = Color.white;
-        var btn = go.GetComponent<Button>();
-        btn.targetGraphic = img;
-        btn.onClick.AddListener(() => DraftOddsPopupUI.Toggle());
-
-        _oddsBtn = btn;
     }
 
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示：挂在抽奖容器上方，≥2 才显示（不新建美术节点）。</summary>

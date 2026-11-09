@@ -509,10 +509,14 @@ public static class MercRosterDefs
         float baseDef = d.BaseDef * g;
         float hpMul = 1f + (level - 1) * 0.1f;
         float atkAdd = (level - 1) * 2f * g;
-        hp = baseHp * hpMul;
+        // 【2026-11-09 口径】羁绊首通乘区并进公式唯一出口：只乘血/攻/防，
+        // 魔攻/魔防由 atk/def 派生天然跟随；攻速/移速/射程原样输出。
+        // 判据按本行 HireId（不按 asset 首行），共用 asset 的佣兵各判各的。
+        float bondMul = MercFavorDefs.BondClearStatMulFor(d.HireId);
+        hp = baseHp * hpMul * bondMul;
         // 花名册 BaseAtk 即战斗 ATK，禁止再叠佣兵伤害系数。
-        atk = baseAtk + atkAdd;
-        def = baseDef;
+        atk = (baseAtk + atkAdd) * bondMul;
+        def = baseDef * bondMul;
         // 设计表攻速≈攻击频率系数；移速为相对值（基准为 3.5），换算到世界单位
         atkSpeed = Mathf.Max(0.2f, d.AtkSpeed);
         const float designMoveRef = 3.5f;

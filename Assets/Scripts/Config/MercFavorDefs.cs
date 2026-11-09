@@ -1,13 +1,16 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 /// <summary>
 /// 佣兵好感配置表（2026-10-26 主人拍板「佣兵好感界面」，预制体 Resources/Prefabs/Town/佣兵好感.prefab）。
 ///
-/// 玩法口径（2026-10-26 晚二次拍板修订）：
+/// 玩法口径（2026-11-09 口径）：
 /// - 好感值真源 = SaveData.mercTrust（与酒馆闲话 +1 共用同一套好感成长，单一出口 AddMercTrust）。
-/// - 对话：每名佣兵每天 3 次机会、一次选一个答案（<see cref="TalksPerDay"/>）；分值不展示——
-///   每天轮换一个「特殊答案」（<see cref="SpecialFavor"/>），另外两个是普通答案（<see cref="NormalFavor"/>），
-///   玩家猜哪个最对佣兵胃口；佣兵的问题显示在右上立绘的对话框里（代码建气泡，主人拍板）。
+/// - 对话：一天一轮、一轮一问、一次只选一个答案（<see cref="TalksPerDay"/>）。选中后佣兵在气泡里回话，
+///   旧三答案依次右滑撤出、次日的新题 + 新三答案依次滑入（当天禁点，次日才可答）。
+/// - 三个答案分别对应 +10（额外回 1 个普通品质礼物）/ +5 / +0 三档回报，按 天+佣兵 轮换挂槽，
+///   分值不展示、选完才揭晓（<see cref="TalkTierAt"/>）。
+/// - 题库：按花名册姓名/昵称/职业与已有专属对话扩写，C# 常量，按 日键 + 佣兵 确定性取题。
 /// - 礼物：独立好感礼物仓（SaveData.favorGifts），点图标送出扣 1 加对应好感。
 /// - 羁绊地图：好感攒满（FavorMax）解锁入口；通关（二期专属双人关）后该佣兵全属性永久提升（×1.5，文档拍板）。
 ///
@@ -28,20 +31,45 @@ public static class MercFavorDefs
     /// <summary>好感总满值（羁绊地图解锁线）。</summary>
     public const int FavorMax = HeartCount * FavorPerHeart;
 
-    /// <summary>每名佣兵每天对话次数（2026-10-26 晚拍板「每天只能选3次 一次只能选一个」）。</summary>
-    public const int TalksPerDay = 3;
+    /// <summary>每名佣兵每天对话轮数（2026-11-09 口径：一天一轮、一轮一问、一次只选一个答案）。</summary>
+    public const int TalksPerDay = 1;
 
     /// <summary>对话选项个数（预制体「选中对话/1|2|3」三槽）。</summary>
     public const int DialogueOptionCount = 3;
 
-    /// <summary>「特殊答案」好感分（每天轮换一个，分值不展示）。</summary>
-    public const int SpecialFavor = 5;
+    /// <summary>三个答案分别对应的好感回报档：最高档额外回 1 个普通品质礼物。
+    /// 哪条答案对应哪档按 天+佣兵 轮换，界面不展示分值，选完才揭晓。数值只此一处。</summary>
+    public const int BestTalkFavor = 10;
+    public const int MidTalkFavor = 5;
+    public const int NoTalkFavor = 0;
+    static readonly int[] TalkFavorTiers = { BestTalkFavor, MidTalkFavor, NoTalkFavor };
 
-    /// <summary>普通答案好感分（另外两个，分值不展示）。</summary>
-    public const int NormalFavor = 2;
+    /// <summary>按档位序号取好感回报（唯一出口；序号由系统层的每日轮换给出）。</summary>
+    public static int TalkTierAt(int tierIndex)
+    {
+        int n = TalkFavorTiers.Length;
+        return TalkFavorTiers[((tierIndex % n) + n) % n];
+    }
 
-    /// <summary>通关羁绊地图后该佣兵全属性乘区（2026-10-26 信任交流文档拍板 ×1.5；挂乘区见 Mercenary.Attributes.ApplyBondClearBonus）。</summary>
+    /// <summary>通关羁绊地图后的属性乘区（×1.5）。【2026-11-09 口径】范围＝血/攻/防/魔攻/魔防，
+    /// 攻速/移速/射程不加；唯一计算出口 = MercRosterDefs 的属性公式唯一实现。</summary>
     public const float BondClearStatMul = 1.5f;
+
+    /// <summary>
+    /// 羁绊乘区唯一取值出口：按 hireId 读存档通关标记，未通关恒 1.0、首通后恒 <see cref="BondClearStatMul"/>。
+    /// 数值 / 判据只此一处，战斗与所有面板同源，禁止在 UI / 战斗各写一份 ×1.5。
+    /// hireId 缺失时 LogError 后按不加成处理（不静默放行）。
+    /// </summary>
+    public static float BondClearStatMulFor(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId))
+        {
+            Debug.LogError("[MercFavorDefs] 羁绊乘区缺 hireId，按不加成处理（不静默放行）");
+            return 1f;
+        }
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        return data != null && data.IsMercBondCleared(hireId) ? BondClearStatMul : 1f;
+    }
 
     /// <summary>羁绊副本场景章（≈5~7 章强度；单难度不开放选择，固定噩梦档。两个常量都可单独调）。</summary>
     public const int BondDungeonChapter = 7;
@@ -75,70 +103,165 @@ public static class MercFavorDefs
         public string[] replies;   // 3 条佣兵回应（选中后 Toast 展示）
     }
 
-    /// <summary>专属对话（首批 4 人，照信任交流文档 §2.7 名单）。查不到的佣兵走通用池。</summary>
+    /// <summary>专属题库（按花名册姓名 / 昵称 / 职业写；每人 3 题，按日轮换）。未配的佣兵走通用池。</summary>
     static readonly FavorTalk[] SpecialTalks =
     {
+        // H001 马库斯（老盾·剑盾）
         new FavorTalk
         {
-            hireId = "H001",   // 马库斯（老盾·剑盾）
+            hireId = "H001",
             question = "你说，一把盾牌最重要的是什么？",
             options = new[] { "够硬就行，扛住就完事了！", "护住身后的人，才算一面好盾。", "……好看也很重要吧？" },
             replies = new[] { "哈哈，够硬是本分！", "……说得好。这话我记下了。", "嘿，你小子还挺懂。" },
         },
         new FavorTalk
         {
-            hireId = "H003",   // 塔克（重盾·引导局坦克）
+            hireId = "H001",
+            question = "在酒馆坐了半宿，你猜我在等谁？",
+            options = new[] { "等一个能陪我喝到天亮的人", "等老板上菜吧", "等……我？我勒个豆" },
+            replies = new[] { "哈哈，就等这句。", "你小子，一点浪漫都不给。", "可不就是等你嘛，老伙计。" },
+        },
+        new FavorTalk
+        {
+            hireId = "H001",
+            question = "打完这仗，你想去哪儿？",
+            options = new[] { "回镇上，好好睡一觉", "哪儿有架打去哪儿", "跟着你，去哪都行" },
+            replies = new[] { "踏实。这才是过日子。", "你这脾气，跟我年轻时一个样。", "……那这面盾就更不能撤了。" },
+        },
+        // H003 塔克（重盾·引导局坦克）
+        new FavorTalk
+        {
+            hireId = "H003",
             question = "打起来我总冲最前面，你不嫌我挡路？",
             options = new[] { "你就是最稳的那堵墙！", "偶尔……也让让我嘛。", "确实有点挡……开玩笑的！" },
             replies = new[] { "哈！这话中听。", "那可不行，盾牌手哪有让路的。", "好家伙，胆子见长啊。" },
         },
         new FavorTalk
         {
-            hireId = "H011",   // 路加（男僧侣·牧师）
+            hireId = "H003",
+            question = "我这身板，站前排是不是太占地方了？",
+            options = new[] { "占得好，后面才安心", "要不往后稍稍？", "你站前面我都看不见怪了" },
+            replies = new[] { "那我就一直站着。", "让？没学过。", "哈哈哈，怪也被你挡住了。" },
+        },
+        new FavorTalk
+        {
+            hireId = "H003",
+            question = "要是有一天我扛不住了，你怎么办？",
+            options = new[] { "我替你扛一会儿", "那就一起撤", "不会有那天的" },
+            replies = new[] { "……好。记住这话。", "撤也得你先撤。", "嘿，借你吉言。" },
+        },
+        // H011 路加（男僧侣·牧师）
+        new FavorTalk
+        {
+            hireId = "H011",
             question = "施主近日可有烦心事？",
             options = new[] { "有你在，就安心多了。", "还好，没什么大事。", "那诵段经给我听听吧。" },
             replies = new[] { "阿弥陀佛，贫僧必不负所托。", "心事莫憋着，贫僧随时在。", "也罢，就结个善缘。" },
         },
         new FavorTalk
         {
-            hireId = "H004",   // 维克（钢盾·传奇）
+            hireId = "H011",
+            question = "诵经的时候，你听见了什么？",
+            options = new[] { "听见你念得挺好听", "听见……我睡着了，抱歉", "听见风，挺静的" },
+            replies = new[] { "善哉，那便再诵一段。", "……贫僧的经，竟有安神之效。", "静，最难得。" },
+        },
+        new FavorTalk
+        {
+            hireId = "H011",
+            question = "若只能许一个愿，施主许什么？",
+            options = new[] { "大家都能平安回来", "许我抽卡别再歪了", "许你别总叫我施主" },
+            replies = new[] { "与贫僧一般。", "……此愿，佛祖怕是管不着。", "那贫僧便改口，叫你一声同伴。" },
+        },
+        // H004 维克（钢盾·传奇）
+        new FavorTalk
+        {
+            hireId = "H004",
             question = "……你为什么总盯着我的剑看？",
             options = new[] { "剑很漂亮，人更沉稳。", "没什么，随便看看。", "我在想它能卖多少钱。" },
             replies = new[] { "……哼。会说话。", "随你。", "胆子不小。滚。" },
         },
+        new FavorTalk
+        {
+            hireId = "H004",
+            question = "这把剑，沾过不少人的血。",
+            options = new[] { "那它护过更多人吧", "……能擦干净吗", "别这么说，它挺好看的" },
+            replies = new[] { "……你倒是会挑话。", "擦不干净。", "好看？……哼。" },
+        },
+        new FavorTalk
+        {
+            hireId = "H004",
+            question = "没人问我累不累。",
+            options = new[] { "那我现在问了：累吗", "累了就歇，我守着", "强者不说累吧？" },
+            replies = new[] { "……不累。但多谢。", "……守好。", "强者也会累，只是没人问。" },
+        },
     };
 
-    /// <summary>通用对话池（未配专属文案的佣兵用）。</summary>
-    const string GenericQuestion = "最近过得怎么样？想聊点什么？";
-    static readonly string[] GenericOptions =
+    /// <summary>通用题库（未配专属文案的佣兵用；名字/职业不进文案，谁都能用）。</summary>
+    static readonly FavorTalk[] GenericTalks =
     {
-        "今天也辛苦了，要一起吃点东西吗？",
-        "有什么喜欢的东西吗？下次带给你。",
-        "最近有什么烦心事吗？可以跟我说说。",
-    };
-    static readonly string[] GenericReplies =
-    {
-        "嗯，有你这句话就够了。",
-        "……你猜？聊得来的话就告诉你。",
-        "说出来舒坦多了，多谢关心。",
+        new FavorTalk
+        {
+            question = "最近过得怎么样？想聊点什么？",
+            options = new[] { "今天也辛苦了，要一起吃点东西吗？", "有什么喜欢的东西吗？下次带给你。", "最近有什么烦心事吗？可以跟我说说。" },
+            replies = new[] { "嗯，有你这句话就够了。", "……你猜？聊得来的话就告诉你。", "说出来舒坦多了，多谢关心。" },
+        },
+        new FavorTalk
+        {
+            question = "路上捡到个奇怪的小玩意儿，你猜是什么？",
+            options = new[] { "发光的石头？", "会不会是陷阱啊", "先给我看看！" },
+            replies = new[] { "猜得挺准，送你啦。", "警惕点好，是块旧徽章。", "别抢，是给你的。" },
+        },
+        new FavorTalk
+        {
+            question = "今晚的星星挺亮，要不要一起看会儿？",
+            options = new[] { "好啊，正好歇歇", "我怕黑，你别走", "不如去吃夜宵" },
+            replies = new[] { "那就这么定了。", "不走，坐着。", "……你倒是实在。走。" },
+        },
     };
 
-    /// <summary>查对话组（唯一出口）：先查专属，未配走通用池。</summary>
-    public static void GetTalk(string hireId, out string question, out string[] options, out string[] replies)
+    /// <summary>该佣兵的题库题数（唯一出口；没配专属走通用池）。</summary>
+    public static int TalkCountOf(string hireId)
     {
+        int n = 0;
+        for (int i = 0; i < SpecialTalks.Length; i++)
+            if (SpecialTalks[i].hireId == hireId) n++;
+        return n > 0 ? n : GenericTalks.Length;
+    }
+
+    /// <summary>按 日键 + 佣兵 确定性取今天/明天该出哪道题（同一天不变、跨天换题）。</summary>
+    public static int TalkIndexOfDay(string hireId, int dayKey)
+    {
+        int count = TalkCountOf(hireId);
+        long h = 0;
+        if (!string.IsNullOrEmpty(hireId))
+            for (int i = 0; i < hireId.Length; i++) h = h * 31 + hireId[i];
+        long seed = (long)dayKey * 31 + h;
+        if (seed < 0) seed = -seed;
+        return (int)(seed % count);
+    }
+
+    /// <summary>查第 index 道题（唯一出口）：先查专属题库，未配走通用池；index 按题数取模归一。</summary>
+    public static void GetTalk(string hireId, int index, out string question, out string[] options, out string[] replies)
+    {
+        int count = TalkCountOf(hireId);
+        int want = ((index % count) + count) % count;
+        int seen = 0;
         for (int i = 0; i < SpecialTalks.Length; i++)
         {
-            if (SpecialTalks[i].hireId == hireId)
+            if (SpecialTalks[i].hireId != hireId) continue;
+            if (seen == want)
             {
                 question = SpecialTalks[i].question;
                 options = SpecialTalks[i].options;
                 replies = SpecialTalks[i].replies;
                 return;
             }
+            seen++;
         }
-        question = GenericQuestion;
-        options = GenericOptions;
-        replies = GenericReplies;
+        var t = GenericTalks[want];
+        question = t.question;
+        options = t.options;
+        replies = t.replies;
     }
 
     // —— 礼物表（图标 = Resources/Art/UI/礼物/32px-itemXXX，主人 2026-10-26 供图）——

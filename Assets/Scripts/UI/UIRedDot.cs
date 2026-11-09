@@ -12,7 +12,7 @@ public class UIRedDot : MonoBehaviour
     public string key = RedDot.Mail;
     [Tooltip("若节点上还没有 Image，是否自动补齐红点图")]
     public bool autoCreate = true;
-    public float size = 44f;
+    public float size = RedDot.DefaultSize;
     public Vector2 offset = new Vector2(-12f, -12f);
 
     Image _image;

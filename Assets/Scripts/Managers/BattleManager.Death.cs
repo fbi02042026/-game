@@ -241,9 +241,14 @@ public partial class BattleManager
         // 撤离回城后打开冒险页（引导局另有收尾，不抢页签）
         if (!Rules.SkipPendingAdventureOnEvacuate)
         {
-            TownHubController.PendingOpenAdventure = true;
-            // 【2026-11-05】章节战记下本局难度，回城冒险页按该难度真源落位；其它模式 IsFormalMainRun=false 不写。
-            if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+            // 【T11】羁绊本撤离不跳冒险页：回城自动重开好感界面（带 hireId）
+            if (IsBondDungeon) MercFavorUI.PendingOpenAfterBattleHireId = BondMercHireId;
+            else
+            {
+                TownHubController.PendingOpenAdventure = true;
+                // 【2026-11-05】章节战记下本局难度，回城冒险页按该难度真源落位；其它模式 IsFormalMainRun=false 不写。
+                if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+            }
         }
         // 教程收尾也走「战斗结果」界面（2026-10-28 主人拍板），关闭后再回城接剧情
         if (SkipLegacyOnEvacuate || Rules.Active)
@@ -388,9 +393,14 @@ public partial class BattleManager
         FillSettlementSnapshot(isDeath, talentGain);
         if (!isDeath)
             if (NormalOnlyContentAllowed(BattleDifficulty)) AdventureLogAchievements.OnRunGoldPeak(RunStats.GoldEarned);   // 2026-10-18 双钱包拆分：峰值按「本局获得金币」记
-        TownHubController.PendingOpenAdventure = true;
-        // 【2026-11-05】章节战（失败/主动撤离）记下本局难度，回城冒险页按该难度真源落位；其它模式不写。
-        if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+        // 【T11】羁绊本阵亡 / 撤离不跳冒险页：回城自动重开好感界面（带 hireId）
+        if (IsBondDungeon) MercFavorUI.PendingOpenAfterBattleHireId = BondMercHireId;
+        else
+        {
+            TownHubController.PendingOpenAdventure = true;
+            // 【2026-11-05】章节战（失败/主动撤离）记下本局难度，回城冒险页按该难度真源落位；其它模式不写。
+            if (IsFormalMainRun) AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+        }
         // 【2026-11-08 主人拍板「中途撤离按失败结算」】阵亡与主动撤离都不弹战斗结算界面，
         // 直接清临时雇佣、回城；金币/天赋石/清档规则两条路完全同口径，经济不因撤离改变。
         MercHireSession.ClearHired();

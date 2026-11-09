@@ -77,6 +77,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookMercRoster();
         CookBossStageVariant();
         CookQuest();
+        CookRunTrack();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -301,6 +302,8 @@ public class GameDataCooker : IPreprocessBuildWithReport
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/quest.csv", null, "quest");
     }
+    /// <summary>跑酷配表（地形 / 数值 / 7 种波次模板）：run_track.csv → .bytes，加载器 RunTrackTable.cs。</summary>
+    static void CookRunTrack() { CookTableFromSource(ContentPaths.Source.Tables + "/run_track.csv", null, "run_track"); }
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
     {
         string csv = null;

@@ -491,7 +491,12 @@ public partial class BattleManager
         // 剧情播放定义在别处，任何异常都不能把战斗卡在“无首波”状态：捕住异常并直接放行。
         try
         {
-            if (IsSideIsland)
+            if (IsBondDungeon)
+            {
+                // 【T10】羁绊副本专属开场剧情：不播主线章节剧情、不写 MarkPreStorySeen（玩法隔离口径不变）
+                playing = BondDungeonStoryBeats.PlayIntro(BondMercHireId, () => done = true);
+            }
+            else if (IsSideIsland)
             {
                 // 【2026-10-31】支线岛自己的开场：岛名·副标黑幕 + 岛背景 + 独眼字条。
                 // 岛是一次性关，不记「看过」，中途退出重进会重播（文案短，可接受）。
@@ -526,6 +531,13 @@ public partial class BattleManager
             // _preBattleStoryPlaying 保持 true 压住硬刷，首波由回调触发）。
             if (IsTutorialRun)
             {
+                _preBattleStoryPlaying = false;
+                ScheduleFirstWaveSpawn();
+            }
+            else if (IsBondDungeon)
+            {
+                // 【T8】羁绊副本全程无抽奖：判据 Mode.Id == BondDungeon，不塞回 IsResourceDungeon
+                //（与「羁绊本不算活动副本」的口径一致）。不进 CoStageEntryDraft、不进 EnterLiveStartPhase。
                 _preBattleStoryPlaying = false;
                 ScheduleFirstWaveSpawn();
             }
@@ -569,6 +581,13 @@ public partial class BattleManager
         // 引导局直接开打；裂隙旧面板照旧；正式关/金币本常显按钮 +「开始战斗」（非阻塞，回调触发首波）。
         if (IsTutorialRun)
         {
+            _preBattleStoryPlaying = false;
+            ScheduleFirstWaveSpawn();
+            yield break;
+        }
+        if (IsBondDungeon)
+        {
+            // 【T8/T10】开场剧情播完直接刷首波，不弹任何抽奖面板（与上方无剧情分支同口径）
             _preBattleStoryPlaying = false;
             ScheduleFirstWaveSpawn();
             yield break;
@@ -1086,20 +1105,21 @@ public partial class BattleManager
             // null = 点的是随机；有值 = 点的是定向
             var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
             // 定向价按类型各自的币种算（佣兵 = 佣兵币价，装备 / 技能 = 抽奖币价）。
-            // 【2026-10-19 主人拍板】免费次数只惠及随机抽（null）；定向永远按价扣币，
+            // 【2026-10-19 主人拍板】正式关：免费次数只惠及随机抽（null）；定向永远按价扣币，
             // 也不消耗免费额度（cost>0 走 SpendBattleGold，免费额度只在 cost==0 时才被吃）。
-            // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本（金币/徽记/卷轴/礼物）全免费：
-            // 随机抽共用模式免费额度（5 次），定向各限 1 次（真源 SlotMachineSystem.ActivityFocusLeft），
+            // ⚠ 资源副本不适用上一句：本副本所有抽奖都免费，且都占 5 次总名额（见紧邻的下段注释）。
+            // 2026-11-09 口径调整：资源副本（金币/徽记/卷轴/礼物）全免费，
+            // 所有抽奖共用 5 次总名额，定向另受每类 1 次限制（真源 SlotMachineSystem.ActivityFocusLeft），
             // 都不扣币；额度用完由面板置灰挡在前面，这里再拦一道（回面板重选，不静默吞点击）。
             int cost;
             if (IsResourceDungeon)
             {
-                bool allowed = !picked.HasValue
-                    ? SlotMachineSystem.FreeDrawsLeft() > 0
-                    : SlotMachineSystem.ActivityFocusLeft(picked.Value) > 0;
+                bool allowed = SlotMachineSystem.FreeDrawsLeft() > 0
+                    && (!picked.HasValue || SlotMachineSystem.ActivityFocusLeft(picked.Value) > 0);
                 if (!allowed)
                 {
-                    UIManager.Instance?.ShowToast(!picked.HasValue ? "免费抽奖次数已用完" : "该方向本场只能抽一次");
+                    UIManager.Instance?.ShowToast(SlotMachineSystem.FreeDrawsLeft() <= 0
+                        ? "免费抽奖次数已用完" : "该方向本场只能抽一次");
                     continue;
                 }
                 cost = 0;
@@ -1268,9 +1288,9 @@ public partial class BattleManager
     public bool TryLiveDraw(DraftCategory? picked)
     {
         // —— 守卫（每个都报原因，不静默，铁律 12）——
-        if (IsTutorialRun || IsEndlessRift)
+        if (IsTutorialRun || IsEndlessRift || IsBondDungeon)
         {
-            Debug.LogError($"[BattleManager] 实时抽在引导局/裂隙不应出现（按钮应隐藏），已拦截 picked={picked}");
+            Debug.LogError($"[BattleManager] 实时抽在引导局/裂隙/羁绊副本不应出现（按钮应隐藏），已拦截 picked={picked}");
             return false;
         }
         if (_runClosed || _stageCleared || _rewardSequenceStarted)
@@ -1521,11 +1541,14 @@ public partial class BattleManager
         bool bonusFree = false;
         if (cost > 0)
             SpendBattleGold(cost);
-        // 【2026-11-09 主人拍板】资源副本定向抽：走自己的「每类 1 次」限额
-        //（SlotMachineSystem.ConsumeActivityFocusDraw），不吃普通免费额度；
+        // 2026-11-09 口径调整：资源副本定向抽走自己的「每类 1 次」限额
+        //（SlotMachineSystem.ConsumeActivityFocusDraw），并同样占用本场 5 次免费总名额；
         // bonus 额度本就只发给随机抽，这里按 isTargetedPick 收口，定向永远不会误吃它。
         else if (isTargetedPick && IsResourceDungeon)
+        {
             SlotMachineSystem.ConsumeActivityFocusDraw(cat);
+            SlotMachineSystem.ConsumeFreeDraw();   // 定向抽同样占本场 5 次总名额
+        }
         else if (!isTargetedPick && SlotMachineSystem.ConsumeBonusFreeDraw())
             bonusFree = true;
         else

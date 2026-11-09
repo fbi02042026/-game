@@ -93,6 +93,13 @@ public partial class WavePlanner
             BuildActivityDungeonWaves(startX, usable);
             return;
         }
+        // 【T10 2026-11-09】羁绊副本定死 2 波：1 波小怪 + 末波必出 Boss（章节池）。
+        // 判据用 IsBondDungeon，不塞回 IsResourceDungeon；只动羁绊本自己的波表，别的模式一行不碰。
+        if (bm != null && bm.IsBondDungeon)
+        {
+            BuildBondDungeonWaves(startX, usable);
+            return;
+        }
 
         StageType spawnType = elite ? StageType.Elite : StageType.Normal;
 
@@ -369,6 +376,42 @@ public partial class WavePlanner
     /// Boss 槽走 bossCountInWave 尾槽口径（不吃精英额度）。
     /// 带精英/Boss 的波不摇近远编成（照既有精英波口径 compositionStyle=0）；纯小怪波按普通波口径摇。
     /// </summary>
+    /// <summary>
+    /// 【T10】羁绊副本波次骨架：1 波小怪 + 末波 Boss，共 2 波。
+    /// Boss 图走章节池（ConfigManager.GetAvailableSpriteIndices(..., isBossWave=true)），不新增美术。
+    /// 末波 isBossWave=true 让 TryPickWaveMonster 挑 Boss 模板；通关链靠「所有波刷完且无活怪」，与关卡类型无关。
+    /// </summary>
+    void BuildBondDungeonWaves(float startX, List<Transform> usable)
+    {
+        const int bondMinionCount = 6;
+        for (int i = 0; i < 2; i++)
+        {
+            bool boss = i == 1;
+            Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
+            float triggerX = anchor != null
+                ? anchor.position.x
+                : startX + 3.5f + i * GameConfig.VIRTUAL_WAVE_SPACING;
+            if (boss && endPoint != null) triggerX = endPoint.position.x - 3f;
+            var wave = new WaveData
+            {
+                triggerX = triggerX,
+                spawnAnchor = anchor,
+                monsterCount = boss ? GameConfig.GetBossStageMonsterTotal() : bondMinionCount,
+                isBossWave = boss,
+                isRoundEnd = false,
+                spawned = false,
+                aliveCount = 0,
+                eliteBonus = 0,
+                bossCountInWave = 0
+            };
+            if (!boss) wave.compositionStyle = RollWaveComposition();
+            _waves.Add(wave);
+        }
+        PlanStageEvents();   // 候选波 = 非 Boss 且非首波，羁绊本 2 波天然无候选 → 不挂事件
+        _totalWaves = _waves.Count;
+        GamePerf.Log("[BattleManager] 羁绊副本定死波次：1 波小怪 + 1 波 Boss（章节池），共 " + _totalWaves + " 波");
+    }
+
     void BuildActivityDungeonWaves(float startX, List<Transform> usable)
     {
         // 【2026-11-09 主人拍板「每波8-10只 固定1 2 3波」】每波只数 8~10 随机（含端点），

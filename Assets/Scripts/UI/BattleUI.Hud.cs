@@ -166,7 +166,8 @@ public partial class BattleUI : MonoBehaviour
         HideTopBarEntryByLabel(enchantStoneText);  // 天赋石（旧布局第三资源位 EnchantText，新顶栏借它显示天赋石）
         // 【2026-11-09 主人拍板「去掉抽奖币资源条」】资源副本（金币/徽记/卷轴/礼物）抽奖全免费、
         // 局内抽奖币无消费出口 → DraftDisplay 整条隐藏；竞技场（「剩余N次」）/裂隙/正式关不受影响。
-        if (BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon)
+        if (BattleManager.Instance != null
+            && (BattleManager.Instance.IsResourceDungeon || BattleManager.Instance.IsBondDungeon))
             HideTopBarEntryByLabel(draftCoinText);
     }
 

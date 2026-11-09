@@ -496,6 +496,30 @@ public class CharacterSlotUI
         skillBadge.gameObject.SetActive(icon != null);
     }
 
+    /// <summary>
+    /// 【2026-11-09】佣兵头像左上角「羁绊」角标。挂点照 EnsureSkillBadge 同款：
+    /// 头像自己带 AspectRatioFitter，必须挂它的父节点才不会按原图比例被拉变形。
+    /// </summary>
+    public void SetBondBadge(string hireId)
+    {
+        Transform holder = portrait != null && portrait.transform.parent != null
+            ? portrait.transform.parent
+            : (root != null ? root.transform : null);
+        if (holder == null)
+        {
+            Debug.LogError("[CharacterSlotUI] 头像父节点缺失，羁绊角标挂不上");
+            return;
+        }
+        // 未解锁 / 空槽传 null 是正常状态：只复位显隐，不刷错误日志
+        if (string.IsNullOrEmpty(hireId))
+        {
+            var badge = holder.Find(BondBadge.NodeName);
+            if (badge != null) badge.gameObject.SetActive(false);
+            return;
+        }
+        BondBadge.Apply(holder as RectTransform, hireId);
+    }
+
     /// <summary>设置职业图标；给 null 就隐藏节点（不显示占位白块）。</summary>
     public void SetJobIcon(Sprite icon)
     {

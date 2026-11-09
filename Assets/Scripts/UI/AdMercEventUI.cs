@@ -221,7 +221,7 @@ public class AdMercEventUI : MonoBehaviour
             gBtn.onClick.AddListener(() => OnGiftClicked(idx));
 
             // 可领取红点（键 admerc.m{i}；状态由 AdMercEventSystem.RefreshRedDots 统一 Set）
-            RedDot.Bind(giftT, AdMercEventSystem.MilestoneRedDotKey(i), new Vector2(-16f, -16f), 52f);
+            RedDot.Bind(giftT, AdMercEventSystem.MilestoneRedDotKey(i), new Vector2(-16f, -16f), RedDot.DefaultSize);
         }
 
         var hintT = Deep(_root, "HintText");
@@ -244,8 +244,8 @@ public class AdMercEventUI : MonoBehaviour
 
         if (_days != null)
         {
-            // 【2026-10-31 主人拍板】双参数：当天已看 x/3（看满 3 个记 1 天，当天再看不计）+ 累计天数
-            _days.text = $"当天已看广告 {AdMercEventSystem.TodayAdProgress()}/{AdMercEventDefs.AdsPerDay}，已累计 {days} 天";
+            // 【2026-11-09 拍板：3 起步每天 +2，按累计已计天数】双参数：当天已看 x/N（看满当天所需记 1 天，当天再看不计）+ 累计天数
+            _days.text = $"当天已看广告 {AdMercEventSystem.TodayAdProgress()}/{AdMercEventSystem.TodayNeed()}，已累计 {days} 天";
         }
 
         // 进度条：0.15/0.4/0.65/0.95 是【可领取节点】（3/5/7/10 天）的刻度，相邻节点间按天数线性插值
@@ -254,7 +254,7 @@ public class AdMercEventUI : MonoBehaviour
         {
             float effDays = days + (AdMercEventSystem.IsDayCountedToday()
                 ? 0f
-                : AdMercEventSystem.TodayAdProgress() / (float)AdMercEventDefs.AdsPerDay);
+                : AdMercEventSystem.TodayAdProgress() / (float)AdMercEventSystem.TodayNeed());
             _progressFill.fillAmount = AdMercEventSystem.DayToFillAmount(effDays);
         }
 
@@ -323,9 +323,9 @@ public class AdMercEventUI : MonoBehaviour
             {
                 // 计数已在广播里落账（任意广告位都算，含别处看的），这里按最新状态提示
                 if (AdMercEventSystem.IsDayCountedToday())
-                    GlobalToastUI.Show($"今日 3 个已看完，累计 {AdMercEventSystem.Days}/{AdMercEventDefs.MaxDay} 天，明天再来看");
+                    GlobalToastUI.Show($"今日 {AdMercEventSystem.TodayNeed()} 个已看完，累计 {AdMercEventSystem.Days}/{AdMercEventDefs.MaxDay} 天，明天再来看");
                 else
-                    GlobalToastUI.Show($"看广告成功，今日 {AdMercEventSystem.TodayAdProgress()}/{AdMercEventDefs.AdsPerDay} 个，已累计 {AdMercEventSystem.Days}/{AdMercEventDefs.MaxDay} 天");
+                    GlobalToastUI.Show($"看广告成功，今日 {AdMercEventSystem.TodayAdProgress()}/{AdMercEventSystem.TodayNeed()} 个，已累计 {AdMercEventSystem.Days}/{AdMercEventDefs.MaxDay} 天");
             }
             else
             {

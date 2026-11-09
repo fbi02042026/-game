@@ -433,8 +433,9 @@ public class TavernUI : MonoBehaviour, ITownPage
             // 挂它下面整棵子树不渲染，是红点看不见的根因；改挂整卡根节点（active，子节点渲染在最上层）。
             RedDot.Bind(questButton.transform, RedDot.Tavern);
 
-            // 2026-11-08 主人当场「佣兵列队整体可以放大2%」→「再放大1%再往上2」→「+3」（19:1x 拍板）：
-            // 整张入口卡累计等比放大 3%（从基准算，不做 1.02×1.01 叠乘），并在
+            // 2026-11-08 主人当场「佣兵列队整体可以放大2%」→「再放大1%再往上2」→「+3」（19:1x 拍板）
+            // → 2026-11-09 主人当场「这个框再放大2%」（累计到 5%）：
+            // 整张入口卡累计等比放大 5%（从基准算，不做 1.02×1.01 叠乘），并在
             // ApplyFeatureCardLayout 落位之后整体上移 3 逻辑像素。只改 localScale 与纵向 y，
             // 不碰 sizeDelta / anchoredPosition.x / Image.type / 贴图 / prefab。
             // 基准首读一次，之后按基准绝对赋值：防 WireClicks 重入累乘，也防布局重排抹掉偏移。
@@ -447,7 +448,7 @@ public class TavernUI : MonoBehaviour, ITownPage
                     _questBaseY = qrt.anchoredPosition.y;
                     _questCardTuned = true;
                 }
-                qrt.localScale = new Vector3(_questBaseScale.x * 1.03f, _questBaseScale.y * 1.03f, _questBaseScale.z);
+                qrt.localScale = new Vector3(_questBaseScale.x * 1.05f, _questBaseScale.y * 1.05f, _questBaseScale.z);
                 var p = qrt.anchoredPosition;   // x 原样带回，只改 y
                 p.y = _questBaseY + 3f;
                 qrt.anchoredPosition = p;

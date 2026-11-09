@@ -280,7 +280,7 @@ public sealed class GiftDungeonBattleMode : BattleMode
 /// <summary>
 /// 羁绊副本（2026-10-27 主人拍板「照礼物副本框架」）：好感满的佣兵专属单场 Elite 关。
 /// 该佣兵强制进玩家队伍（RunDraftDirector.EnsureBondMercInLoadout），难度固定（不开放选择，≈5~7 章强度），
-/// 一次性通关后该佣兵全属性永久 ×1.5（Mercenary.ApplyBondClearBonus 自动生效）+ 奖励钻石（见 SettleStageClear）。
+/// 一次性通关后该佣兵血/攻/防/魔攻/魔防永久 ×1.5（乘区在 MercRosterDefs 属性公式内按 hireId 判）+ 奖励钻石（见 SettleStageClear）。
 /// 结构照抄 <see cref="GiftDungeonBattleMode"/>；不占 SlotTable 位，入口 = 好感界面「羁绊地图」按钮
 /// （MercFavorUI.OnBondClicked 置 PendingBondDungeon / PendingBondHireId）。
 /// </summary>
@@ -312,7 +312,7 @@ public sealed class BondDungeonBattleMode : BattleMode
 
     /// <summary>
     /// 通关结算：首次通关 → 标记羁绊已建立 + 发钻石；随后弹胜利结算回城。
-    /// 属性 ×1.5 是永久存档乘区，由 Mercenary.ApplyBondClearBonus 在战斗内自动生效，这里只负责"一次性标记 + 钻石"。
+    /// 属性 ×1.5 是永久存档乘区，由 MercRosterDefs 属性公式按 hireId 判定，这里只负责"一次性标记 + 钻石"。
     /// 二次进入（已通关）不应再发奖——但入口按钮已置灰，正常走不到这里。
     /// </summary>
     public override void SettleStageClear(BattleManager bm)
@@ -336,8 +336,10 @@ public sealed class BondDungeonBattleMode : BattleMode
             ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, diamond, save: true, notify: true);
             Debug.Log($"[BondDungeon] 羁绊通关：{hid}（{rarity}）已标记 + 钻石{diamond}");
         }
-        // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
-        bm.EndRunAndReturnToTown();
+        // 【T11】通关回城自动重开好感界面（不跳冒险页）；收尾剧情播完再回城。
+        // 【T10】通关后剧情照 FinaleBattleMode 先例：Boss 死 → 剧情 → 回城。
+        MercFavorUI.PendingOpenAfterBattleHireId = hid;
+        BondDungeonStoryBeats.PlayClear(bm.EndRunAndReturnToTown);
     }
 }
 

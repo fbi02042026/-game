@@ -140,8 +140,10 @@ public class SaveData
     // === 看广告送佣兵活动（2026-10-31 立项，艾拉 H015，Systems/AdMercEventSystem.cs）===
     /// <summary>活动「今日计数」日键 yyyyMMdd（本地日口径与其它广告位一致；跨天自动失效重计）</summary>
     public string adMercEventDayKey = "";
-    /// <summary>今日已看成功的活动广告次数（0..AdsPerDay=3；2026-10-31 主人拍板：每天看满 3 个广告计 1 天，跨天随 dayKey 失效归零）</summary>
+    /// <summary>今日已看成功的活动广告次数（0..当天所需；2026-11-09 拍板：3 起步每天 +2，按累计已计天数；跨天随 dayKey 失效归零）</summary>
     public int adMercEventTodayAds = 0;
+    /// <summary>今日计 1 天所需的成功广告次数（跨天时按累计已计天数锁定并写入，当天所有判断与 UI 分母都读它；老档为 0 时跨天自然重算）</summary>
+    public int adMercEventTodayNeed = 0;
     /// <summary>活动累计看广告成功天数（只增不减、断签不清零——2026-10-31 主人拍板；达到 10 天后停止累计）</summary>
     public int adMercEventDays = 0;
     /// <summary>里程碑领取位标记 bit0..bit3（0=未领 1=已发邮件；领取入口 AdMercEventSystem.Claim）</summary>
@@ -173,6 +175,14 @@ public class SaveData
     /// 刷成今天，永远表现成「今天刚玩过」，排名就永远不会因几天没玩而回落。
     /// </summary>
     public string endlessRiftLastPlayDayKey = "";
+
+    // === 跑酷（2026-11-09 拍板）===
+    /// <summary>跑酷每日次数日键 yyyyMMdd（本地日 DayKeyUtil 口径），跨天清零 triesToday</summary>
+    public string runDayKey = "";
+    /// <summary>跑酷今日已用次数（进入扣 1，中途退出不退）</summary>
+    public int runTriesToday = 0;
+    /// <summary>跑酷今日广告加次（0/1，做进去但不开放）</summary>
+    public int runAdBonusToday = 0;
 
     // === 活动副本（2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 主人拍板：
     //     金币周一/三/六、徽记周二/四/日开放，每日各 2 次，每次 10 体力；规则见 ActivityDungeonRules）===
@@ -425,6 +435,8 @@ public class SaveData
     public bool arenaUnlockToastShown = false;
     /// <summary>【2026-11-09】首次「可升星」箭头气泡已弹（酒馆图标上方，账号全局一次，记档防重弹）。</summary>
     public bool mercStarReadyHintShown = false;
+    /// <summary>【2026-11-09】首次点进无限裂隙的玩法说明已弹（账号全局一次，记档防重弹）。</summary>
+    public bool endlessRiftIntroShown = false;
     /// <summary>
     /// 战前剧情「看过即不重播」位标记（2026-10-19 主人拍板）：bit0=第1章 … bit7=第8章。
     /// 每章战前剧情开播过一次就置位，之后进关不再重播（治「每次进都卡剧情」）。

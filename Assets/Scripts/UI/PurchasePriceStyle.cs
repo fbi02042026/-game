@@ -27,14 +27,22 @@ public static class PurchasePriceStyle
     /// <summary>描边色：转发全局稀有度表的统一描边色。</summary>
     public static Color OutlineColor => RarityPalette.Outline;
 
+    /// <summary>
+    /// 半透浅描边（2026-11-09 升阶按钮「×N」专用）：亮黄绿底上纯黑不透明描边对比太硬。
+    /// 中性灰提亮一档 + 50% 透明，色相不变；只有显式传入 Apply 的调用点生效，
+    /// 其余购买数字仍走 <see cref="OutlineColor"/>，零影响。
+    /// </summary>
+    public static readonly Color SoftOutlineColor = new Color(0.20f, 0.20f, 0.20f, 0.5f);
+
     /// <summary>描边偏移（与 LoadingUI / BattleUI 里已有 Outline 同口径）。</summary>
     public static readonly Vector2 EffectDistance = new Vector2(1.5f, -1.5f);
 
     /// <summary>
     /// 给购买 / 消耗数字套统一样式。幂等，可放在每次 Refresh 里。
     /// useNormalColor=true 时把文字色设成全局暖金（仅用于原本是纯白、确实看不清的地方）。
+    /// outlineColor 只给需要浅描边的亮底数字用（默认 null = 全局深描边）。
     /// </summary>
-    public static void Apply(Text label, bool useNormalColor = false)
+    public static void Apply(Text label, bool useNormalColor = false, Color? outlineColor = null)
     {
         if (label == null) return;
         if (useNormalColor) label.color = NormalColor;
@@ -43,7 +51,7 @@ public static class PurchasePriceStyle
         if (label.GetComponent<Shadow>() != null) return;
 
         var ol = label.gameObject.AddComponent<Outline>();
-        ol.effectColor = OutlineColor;
+        ol.effectColor = outlineColor ?? OutlineColor;
         ol.effectDistance = EffectDistance;
         ol.useGraphicAlpha = true;
     }

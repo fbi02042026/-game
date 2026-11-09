@@ -484,6 +484,18 @@ public class MailListUI : MonoBehaviour
         {
             var dotT = FindDeep(go.transform, "红点");
             row.unreadDot = dotT != null ? dotT.gameObject : null;
+            // 2026-11-09 主人「必须统一 以后都统一」：全工程红点贴图唯一出口 = RedDot.Sprite。
+            // 预制体里手摆的深棕金边圆不再生效；已领取模板的同名印章节点不在此列。
+            if (dotT != null)
+            {
+                var dotImg = dotT.GetComponent<Image>();
+                if (dotImg == null) Debug.LogError("[MailList] 红点节点缺 Image，贴图统一失败");
+                else
+                {
+                    dotImg.sprite = RedDot.Sprite;
+                    dotImg.preserveAspect = true;   // 与 RedDot.Bind 同款，不拉伸
+                }
+            }
         }
 
         // 横条 icon（底框下，主人 2026-10-16 加的）：sprite 在 ApplyRowVisual 按状态切 礼物/信件

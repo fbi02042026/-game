@@ -293,8 +293,6 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     float _animK;
     Button _continueBtn;
     Button _backpackBtn;
-    /// <summary>概率公示按钮（美术图，运行时建，见 BuildOddsButton）。</summary>
-    Button _oddsBtn;
     /// <summary>【2026-10-13 #9】连抽计数（每次开面板清零，每点一次抽奖 +1）。</summary>
     int _comboCount;
     /// <summary>【2026-10-13 #9】「已连抽 ×N」提示（≥2 显示），挂在抽奖容器上方。</summary>

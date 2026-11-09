@@ -255,8 +255,8 @@ public partial class Mercenary : UnitBase
         ApplyOutStarBonus();
         // 【2026-10-23 施工单 T4】养成资质加成同款补挂时机（幂等：_growApplied 挡重复，无养成记录是无操作）。
         ApplyGrowBonus();
-        // 【2026-10-27 羁绊】通关羁绊后全属性 ×1.5 同款补挂时机（幂等：_bondApplied 挡重复，未通关是无操作）。
-        ApplyBondClearBonus();
+        // 【2026-11-09】羁绊乘区已并入 MercRosterDefs 属性公式（按 hireId 判），战斗侧不再补挂；
+        // 共用 asset 行不同时会重建基底，加成随之重算。
         ApplyLegendaryFx();   // 【2026-11-05】hireId 到手后重判传奇（共用 asset 的佣兵稀有度可能不同）
     }
 

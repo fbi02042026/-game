@@ -1,3 +1,5 @@
+using UnityEngine;
+
 /// <summary>
 /// 看广告送佣兵活动纯数据定义（2026-10-31 立项，施工单
 /// 《Docs/看广告送佣兵_艾拉活动_待办任务清单_2026-10-31.md》第一节）。
@@ -8,7 +10,7 @@
 ///   满 7 天 → 艾拉碎片 ×20 + 中级徽记 ×10（够升 2 星）
 ///   满 10 天 → 艾拉碎片 ×40 + 中级徽记 ×20（够升 3 星）
 /// 计 1 天的口径（2026-10-31 主人拍板，与活动面板设计稿副标题一致）：
-///   **每天看满 AdsPerDay(3) 个成功激励视频才计 1 天**，当天看满即停，跨天重新计数。
+///   **每天看满当天所需个数的成功激励视频才计 1 天**（所需 = 3 + 2*累计已计天数，2026-11-09 拍板，跨天锁定），当天看满即停，跨天重新计数。
 /// 碎片合计 70 = MercStarDefs.FullStarFragTotal(Rare)，零溢出零缺口；礼包不发金币（主人原话
 /// 「金币让玩家自己去获取 也算一种动力」）。
 /// 徽记档位/职业不写死：运行时从花名册 H015 行反查（游侠 × MercStarDefs.BadgeTierOf），
@@ -28,8 +30,8 @@ public static class AdMercEventDefs
     /// <summary>最后一档天数（达到即停止拉广告——「没有功能的不要累计」）。</summary>
     public static int MaxDay => MilestoneDays[MilestoneCount - 1];
 
-    /// <summary>每天需看满多少个成功广告才计 1 天（2026-10-31 主人拍板「每天看够 3 个广告」）。</summary>
-    public const int AdsPerDay = 3;
+    /// <summary>第 N 个累计天（N 从 0 起）当天需看满多少个成功广告才计 1 天（2026-11-09 拍板：3 起步每天 +2，按累计已计天数）。</summary>
+    public static int AdsNeededForDays(int days) => 3 + 2 * Mathf.Max(0, days);
 
     // ---- 里程碑奖励数量（对齐 MercStarDefs 稀有档升星消耗 10/20/40 + 中级徽记 0/10/20）----
     public const int FragStage1 = 10;   // 满 5 天：碎片 ×10（1 星）

@@ -86,6 +86,7 @@ public class TownHubController : MonoBehaviour
         ConsumePendingAdventure();
         TapTapRatePopup.ConsumePendingPrompt();   // 章末通关回城后弹好评引导（2026-10-25 主人拍板，每日最多一次）
         ArenaPopupUI.ConsumePendingOpen();        // 竞技场战斗返回 → 回到竞技场界面（2026-10-31 主人拍板）
+        MercFavorUI.ConsumePendingOpen();         // 【T11】羁绊副本返回 → 回到好感界面，不跳冒险页
         StartCoroutine(CoWarmupPages());
         StartCoroutine(CoDefeatComfort());
     }

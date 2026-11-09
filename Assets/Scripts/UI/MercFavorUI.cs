@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,7 +20,7 @@ using UnityEngine.UI;
 ///   粉色从下往上一点点露出；不跳变、不建任何进度条图）
 /// → Right/Top1/佣兵头像(Iconmask/Icon + namebg/Name)：头像 + 名字
 /// → Right/Top1/选中对话/1|2|3（各带 Text (Legacy)）：答案槽（prefab 无 Button，代码补）；
-///   分值不展示，每天轮换一个特殊答案，每天 3 次、一次选一个
+///   一天一轮、一次选一个答案，选完佣兵回话并换次日新题；三档回报每天轮换、选完揭晓
 /// → Right/Middle/panl(Iconbg/Icon + Iconbg/Name)：礼物槽模板（代码按持有礼物横排克隆；
 ///   文字行 = 品质(着色)+名字+好感值，数量在右下角爱心角标【代码建 CountBadge】，
 ///   空行时行框上显示提示【代码建 GiftEmptyTip】，2026-10-31 主人拍板照设计稿）
@@ -59,6 +60,14 @@ public class MercFavorUI : MonoBehaviour
     Text _bondBtnTitle;        // 战斗按钮/羁绊地图
     Color _bondLabelOrigColor = Color.white;   // 战斗按钮/地图名字 的 prefab 原色（Bind 时缓存）
 
+    // —— T4/T5 新增：顶部好感数值 + 换题动画（运行时补节点/组件，预制体一字不动）——
+    Text _favorValueText;                  // 【代码建】顶部「当前/满值」进度文本
+    RectTransform[] _talkSlotRts;          // 三个答案槽（换题动画用）
+    float[] _talkSlotBaseX;                // 槽 prefab 原 x（动画结束复位，不写死布局）
+    CanvasGroup[] _talkSlotGroups;         // 动画淡入淡出（运行时挂）
+    Coroutine _talkAnim;                   // 换题动画（同一时刻只跑一条）
+    bool _talkAnimating;                   // 动画期间不刷对话区，避免覆盖气泡回话
+
     // —— 左列表（2026-10-27 主人拍板：可滑动；prefab 6 格作初始池，超出克隆 Row_0 补行）——
     RectTransform _rosterRoot;         // Left/头像（兼 viewport）
     ScrollRect _rosterScroll;          // 左列表滚动容器（运行时套）
@@ -95,6 +104,19 @@ public class MercFavorUI : MonoBehaviour
     static string _pendingHireId;
     string _initialHireId;
 
+    /// <summary>【T11】羁绊本撤离 / 退出 / 通关回城后自动重开好感界面（带 hireId）。
+    /// 置位点在战斗收尾链，消费点 = TownHubController.Start；清档复位在 NewGameReset.ApplyAll。</summary>
+    public static string PendingOpenAfterBattleHireId;
+
+    /// <summary>回城消费口：置位则按 hireId 重开好感界面（只消费一次）。</summary>
+    public static void ConsumePendingOpen()
+    {
+        if (string.IsNullOrEmpty(PendingOpenAfterBattleHireId)) return;
+        string hid = PendingOpenAfterBattleHireId;
+        PendingOpenAfterBattleHireId = null;
+        Open(hid);
+    }
+
     public static void Open(string hireId = null)
     {
         if (!Application.isPlaying) return;
@@ -117,6 +139,7 @@ public class MercFavorUI : MonoBehaviour
         if (canvas != null && canvas.GetComponent<GraphicRaycaster>() == null)
             canvas.gameObject.AddComponent<GraphicRaycaster>();
 
+        FitPanelUniformScale();   // T1：只改根 Panel 的 localScale，不动任何子节点坐标 / 锚点 / SizeDelta
         if (!BindNodes()) { Destroy(gameObject); return; }
         _initialHireId = _pendingHireId;
         _pendingHireId = null;
@@ -199,6 +222,9 @@ public class MercFavorUI : MonoBehaviour
             _talkTexts = new Text[3];
             _talkBtns = new Button[3];
             _talkImgs = new Image[3];
+            _talkSlotRts = new RectTransform[3];
+            _talkSlotBaseX = new float[3];
+            _talkSlotGroups = new CanvasGroup[3];
             for (int i = 0; i < 3; i++)
             {
                 var slotT = talkRoot.Find((i + 1).ToString());
@@ -209,6 +235,11 @@ public class MercFavorUI : MonoBehaviour
                     _talkBtns[i] = slotT.gameObject.AddComponent<Button>();   // prefab 只摆了 Image，补点击
                 _talkImgs[i] = slotT != null ? slotT.GetComponent<Image>() : null;
                 if (_talkImgs[i] != null) _talkImgOrigColor = _talkImgs[i].color;
+                _talkSlotRts[i] = slotT as RectTransform;
+                _talkSlotBaseX[i] = _talkSlotRts[i] != null ? _talkSlotRts[i].anchoredPosition.x : 0f;
+                _talkSlotGroups[i] = slotT != null ? slotT.GetComponent<CanvasGroup>() : null;
+                if (_talkSlotGroups[i] == null && slotT != null)
+                    _talkSlotGroups[i] = slotT.gameObject.AddComponent<CanvasGroup>();
                 if (_talkTexts[i] == null || _talkBtns[i] == null)
                 {
                     Debug.LogError(LogTag + "选中对话缺槽 " + (i + 1) + " 或其 Text (Legacy)（结构被改过？）");
@@ -510,6 +541,24 @@ public class MercFavorUI : MonoBehaviour
         text.resizeTextMaxSize = 26;
         text.raycastTarget = false;
         _questionText = text;
+
+        // 【T5】顶部「当前/满值」好感数值：几何沿用气泡实测值（不发明布局数值），挂在气泡正上方。
+        // 主人点名要「最上面显示当前/满值」，属必要介入；字号 24（fusion-pixel 12 倍数）。
+        var favGo = new GameObject("FavorValueText", typeof(RectTransform), typeof(Text));
+        var favRt = favGo.GetComponent<RectTransform>();
+        favRt.SetParent(standRoot, false);
+        favRt.anchorMin = favRt.anchorMax = new Vector2(0.5f, 0.5f);
+        favRt.pivot = new Vector2(0.5f, 0.5f);
+        favRt.sizeDelta = new Vector2(bubbleRt.sizeDelta.x, 30f);
+        favRt.anchoredPosition = new Vector2(bubbleRt.anchoredPosition.x,
+            bubbleRt.anchoredPosition.y + bubbleRt.sizeDelta.y * 0.5f + 16f);
+        var favTx = favGo.GetComponent<Text>();
+        favTx.font = text.font;
+        favTx.fontSize = 24;
+        favTx.color = Color.white;
+        favTx.alignment = TextAnchor.MiddleCenter;
+        favTx.raycastTarget = false;
+        _favorValueText = favTx;
     }
 
     /// <summary>建一个带 Image 的 UI 子节点（锚点用比例；siblingIndex 0 = 垫底，-1 = 最上层）。</summary>
@@ -605,17 +654,9 @@ public class MercFavorUI : MonoBehaviour
             _rowGos[i].SetActive(true);
             var sp = MercPortraitSprites.GetHead(_mercIds[i]);
             if (sp != null && i < _rowIcons.Count && _rowIcons[i] != null) _rowIcons[i].sprite = sp;
-            // 【2026-10-26 晚拍板】头像框随本格佣兵稀有度换三档（普通银/稀有蓝/传奇金）
-            if (i < _rowBgs.Count && _rowBgs[i] != null)
-            {
-                if (MercRosterDefs.TryGetByHireId(_mercIds[i], out var rowDef))
-                    _rowBgs[i].sprite = MercHireSession.LoadTavernCardFrame(rowDef.Rarity);
-                else
-                    Debug.LogError(LogTag + "花名册里查不到佣兵 " + _mercIds[i] + "，头像框不换（表被改过？）");
-                // 【2026-10-31 主人拍板「按我的预制体效果来」】行颜色保持 prefab 原色，不再乘暗
-                //（旧逻辑未选中 ×0.62 变暗 = 运行时改了主人摆好的行色，撤）
-                _rowBgs[i].color = _rowOrigColor;
-            }
+            // 【T2/T3 按预制体效果来】左列头像框与行色一律保持 prefab 摆好的样子：
+            // 代码不再按稀有度换框、不再改行色。要换图请直接在预制体里重拖，代码不补图、不开加载路径。
+            // _rowBgs / _rowOrigColor 保留节点绑定（死字段只报告不清理，铁律 18）。
         }
         // 左列每格好感百分比（2026-10-27 主人拍板：爱心旁显示当前进度；FavorPct 由 Tools/好感界面/第三批构建 生成）
         for (int i = 0; i < _mercIds.Length && i < _rowPcts.Count; i++)
@@ -648,18 +689,10 @@ public class MercFavorUI : MonoBehaviour
         var head = MercPortraitSprites.GetHead(hireId);
         if (head != null) _headIcon.sprite = head;
 
-        // 【2026-10-26 晚拍板】半身像框随选中佣兵稀有度换三档（主人点名）
-        var frameSp = MercHireSession.LoadTavernCardFrame(def.Rarity);
-        if (frameSp != null)
-        {
-            // 2026-10-27 美术裁决：mask 只做裁剪不显示、裁剪形状不随稀有度变（实测三档框图中心
-            // 区域不透明，立绘显示正常）；框由 _standFrameBg（Top/bg）显示。
-            // 原先这行把 _standFrame（Top/mask 本体 Image）也换图，已删；字段与绑定保留不动。
-            if (_standFrameBg != null) _standFrameBg.sprite = frameSp;
-        }
-        else
-            Debug.LogError(LogTag + "稀有度头像框加载失败：Resources/" + MercHireSession.TavernCardFrameDir +
-                           "/（普通|稀有|传奇）头像框，半身像框不换（fail closed 不静默）");
+        // 【T2 按预制体效果来】Top/bg、Top/mask 的背景与卡框一律用 prefab 摆好的图，
+        // 代码不再按稀有度换图（切换佣兵稀有度也不换背景）。要换图请直接在预制体里重拖。
+        // 立绘只按 hireId 提供 sprite 内容，显示尺寸 / preserveAspect 全交给 prefab 节点（T3）。
+        // _standFrameBg 保留绑定不参与换图（死字段只报告不清理，铁律 18）。
 
         // 名字
         if (_nameText != null)
@@ -695,25 +728,37 @@ public class MercFavorUI : MonoBehaviour
             }
         }
 
-        // 问题对话框：佣兵先开口提问（答案在下方三选一，分值不展示）
-        MercFavorDefs.GetTalk(hireId, out var question, out var options, out var replies);
-        if (_questionText != null) _questionText.text = question;
+        // 【T5】顶部「当前/满值」好感数值（真源唯一：GetFavor + FavorMax）
+        if (_favorValueText != null) _favorValueText.text = favor + "/" + MercFavorDefs.FavorMax;
 
-        // 答案 3 槽：每天 3 次、一次选一个；分值不展示（每天轮换一个特殊答案，玩家猜）
-        bool canTalk = MercFavorSystem.CanTalk(d, hireId);
-        for (int i = 0; i < MercFavorDefs.DialogueOptionCount; i++)
+        // 【T4】一天一轮、一轮一问：可聊 = 今天的题；已聊 = 展示明天的题（下一题次日才真正可答）。
+        // 换题动画期间跳过本区，避免把气泡里的回话 / 新题覆盖掉（动画结束会 RefreshAll 收口）。
+        if (!_talkAnimating)
         {
-            _talkBtns[i].interactable = canTalk;
-            if (_talkImgs[i] != null)
-                _talkImgs[i].color = canTalk ? _talkImgOrigColor : DisabledLabelColor;
-            if (_talkTexts[i] != null)
-                _talkTexts[i].text = canTalk ? options[i] : "今日已聊";
+            bool canTalk = MercFavorSystem.CanTalk(d, hireId);
+            int dayKey = canTalk ? MercFavorSystem.TodayKey() : MercFavorSystem.TomorrowKey();
+            int talkIdx = MercFavorDefs.TalkIndexOfDay(hireId, dayKey);
+            MercFavorDefs.GetTalk(hireId, talkIdx, out var question, out var options, out _);
+            if (_questionText != null) _questionText.text = question;
+
+            for (int i = 0; i < MercFavorDefs.DialogueOptionCount; i++)
+            {
+                _talkBtns[i].interactable = canTalk;
+                if (_talkImgs[i] != null)
+                    _talkImgs[i].color = canTalk ? _talkImgOrigColor : DisabledLabelColor;
+                if (_talkTexts[i] != null) _talkTexts[i].text = options[i];
+            }
         }
 
         // 底部羁绊区
         if (_mapNameText != null) _mapNameText.text = MercFavorDefs.BondMapName(hireId);
         bool full = MercFavorSystem.IsBondOpen(d, hireId);
         bool cleared = MercFavorSystem.IsBondCleared(d, hireId);
+        // 【2026-11-09 口径】满好感只是开门、通关才加属性：顶部面板压暗把两态在视觉上分开。
+        // S0 不变暗 / S1「好感值已满」/ S2「羁绊已建立」。
+        ApplyBondFullOverlay(cleared ? "羁绊已建立" : full ? "好感值已满" : null);
+        // 【T5】满好感遮罩是运行时后建、层级在上；把数值文本提到最上层，避免「当前/满值」被黑罩压暗。
+        if (_favorValueText != null) _favorValueText.transform.SetAsLastSibling();
         if (_infoText != null)
         {
             if (cleared)
@@ -827,6 +872,75 @@ public class MercFavorUI : MonoBehaviour
         if (tip != null) tip.gameObject.SetActive(shown == 0);
     }
 
+    /// <summary>
+    /// 【2026-11-09】好感满 / 羁绊已建立时，顶部面板压暗 + 居中文字。
+    /// 运行时建节点，预制体一字不动；遮罩 raycastTarget=false，对话 / 送礼点击不受影响。
+    /// 传 null = S0（未满），只隐藏遮罩；节点认不出 LogError，不静默造半套 UI。
+    /// </summary>
+    void ApplyBondFullOverlay(string label)
+    {
+        var top = transform.Find("Panel/Right/Top") as RectTransform;
+        if (top == null)
+        {
+            Debug.LogError(LogTag + "缺 Panel/Right/Top 节点，好感满遮罩挂不上（结构被改过？）");
+            return;
+        }
+
+        var exist = top.Find("BondFullOverlay");
+        GameObject go;
+        if (exist != null)
+        {
+            go = exist.gameObject;
+        }
+        else
+        {
+            var font = GameFonts.GetChinese();
+            if (font == null)
+            {
+                Debug.LogError(LogTag + "fusion-pixel 字体取不到，好感满遮罩不建（不拿其它字体顶替）");
+                return;
+            }
+            go = new GameObject("BondFullOverlay", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(top, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            var img = go.GetComponent<Image>();
+            img.color = new Color(0f, 0f, 0f, 0.6f);
+            img.raycastTarget = false;
+
+            var textGo = new GameObject("Label", typeof(RectTransform));
+            textGo.transform.SetParent(go.transform, false);
+            var trt = textGo.GetComponent<RectTransform>();
+            trt.anchorMin = trt.anchorMax = new Vector2(0.5f, 0.5f);
+            trt.pivot = new Vector2(0.5f, 0.5f);
+            trt.anchoredPosition = Vector2.zero;
+            trt.sizeDelta = new Vector2(360f, 60f);
+            var t = textGo.AddComponent<Text>();
+            t.font = font;
+            t.fontSize = 36;   // fusion-pixel 12px 点阵的整倍数
+            t.alignment = TextAnchor.MiddleCenter;
+            t.color = Color.white;
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            t.raycastTarget = false;
+        }
+
+        bool show = !string.IsNullOrEmpty(label);
+        go.SetActive(show);
+        if (!show) return;
+        var labelText = go.transform.Find("Label")?.GetComponent<Text>();
+        if (labelText == null)
+        {
+            Debug.LogError(LogTag + "好感满遮罩缺 Label 节点（结构被改过？）");
+            return;
+        }
+        labelText.text = label;
+        go.transform.SetAsLastSibling();
+    }
+
     // —— 礼物行两件套（2026-10-31 主人拍板）：数量角标 + 空行提示（运行时建节点，预制体没摆）——
 
     /// <summary>角标爱心图路径：好感度图组的粉色实心爱心（22×19，按路径加载，铁律 16）。</summary>
@@ -931,29 +1045,129 @@ public class MercFavorUI : MonoBehaviour
         _giftTemplate.gameObject.SetActive(true);   // 旧结构复位（没礼物时下方再统一隐藏）
     }
 
+    // ———————— T1 等比放大 / T4 换题动画 ————————
+
+    /// <summary>
+    /// T1 界面等比放大：照 BattleSettlementUI.FitPanelUniformScale，只给根 Panel 的 localScale 赋值。
+    /// 幂等（每次 Show 都从 scale=1 的设计尺寸重算，不叠乘）；不改锚点 / SizeDelta / 任何子节点坐标。
+    /// </summary>
+    void FitPanelUniformScale()
+    {
+        var panel = transform.Find("Panel") as RectTransform;
+        if (panel == null)
+        {
+            Debug.LogError(LogTag + "缺根 Panel，界面不缩放（fail closed）");
+            return;
+        }
+        Vector2 design = panel.sizeDelta;
+        if (design.x < 1f || design.y < 1f)
+        {
+            var r = panel.rect;
+            design = new Vector2(Mathf.Abs(r.width), Mathf.Abs(r.height));
+        }
+        if (design.x < 1f || design.y < 1f) return;
+        float w = Mathf.Max(1f, GameConfig.DESIGN_WIDTH);
+        float h = Mathf.Max(1f, GameConfig.DESIGN_HEIGHT);
+        float s = Mathf.Min(w / design.x, h / design.y);
+        if (s < 0.05f) s = 0.05f;
+        panel.localScale = new Vector3(s, s, 1f);
+    }
+
+    /// <summary>T6 好感刚满的恭喜 toast（对话 / 送礼共用一条口，文案只此一处）。</summary>
+    static void ShowFavorFullToast(string mercName)
+        => GlobalToastUI.Show("我勒个豆！和" + mercName + "的好感拉满，羁绊地图开了", true);
+
+    /// <summary>
+    /// T4 换题反馈：气泡先播佣兵回话 → 旧三答案依次右滑撤出 → 换成次日新题 + 新三答案依次滑入
+    /// → 当天收口（三槽置灰禁点）。动画期间不刷对话区，数值 / 爱心 / Info 照常刷新。
+    /// </summary>
+    IEnumerator CoTalkFeedback(string mercName, string reply, bool justFull)
+    {
+        _talkAnimating = true;
+        RefreshAll();   // 数值 / 爱心 / Info 即时刷新；对话区由 _talkAnimating 跳过
+
+        if (_questionText != null) _questionText.text = mercName + "：「" + reply + "」";
+        for (int i = 0; i < MercFavorDefs.DialogueOptionCount; i++)
+            if (_talkBtns[i] != null) _talkBtns[i].interactable = false;
+        yield return new WaitForSecondsRealtime(1.1f);
+
+        yield return CoSlideSlots(outIn: false);
+
+        int nextIdx = MercFavorDefs.TalkIndexOfDay(_currentHireId, MercFavorSystem.TomorrowKey());
+        MercFavorDefs.GetTalk(_currentHireId, nextIdx, out var nextQuestion, out var nextOptions, out _);
+        if (_questionText != null) _questionText.text = nextQuestion;
+        for (int i = 0; i < MercFavorDefs.DialogueOptionCount; i++)
+            if (_talkTexts[i] != null) _talkTexts[i].text = nextOptions[i];
+
+        yield return CoSlideSlots(outIn: true);
+
+        _talkAnimating = false;
+        _talkAnim = null;
+        RefreshAll();   // 收口：与重开界面（已聊态）显示同一套明日题 + 置灰槽
+        if (justFull) ShowFavorFullToast(mercName);
+    }
+
+    /// <summary>
+    /// 三个答案槽依次横向滑出 / 滑入。位移量取槽自身实测宽度，动画结束一律复位到 prefab 原 x
+    /// （只临时改 x，不改 sizeDelta / 锚点 / Image.type；属主人点名的换题动画必要介入）。
+    /// </summary>
+    IEnumerator CoSlideSlots(bool outIn)
+    {
+        const float duration = 0.22f;
+        for (int i = 0; i < MercFavorDefs.DialogueOptionCount; i++)
+        {
+            var rt = _talkSlotRts != null && i < _talkSlotRts.Length ? _talkSlotRts[i] : null;
+            var cg = _talkSlotGroups != null && i < _talkSlotGroups.Length ? _talkSlotGroups[i] : null;
+            if (rt == null) continue;
+            float dist = rt.rect.width > 1f ? rt.rect.width : 200f;
+            float baseX = _talkSlotBaseX != null && i < _talkSlotBaseX.Length ? _talkSlotBaseX[i] : rt.anchoredPosition.x;
+            float from = outIn ? baseX + dist : baseX;
+            float to = outIn ? baseX : baseX + dist;
+            for (float t = 0f; t < duration; t += Time.unscaledDeltaTime)
+            {
+                float k = Mathf.Clamp01(t / duration);
+                rt.anchoredPosition = new Vector2(Mathf.Lerp(from, to, k), rt.anchoredPosition.y);
+                if (cg != null) cg.alpha = outIn ? k : 1f - k;
+                yield return null;
+            }
+            rt.anchoredPosition = new Vector2(to, rt.anchoredPosition.y);
+            if (cg != null) cg.alpha = outIn ? 1f : 0f;
+        }
+    }
+
     // ———————— 交互 ————————
 
     void OnTalkClicked(int slot)
     {
         var d = Data;
         if (d == null || string.IsNullOrEmpty(_currentHireId)) return;
-        // 【2026-11-04 主人拍板】好感到顶后不再接受对话：明确提示，不静默
+        if (_talkAnimating) return;   // 换题动画期间不接受第二次点击（一天只有一轮）
+        // 好感到顶后不再接受对话：明确提示，不静默
         if (MercFavorSystem.IsBondOpen(d, _currentHireId))
         {
             GlobalToastUI.Show("好感已满");
             return;
         }
+        int before = MercFavorSystem.GetFavor(d, _currentHireId);
         int gain = MercFavorSystem.Talk(d, _currentHireId, slot, out var grantedGiftId);
         if (gain < 0) return;   // 今日已聊（按钮已禁点，这里再拦一道）
 
-        MercFavorDefs.GetTalk(_currentHireId, out _, out _, out var replies);
+        // 【T6】刚好顶到满值弹一次恭喜：UI 层 before/after 判定，不写存档标记、不在系统层弹
+        int after = MercFavorSystem.GetFavor(d, _currentHireId);
+        bool justFull = before < MercFavorDefs.FavorMax && after >= MercFavorDefs.FavorMax;
+
+        // 回话取「今天这道题」的第 slot 条（Talk 之后 canTalk 已 false，此处显式用今日日键）
+        int todayIdx = MercFavorDefs.TalkIndexOfDay(_currentHireId, MercFavorSystem.TodayKey());
+        MercFavorDefs.GetTalk(_currentHireId, todayIdx, out _, out _, out var replies);
         MercRosterDefs.TryGetByHireId(_currentHireId, out var def);
         string msg = def.Name + "：「" + replies[slot] + "」 好感+" + gain;   // 选完才揭晓加了多少
-        // 【2026-10-26 主人拍板】当日 3 次聊完随机回礼（Toast 由 GrantRandomGift 自己 force 弹，这里不重复）
-        if (grantedGiftId != null) msg += "，还收到了回礼！";
+        if (grantedGiftId != null) msg += "，还收到了回礼！";   // 礼物 Toast 由 GrantRandomGift 自己弹
         GlobalToastUI.Show(msg);
         SaveSystem.Instance.Save();
-        RefreshAll();
+
+        // T4：回话进气泡 → 旧三答案依次右滑撤出 → 明日新题 + 新三答案依次滑入（当天禁点）
+        if (_talkAnim != null) StopCoroutine(_talkAnim);
+        _talkAnim = StartCoroutine(CoTalkFeedback(def.Name, replies[slot], justFull));
     }
 
     void OnGiftClicked(string giftId)
@@ -966,14 +1180,20 @@ public class MercFavorUI : MonoBehaviour
             GlobalToastUI.Show("好感已满");
             return;
         }
+        int before = MercFavorSystem.GetFavor(d, _currentHireId);
         int gain = MercFavorSystem.GiveGift(d, _currentHireId, giftId);
         if (gain < 0) { RefreshGifts(d); return; }   // 礼物没了等异常：静默刷一遍，下次必显示正确状态
 
         MercFavorDefs.TryGetGift(giftId, out var def);
         MercRosterDefs.TryGetByHireId(_currentHireId, out var m);
-        GlobalToastUI.Show("送出" + def.Name + "，" + (m.Name ?? _currentHireId) + " 好感+" + gain);
+        string mercName = m.Name ?? _currentHireId;
+        GlobalToastUI.Show("送出" + def.Name + "，" + mercName + " 好感+" + gain);
         SaveSystem.Instance.Save();
         RefreshAll();
+        // 【T6】送礼刚好顶到满值同样弹一次恭喜（与对话共用一条出口）
+        int after = MercFavorSystem.GetFavor(d, _currentHireId);
+        if (before < MercFavorDefs.FavorMax && after >= MercFavorDefs.FavorMax)
+            ShowFavorFullToast(mercName);
     }
 
     void OnBondClicked()
@@ -982,18 +1202,21 @@ public class MercFavorUI : MonoBehaviour
         if (d == null || string.IsNullOrEmpty(_currentHireId)) return;
         // 一次性：未开放 / 已通关都不进本（按钮已置灰，这里双保险）
         if (!MercFavorSystem.IsBondOpen(d, _currentHireId) || MercFavorSystem.IsBondCleared(d, _currentHireId)) return;
-        // 【2026-10-27 主人拍板】羁绊副本 = 照礼物副本框架：好感满佣兵专属单场关，该佣兵强制进队，
-        // 难度固定 ≈5~7 章、一次性通关发钻石 + 永久 ×1.5 属性（详见 BondDungeonBattleMode）。
-        // 进本标记（2026-10-28 起统一走 ResetPendingFlags 全清，再立羁绊本标记；BattleManager 读后即清）
-        AdventureUI.ResetPendingFlags();
-        AdventureUI.PendingBondDungeon = true;
-        AdventureUI.PendingBondHireId = _currentHireId;
-        AdventureUI.PendingBattleDifficulty = MercFavorDefs.BondDungeonDifficulty;
-        AdventureUI.PendingBattleChapter = MercFavorDefs.BondDungeonChapter;
-        // 关掉好感界面再进本（进战斗会切场景，这里先 Destroy 干净，避免叠界面）
-        Destroy(gameObject);
-        if (GameSceneManager.Instance != null) GameSceneManager.Instance.LoadBattleScene();
-        else Debug.LogError(LogTag + "找不到 GameSceneManager，羁绊副本进本失败");
+        string hireId = _currentHireId;   // 回调里界面可能已关，先捕获真值
+        // 【T9】选职必须在切场景之前（PlayerJobDefs.ApplyForBattle 按「当前所选职业」发装）。
+        // 取消不进本、不扣体力；Options 每次 Open 都重设，避免上次对战的「挑战」文案残留。
+        PlayerJobSelectUI.Show(() =>
+        {
+            // ResetPendingFlags 会清掉所有 Pending，标记必须在回调里重立（照 AdventureUI.Interaction 口径）
+            AdventureUI.ResetPendingFlags();
+            AdventureUI.PendingBondDungeon = true;
+            AdventureUI.PendingBondHireId = hireId;
+            AdventureUI.PendingBattleDifficulty = MercFavorDefs.BondDungeonDifficulty;
+            AdventureUI.PendingBattleChapter = MercFavorDefs.BondDungeonChapter;
+            Destroy(gameObject);
+            if (GameSceneManager.Instance != null) GameSceneManager.Instance.LoadBattleScene();
+            else Debug.LogError(LogTag + "找不到 GameSceneManager，羁绊副本进本失败");
+        }, new PlayerJobSelectUI.Options { EnterLabel = "进入羁绊", StaminaFree = true });
     }
 
     void Close()

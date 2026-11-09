@@ -618,20 +618,17 @@ public partial class BattleEntryDraftPanel
             SetExpanded(false);
             ApplyState(0f);   // 立刻归位到收起态（不等动画走完），下面展开才有「收 → 展」的观感
         }
-        // 这里是倒计时<b>首次</b>起表点：面板一露头（= 抽奖环节开始）就开始走，
-        // **不是抽完才开始**。归零 = 玩家挂着没动 → 当作点了「继续」。
-        // ⚠【2026-10-12 纠正误记】旧注释写「2026-10-11 主人拍板：每抽一次结算完再起一次表 = 重置计时」，
-        // 但它引用的主人原话是「时间是固定的 不是抽一次重置一次计时」—— 引文与结论正好相反，是误记；
-        // 主人 2026-10-12 又强调了一遍。按归因纪律纠正回 2026-10-06 那份口径：
-        // **总预算就是面板弹出时这 60s，抽完只解冻、不补满**，StartContinueCountdown 在本类里
-        // 只剩「面板首次弹出」这一个调用点（铁律 15：不多入口）。
+        // 2026-11-09 口径调整：这里<b>不再起 60 秒倒计时</b>。原「面板一露头就开始走、
+        // 归零当作点了继续」整套停用 —— 面板只由玩家点「继续/开始战斗」或正常流程收起，
+        // 挂机多久都不会自己收。倒计时数字节点随之不再创建（唯一创建点是 StartContinueCountdown）。
+        // 历史口径（60s 固定预算、抽完只解冻不补满）已随起表点一起作废，这里只留结论，免后人改回去。
         _drawLocked = false;
-        StartContinueCountdown();
+        // 2026-11-09 口径调整：所有模式都不再起 60 秒倒计时，面板只由玩家点继续/开始战斗或正常流程收起。
         _onPick = onPick;
         _onFight = onFight;
         _draftActive = true;
         _comboCount = 0;   // 【2026-10-13 #9】每次开面板重置连抽计数
-        RestartIdleGuide();   // 【2026-10-18 主人拍板】面板弹出 = 5 秒无操作计时开始（引导局内部自动跳过）
+        // 2026-11-09 口径调整：停用 5 秒无操作软引导（去掉抽奖按钮上的手指）。
 
         SetDraftVisible(true);
         SetExpanded(true);
@@ -677,7 +674,6 @@ public partial class BattleEntryDraftPanel
         _hasDrawnThisPanel = false;
         var bm = BattleManager.Instance;
         if (bm != null && bm.IsTutorialRun) return;
-        _idleGuideCo = StartCoroutine(CoIdleGuide());
     }
 
     /// <summary>停计时并收掉引导手指（幂等）。</summary>
