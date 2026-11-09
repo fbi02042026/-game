@@ -129,6 +129,13 @@ public class GlobalToastUI : MonoBehaviour
     /// Loading 遮罩真正收掉时由 <see cref="BattleLoadingOverlay.Hide"/> 调：把攥住的 toast 放出来。
     /// 若此刻又有新的一场 Loading 开着（连续切场景），继续攥着等下一次收。
     /// </summary>
+    /// <summary>【2026-11-06】进程级静态队列跨 Play 残留，与 _heldMsg 同口径：启动时清掉。</summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetQueuedToast()
+    {
+        _queued.Clear();
+    }
+
     public static void FlushHeldToast()
     {
         if (string.IsNullOrEmpty(_heldMsg)) return;
@@ -341,6 +348,7 @@ public class GlobalToastUI : MonoBehaviour
         if (_rootRt != null) _rootRt.anchoredPosition = _basePos;
         _root.SetActive(false);
         _co = null;
+        PlayNextQueued();   // 【2026-11-06】coroutine 收尾：队列非空就接播下一条（上飘淡出后从原位淡入）
     }
 
     IEnumerator CoFlythrough(string msg)
@@ -417,5 +425,6 @@ public class GlobalToastUI : MonoBehaviour
         if (plate != null) plate.color = normalPlateColor;
         _root.SetActive(false);
         _co = null;
+        PlayNextQueued();   // 【2026-11-06】coroutine 收尾：队列非空就接播下一条（上飘淡出后从原位淡入）
     }
 }

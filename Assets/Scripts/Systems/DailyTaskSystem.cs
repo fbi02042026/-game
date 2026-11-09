@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 /// <summary>
 /// 每日/周常任务结算器（2026-10-29 新增，主人拍板扩编任务种类）。
@@ -49,15 +50,30 @@ public static class DailyTaskSystem
             data.MarkTaskRewardClaimed(row.id, keyInt);
 
             // 发奖：天赋石（日常）/ 钻石（周常）+ 经验（2026-10-29 扩编，主人拍板「有些奖励可以给些经验」）
+            // 【2026-11-06 主人拍板】奖励明细汇总成一条中央 toast（排队播，不顶前）：经验 → 天赋石/钻石。
+            // ResourceWallet 改 notify:false，避免它自带的单条 toast 顶掉汇总；经验照常走 LevelSystem。
+            var lines = new List<string>();
             if (row.rewardStones > 0)
-                ResourceWallet.Add(daily ? ResourceWallet.ResourceType.TalentPoint : ResourceWallet.ResourceType.Diamond,
-                    row.rewardStones, save: true, notify: true);
+            {
+                var type = daily ? ResourceWallet.ResourceType.TalentPoint : ResourceWallet.ResourceType.Diamond;
+                var result = ResourceWallet.Add(type,
+                    row.rewardStones, save: true, notify: false);
+                if (result.added > 0)
+                    lines.Add("获得 " + ResourceWallet.DisplayName(type) + " +" + result.added);
+                if (result.overflow > 0)
+                    lines.Add(ResourceWallet.DisplayName(type) + "已满，溢出进邮箱");
+            }
             if (row.rewardExp > 0)
+            {
                 LevelSystem.AddDirectExp(row.rewardExp);
+                lines.Insert(0, "获得 经验 +" + row.rewardExp);   // 经验置顶：汇总「经验 → 天赋石/钻石」
+            }
 
             // 【2026-11-04 主人拍板】任务完成提示统一左侧滑入横幅（仿新邮件模式）：
             // 文案只说「XXX任务已完成」，奖励明细不再写（原 GlobalToastUI 的「获得 …」移除）。
             QuestDoneToast.Show(row.title);
+            if (lines.Count > 0)
+                GlobalToastUI.ShowQueued(string.Join("\n", lines));
 
             Debug.Log("[DailyTask] settle: " + row.id + " +" + row.rewardStones + (daily ? " 石" : " 钻")
                 + (row.rewardExp > 0 ? " +" + row.rewardExp + " exp" : ""));
