@@ -744,7 +744,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (worldTab != null)
             RedDot.Bind(worldTab, RedDot.LogWorld);
         if (_claim != null)
-            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-8f, -8f));
+            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -16f));
     }
 
     void SelectTab(LogTab tab, bool force = false)
@@ -1386,8 +1386,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             var rt = (RectTransform)go.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(-8f, -8f);
-            rt.sizeDelta = new Vector2(24f, 24f);
+            rt.anchoredPosition = new Vector2(-16f, -16f);
+            rt.sizeDelta = new Vector2(48f, 48f);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.color = Color.white;

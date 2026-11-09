@@ -131,7 +131,7 @@ public static class RedDot
     }
 
     /// <summary>给任意图标右上角挂红点（没有则创建）</summary>
-    public static UIRedDot Bind(Transform icon, string key, Vector2? offset = null, float size = 22f)
+    public static UIRedDot Bind(Transform icon, string key, Vector2? offset = null, float size = 44f)
     {
         if (icon == null || string.IsNullOrEmpty(key)) return null;
         var existing = icon.GetComponentInChildren<UIRedDot>(true);
@@ -147,7 +147,7 @@ public static class RedDot
         rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(size, size);
-        rt.anchoredPosition = offset ?? new Vector2(-6f, -6f);
+        rt.anchoredPosition = offset ?? new Vector2(-12f, -12f);
 
         var img = go.GetComponent<Image>();
         img.sprite = Sprite;

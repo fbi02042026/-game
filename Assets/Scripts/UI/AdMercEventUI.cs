@@ -221,7 +221,7 @@ public class AdMercEventUI : MonoBehaviour
             gBtn.onClick.AddListener(() => OnGiftClicked(idx));
 
             // 可领取红点（键 admerc.m{i}；状态由 AdMercEventSystem.RefreshRedDots 统一 Set）
-            RedDot.Bind(giftT, AdMercEventSystem.MilestoneRedDotKey(i), new Vector2(-8f, -8f), 26f);
+            RedDot.Bind(giftT, AdMercEventSystem.MilestoneRedDotKey(i), new Vector2(-16f, -16f), 52f);
         }
 
         var hintT = Deep(_root, "HintText");

@@ -426,8 +426,8 @@ public partial class TalentUI
             var rt = dot.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.sizeDelta = new Vector2(18f, 18f);
-            rt.anchoredPosition = new Vector2(-6f, -6f);
+            rt.sizeDelta = new Vector2(36f, 36f);
+            rt.anchoredPosition = new Vector2(-12f, -12f);
             var img = dot.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.raycastTarget = false;
@@ -438,7 +438,7 @@ public partial class TalentUI
 
     /// <summary>
     /// 2026-09-29：节点右上角红色「新」字（<see cref="RightNodeView.newTag"/>）。
-    /// 位置刻意让开右上角那个「可点/可升级」小红点（-6,-6），故往左挪到 (-34,-12)。
+    /// 位置刻意让开右上角那个「可点/可升级」小红点（-12,-12），故往左挪到 (-34,-12)。
     /// </summary>
     static void SetRowNewTag(GameObject rowRoot, ref Text tag, bool show)
     {

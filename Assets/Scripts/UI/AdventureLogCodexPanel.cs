@@ -24,7 +24,7 @@ public class AdventureLogCodexPanel
     static readonly Vector2 TinyBtnSize = new Vector2(56f, 44f);    // 翻页小按钮（原 40×32）
     const int TinyBtnFontSize = 28;         // 翻页小按钮字号（原 20）
     const float PageBtnOffsetX = 100f;      // 翻页按钮距中心（原 90，给加宽的页码标签让位）
-    const float RedDotSize = 36f;           // 未读红点角标（原 28，同比例放大）
+    const float RedDotSize = 72f;           // 未读红点角标（原 36，2026-11-09 主人拍板全部界面红点 ×2）
     const float PagePad = 8f;
     const float SectionGap = 16f;      // 章与章（区与区）之间的间距
     const float BottomBarReserve = 64f; // 底部翻页条留白，避免最后一行被箭头挡住
@@ -746,7 +746,7 @@ public class AdventureLogCodexPanel
             rt.pivot = new Vector2(0.5f, 0.5f);
             // 2026-09-18 用户反馈：16px 红点太小不明显，加大到 28 并压进角内
             // 2026-10-23 主人拍板：角标随运行时元素同比例放大 28 → 36
-            rt.anchoredPosition = new Vector2(-4f, -4f);
+            rt.anchoredPosition = new Vector2(-8f, -8f);
             rt.sizeDelta = new Vector2(RedDotSize, RedDotSize);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
