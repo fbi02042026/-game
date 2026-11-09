@@ -34,6 +34,8 @@ public class TownHubController : MonoBehaviour
     MainNavTab _current = MainNavTab.Guild;
     bool _wasLandladyBanned;
     TavernNavBanHud _tavernBanHud;
+    /// <summary>进镇预热（含 Loading）已收起：此前主界面被 Loading 盖着，不许弹玩家可见提示。</summary>
+    bool _warmupDone;
 
     void Awake()
     {
@@ -60,6 +62,10 @@ public class TownHubController : MonoBehaviour
             _tavern.MarkWelcomeBack();
         _wasLandladyBanned = banned;
         RefreshTavernNavBannedVisual(banned);
+        // 【2026-11-09】首次可升星：进镇预热收起后持续轮询（复用 0.25s 节流，已弹过直接短路）。
+        // 不限制当前停在哪个功能页——只要底栏酒馆菜单可见，由 MercStarReadyHint 自行判定。
+        if (_warmupDone && _nav != null && _nav.tavernButton != null)
+            MercStarReadyHint.TryShow(_nav.tavernButton.transform as RectTransform);
     }
 
     void RefreshTavernNavBannedVisual(bool banned)
@@ -114,7 +120,11 @@ public class TownHubController : MonoBehaviour
         foreach (var tab in order)
         {
             var mb0 = PageOf(tab) as MonoBehaviour;
-            if (mb0 != null && mb0.gameObject.activeSelf) yield break;
+            if (mb0 != null && mb0.gameObject.activeSelf)
+            {
+                _warmupDone = true;   // 玩家已在用某页：本就不遮 Loading，主界面直接可见
+                yield break;
+            }
         }
 
         var loading = EnsureWarmupLoading();
@@ -173,6 +183,7 @@ public class TownHubController : MonoBehaviour
             Destroy(loading.gameObject);
         }
         ShowGuildOnly(); // 恢复大厅底图状态（清掉预热期间页面设置的 overlay 模式）
+        _warmupDone = true;   // Loading 已收起，此后才允许弹玩家可见提示
     }
 
     /// <summary>预热用的 Loading 实例（自己持有，不抢 BattleLoadingOverlay 的单例，避免被场景流程提前 Hide）。</summary>

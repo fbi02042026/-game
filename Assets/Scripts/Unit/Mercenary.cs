@@ -209,7 +209,7 @@ public partial class Mercenary : UnitBase
         SetupAttributes(id, level);
         Face(1);
         WirePassiveOnAttack();
-        ApplyLegendaryFx();   // 【2026-11-05】传奇佣兵战斗特效（形象流光+脚下光环，见 Mercenary.LegendaryFx.cs）
+        ApplyLegendaryFx();   // 【2026-11-05】传奇佣兵战斗特效（脚下光环；形象流光 11-09 已停用，见 Mercenary.LegendaryFx.cs）
 
         Debug.Log($"[Mercenary:{id}] Init完成 | isAlly={isAlly} | facingDir={facingDir} | pos={transform.position}");
     }

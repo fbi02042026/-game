@@ -420,6 +420,24 @@ public class Hero : UnitBase
         // 摇杆优先：手动位移，期间不跑自动追敌（直接改坐标，避免 velocity 被 ApplyLaneY/SetWorldPosition 清掉）
         if (_manualMove)
         {
+            // 【2026-11-09】点击集结：每帧把方向喂给手动位移（不追敌、不推图）；
+            // 到点后保持手动态但不播走路动画，等 BattleRally 的 2 秒驻留结束才恢复自动。
+            if (BattleRally.Active && BattleRally.TryGetMoveDir(this, out Vector2 rallyDir))
+            {
+                if (rallyDir.sqrMagnitude > 0.0001f)
+                {
+                    _manualDir = rallyDir;
+                    _manualHeld = true;
+                }
+                else
+                {
+                    _manualHeld = false;
+                    _manualDir = Vector2.zero;
+                    _acquireLock = null;
+                    _acquireUntil = 0f;
+                    _manualReleaseUntil = 0f;
+                }
+            }
             float spd = GetCombatMoveSpeed();
             float vx = _manualDir.x * spd * GameConfig.HERO_MANUAL_MOVE_X_MUL;
 
@@ -456,16 +474,24 @@ public class Hero : UnitBase
             RefreshDepthSort();
 
             // 手动移动也每帧刷新当前目标；没有合法候选时立刻清空，不能等到可攻击才换目标
-            var near = FindNearestEnemyInDetectRange();
-            target = near;
-            if (near != null && IsInBasicAttackRange(near)
-                && attackCd <= 0f
-                && (unitAnim == null || !unitAnim.InAttackLock))
+            // 【2026-11-09】集结期间不索敌、不出手（首人到达 2 秒后才恢复自动）
+            if (BattleRally.Active)
             {
-                if (Mathf.Abs(_manualDir.x) <= 0.05f)
-                    FaceToward(near);
-                Attack(near);
-                attackCd = GetAttackCooldown();
+                target = null;
+            }
+            else
+            {
+                var near = FindNearestEnemyInDetectRange();
+                target = near;
+                if (near != null && IsInBasicAttackRange(near)
+                    && attackCd <= 0f
+                    && (unitAnim == null || !unitAnim.InAttackLock))
+                {
+                    if (Mathf.Abs(_manualDir.x) <= 0.05f)
+                        FaceToward(near);
+                    Attack(near);
+                    attackCd = GetAttackCooldown();
+                }
             }
 
             // 按住摇杆时即使死区也保持走步，避免过中心闪站立

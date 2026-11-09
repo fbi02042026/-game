@@ -189,6 +189,32 @@ public partial class Mercenary : UnitBase
 
         EnsureAiPolicy();
 
+        // 【2026-11-09】点击集结：我方全体优先走到点击点，期间不索敌 / 不出手。
+        // 敌方佣兵（竞技场机器人）不参与，仍走原 AI。
+        if (isAlly && BattleRally.Active && BattleRally.TryGetMoveDir(this, out Vector2 rallyDir))
+        {
+            if (rallyDir.sqrMagnitude > 0.0001f)
+            {
+                facingDir = rallyDir.x > 0f ? 1 : -1;
+                ApplyFacing(facingDir);
+                if (rb != null)
+                    rb.velocity = new Vector2(rallyDir.x * GetCombatMoveSpeed(), rb.velocity.y);
+                if (Mathf.Abs(rallyDir.y) > 0.01f)
+                    SetLaneY(LaneY + rallyDir.y * GetCombatMoveSpeed() * Time.deltaTime);
+                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            }
+            else
+            {
+                if (rb != null) rb.velocity = Vector2.zero;
+                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            }
+            target = null;
+            if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
+                ClampToScreen();
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
+
         // 牧师：有伤员且治疗技可放时，站住等自动奶。
         // 【2026-10-20 主人拍板】原实现无条件定身 return，两条路会脱队/死锁：
         // ① 定住时不过拴绳、不走 10-19 的「边打边跟」，玩家往前跑牧师钉在原地；

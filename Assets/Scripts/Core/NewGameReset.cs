@@ -32,6 +32,8 @@ public static class NewGameReset
         // 清档后 GoLogin 同步切场景、不走 Loading 流程，旧曲会一路拖到登录页：
         // 立刻切断并把待恢复曲目钉成登录曲（单一出口在 GameBgm，别在调用点散着写）。
         GameBgm.ResetForNewGame();
+        // 【2026-11-09】点击集结是进程级静态状态，清档必须一起复位
+        BattleRally.Reset();
 
         UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM）");
     }

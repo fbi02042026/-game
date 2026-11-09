@@ -392,7 +392,7 @@ public class TavernUI : MonoBehaviour, ITownPage
             // 原「信任交流卡复用为酒馆闲话」口径作废——闲话已单独挪到场景「对话」按钮
             // （本文件下方 gossipBtn 接线），本卡只开好感界面。
             // 2026-10-31 主人拍板：原聚合弹窗 TavernChatPopupUI 已删除（四个入口各有正式去处，弹窗零调用点）。
-            // 【2026-10-31】佣兵功能分先后开：羁绊排最后（主力固定下来感情才有意义），门槛 = 通第 3 章。
+            // 【2026-11-09 主人拍板】羁绊门槛由第 3 章提前到第 2 章（排序仍排最后：主力固定下来感情才有意义）。
             trustButton.gameObject.SetActive(true);
             trustButton.onClick.RemoveAllListeners();
             trustButton.onClick.AddListener(() =>

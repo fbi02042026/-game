@@ -63,11 +63,8 @@ public partial class BattleEntryDraftPanel
         else
         {
             _continueBtn = EnsureClickable(cont);
-            // 2026-10-04 主人拍板：「继续」按钮不要文字，只留美术图标。
-            // 不管预制体自带还是别处补的 Text，一律关掉 —— 不留第二个文字入口。
-            var contTexts = cont.GetComponentsInChildren<Text>(true);
-            for (int i = 0; i < contTexts.Length; i++)
-                contTexts[i].gameObject.SetActive(false);
+            // 2026-11-09 主人拍板：字在按钮的子节点（预制体里的 Text），这里只管父节点显隐，
+            // 不再关子节点；新换的按钮底图本身不带字，关掉就成了空白按钮。
             if (_continueBtn != null) _continueBtn.onClick.AddListener(OnContinueClicked);
         }
 
@@ -87,7 +84,12 @@ public partial class BattleEntryDraftPanel
         // 先按真值表拍回收起态，之后 Begin→SetExpanded(true) 才能从 0 平滑动到 1；
         // 不拍这一步，第一次展开会先把面板从 750 抽回 600 再展开，看着就是「跳一下」。
         SetDraftVisible(false);
-        ApplyState(0f);
+        // 【2026-11-09 主人拍板】map / 世界层不再跟着面板两态走：预制体已直接摆成战斗中的
+        // 常驻位置（中心Y 350 / scale 1.4）。这里只把面板 UI 拍回收起态，并一次性把 map
+        // 与世界层落到终态（初始化期、Loading 底下完成，玩家看不到任何位移）。
+        ApplyPanelState(0f);
+        ApplyMapState(1f);
+        ApplyWorldLift(1f);
     }
 
     /// <summary>
@@ -209,8 +211,10 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// 概率公示按钮（美术图「提示」金币问号）：贴在抽奖按钮这一排的右上角，点了弹 <see cref="DraftOddsPopupUI"/>。
-    /// 【2026-11-08 拍板】位置改到「最下面这排抽奖按钮的右边角落里」，下面 10-05 的「按钮旁边」口径作废。
+    /// 概率公示按钮（美术图「提示」金币问号）：贴屏幕右边缘，点了弹 <see cref="DraftOddsPopupUI"/>。
+    /// 【2026-11-09 主人拍板「放到屏幕边上」】11-08 那版按「整排抽奖按钮右上角内收」定位，
+    /// 图标整块压在最后一张抽奖卡上，把抽奖按钮挡住了 —— 该口径作废。现在 x 锚到根画布右边缘，
+    /// y 仍取这一排上沿；右边放不下时把图标抬到整排上方，绝不盖住任何一张抽奖卡。
     ///
     /// 2026-10-05 主人拍板：「概率需要告诉玩家……可以再（抽）按钮旁边加个感叹号之类的，
     /// 点击弹出弹窗上面写的概率」「可以加到 DraftRoot 节点里」。预制体里没有这个节点
@@ -223,9 +227,8 @@ public partial class BattleEntryDraftPanel
     {
         if (_draftRt == null || _slots.Count == 0) return;
 
-        // 【2026-11-08 拍板】概率公示改放到「最下面这排抽奖按钮的右边角落里」：
-        // 取这一排可见按钮整棵子树的世界角点 → 换成 DraftRoot 本地坐标 → 求包围盒右上角。
-        // 不绑某一张卡、不写死坐标；只显示一个按钮或竖屏重锚都照贴这一排的右上角。
+        // 【2026-11-09 拍板】贴屏幕右边缘；仍挂在 DraftRoot 下，面板收起时跟着一起藏。
+        // 下面仍算出这一排的包围盒右上角，只用来定 y 和校验「会不会压到抽奖卡」。
         var corners = new Vector3[4];
         float rowRight = 0f, rowTop = 0f;
         bool hasVisible = false;
@@ -255,6 +258,19 @@ public partial class BattleEntryDraftPanel
             return;
         }
 
+        // 【2026-11-09 拍板】根画布右上角 → DraftRoot 本地坐标 = 屏幕右边缘。
+        // 不写死 720，竖屏/缩放都跟着走；仍挂 DraftRoot 下（不改成挂 Canvas 根），面板收起时一起藏。
+        var canvas = _draftRt.GetComponentInParent<Canvas>();
+        var rootCanvas = canvas != null ? canvas.rootCanvas : null;
+        var canvasRt = rootCanvas != null ? rootCanvas.transform as RectTransform : null;
+        if (canvasRt == null)
+        {
+            Debug.LogError("[BattleEntryDraftPanel] 找不到根画布，概率公示按钮不建");
+            return;
+        }
+        var canvasCorners = new Vector3[4];
+        canvasRt.GetWorldCorners(canvasCorners);
+        float screenRight = _draftRt.InverseTransformPoint(canvasCorners[2]).x;
         var go = new GameObject("BtnOdds", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
         go.transform.SetParent(_draftRt, false);
 
@@ -265,9 +281,13 @@ public partial class BattleEntryDraftPanel
         // 【2026-10-13 #6】58 → 88：顺手修触摸目标不达标（美术规格 §5.5）。
         // 【2026-10-16 主人口令】图标有点大 → 缩小 30%（88 → 61.6）。
         rt.sizeDelta = new Vector2(61.6f, 61.6f);
-        // 图标完整落在这排右上角内侧：中心往里收半个自身尺寸，不压到排外。
-        rt.anchoredPosition = new Vector2(rowRight - rt.sizeDelta.x * 0.5f,
-                                          rowTop - rt.sizeDelta.y * 0.5f);
+        // 图标右边界离屏幕右边 16；y 取这一排上沿。
+        float half = rt.sizeDelta.x * 0.5f;
+        float x = screenRight - 16f - half;
+        float y = rowTop - half;
+        // 右边空位不够（会压到抽奖卡）时抬到整排上方：宁可靠上，也不挡按钮。
+        if (x - half < rowRight) y = rowTop + half + 8f;
+        rt.anchoredPosition = new Vector2(x, y);
 
         var img = go.GetComponent<Image>();
         // 2026-10-15 主人拍板：概率按钮换成美术图 Art/UI/Common/提示（金币问号），

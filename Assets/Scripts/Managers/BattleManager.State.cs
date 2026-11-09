@@ -16,6 +16,14 @@ public partial class BattleManager
     /// 于是战斗里看到的金币就是进关时的金币，金币奖励变成结算界面上的一笔。</para>
     /// </summary>
     long _runStageGoldPending = 0;
+
+    // —— 金币本逐怪分摊三件套（2026-11-09 主人拍板「金币按文案设定来发 + 资源条累计与总额一致」）——
+    /// <summary>金币本本局总权重（普通1/精英2/Boss5，真源 ActivityDungeonDefs；WavePlanner.BuildActivityDungeonWaves 铺波时算好，≤0 = 未就绪，逐怪发放早退）。</summary>
+    internal int _goldDungeonWeightTotal;
+    /// <summary>金币本已死怪的权重累计（逐怪发放按「累计权重 / 总权重」占比取整）。</summary>
+    internal int _goldDungeonWeightSoFar;
+    /// <summary>金币本已发放金币累计（恒 ≤ 文案总额，最后一只把零头补齐）。</summary>
+    internal int _goldDungeonGoldPaid;
     /// <summary>本局待发的局外金币（中断存档要写它，杀进程才不会吞掉这笔钱）。</summary>
     public long RunStageGoldPending => _runStageGoldPending;
     /// <summary>本局已通关关卡数（撤离补偿用：每关 +1 天赋石，2026-10-17 主人拍板）。</summary>
@@ -192,6 +200,13 @@ public partial class BattleManager
 
     /// <summary>当前局是否活动副本（金币/徽记/卷轴/礼物/羁绊统称，开放日/次数/波次/倍率共用口径的地方用）。</summary>
     public bool IsActivityDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon || IsBondDungeon;
+
+    /// <summary>
+    /// 当前局是否资源副本（金币/徽记/卷轴/礼物四本）。
+    /// 【2026-11-09 主人拍板「羁绊本不算活动副本，算是关卡的复制品」】羁绊本不在内；
+    /// 抽奖免费限额 / 进关抽奖分流 / 精英Boss血量 / 顶栏资源条显隐等新口径一律走本属性，不再散判四本。
+    /// </summary>
+    public bool IsResourceDungeon => IsGoldDungeon || IsBadgeDungeon || IsScrollDungeon || IsGiftDungeon;
 
     /// <summary>当前局是否无限裂隙（2026-10-17 新玩法，见 EndlessBattleMode）</summary>
     public bool IsEndlessRift => Mode != null && Mode.Id == BattleModeId.Endless;

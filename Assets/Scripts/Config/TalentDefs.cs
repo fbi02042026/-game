@@ -524,10 +524,10 @@ public static class TalentDefs
             new[] { 30, 65, 110 }, AttrKind.EliteDamage, new[] { 15f, 30f, 50f }, "hunt", "精英猎手"));
         // 2026-09-29 新增：R_LUCK 幸运提升 —— 提高进关抽奖「再来一次」的概率。
         // kind=Custom 不走属性系统（属性系统没有「概率」这一项），数值由
-        // SlotMachineSystem.RerollChance 按等级直接读：每级 +3%（1/2/3 级 = +3%/+6%/+9%）。
-        // optValues 与 SlotMachineDefs.REROLL_PER_TALENT 必须一致，改一处要同步另一处。
+        // SlotMachineSystem.RerollChance 按等级直读本值。【2026-11-09 主人拍板】阶梯：第 1 级 +1%、第 2 级再 +2%、第 3 级再 +3%（累计 1%/3%/6%），加满 = 基础 1% + 6% = 7%。
+        // optValues 是概率加成唯一真源；改表后跑 Tools/sync_table_bytes.py talent_right 同步 bytes。
         list.Add(HNode(14, "R_LUCK", "幸运提升", RightNodeType.Attr, 40, 3, "",
-            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 3f, 6f, 9f }, "luck", "幸运提升"));
+            new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 1f, 3f, 6f }, "luck", "幸运提升"));
         // 2026-09-29 新增：R_FUND 初始资金 —— 每局开局的启动金 +80/级。
         // 同 R_LUCK，kind=Custom 不走属性系统，由 SlotMachineSystem.RunStarterGold 按等级读
         // （【2026-10-10】发进局内钱包 currentGold，不再发抽奖币）。

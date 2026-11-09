@@ -86,7 +86,9 @@ public partial class WavePlanner
         // 初级(0) 精英 [0,1,2] 无 Boss；中级(1) 每波数量不变、精英每波 +1~2；
         // 高级(2) 每波数量不变、精英每波 80~90%，最后 2 波各带 1 个 Boss。
         // 徽记/卷轴副本波次布局与金币副本完全一致（主人 2026-10-23/10-24 拍板）。中级/高级不再走下方随机路径。
-        if (bm != null && bm.IsActivityDungeon)
+        // 【2026-11-09 主人拍板「羁绊本不算活动副本，算是关卡的复制品」】判据从 IsActivityDungeon
+        // 收窄成 IsResourceDungeon（金币/徽记/卷轴/礼物四本）——羁绊本回到普通关卡的波次生成。
+        if (bm != null && bm.IsResourceDungeon)
         {
             BuildActivityDungeonWaves(startX, usable);
             return;
@@ -369,13 +371,19 @@ public partial class WavePlanner
     /// </summary>
     void BuildActivityDungeonWaves(float startX, List<Transform> usable)
     {
-        const int perWaveCount = 10;
+        // 【2026-11-09 主人拍板「每波8-10只 固定1 2 3波」】每波只数 8~10 随机（含端点），
+        // 波数仍固定 3；精英/Boss 占波内名额，下方向下钳制精英数防超波内总数
+        //（高级难度 8~9 精英 + Boss 遇上 8 只的波会爆名额）。
+        const int perWaveMin = 8;
+        const int perWaveMax = 10;
         int diff = bm != null ? bm.BattleDifficulty : 0;
         int[] baseElite = { 0, 1, 2 };
         int[] elitePerWave = new int[3];
         int[] bossPerWave = { 0, 0, 0 };
+        int[] perWave = new int[3];
         for (int i = 0; i < elitePerWave.Length; i++)
         {
+            perWave[i] = UnityEngine.Random.Range(perWaveMin, perWaveMax + 1);
             if (diff >= 2)
             {
                 // 80~90% 精英：10 × (0.8~0.9) → 每波 8~9 只；最后 2 波各再带 1 Boss
@@ -391,6 +399,9 @@ public partial class WavePlanner
                 elitePerWave[i] = baseElite[i];
             }
         }
+        // 精英 + Boss 不得超波内总数（【2026-11-09】每波改 8~10 只后必须钳制）
+        for (int i = 0; i < elitePerWave.Length; i++)
+            elitePerWave[i] = Mathf.Min(elitePerWave[i], perWave[i] - bossPerWave[i]);
         for (int i = 0; i < elitePerWave.Length; i++)
         {
             Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
@@ -401,7 +412,7 @@ public partial class WavePlanner
             {
                 triggerX = triggerX,
                 spawnAnchor = anchor,
-                monsterCount = perWaveCount,
+                monsterCount = perWave[i],
                 isBossWave = false,
                 isRoundEnd = false,
                 spawned = false,
@@ -412,10 +423,25 @@ public partial class WavePlanner
             if (elitePerWave[i] <= 0 && bossPerWave[i] <= 0) wave.compositionStyle = RollWaveComposition();
             _waves.Add(wave);
         }
+        // 【2026-11-09 主人拍板】金币本逐怪分摊：铺完波就算总权重（普通1/精英2/Boss5，真源 ActivityDungeonDefs），
+        // 逐怪发放消费（BattleManager.GrantGoldDungeonKillGold）；三件套在此重置，续局重铺同样归零重算。
+        if (bm != null && bm.IsGoldDungeon)
+        {
+            bm._goldDungeonWeightTotal = 0;
+            for (int i = 0; i < _waves.Count; i++)
+            {
+                int normalCount = Mathf.Max(0, _waves[i].monsterCount - _waves[i].eliteBonus - _waves[i].bossCountInWave);
+                bm._goldDungeonWeightTotal += normalCount * ActivityDungeonDefs.GoldWeightNormal
+                                            + _waves[i].eliteBonus * ActivityDungeonDefs.GoldWeightElite
+                                            + _waves[i].bossCountInWave * ActivityDungeonDefs.GoldWeightBoss;
+            }
+            bm._goldDungeonWeightSoFar = 0;
+            bm._goldDungeonGoldPaid = 0;
+        }
         PlanStageEvents();
         _totalWaves = _waves.Count;
         GamePerf.Log($"[BattleManager] 活动副本（{(bm != null && bm.IsBadgeDungeon ? "徽记" : bm.IsScrollDungeon ? "卷轴" : bm.IsGiftDungeon ? "礼物" : "金币")}）难度{diff} 定死波次：" +
-                     $"{elitePerWave.Length}波×{perWaveCount}只 精英=[{string.Join(",", elitePerWave)}] Boss=[{string.Join(",", bossPerWave)}]");
+                     $"{elitePerWave.Length}波×[{string.Join(",", perWave)}]只 精英=[{string.Join(",", elitePerWave)}] Boss=[{string.Join(",", bossPerWave)}]");
         for (int i = 0; i < _waves.Count; i++)
         {
             var w = _waves[i];

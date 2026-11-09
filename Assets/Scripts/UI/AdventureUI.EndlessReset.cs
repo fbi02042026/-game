@@ -354,12 +354,13 @@ public partial class AdventureUI
         }
 
         int checkpoint = EndlessRiftRules.CheckpointOf(data.endlessRiftClearedStage);
+        // 【2026-11-09 主人拍板】删掉重复表述，改成短句主动换行（居中对齐下不再被自动折成碎行）。
         string body =
-            "重置后本轮进度归零，下次从第 1 层重新开始。\n" +
-            (checkpoint > 0 ? $"（保存点第 {checkpoint} 层的构筑快照会一起作废）\n" : "") +
-            "重打已通关的层只发 30% 金币，天赋石不重复发放。\n" +
-            $"生涯最高层（{EndlessRiftRules.BestStage(data)} 层）与排行榜不受影响。\n" +
-            "每周只能重置 1 次。";
+            "进度归零，回到第 1 层" + (checkpoint > 0 ? "，快照作废" : "") + "\n" +
+            "重打旧层只发 30% 金币\n" +
+            "天赋石不重复发放\n" +
+            "最高层与排行榜保留\n" +
+            "每周限 1 次";
 
         StaminaConfirmPopup.Show("重置裂隙进度", body, "重置", () =>
         {

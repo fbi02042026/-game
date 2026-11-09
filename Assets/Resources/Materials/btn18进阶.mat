@@ -284,7 +284,7 @@ Material:
     - _ShineSaturation: 0.5
     - _ShineScale: 0.05
     - _ShineSmoothness: 2
-    - _ShineSpeed: 0.1
+    - _ShineSpeed: 0.05
     - _ShineWidth: 0.1
     - _SineGlowContrast: 1
     - _SineGlowFade: 1

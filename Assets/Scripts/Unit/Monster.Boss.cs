@@ -35,23 +35,31 @@ public partial class Monster
     {
         _bossPhaseShiftBusy = true;
         GameObject disc = null;
+        GameObject progressDisc = null;
+        Vector3 baseScale = Vector3.one;
         try
         {
             if (rb != null) rb.velocity = Vector2.zero;
             UIManager.Instance?.ShowToast("Boss 进入狂暴阶段！");
             Vector3 center = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
-            disc = CreateTelegraphDisc(center, 4.5f);
+            baseScale = CreateTelegraphPair(center, GameConfig.TELEGRAPH_BOSS_RADIUS, out disc, out progressDisc);
             float t = 0f;
             float frozenReal = 0f;   // 【2026-10-20 保险】连续冻场真实时间累计
             // 冻场感知与技能预警同口径（2026-10-16）：UnitsCanAct=false 期间不倒数，
             // 红圈原地等，解冻才继续 —— 也修掉「对白冻场中照样倒数、到点隔着对白砸人」。
-            while (t < GameConfig.BOSS_PHASE_SHIFT_TELEGRAPH
+            while (t < GameConfig.TELEGRAPH_BOSS_SEC
                    || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct))
             {
                 if (isDead || this == null) yield break;   // 收尾统一走 finally
                 if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
                 {
                     t += Time.deltaTime;
+                    // 【2026-11-09】深色进度圈：从 0 放大到满范围，用时＝预警时长
+                    if (progressDisc != null)
+                    {
+                        float grow = Mathf.Clamp01(t / GameConfig.TELEGRAPH_BOSS_SEC);
+                        progressDisc.transform.localScale = new Vector3(baseScale.x * grow, baseScale.y * grow, 1f);
+                    }
                     frozenReal = 0f;
                 }
                 else
@@ -67,15 +75,17 @@ public partial class Monster
                 yield return null;
             }
             if (disc != null) { Destroy(disc); disc = null; }
+            if (progressDisc != null) { Destroy(progressDisc); progressDisc = null; }
             // 【2026-10-19 圆心锁定】伤害圆心 = 红圈位置（预警开始时锁定），不取砸下瞬间 Boss 当前位置
             if (!isDead)
-                ApplySkillDamage(GetMainAttackStat() * 0.85f, 4.5f, null, center.x);
+                ApplySkillDamage(GetMainAttackStat() * 0.85f, GameConfig.TELEGRAPH_BOSS_RADIUS, null, center);
         }
         finally
         {
             // 【2026-10-20 保险】协程任何路径退出（冻场中被杀/被停协程/正常收尾）都清标志+销毁红圈，
             // 绝不让 _bossPhaseShiftBusy 卡死成永久站桩（参照 2026-10-17 波次闸门 try/finally 教训）
             if (disc != null) Destroy(disc);
+            if (progressDisc != null) Destroy(progressDisc);
             _bossPhaseShiftBusy = false;
         }
     }

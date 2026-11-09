@@ -74,6 +74,14 @@ public class TutorialHintUI : MonoBehaviour
     /// 2026-11-07 主人当场「还有这么多的空隙」：1.3→1.2 小幅收紧，不回退到 1.0。
     /// </summary>
     const float HintLineSpacing = 1.2f;
+    /// <summary>
+    /// 箭头气泡框固定尺寸（【2026-11-09 主人拍板】4 处气泡统一：框固定 400×192、颜色固定）。
+    /// 来源 = 底图「像素风空白对话框指针.png」200×96 等比放大 2 倍；固定常量，不再按图宽实时推导
+    /// （PlaceBanner 气泡分支直接用这两个值）。字号 / 字色以 BattleHeadTalkUI.BubbleFontSize /
+    /// BubbleTextColor 为唯一真源，此处不另抄数值。
+    /// </summary>
+    const float BubbleBannerWidth = 400f;
+    const float BubbleBannerHeight = 192f;
 
     // ── 一次性自定义底框（【2026-10-31 主人拍板】抽奖引导用「像素风空白对话框指针」当底框）──
     /// <summary>下一次 Show 用的自定义底框；null = 用默认引导底框。Hide 时自动清空，其余引导不受影响。</summary>
@@ -390,36 +398,37 @@ public class TutorialHintUI : MonoBehaviour
     public string CurrentHint => _label != null ? _label.text : "";
 
     /// <summary>
-    /// 还原通用引导默认字样式（【2026-11-08 方案 A】样式泄漏的根治口）。
-    /// <para>根因：TutorialHintUI 是单例、_label 是同一个 Text。抽奖引导在 Show 之后调
-    /// ApplyBattleTalkTextStyle 把字改成 26 号深灰，而 Hide() 只清底框 override、不清字样式，
-    /// Show() 也只还原底框 → 下一次 Show（「拖动技能改顺序」那条）沿用被污染的深灰小字。</para>
-    /// <para>修法：把 ApplyBattleTalkTextStyle 做成<b>一次性语义</b> —— Show() 与 Hide() 都从这里
-    /// 无条件还原默认（字号 / 字色 / 字体三项与 ApplyBattleTalkTextStyle 一一对应），
-    /// 特殊样式只在「本次 Show 之后被显式覆盖」期间有效。抽奖引导三处调用点仍是 Show 后调
-    /// ApplyBattleTalkTextStyle，一行都不用改；也不在 SkillOrderGuide 里另设第二套字样式。</para>
+    /// 按「当前是否气泡」应用字样式（【2026-11-09 主人拍板】4 处气泡统一口径的唯一判据）。
+    /// <para>判据 = _bannerSpriteOverride != null：气泡走 BattleHeadTalkUI.BubbleFontSize /
+    /// BubbleTextColor（26 号深灰，唯一真源，不在本类另抄数值）；普通引导走 HintFontSize /
+    /// HintTextColor（34 号浅黄，保持不变）。字体为空时补 GameFonts.GetChinese()。</para>
+    /// <para>【2026-11-08 样式泄漏根治】Show() 与 Hide() 都经 ApplyDefaultTextStyle 落到这里，
+    /// 单例 _label 的样式永远由当前 override 决定，不会串到下一次引导。</para>
     /// </summary>
-    void ApplyDefaultTextStyle()
+    void ApplyTextStyleForCurrentMode()
     {
         if (_label == null) return;
-        _label.fontSize = HintFontSize;
-        _label.color = HintTextColor;
+        bool bubble = _bannerSpriteOverride != null;
+        _label.fontSize = bubble ? BattleHeadTalkUI.BubbleFontSize : HintFontSize;
+        _label.color = bubble ? BattleHeadTalkUI.BubbleTextColor : HintTextColor;
         if (_label.font == null) _label.font = GameFonts.GetChinese();
     }
 
+    /// <summary>按当前模式还原字样式（Show 起步 / Hide 收尾共用；内部复用同一判据与真源）。</summary>
+    void ApplyDefaultTextStyle()
+    {
+        ApplyTextStyleForCurrentMode();
+    }
+
     /// <summary>
-    /// 把本次气泡的文字设置改成「战斗佣兵说话」同款（字号 / 字色 / 字体），底框不动。
-    /// 【2026-11-08 方案 A】一次性语义：效果只到下一次 Show() 或 Hide() 为止
-    /// （两者都会走 ApplyDefaultTextStyle 还原默认），通用引导的字设置永远回到 HintFontSize / HintTextColor。
-    /// 调用方在 Show 之后调 —— 不改这三处调用顺序；Show 里的布局刷新已按默认字号量过，
-    /// 这里改完再刷一次横幅高度，避免气泡按 34 号量、却显示 26 号字的偏大空框。
+    /// 【2026-11-09 新口径】保留公开签名与 3 个调用点：Show() 已按判据自动应用气泡样式，
+    /// 这里幂等地再应用同一套气泡样式并 RefreshLayout()，不写死任何字号 / 色值。
+    /// Hide() 里 ApplyDefaultTextStyle() 先于清 override 执行，判据仍为气泡 → 还原成气泡样式；
+    /// 下一次 Show 再由 ApplyTextStyleForCurrentMode 按新 override 重设，逻辑自洽。
     /// </summary>
     public void ApplyBattleTalkTextStyle()
     {
-        if (_label == null) return;
-        _label.fontSize = BattleHeadTalkUI.BubbleFontSize;
-        _label.color = BattleHeadTalkUI.BubbleTextColor;
-        _label.font = GameFonts.GetChinese();
+        ApplyTextStyleForCurrentMode();
         RefreshLayout();
     }
 
@@ -431,6 +440,7 @@ public class TutorialHintUI : MonoBehaviour
         EnsureBuilt();
         ApplyDefaultTextStyle();      // 【2026-11-08 方案 A】本次 Show 从默认字起步，杜绝上次抽奖气泡的深灰小字泄漏
         ApplyBannerSpriteForShow();   // 【2026-10-31】有 override 换自定义底框，没有且上次换过 → 还原默认
+        ApplyTextStyleForCurrentMode();   // 【2026-11-09】按「是否气泡」定字样式：气泡 26/深灰，普通 34/浅黄
         bool targetChanged = highlight != _follow;
         string prevHint = _label != null ? _label.text : "";
         if (_label != null) _label.text = text ?? "";
@@ -757,10 +767,8 @@ public class TutorialHintUI : MonoBehaviour
         float x = 0f;
         if (_bannerSpriteOverride != null)
         {
-            float bw = Mathf.Max(1f, _bannerSpriteOverride.rect.width);
-            float bh = Mathf.Max(1f, _bannerSpriteOverride.rect.height);
-            width = Mathf.Min(bw * 2f, root.rect.width - 16f);
-            bannerH = width * (bh / bw);
+            width = BubbleBannerWidth;
+            bannerH = BubbleBannerHeight;
             if (target.HasValue)
                 x = Mathf.Clamp(target.Value.x,
                                 root.rect.xMin + width * 0.5f + 8f,

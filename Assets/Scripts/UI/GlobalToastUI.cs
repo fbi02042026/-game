@@ -245,7 +245,7 @@ public class GlobalToastUI : MonoBehaviour
         _rootRt.anchorMax = new Vector2(0.5f, 0.55f);
         _rootRt.pivot = new Vector2(0.5f, 0.5f);
         _rootRt.sizeDelta = new Vector2(560f, 72f);
-        _basePos = Vector2.zero;
+        _basePos = new Vector2(0f, 20f);
         _rootRt.anchoredPosition = _basePos;
         var plate = _root.GetComponent<Image>();
         plate.color = new Color(0.08f, 0.07f, 0.1f, 0.6f);

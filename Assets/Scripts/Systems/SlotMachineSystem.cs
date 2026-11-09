@@ -255,6 +255,8 @@ public static class SlotMachineSystem
     {
         _freeDrawsUsed = 0;
         _bonusFreeDraws = 0;
+        // 【2026-11-09 主人拍板】资源副本定向抽限额（每类每场 1 次）随每场免费额度一起清零。
+        _activityFocusUsed.Clear();
     }
 
     /// <summary>本关还剩几次免费抽（模式额度 + 「再来一次」送的）。0 = 没有了（正常扣币）。</summary>
@@ -279,6 +281,28 @@ public static class SlotMachineSystem
     {
         _freeDrawsUsed++;
         Debug.Log($"[SlotMachineSystem] 免费抽已用 {_freeDrawsUsed}/{TotalFreeDraws()}（本次未扣抽奖币）");
+    }
+
+    // —— 资源副本定向抽限额（2026-11-09 主人拍板「其他三个抽奖每次只能抽一次 抽一次后变灰」）——
+    // 资源副本（金币/徽记/卷轴/礼物）抽奖全免费：随机抽共用模式免费额度（FreeEntryDraws=5），
+    // 三个定向（佣兵/装备/技能）各限 1 次。计数随 <see cref="ResetStageFreeDraws"/> 每场清零。
+    static readonly Dictionary<DraftCategory, int> _activityFocusUsed = new Dictionary<DraftCategory, int>();
+
+    /// <summary>资源副本某定向方向本场还能抽几次（每类 1 次；非资源副本恒 0，不启用本限额）。</summary>
+    public static int ActivityFocusLeft(DraftCategory cat)
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.IsResourceDungeon) return 0;
+        _activityFocusUsed.TryGetValue(cat, out int used);
+        return Mathf.Max(0, 1 - used);
+    }
+
+    /// <summary>资源副本用掉某定向方向的本场限额（结果确认生效后才调，与扣币同位置）。</summary>
+    public static void ConsumeActivityFocusDraw(DraftCategory cat)
+    {
+        _activityFocusUsed.TryGetValue(cat, out int used);
+        _activityFocusUsed[cat] = used + 1;
+        Debug.Log($"[SlotMachineSystem] 资源副本定向 {cat} 已用 {used + 1}/1（本场限额，未扣抽奖币）");
     }
 
     /// <summary>【2026-10-11 主人拍板】「再来一次」命中：白送一次免费抽。</summary>
@@ -571,11 +595,14 @@ public static class SlotMachineSystem
         }
     }
 
-    /// <summary>「再来一次」概率 = 基础 + 幸运提升天赋每级加成。</summary>
+    /// <summary>「再来一次」概率 = 基础 + 幸运提升(R_LUCK)当前级累计加成。
+    /// 【2026-11-09 主人拍板】加成阶梯 1%/3%/6%（唯一真源 = talent_right 表 R_LUCK optValues），
+    /// 加满 = 基础 1% + 6% = 7%；等级 0 或取不到节点时只有基础值。</summary>
     public static float RerollChance()
     {
-        float c = SlotMachineDefs.REROLL_BASE_CHANCE + SlotMachineDefs.REROLL_PER_TALENT * LuckTalentLevel();
-        return Mathf.Clamp01(c);
+        var luckNode = TalentDefs.GetRightNodeById("R_LUCK");
+        float bonus = luckNode != null ? luckNode.EffectValue(LuckTalentLevel(), 0) / 100f : 0f;  // 表值 1/3/6 是百分点，除 100 才是概率
+        return Mathf.Clamp01(SlotMachineDefs.REROLL_BASE_CHANCE + bonus);
     }
 
     /// <summary>
@@ -647,9 +674,9 @@ public static class SlotMachineSystem
         return lv > 0 ? lv : 0;
     }
 
-    /// <summary>【2026-10-12 主人拍板】这一抽的结果是不是「再来一次」——
-    /// 抽奖**开始前**掷（命中则本次不出类型奖品，只送一次免费抽，见 BattleManager.CoStageEntryDraft）。
-    /// 【2026-10-19 主人拍板】只对**随机抽**掷（picked == null）；三个定向不吃 reroll，掷点由调用方过滤。</summary>
+    /// <summary>【2026-11-09 主人拍板】抽奖**出货成功后**掷「再来一次」——
+    /// 命中＝在类型奖品**之外**额外送一次免费抽（与奖品叠加，见 BattleManager.CoStageEntryDraft）。
+    /// 只对**随机抽**掷（picked == null）；定向抽不吃 reroll，掷点由调用方过滤。</summary>
     public static bool RollReroll() => Random.value < RerollChance();
 
     /// <summary>

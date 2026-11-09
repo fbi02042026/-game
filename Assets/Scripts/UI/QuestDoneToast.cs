@@ -22,7 +22,7 @@ public class QuestDoneToast : MonoBehaviour
     const float PadY = 10f;             // 上下内边距
     const int FontSize = 24;            // 与邮件提示同款字号（缩放后等效约 31）
     const float MarginLeft = 0f;        // 左缘贴住屏幕左缘（与邮件提示右缘贴右缘对称）
-    const float YPos = 300f;            // 与邮件提示同款「距顶边」基准（见 PlayNext）
+    const float YPos = 320f;            // 与邮件提示同款「距顶边」基准（见 PlayNext）
     const int SortOrder = 950;
     const float ToastScale = 1.3f;      // 整体等比放大（与邮件提示 10-31 拍板同口径）
     const int MaxQueue = 4;             // 排队上限防刷屏（任务通知低频，超出直接丢弃）

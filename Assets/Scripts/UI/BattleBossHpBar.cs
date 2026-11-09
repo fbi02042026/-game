@@ -372,9 +372,9 @@ public class BattleBossHpBar : MonoBehaviour
     /// </summary>
     void UpdateAffixText()
     {
-        string name = _bound != null && _bound.config != null && !string.IsNullOrEmpty(_bound.config.monsterName)
-            ? _bound.config.monsterName
-            : "";
+        // 【2026-11-09 主人拍板】金币/徽记本显副本专属名（宝箱怪/金宝箱/宝箱王等），
+        // 走 Monster.HudDisplayName 唯一出口；其余模式在出口内部原样回退模板怪物名。
+        string name = _bound != null ? (_bound.HudDisplayName() ?? "") : "";
         var af = _bound != null ? MonsterAffix.Get(_bound) : null;
         string suffix = af != null ? af.Suffix : "";
         string full = name + suffix;

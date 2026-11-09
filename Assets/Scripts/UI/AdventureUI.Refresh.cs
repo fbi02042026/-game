@@ -456,8 +456,8 @@ public partial class AdventureUI
 
     /// <summary>排行榜文字节点名（挂在 无限/关卡 容器下；不是「数字-数字」不会混进槽位识别）。</summary>
     const string RiftRankLabelName = "虚拟排行";
-    /// <summary>排行榜文字与顶槽位的纵向关系：0 = 与顶槽齐平、右侧并排（不挡中间的岛；补第 5 槽后顶槽升到 bandTop，再 +92 会撞 TitleBar）。y 跟顶槽现算，不写死坐标。</summary>
-    const float RiftRankLabelGapY = 0f;
+    /// <summary>排行榜文字与顶槽位的纵向关系（2026-11-09 主人拍板整体往上 30）：y 跟顶槽现算，不写死坐标。补第 5 槽后顶槽升到 bandTop，再往上过多会撞 TitleBar。</summary>
+    const float RiftRankLabelGapY = 30f;
     /// <summary>排行榜半透底框节点名（不是「数字-数字」不会混进槽位识别）。</summary>
     const string RiftRankFrameName = "虚拟排行底框";
 
@@ -484,7 +484,7 @@ public partial class AdventureUI
         int start = _riftPreviewStart > 0 ? _riftPreviewStart : EndlessRiftRules.StartStage();
         ApplyRiftPlateNumbers(slots, start);
 
-        // 虚拟排行榜：与最上面那个岛齐平、右侧并排（GapY=0；瘦屏重排后 RefreshRiftPage 会重算，不脱节）
+        // 虚拟排行榜：与最上面那个岛右侧并排、整体上移 30（2026-11-09；瘦屏重排后 RefreshRiftPage 会重算，不脱节）
         var data = SaveSystem.Instance?.Data;
         var label = EnsureRiftRankLabel(guanka);
         if (label != null)
@@ -495,20 +495,20 @@ public partial class AdventureUI
             // 【2026-11-02 晚·主人拍板「都可以」】百分比 ±1 微波动：固定数字显得假，虚拟榜每次进页
             // 略有浮动更像活的榜单（纯展示，不动 RankPercentOf 真源）。
             int pct = Mathf.Clamp(EndlessRiftRules.RankPercentOf(data) + UnityEngine.Random.Range(-1, 2), 0, 100);
-            // 【2026-11-08 主人拍板】文案精简：一行短句，best==0 显示「未挑战」。
+            // 【2026-11-09 主人拍板】三行：新纪录 / 最高第N层 / 超过X%的玩家；best==0 仍显示「未挑战」。
+            // 新纪录是条件首行（打破生涯纪录 → 保留到下次进本，TryConsumeEnter 清账），金色沿用原暖金。
+            string recordLine = EndlessRiftRules.NewRecordPendingShow && best > 0
+                ? "<color=#FFD97A>新纪录</color>\n"
+                : "";
             label.text = best > 0
-                ? $"第{best}层 · 超过{pct}%"
+                ? recordLine + $"最高第{best}层\n超过{pct}%的玩家"
                 : "未挑战";
-            // 【2026-11-02 晚·主人拍板「都可以」】打破生涯纪录 → 追加一行「◆ 新纪录！」，
-            // 保留到下次进本（TryConsumeEnter 清账）。rich text 金色与 ◆ 用法同 DraftPool 对比箭头先例。
-            if (EndlessRiftRules.NewRecordPendingShow && best > 0)
-                label.text += "\n<size=26><color=#FFD97A>◆ 新纪录！</color></size>";
             ApplyRiftRankLabelSize(label);   // 文案定稿后才量宽度（黑底跟着收缩）
             if (slots.Count > 0)
             {
                 var top = slots[slots.Count - 1];
                 var lrt = label.rectTransform;
-                // 2026-11-08 主人拍板：x 不写死，取 RightContent 右边缘(留 12)现算成「关卡」局部坐标；y 与顶槽齐平（GapY=0）
+                // 2026-11-08 主人拍板：x 不写死，取 RightContent 右边缘(留 12)现算成「关卡」局部坐标；y 在顶槽基础上上移 30
                 float rightEdgeLocalX = guanka.InverseTransformPoint(
                     right.TransformPoint(new Vector3(right.rect.xMax - 12f, 0f, 0f))).x;
                 lrt.anchoredPosition = new Vector2(rightEdgeLocalX, top.anchoredPosition.y + RiftRankLabelGapY);
@@ -573,12 +573,12 @@ public partial class AdventureUI
     /// 排行榜文字框按文案实际宽高收缩（2026-11-08 16:0x「黑底也收缩一下」）：
     /// label 几何的唯一出口，黑底框由 EnsureRiftRankFrame 从这里现读复制，不另开位置出口。
     /// 必须在 label.text 完全定稿之后调用（preferredWidth/Height 要读到最终文本）；
-    /// 高度按内容算，避免「◆ 新纪录！」两行被固定高度截断。
+    /// 高度按内容算，避免三行（新纪录 / 最高层 / 超过玩家）被固定高度截断。
     /// </summary>
     static void ApplyRiftRankLabelSize(Text label)
     {
         float w = Mathf.Clamp(label.preferredWidth + 20f, 96f, 240f);
-        float h = Mathf.Clamp(label.preferredHeight + 8f, 48f, 72f);   // 两行「◆ 新纪录！」也不被截断
+        float h = Mathf.Clamp(label.preferredHeight + 8f, 48f, 104f);  // 三行（新纪录/最高层/超过玩家）也不被截断
         label.rectTransform.sizeDelta = new Vector2(w, h);
     }
 
@@ -614,7 +614,7 @@ public partial class AdventureUI
 
     /// <summary>排行榜文字（运行时建一次；纯 Text 无新图，颜色对齐页内暖金奶油口径）。
     /// 【2026-11-02 两点改版】排版属性每次刷新都重写一遍（幂等）—— 老节点若是单行口径的旧尺寸，
-    /// 进页即被纠正成两行框，不用重启。</summary>
+    /// 进页即被纠正成按内容收缩的框，不用重启。</summary>
     Text EnsureRiftRankLabel(RectTransform guanka)
     {
         var found = guanka.Find(RiftRankLabelName);

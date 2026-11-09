@@ -71,6 +71,13 @@ public partial class BattleManager
             AddRunGold(killGold, countsAsEarned: false);
             DamageTextSystem.Instance?.SpawnGoldText(m.transform.position, killGold);
         }
+        // 【2026-11-09 主人拍板「金币按文案设定来发」】金币本金币改按文案总额逐怪分摊
+        //（普通 500 / 困难 800 / 噩梦 1200，= 冒险页详情文案同一真源 GetGoldDungeonClearGold）：
+        // 权重 普通1/精英2/Boss5（真源 ActivityDungeonDefs），按累计权重占比发放、末只补齐零头
+        // → 顶栏金币条累计 = 结果界面总额 = 详情文案。旧的关卡固定金那笔对金币本已跳过
+        //（BeginRewardSequence），不会双发。
+        if (IsGoldDungeon)
+            GrantGoldDungeonKillGold(m);
         // 2026-09-26 主人拍板：累计本关物理/魔法击杀数，用于掉落按类型分池（主导类型 = 数量多者）。
         if (m.IsMagicType) _magicKills++;
         else _physicalKills++;

@@ -93,18 +93,16 @@ public partial class BattleEntryDraftPanel
         _liveDrawHintShown = false;
         _liveDrawHintTimer = 0f;
         // ⚠ 不走动画：主人原话「不会出现抽奖时那个界面动画了」—— 直接按展开态真值表一步落位
-        //（面板 750 / zhuangshi +80 / DraftRoot -250 / map 350），与旧面板 Begin 的 SetExpanded(true) 同一套数值，
-        // 只是跳过 CoAnimState 插值。【2026-11-06 起 map/世界层不再跟着瞬移，见下方 StartMapGlide】
+        //（面板 750 / zhuangshi +80 / DraftRoot -250），与旧面板 Begin 的 SetExpanded(true) 同一套数值，
+        // 只是跳过 CoAnimState 插值。【2026-11-09 起 map/世界层恒在终态，不再有任何过渡】
         if (_animCo != null) { StopCoroutine(_animCo); _animCo = null; }
         if (_settleCo != null) { StopCoroutine(_settleCo); _settleCo = null; }
         SetDraftVisible(true);
         _expanded = true;
         // 【2026-10-31】面板 UI 一步落位不变（主人拍板「不会出现抽奖时那个界面动画了」）。
-        // 【2026-11-06 主人报「进战斗背景卡一下」】map/世界层不再跟着瞬移 ——
-        // 揭幕+走场都在玩家眼前，面板一步落位=背景从收起位「啪」地跳到展开位。
-        // 改走 StartMapGlide 短过渡（AnimSec 0.25s），面板本体仍瞬移。
+        // 【2026-11-09 主人拍板】0.25s 滑动整套去掉：map / 世界层从第一帧起就恒在终态，
+        // 预制体已摆到该位置，运行时不再有「收起→展开」的位移。
         ApplyPanelState(1f);
-        StartMapGlide(1f);
         RefreshLive();
         ShowLiveEntryDrawHint();
         LogState("BeginLive");
@@ -235,8 +233,8 @@ public partial class BattleEntryDraftPanel
     /// <summary>「币够了没抽」引导气泡文案唯一出口（前台小姐傲娇口吻，实用信息不丢）。</summary>
     internal static string DrawHintText(bool isArena)
         => isArena
-            ? "还有抽奖次数呢～开局先抽一次嘛，哼！"
-            : "开局先抽一次，路上才不慌呀～哼，才不是担心你呢！";
+            ? "还有次数，先抽一次嘛！"
+            : "币够啦，先抽一次嘛！";
 
     /// <summary>
     /// 【2026-11-06】正式关/金币本刚进关、玩家还没点「开始战斗」时，在「随机抽奖」按钮上
@@ -301,12 +299,10 @@ public partial class BattleEntryDraftPanel
         // 打出来的对照值才是「适配给的基准」。
         c._mapRt = c.ResolveMap();
         c.LogMapBaseOnce();
-        // 【2026-10-06 主人拍板】组件一出生就把 map 往主人给的收起态（中心Y 250 / scale 1.13）落。
-        // 原因：适配是按「那一刻面板多高」算的，而那一刻面板还停在预制体的展开态 750，
-        // 算出来的 map 落点本身就是展开位 —— 这就是主人报「一上来就跑到上面」的根因。
-        // 这里补一次落位：Build / Show 还没跑到的时候，map 就已经在往收起位走。
-        // 【2026-10-06 主人二次拍板】不要瞬移 —— 走 SettleMapToCollapsed 平滑滑过去。
-        c.SettleMapToCollapsed();
+        // 【2026-11-09 主人拍板】map 不再二次调整：预制体已直接摆成战斗中第一帧的常驻位置
+        //（中心Y 350 / scale 1.4），Build 里一次性落位后全程不动。
+        // 原「组件一出生就把 map 平滑滑回收起态 250/1.13」整套停用 —— 主人实测那段滑动
+        // 根本没效果，反而让 map 在玩家眼前先跳一下再滑。SettleMapToCollapsed 方法保留便于回退。
         return c;
     }
 
@@ -334,7 +330,7 @@ public partial class BattleEntryDraftPanel
         // 【2026-10-09 主人拍板】这里必须补一次 Build()：Build 只在 Begin()（抽奖开始）里跑，
         // 于是「还没抽奖的那段时间」面板一直停在预制体存的展开态（750 / zhuangshi +80），
         // 且 BtnBackpack 的 onClick 还没绑 —— 就是主人报的「一上来背包是打开的」「点了关不掉」。
-        // Build() 末尾的 SetDraftVisible(false) + ApplyState(0f) 正好把面板拍回收起态，
+        // Build() 末尾的 SetDraftVisible(false) + ApplyPanelState(0f) 正好把面板拍回收起态，
         // 只建不显示，与本方法「只建组件、不显示任何东西」的语义一致；它有 _built 守卫，重复调无害。
         var pre = Ensure();
         if (pre != null) pre.Build();
@@ -427,7 +423,7 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// 【2026-10-06 主人拍板】map 落到收起态时<b>不许瞬移</b> —— 主人原话「往上移动或往下移动加个效果，不要突然出来」。
+    /// 【2026-11-09 已停用，方法保留便于回退】原【2026-10-06 主人拍板】map 落到收起态时<b>不许瞬移</b> —— 主人原话「往上移动或往下移动加个效果，不要突然出来」。
     /// <para>为什么需要它：竖屏适配把 map 摆在 <b>361 / scale 1.0</b>（展开位），
     /// 而主人定的收起态是 <b>250 / scale 1.13</b>。直接写目标值就会「啪」地跳一下。
     /// 这里从<b>当前实际位置</b>起算，用与展开/收起同一段时长（<c>AnimSec</c>）平滑滑回收起位。</para>
@@ -466,12 +462,12 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
-    /// 【2026-11-06 主人报「进战斗背景卡一下」】map/世界层两态<b>短过渡</b>入口：
+    /// 【2026-11-09 已停用，方法保留便于回退】原【2026-11-06 主人报「进战斗背景卡一下」】map/世界层两态<b>短过渡</b>入口：
     /// LiveMode 的 BeginLive 展开时，面板 UI 一步落位（2026-10-31 拍板不变），
     /// 但 map 与世界层从当前 <c>_animK</c> 平滑滑到目标态（时长 <c>AnimSec</c>、ease-out）——
     /// 背景瞬跳就是主人看到的「卡一下」。收起（Finish → SetExpanded(false)）本就走
     /// <c>CoAnimState</c> 动画，不经这里。
-    /// <para>占用 <c>_animCo</c> 槽位：LateUpdate 静止写回（<c>ApplyMapState(_animK)</c>）
+    /// <para>占用 <c>_animCo</c> 槽位：LateUpdate 静止写回（<c>ApplyMapState(1f)</c>）
     /// 在 _animCo 运行期间自动让路，同一时刻只有一处写 map；跑完置 null 归还槽位
     /// （与 <c>CoSettleMap</c> 同款收尾）。</para>
     /// </summary>
@@ -557,6 +553,8 @@ public partial class BattleEntryDraftPanel
     {
         // 倒计时每帧走：与本类两态动画、入场归位互不干涉，各自独立。
         TickContinueCountdown();
+        // 【2026-11-09 主人拍板】「继续」按钮 1.45→1.55 呼吸缩放，4 秒一个来回、循环。
+        TickContinueBreath();
 
         // 【2026-10-29 实时抽 CD】LiveMode 下每帧同步 CD 遮罩与秒数（含起止沿的按钮刷新）。
         if (_liveMode)
@@ -580,9 +578,10 @@ public partial class BattleEntryDraftPanel
         // 每帧无条件更新，不放在上面的早退之后
         _prevUnitsCanAct = canAct;
 
-        // 入场归位（_settleCo）在跑时也让路：同一时刻只有一处写 map。
-        if (_mapRt == null || _animCo != null || _settleCo != null) return;
-        ApplyMapState(_animK);
+        // 【2026-11-09】只写恒定终态：竖屏适配随时会重锚 map，这里按同一出口把它拉回
+        // 350/1.4；不再按 _animK 插值 —— 两态动画只动面板 UI，map 全程不动。
+        if (_mapRt == null) return;
+        ApplyMapState(1f);
     }
 
     void Awake()
@@ -740,6 +739,32 @@ public partial class BattleEntryDraftPanel
             TutorialHintUI.Ensure().Show("点这里抽一次奖", drawRt, -1f);
         }
         _idleGuideShown = true;
+    }
+
+    // ── 「继续」按钮呼吸缩放（2026-11-09 主人拍板）──────────────────────────
+    // 预制体 BtnContinue 默认 m_LocalScale = 1.45（BattleUI.prefab 实测），放大到 1.55，
+    // 一个完整来回 4 秒、循环；按钮隐藏时归位，下次亮起从 1.45 重新起步。
+    // 只写 localScale，不动锚点 / 位置 / 尺寸，也不改预制体；与 ApplyPanelState 两态位移互不干涉。
+    const float ContinueBaseScale = 1.45f;
+    const float ContinueMaxScale = 1.55f;
+    const float ContinueBreathSec = 4f;
+    float _continueBreathT;
+
+    /// <summary>每帧驱动 BtnContinue 的等比缩放（只在按钮可见时推进计时）。</summary>
+    void TickContinueBreath()
+    {
+        var rt = ContinueButtonRect;
+        if (rt == null) return;
+        if (!rt.gameObject.activeInHierarchy)
+        {
+            _continueBreathT = 0f;
+            rt.localScale = Vector3.one * ContinueBaseScale;
+            return;
+        }
+        _continueBreathT += Time.unscaledDeltaTime;
+        float phase = (_continueBreathT % ContinueBreathSec) / ContinueBreathSec;
+        float k = 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * phase);   // 0→1→0，4 秒一个来回
+        rt.localScale = Vector3.one * Mathf.Lerp(ContinueBaseScale, ContinueMaxScale, k);
     }
 
 }

@@ -286,7 +286,12 @@ public partial class Monster
         // 【2026-10-23 主人拍板「引导的不要动」】引导局 Boss 也不吃本批倍率，保持原数值。
         float bossHpMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_HP_MUL : 1f;
         float bossAtkMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_ATTACK_MUL : 1f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul);
+        // 【2026-11-09 主人拍板「所有的活动本精英和boss血量*2」】资源副本（金币/徽记/卷轴/礼物；
+        // 羁绊本不算，见 IsResourceDungeon）精英/Boss MaxHp ×2，只动血量不动攻击；
+        // 主线 / 引导 / 裂隙 / 竞技场不受影响。
+        float activityEliteBossHpMul = BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon
+            && (eliteWave || bossUnit) ? 2f : 1f;
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * activityEliteBossHpMul);
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
         // 它和 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」是同一批 2026-09-23 测试数据，

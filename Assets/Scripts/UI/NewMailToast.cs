@@ -22,7 +22,7 @@ public class NewMailToast : MonoBehaviour
     const float PadY = 10f;             // 上下内边距
     const int FontSize = 24;            // 主人要求：30 → 24（减 20%）
     const float MarginRight = 0f;       // 主人要求：右缘贴住屏幕右缘（原 24 缝去掉）；框小了，进屏自然不多
-    const float YPos = 300f;            // 【基线】参考画布(720×1280)上原中心锚的 y（换算「距顶边」距离用，见 BuildPanel）
+    const float YPos = 320f;            // 【基线】参考画布(720×1280)上原中心锚的 y（换算「距顶边」距离用，见 BuildPanel）
     const int SortOrder = 950;
     /// <summary>整体等比放大倍数（2026-10-31 主人拍板「放大 30%」：字号/底框/内边距一起 ×1.3）。</summary>
     const float ToastScale = 1.3f;

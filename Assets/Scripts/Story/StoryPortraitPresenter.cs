@@ -159,6 +159,17 @@ public static class StoryPortraitPresenter
 
         EnsureClipMask(img, StoryPortraitLayout.GetClipHeightFrac(portraitId), w, h);
 
+        // 【2026-11-09 主人「立绘往上，mask 不跟着往上」】只把立绘图片在遮罩里往上挪 50；
+        // PortraitClip（裁切窗）的位置 / 尺寸一律不动 —— 裁切线仍贴对话框顶，脚不会被抬出来。
+        // 必须放在 EnsureClipMask 之后：该方法会把图片锚点设为父顶、anchoredPosition 归零。
+        // 直接赋值（不累加）：ResetHost 每次重建 clip，重复调用不会越抬越高。
+        float standingLift = StoryPortraitLayout.GetStandingLiftPx(portraitId);
+        if (standingLift > 0f)
+        {
+            var p = portraitRt.anchoredPosition;
+            portraitRt.anchoredPosition = new Vector2(p.x, standingLift);
+        }
+
         var hostRt = GetHostRt(img);
         hostRt.pivot = new Vector2(0.5f, 0f);
         hostRt.anchorMin = hostRt.anchorMax = new Vector2(anchorX, 0f);
@@ -169,6 +180,11 @@ public static class StoryPortraitPresenter
         hostRt.anchoredPosition = new Vector2(0f, bottomY);
         ctx.PlaceBehindDialogueBox?.Invoke(hostRt);
         ClampInsideCanvas(hostRt, ctx.CanvasRt);
+
+        // 【2026-11-09 主人「上和左右的裁边都到屏幕外，只有下面的裁边保持跟原来设定一致」】
+        // 放在最后：ResolveBottomY / PlaceBehindDialogueBox / ClampInsideCanvas 都已按原尺寸裁切窗算完，
+        // 底边 y 与 11-04 定稿完全一致；这里只把裁切窗上 / 左 / 右三边推到画布外，底边原地不动。
+        ExpandClipEdges(hostRt, portraitRt, ctx.CanvasRt);
     }
 
     /// <summary>
@@ -227,11 +243,13 @@ public static class StoryPortraitPresenter
         desired += profile.bottomOffsetPx;
         desired += StoryPortraitLayout.GetBottomOffsetPx(portraitId);
 
-        // 【2026-10-15 主人立规矩：遮罩永远不要动，动的只是立绘的上下】
-        // 下移补偿只保留给裁切窗=整图的坐姿立绘（会长/前台小姐）：不补则 0.72 基准的可见顶边
-        // 整体上浮（522 高 ≈146px）。站立立绘裁切窗已在 0.72 原位（切线一直藏在对话框后面，
-        // 脚从来是遮罩在框后裁掉的=审定机制），不再做任何补偿——主人报「脚露出来」，
-        // 救法是遮罩回原位，禁止钳窗底/挪遮罩（上一版那么修已被主人否掉）。
+        // 【2026-11-09 口径更新：仅剧情对话立绘这块覆盖 10-15「遮罩永远不要动」；别处遮罩照旧、不要动】
+        // 本链路裁切窗的上 / 左 / 右三边由 ExpandClipEdges 统一推到画布外，只留底边裁切；
+        // 底边 y 仍由本方法算，一律不要挪。本文件只服务 DialogueUI 的剧情对话立绘，其它界面不走这里。
+        // 下移补偿只保留给基准窗高=整图的坐姿立绘（会长/前台小姐）：不补则 0.72 基准的可见顶边
+        // 整体上浮（522 高 ≈146px）。站立立绘基准窗高已在 0.72 原位（脚从来是底边切线在框后裁掉的），
+        // 不再做任何补偿——10-15 主人报「脚露出来」即窗被开到整图所致，回 0.72 原位即愈；
+        // 禁止钳窗底 / 挪遮罩底边来凑位置（上一版那么修已被主人否掉）。
         float hostH = hostRt != null ? hostRt.sizeDelta.y : 0f;
         float maskFrac = Mathf.Clamp(StoryPortraitLayout.GetClipHeightFrac(portraitId), 0.01f, 1f);
         if (hostH > 1f && maskFrac >= 0.99f && profile.clipHeightFrac > 0.01f && profile.clipHeightFrac < 1f)
@@ -306,6 +324,31 @@ public static class StoryPortraitPresenter
         if (h < 1f) h = portrait.sprite.rect.height;
         // 裁切窗宽=原图宽，高=原图高×裁切比例；不把图拉进更大的框
         clipRt.sizeDelta = new Vector2(Mathf.Max(1f, clipWidth), h * Mathf.Clamp01(clipHeightFrac));
+    }
+
+    /// <summary>
+    /// 【2026-11-09 主人拍板】把裁切窗的上 / 左 / 右三边推到画布外，只留底边裁切。
+    /// clip 的 pivot=(0.5,0)，改 sizeDelta 只会让顶边往上扩、左右往外扩，底边原地不动；
+    /// 底边 y 由 ResolveBottomY 定（本方法在它之后调用，不改它的输入）。
+    /// 图片顶边原本贴裁切窗顶边（anchor/pivot=(0.5,1)），窗变高后必须按差值把图片拉回原屏幕位置，
+    /// 否则人物会被一起顶到画布外；拉回时保留外面已设好的站立上抬量（p.y）。
+    /// </summary>
+    static void ExpandClipEdges(RectTransform clipRt, RectTransform imageRt, RectTransform canvasRt)
+    {
+        if (clipRt == null || canvasRt == null) return;
+        float span = Mathf.Max(canvasRt.rect.width, canvasRt.rect.height);
+        if (span < 64f) span = GameConfig.DESIGN_HEIGHT;
+
+        float oldH = clipRt.sizeDelta.y;
+        float newW = Mathf.Max(clipRt.sizeDelta.x, span * 3f);
+        float newH = Mathf.Max(oldH, span * 2f);
+        clipRt.sizeDelta = new Vector2(newW, newH);
+
+        if (imageRt != null)
+        {
+            var p = imageRt.anchoredPosition;
+            imageRt.anchoredPosition = new Vector2(p.x, p.y - (newH - oldH));
+        }
     }
 
     static void ClampInsideCanvas(RectTransform rt, RectTransform canvasRt)

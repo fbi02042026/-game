@@ -93,16 +93,38 @@ public static class StoryPortraitLayout
     }
 
     /// <summary>
-    /// 立绘裁切比例（2026-10-15 主人立规矩：遮罩永远不要动，动的只是立绘的上下）：
-    /// 坐姿桌面立绘（DeskPortraitBottomOffsetPx 名单内）=1 整图，桌面场景全露、底边由对话框遮挡；
-    /// 其余（站立全身）=0.72 审定原位遮罩——切线一直藏在对话框后面，脚从来是遮罩在框后裁掉的。
-    /// 10-15 主人报「脚露出来」即窗被开到整图所致，回 0.72 原位即愈；禁止再动遮罩位置/尺寸，
-    /// 调立绘位置只动 DeskPortraitBottomOffsetPx / TutorialDeskLiftPx 这类立绘偏移旋钮。
+    /// 【仅剧情对话立绘（DialogueUI → StoryPortraitPresenter 链路）适用；别处遮罩不受本条约束、照旧不要动】
+    /// 立绘「扩窗前基准窗高」比例：坐姿（DeskPortraitBottomOffsetPx 名单内）=1 整图，其余（站立全身）=0.72。
+    /// 0.72 是 2026-10-15 主人审定的可见高度基准，仍决定图片顶边初始位置、ResolveBottomY 的顶部封顶
+    /// 和坐姿下移补偿（Presenter 里几处都按这个值算），别随便改。
+    /// 【2026-11-09 主人拍板「上和左右都不要有裁边，只有下面有裁边」，只覆盖剧情立绘这块的 10-15 旧规】
+    /// StoryPortraitPresenter.ExpandClipEdges 会把裁切窗的上 / 左 / 右三边推到画布外，只留底边一条切线；
+    /// 底边 y 由 ResolveBottomY 定（与 11-04 定稿一致），一律不要挪。
+    /// 所以这里返回的不再是「实际可见裁切比例」，只是扩窗前的基准窗高。
+    /// 调人物上下只动图片自己的 anchoredPosition.y：站立 GetStandingLiftPx(+50)，
+    /// 坐姿 DeskPortraitBottomOffsetPx / TutorialDeskLiftPx；不要挪遮罩底边、也不要另开遮罩尺寸旋钮凑位置。
+    /// 其它界面（角色看板 / 酒馆 / 主界面等）的遮罩与立绘排版不在此列，一律没动也不要动。
     /// </summary>
     public static float GetClipHeightFrac(string portraitId)
     {
         if (string.IsNullOrEmpty(portraitId)) return 0.72f;
         return DeskPortraitBottomOffsetPx.ContainsKey(portraitId) ? 1f : 0.72f;
+    }
+
+    /// <summary>
+    /// 站立（全身）立绘在剧情里往上挪的量（设计画布像素）。
+    /// 2026-11-09 主人「让所有站立的立绘在剧情的时候往上 50」：只加在立绘图片自己的 anchoredPosition.y 上，
+    /// 遮罩底边不动；裁切窗的上 / 左 / 右三边由 StoryPortraitPresenter.ExpandClipEdges 推到画布外。
+    /// 引导期两张坐姿（DeskPortraitBottomOffsetPx 名单）返回 0，位置保持原位不动。
+    /// 判定与 GetClipHeightFrac / GetTutorialDeskLiftPx 同源（同一张坐姿名单）。
+    /// </summary>
+    public const float StandingPortraitLiftPx = 50f;
+
+    /// <summary>查某个立绘的站立上抬量；坐姿 0，其余（含 id 为空的默认站立）50。</summary>
+    public static float GetStandingLiftPx(string portraitId)
+    {
+        if (string.IsNullOrEmpty(portraitId)) return StandingPortraitLiftPx;
+        return DeskPortraitBottomOffsetPx.ContainsKey(portraitId) ? 0f : StandingPortraitLiftPx;
     }
 
     /// <summary>

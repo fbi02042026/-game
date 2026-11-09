@@ -155,9 +155,19 @@ public partial class BattleUI : MonoBehaviour
     /// </summary>
     public void ApplyTopBarResourceVisibility()
     {
-        HideTopBarEntryByLabel(goldText);          // 金币条（GoldDisplay）
+        // 【2026-11-09 主人拍板「点亮原来隐藏的替换现在抽奖币的位置 累计」】金币本点亮金币条
+        //（GoldDisplay，图标本就是金币）显示本局逐怪累计金币（真源 RunEarnedGold，UpdateGold 驱动，
+        // 逐怪发放走 GrantRunGold 唯一出口）；其余模式维持 2026-10-26 的整条隐藏。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+            ShowTopBarEntryByLabel(goldText);
+        else
+            HideTopBarEntryByLabel(goldText);          // 金币条（GoldDisplay）
         HideTopBarEntryByLabel(talentStoneText);   // 天赋石（新布局直绑的 TalentText 等）
         HideTopBarEntryByLabel(enchantStoneText);  // 天赋石（旧布局第三资源位 EnchantText，新顶栏借它显示天赋石）
+        // 【2026-11-09 主人拍板「去掉抽奖币资源条」】资源副本（金币/徽记/卷轴/礼物）抽奖全免费、
+        // 局内抽奖币无消费出口 → DraftDisplay 整条隐藏；竞技场（「剩余N次」）/裂隙/正式关不受影响。
+        if (BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon)
+            HideTopBarEntryByLabel(draftCoinText);
     }
 
     /// <summary>按资源数字文本隐藏其所在资源条（见 <see cref="ApplyTopBarResourceVisibility"/>）。</summary>
@@ -174,6 +184,22 @@ public partial class BattleUI : MonoBehaviour
         }
         if (entry != null && entry.gameObject.activeSelf)
             entry.gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 【2026-11-09 主人拍板】按资源数字文本点亮其所在资源条（<see cref="HideTopBarEntryByLabel"/> 的镜像：
+    /// 同一条上溯链找第一个带 Image 的祖先整条 SetActive(true)）。金币本金币条专用，幂等可反复调用。
+    /// </summary>
+    static void ShowTopBarEntryByLabel(Text label)
+    {
+        if (label == null) return;
+        Transform cur = label.transform.parent;
+        for (int i = 0; i < 3 && cur != null; i++)
+        {
+            if (cur.name == "TopBar") break;
+            if (cur.GetComponent<UnityEngine.UI.Image>() != null) { cur.gameObject.SetActive(true); return; }
+            cur = cur.parent;
+        }
     }
 
     /// <summary>

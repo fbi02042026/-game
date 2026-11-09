@@ -423,6 +423,8 @@ public class SaveData
     public bool finaleStoryPlayed = false;
     /// <summary>【2026-11-02 主人拍板】试炼场解锁提示已弹：显示关卡 2-5 通关后第一次进冒险页 toast 一次，记档防重弹。</summary>
     public bool arenaUnlockToastShown = false;
+    /// <summary>【2026-11-09】首次「可升星」箭头气泡已弹（酒馆图标上方，账号全局一次，记档防重弹）。</summary>
+    public bool mercStarReadyHintShown = false;
     /// <summary>
     /// 战前剧情「看过即不重播」位标记（2026-10-19 主人拍板）：bit0=第1章 … bit7=第8章。
     /// 每章战前剧情开播过一次就置位，之后进关不再重播（治「每次进都卡剧情」）。

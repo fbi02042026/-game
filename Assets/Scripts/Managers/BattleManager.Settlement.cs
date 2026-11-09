@@ -46,6 +46,36 @@ public partial class BattleManager
         BattleUI.Instance?.UpdateGold(RunEarnedGold);
     }
 
+    // 【2026-11-09 主人拍板「金币按文案设定来发 + 资源条累计与总额一致」】
+    /// <summary>
+    /// 金币本逐怪分摊唯一发放口（OnMonsterDead 调）：每死一只按权重（普通1/精英2/Boss5，
+    /// 真源 <see cref="ActivityDungeonDefs"/>）累计占比取整发放，最后一只把零头补齐，
+    /// 保证「顶栏金币条累计 = 结果界面总额 = 冒险页详情文案」（GetGoldDungeonClearGold 三档）。
+    /// 总权重未就绪（≤0，WavePlanner 没算出来）直接 LogError 拒发——不静默、不发错数。
+    /// </summary>
+    void GrantGoldDungeonKillGold(Monster m)
+    {
+        int total = _goldDungeonWeightTotal;
+        if (total <= 0)
+        {
+            Debug.LogError("[BattleManager] 金币本逐怪分摊：总权重未就绪（WavePlanner 未算出），本只金币拒发（不静默）");
+            return;
+        }
+        // Boss 优先、不与精英叠加（Boss 波可能同时带精英标记，与 MonsterDeath 佣兵币同口径）
+        int weight = m != null && m.IsBossUnit ? ActivityDungeonDefs.GoldWeightBoss
+                   : m != null && m.IsEliteWave ? ActivityDungeonDefs.GoldWeightElite
+                   : ActivityDungeonDefs.GoldWeightNormal;
+        _goldDungeonWeightSoFar += weight;
+        int clearGold = GameConfig.GetGoldDungeonClearGold(CurrentChapter, BattleDifficulty);
+        int cumTarget = Mathf.RoundToInt(clearGold * (float)_goldDungeonWeightSoFar / total);
+        int grant = cumTarget - _goldDungeonGoldPaid;
+        if (grant <= 0) return;   // 取整抖动（个别怪占 0），零头留给后面的怪 / 最后一只补齐
+        _goldDungeonGoldPaid += grant;
+        GrantRunGold(grant);      // 「本局获得金币」唯一出口：进 GoldEarned + 顶栏金币条
+        if (m != null)
+            DamageTextSystem.Instance?.SpawnGoldText(m.transform.position, grant);
+    }
+
     void TryGrantStageQuestGold()
     {
         if (_stageQuestGoldGranted || StageQuestClearGold <= 0) return;
@@ -505,6 +535,16 @@ public partial class BattleManager
                 _preBattleStoryPlaying = false;
                 ScheduleFirstWaveSpawn();
             }
+            else if (IsResourceDungeon)
+            {
+                // 【2026-11-09 主人拍板「不弹抽奖只有战斗开始前抽」】资源副本（金币/徽记/卷轴/礼物）
+                // 走裂隙同款战斗前旧面板，开打后面板收起、战斗中无任何抽奖入口；
+                // 不再进 LiveMode 常显实时抽。免费限额（普通共用 5 次 / 定向各 1 次 / 全免费）
+                // 见 CoStageEntryDraft 成本段与 SlotMachineSystem 活动限额区。
+                yield return CoStageEntryDraft();
+                _preBattleStoryPlaying = false;
+                ScheduleFirstWaveSpawn();
+            }
             else
             {
                 EnterLiveStartPhase();
@@ -535,6 +575,15 @@ public partial class BattleManager
         }
         if (IsEndlessRift)
         {
+            yield return CoStageEntryDraft();
+            _preBattleStoryPlaying = false;
+            ScheduleFirstWaveSpawn();
+            yield break;
+        }
+        if (IsResourceDungeon)
+        {
+            // 【2026-11-09 主人拍板「不弹抽奖只有战斗开始前抽」】资源副本（金币/徽记/卷轴/礼物）
+            // 走战斗前旧面板，与上方无剧情分支同口径；不再进 LiveMode 常显实时抽。
             yield return CoStageEntryDraft();
             _preBattleStoryPlaying = false;
             ScheduleFirstWaveSpawn();
@@ -964,7 +1013,8 @@ public partial class BattleManager
             // → 圈住「随机抽奖」按钮弹引导框（Show 非 hard：不遮罩不挡点，玩家照常可直接点「继续」开打）。
             // 【2026-10-31 二次拍板】出现 5 秒后自动消失；点抽奖按钮立刻消失；
             // 一场战斗只出现一次（drawHintShown 局部标记）；底框用主人给的「像素风空白对话框指针」。
-            if (!onceOnly && freeLeft <= 0 && SlotMachineSystem.DrawIndex == 0
+            // 【2026-11-09】资源副本抽奖全免费、顶栏无币条，「币够没抽」的币引导不适用，整段排除。
+            if (!onceOnly && freeLeft <= 0 && !IsResourceDungeon && SlotMachineSystem.DrawIndex == 0
                 && currentGold >= price && !drawHintShown
                 && !SettingsPopupUI.IsBlockingSoftGuide)   // 设置弹窗开着不弹（2026-11-01 主人）
             {
@@ -1038,8 +1088,27 @@ public partial class BattleManager
             // 定向价按类型各自的币种算（佣兵 = 佣兵币价，装备 / 技能 = 抽奖币价）。
             // 【2026-10-19 主人拍板】免费次数只惠及随机抽（null）；定向永远按价扣币，
             // 也不消耗免费额度（cost>0 走 SpendBattleGold，免费额度只在 cost==0 时才被吃）。
-            int cost = !picked.HasValue && freeLeft > 0 ? 0
+            // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本（金币/徽记/卷轴/礼物）全免费：
+            // 随机抽共用模式免费额度（5 次），定向各限 1 次（真源 SlotMachineSystem.ActivityFocusLeft），
+            // 都不扣币；额度用完由面板置灰挡在前面，这里再拦一道（回面板重选，不静默吞点击）。
+            int cost;
+            if (IsResourceDungeon)
+            {
+                bool allowed = !picked.HasValue
+                    ? SlotMachineSystem.FreeDrawsLeft() > 0
+                    : SlotMachineSystem.ActivityFocusLeft(picked.Value) > 0;
+                if (!allowed)
+                {
+                    UIManager.Instance?.ShowToast(!picked.HasValue ? "免费抽奖次数已用完" : "该方向本场只能抽一次");
+                    continue;
+                }
+                cost = 0;
+            }
+            else
+            {
+                cost = !picked.HasValue && freeLeft > 0 ? 0
                      : (picked.HasValue ? SlotMachineSystem.FocusPrice(picked.Value) : price);
+            }
             // 只在这里「查余额」；真正的扣款挪进 CoInstantPick，等结果确认能生效了才扣
             // （2026-10-05：原来先扣后出结果，槽位/背包满时会白扣钱）
             // 免费抽 cost = 0，余额检查自然通过，也不会扣币。币种口径见 CanAffordDraw。
@@ -1054,45 +1123,36 @@ public partial class BattleManager
                 continue;
             }
 
-            // 【2026-10-12 主人拍板】「再来一次」= **抽奖结果之一**，不再是抽完之后的额外赠送。
-            // 主人原话：「为什么抽中了技能还出现了再抽一次　再抽一次应该也算是抽中的东西」。
-            // 于是这一抽**先掷**「再来一次」：
-            //   · 命中 → 本次结果就是它：不出佣兵 / 技能 / 装备，**不扣币、不推进抽数**，
-            //     只送一次免费抽，回面板让玩家用这次免费额度再点（按钮金额当场变「免费」）；
-            //   · 未命中 → 才真的出类型奖品（往下走 CoInstantPick）。
-            // ⚠ 引导局不参与（那一拍只抽一次），判定沿用同一处 onceOnly，别在别处加第二个。
-            // ⚠ 旧的「抽完再掷、额外再送一次免费抽」（2026-10-11 口径）已删除，不留开关。
-            // ⚠【2026-10-19 主人拍板】「再来一次」只惠及随机抽（picked 为 null）；
-            //   三个定向（佣兵/装备/技能）不吃 reroll，点了直接出类型奖品、正常扣费。
-            // ⚠【2026-11-02】跳层补偿的自动抽不参与 reroll：命中要等 1.55 秒横幅，几十连抽会被拖长，
-            //   而且补偿抽本来就白送，再送额度没有意义。
-            if (!onceOnly && !autoRound && !picked.HasValue && SlotMachineSystem.RollReroll())
+
+            // 买了就直接给结果，不走三选一。
+            // 「这一抽到底生效没有」唯一真源 = 保底定序有没有往前走（生效才 NoteDraw）。
+            int drawsBefore = SlotMachineSystem.DrawIndex;
+            bool wasAutoRound = autoRound;
+            // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本这里玩家点定向 = 认账该方向
+            //（定向「本场限 1 次」按玩家点的方向查/扣，真源 ActivityFocusLeft）；
+            // isTargetedPick=false 的其余三处调用（实时抽 / 引导 / 自动抽）零行为变化。
+            yield return CoInstantPick(target, cost, picked.HasValue);
+            autoRound = false;   // 自动抽只影响这一轮（下一轮由等待循环重新置位）
+            bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
+            // 【2026-10-29 主人拍板·裂隙每层三抽改版】只有真出货才占每层名额（reroll / 没生效不占）
+            if (landed) layerDraws++;
+            // 【2026-11-09 主人拍板】「再来一次」= 抽中东西后再白送一抽，一次拿到两次抽奖。
+            // 出货成功（landed）后才掷，命中在奖品之外额外送一次免费抽（不扣币、不涨下一抽价格）；
+            // 沿用既有排除口径：引导局、跳层补偿自动抽、定向抽不参与。
+            if (landed && !onceOnly && !wasAutoRound && !picked.HasValue && SlotMachineSystem.RollReroll())
             {
                 SlotMachineSystem.GrantBonusFreeDraw();
                 var rerollPanel = BattleEntryDraftPanel.Instance;
                 if (rerollPanel != null)
                 {
                     rerollPanel.SetCountdownPaused(true);
-                    // 按钮金额**当场**变成免费（不等面板下一轮重开），主人要求的就是这个瞬间的反馈
                     rerollPanel.RefreshFreeLeft(currentGold, SlotMachineSystem.FreeDrawsLeft());
                 }
                 UIManager.Instance?.ShowToast("再来一次！这一抽免费");
-                // 【2026-10-06 主人拍板】左侧滑入 → 慢慢滑行 1 秒 → 快速向右滑走的大字横幅
                 SlotMachineAgainBanner.Show();
-                // 等横幅播完（0.30 滑入 + 1.00 滑行 + 0.22 滑出 ≈ 1.52s）再回面板
                 yield return new WaitForSecondsRealtime(1.55f);
                 if (rerollPanel != null) rerollPanel.SetCountdownPaused(false);
-                continue;   // 这一抽的结果就是「再来一次」—— 回面板，让玩家点这次免费的
             }
-
-            // 买了就直接给结果，不走三选一。
-            // 「这一抽到底生效没有」唯一真源 = 保底定序有没有往前走（生效才 NoteDraw）。
-            int drawsBefore = SlotMachineSystem.DrawIndex;
-            yield return CoInstantPick(target, cost);
-            autoRound = false;   // 自动抽只影响这一轮（下一轮由等待循环重新置位）
-            bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
-            // 【2026-10-29 主人拍板·裂隙每层三抽改版】只有真出货才占每层名额（reroll / 没生效不占）
-            if (landed) layerDraws++;
 
             // 引导局：这一拍**只抽一次**就开打 —— 不进「再来一次」、也不再回到面板。
             // 面板常驻连抽是正式关的玩法；引导这里若让玩家一口气把三次抽完，
@@ -1142,9 +1202,9 @@ public partial class BattleManager
                 break;
             }
 
-            // ⚠【2026-10-12 已删】原来这里还有一段「抽完再掷 RollReroll → 额外再送一次免费抽」。
-            //   主人报「抽中了技能还出现了再抽一次」→ 判定挪到这一抽**开始之前**（见本循环上方），
-            //   「再来一次」从此是抽奖结果之一，不再与类型奖品叠加。别把这段加回来。
+            // 【2026-11-09 主人拍板】「再来一次」判定已挪到出货之后（见本循环上方 landed 处）：
+            //   命中 = 在类型奖品之外额外白送一次免费抽，可与类型奖品叠加；不再提前掷、不顶掉这一抽。
+            //   引导局 / 跳层补偿自动抽 / 定向抽沿用既有排除口径，不参与。
         }
 
         // 退出循环 = 要开战了：收起 BackpackPanel、隐藏抽奖按钮与「继续」，引导提示也关掉
@@ -1199,7 +1259,7 @@ public partial class BattleManager
     /// <summary>
     /// 实时抽入口（<c>BattleEntryDraftPanel</c> LiveMode 四按钮直连）。
     /// <para>流程：守卫 → 现算价格（唯一出口，与常显按钮的显示判定自动同源）→ 查余额 →
-    /// 「再来一次」掷点（只对随机抽，与旧面板同一拍板）→ <see cref="CoInstantPick"/> 直抽。
+    /// 出货成功后再掷「再来一次」（只对随机抽）→ <see cref="CoInstantPick"/> 直抽。
     /// 保底佣兵 / 保底稀有 / 金币方向限制 / 抽数计数全部走既有链路，零分叉。</para>
     /// <para>CD 从<b>点击时刻</b>起算（主人原话「每次点完抽奖可以加个5-10秒的cd时间 防止连点」）——
     /// reroll / 出卡失败（未扣币）也照起，简单可预期。</para>
@@ -1273,18 +1333,9 @@ public partial class BattleManager
             return false;
         }
 
-        // 「再来一次」：抽奖开始前掷（2026-10-12 拍板），只对随机抽（2026-10-19 拍板）；
-        // 命中 = 本次结果就是免费抽：不扣币、不推进抽数，只送额度 + 横幅。
-        if (!picked.HasValue && SlotMachineSystem.RollReroll())
-        {
-            SlotMachineSystem.GrantBonusFreeDraw();
-            UIManager.Instance?.ShowToast("再来一次！这一抽免费", true);
-            SlotMachineAgainBanner.Show();
-        }
-        else
-        {
-            StartCoroutine(CoLiveDraw(picked, cost, cats));
-        }
+        // 【2026-11-09 主人拍板】「再来一次」改为出货之后再掷（见 CoLiveDraw）：
+        //   命中 = 奖品之外额外白送一次免费抽；这里无条件起出货协程，掷点放进 CoLiveDraw 里。
+        StartCoroutine(CoLiveDraw(picked, cost, cats));
 
         // 【2026-10-30 主人拍板「竞技场抽奖不用有CD」】竞技场在上方分支已提前返回，走不到这里；
         // 正式关/金币本照旧走 LIVE_DRAW_CD_SEC 防连点。UI 遮罩/置灰真源 = LiveDrawCdRemaining。
@@ -1297,7 +1348,16 @@ public partial class BattleManager
     IEnumerator CoLiveDraw(DraftCategory? picked, int cost, List<DraftCategory> cats)
     {
         var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
+        int drawsBefore = SlotMachineSystem.DrawIndex;
         yield return CoInstantPick(target, cost);
+        bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
+        // bonusFree 那一抽不推进 DrawIndex，故这类白送抽不会再触发 reroll，与既有 11-02 口径一致
+        if (landed && !picked.HasValue && SlotMachineSystem.RollReroll())
+        {
+            SlotMachineSystem.GrantBonusFreeDraw();
+            UIManager.Instance?.ShowToast("再来一次！这一抽免费", true);
+            SlotMachineAgainBanner.Show();
+        }
         BattleEntryDraftPanel.Instance?.RefreshLive();
     }
 
@@ -1313,12 +1373,22 @@ public partial class BattleManager
         BattleEntryDraftPanel.EnterLiveStart(OnLiveStartFight);
     }
 
-    /// <summary>玩家点了「开始战斗」：解除硬刷压制 → 刷首波 → 队伍出发（旧流程「抽完才出发」语义保住）。
-    /// 之后整关不再有任何等待节点。</summary>
+    /// <summary>玩家点了「开始战斗」：竞技场先播「对战」开场动画，等动画播完并藏回后才开打。
+    /// 【2026-11-09 主人拍板「动画播完消失后再开始」】等待期间 _preBattleStoryPlaying /
+    /// _liveStartAdvancePending 保持 true，压住 CoFirstWaveHardFallback；动画异常由 BattleVsIntro
+    /// 打 LogError 并立刻回调 DoStartFight，绝不把玩家卡在进关阶段。</summary>
     void OnLiveStartFight()
     {
-        // 【2026-10-30 竞技场开场动画】玩家点「开始战斗/继续」后播一次开场「对战」动画（0.5s 非阻塞，不挡首波刷怪）
-        if (Mode != null && Mode.Id == BattleModeId.Arena) BattleVsIntro.TryPlayForArena();
+        if (Mode != null && Mode.Id == BattleModeId.Arena)
+            BattleVsIntro.TryPlayForArena(DoStartFight);
+        else
+            DoStartFight();
+    }
+
+    /// <summary>真正开战：解除硬刷压制 → 刷首波 → 队伍出发。只由 OnLiveStartFight 触发
+    ///（竞技场要等「对战」动画播完藏回后的回调）。旧流程「抽完才出发」语义保住。</summary>
+    void DoStartFight()
+    {
         _preBattleStoryPlaying = false;
         ScheduleFirstWaveSpawn();
         // 【2026-10-29 实时抽改版】与旧流程同序（先刷首波再出发，见 BattleStartSequenceCoroutine 分流注释）
@@ -1359,7 +1429,9 @@ public partial class BattleManager
     /// <param name="cost">这一抽的价格（币）。由 <see cref="BattleManager"/> 的编排层算好传进来，
     /// 本方法不再自己算价，避免两处价格对不上。</param>
     /// </summary>
-    IEnumerator CoInstantPick(DraftCategory cat, int cost)
+    // isTargetedPick（2026-11-09）：玩家点的是不是定向按钮（资源副本「每类限 1 次」限额用）；
+    // 只区分「玩家点的定向」与「随机摇出的类型」——随机摇出 Merc 也算随机抽那一次额度。
+    IEnumerator CoInstantPick(DraftCategory cat, int cost, bool isTargetedPick = false)
     {
         var dir = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(this);
         if (dir == null)
@@ -1449,7 +1521,12 @@ public partial class BattleManager
         bool bonusFree = false;
         if (cost > 0)
             SpendBattleGold(cost);
-        else if (SlotMachineSystem.ConsumeBonusFreeDraw())
+        // 【2026-11-09 主人拍板】资源副本定向抽：走自己的「每类 1 次」限额
+        //（SlotMachineSystem.ConsumeActivityFocusDraw），不吃普通免费额度；
+        // bonus 额度本就只发给随机抽，这里按 isTargetedPick 收口，定向永远不会误吃它。
+        else if (isTargetedPick && IsResourceDungeon)
+            SlotMachineSystem.ConsumeActivityFocusDraw(cat);
+        else if (!isTargetedPick && SlotMachineSystem.ConsumeBonusFreeDraw())
             bonusFree = true;
         else
             SlotMachineSystem.ConsumeFreeDraw();
@@ -1966,7 +2043,10 @@ public partial class BattleManager
         // 2026-10-05 主人拍板「局外在结算界面才发」：这里**不再**即时加金币、不再飘字。
         // 只把本关额度记进待发池，等结算（PersistBattleGold → GrantPendingStageGold）一次性发。
         // 口径不变：打完一章拿满，中途撤离 / 阵亡只拿已通关那几关的部分（结算侧就是这个算法）。
-        int stageGold = StageGoldDefs.CurrentStageGold();
+        // 【2026-11-09 主人拍板「金币按文案设定来发」】金币本金币改走逐怪分摊
+        //（OnMonsterDead → GrantGoldDungeonKillGold，总额 = GetGoldDungeonClearGold 文案三档），
+        // 关卡固定金那笔对金币本跳过，防双发；其余模式口径一字不动。
+        int stageGold = IsGoldDungeon ? 0 : StageGoldDefs.CurrentStageGold();
         if (stageGold > 0 && !IsSideIsland && !IsArena)   // 支线岛不发主线关卡金——岛金=goldReward，走岛结算链；
                                                           // 竞技场（2026-10-30 拍板）打赢不发金币，按关结算金一并停发
             _runStageGoldPending += stageGold;

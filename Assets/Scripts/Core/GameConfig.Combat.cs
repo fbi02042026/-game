@@ -820,6 +820,22 @@ public static partial class GameConfig
     public static float BOSS_PHASE1_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE1_TELEGRAPH", 3f);
     /// <summary>Boss 阶段切换时的预警时长</summary>
     public static float BOSS_PHASE_SHIFT_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE_SHIFT_TELEGRAPH", 2.5f);
+
+    // ===== 【2026-11-09 主人拍板】红圈双圈 + 分类（精英小/3秒，Boss 大/4秒）=====
+    /// <summary>浅色范围圈：预警第一秒就显示完整范围。</summary>
+    public const float TELEGRAPH_RANGE_ALPHA = 0.28f;
+    /// <summary>深色进度圈：从中心缩放 0 放大到与范围圈一样大，用时＝预警时长。</summary>
+    public const float TELEGRAPH_PROGRESS_ALPHA = 0.85f;
+    /// <summary>红圈视觉椭圆的 Y 压扁比例；伤害判定按同一比例折算，保证演出与判定同位。</summary>
+    public const float TELEGRAPH_DISC_Y_RATIO = 0.35f;
+    /// <summary>精英红圈半径上限（小一点）。</summary>
+    public const float TELEGRAPH_ELITE_RADIUS = 2.6f;
+    /// <summary>Boss 红圈半径下限（大一点）。</summary>
+    public const float TELEGRAPH_BOSS_RADIUS = 4.5f;
+    /// <summary>精英预警时长（秒）。</summary>
+    public const float TELEGRAPH_ELITE_SEC = 3f;
+    /// <summary>Boss 预警时长（秒），阶段 2 与阶段切换同用。</summary>
+    public const float TELEGRAPH_BOSS_SEC = 4f;
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏幅度</summary>
     public static float BOSS_SKILL_RELEASE_SHAKE_AMP => CombatTuningTable.Get("BOSS_SKILL_RELEASE_SHAKE_AMP", 0.18f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏时长</summary>
