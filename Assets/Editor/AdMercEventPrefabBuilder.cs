@@ -97,7 +97,7 @@ public static class AdMercEventPrefabBuilder
         if (giftGlow == null) Debug.LogWarning("[AdMercBuilder] 礼盒底光没加载到：" + GiftGlowPath + "（礼盒底光省略，主人在 prefab 里手补）");
 
         var font = GameFonts.GetChinese();
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (font == null) font = GameFonts.GetDefault();
         Sprite GiftSprite(int i) => i % 2 == 0 ? giftPurple : giftRed;
 
         // ── 根：Canvas + AdMercEventUI ──

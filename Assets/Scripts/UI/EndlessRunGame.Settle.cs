@@ -113,15 +113,20 @@ public partial class EndlessRunGame : MonoBehaviour
     // 金币拾取（每帧协程；读 T3 _props / PropKind / ReleaseProp，同类分部 private 可见）
     // ============================================================
 
-    /// <summary>Coin 类 prop 与玩家 x 距离 ≤ 60px 判定拾取：双计数器各 +1 并回收该 prop。</summary>
+    /// <summary>Coin 类 prop 与玩家 x 距离 ≤ 60px 判定拾取：双计数器各 +1 并回收该 prop。
+    /// MercHead 同款判定距离：回收后触发「新佣兵天降窗口」（满员）或直接入队 + 横条（未满员）。</summary>
     void PickupCoins()
     {
         for (int i = _props.Count - 1; i >= 0; i--)
         {
             var p = _props[i];
-            if (!p.alive || p.kind != PropKind.Coin) continue;
+            if (!p.alive) continue;
+            if (p.kind != PropKind.Coin && p.kind != PropKind.MercHead) continue;
             if (Mathf.Abs(p.logicX - _playerXPx) > COIN_PICKUP_PX) continue;
-            AddCoin();
+            if (p.kind == PropKind.MercHead)
+                OnPickMercHead(p.hireId);
+            else
+                AddCoin();
             ReleaseProp(p);
             _props.RemoveAt(i);
         }

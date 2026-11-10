@@ -64,7 +64,11 @@ public static class MonsterStatsTable
                 baseMagicAttack = (c.Length > 15 && GameTableCsv.TryFloat(c[15], out float matk)) ? matk : 0f,
                 baseMagicDefense = (c.Length > 16 && GameTableCsv.TryFloat(c[16], out float mdef)) ? mdef : 0f,
                 // 2026-10-26 词缀怪：affix 列（c[18]，note 是 c[17]）；旧表缺列留空 = 普通怪
-                tableAffix = (c.Length > 18 && !string.IsNullOrWhiteSpace(c[18])) ? c[18].Trim() : ""
+                tableAffix = (c.Length > 18 && !string.IsNullOrWhiteSpace(c[18])) ? c[18].Trim() : "",
+                // 2026-11-10 主人名单：空中/陆地（airUnit 列 c[19]）与远程/近战（ranged 列 c[20]）。
+                // 旧 .bytes 缺列时按陆地/近战处理（零行为变化）
+                airUnit = (c.Length > 19 && GameTableCsv.TryBool(c[19], out bool air) && air),
+                ranged = (c.Length > 20 && GameTableCsv.TryBool(c[20], out bool rng) && rng)
             };
             if (string.IsNullOrEmpty(e.id))
                 e.id = BuildDefaultId(monsterChapter, spriteIndex);

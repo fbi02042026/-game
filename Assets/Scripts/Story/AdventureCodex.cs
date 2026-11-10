@@ -14,8 +14,29 @@ public static class AdventureCodex
         return chapter <= max;
     }
 
+    /// <summary>
+    /// 图鉴条目所属章节 = 素材章（chapter_theme_map 恒等映射）。
+    /// 【2026-11-10 主人拍板】原先按 Id 数字推章（M101→2）与 AssetId 前缀（jungle=3）错位：
+    /// 第 2 页「幽冥墓园」放着雨林怪、打亡灵怪却点亮第 3 页。改按 AssetId 前缀定章，
+    /// 条目 Id 一个都不动，保住 seenMonsterIds / defeatedMonsterIds / viewedMonsterIds 存档。
+    /// </summary>
     public static int MonsterChapter(AdventureLogCatalog.MonsterEntry e)
     {
+        string asset = e.AssetId ?? "";
+        int us = asset.IndexOf('_');
+        string prefix = us > 0 ? asset.Substring(0, us) : asset;
+        switch (prefix)
+        {
+            case "forest": return 1;
+            case "undead": return 2;
+            case "jungle": return 3;
+            case "field":  return 4;
+            case "sea":    return 5;
+            case "cave":   return 6;
+            case "devil":  return 7;
+            case "ice":    return 8;
+        }
+        // 未知前缀维持旧的 Id 推章行为（不新增分支、不静默改章号）
         if (string.IsNullOrEmpty(e.Id) || e.Id.Length < 2) return 1;
         if (!int.TryParse(e.Id.Substring(1), out int n)) return 1;
         return n / 100 + 1;

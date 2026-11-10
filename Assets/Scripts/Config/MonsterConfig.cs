@@ -39,4 +39,10 @@ public class MonsterConfig : ScriptableObject
     [Header("词缀怪（2026-10-26）")]
     [Tooltip("表定词缀：monster_stats.affix 列（| 分隔的 MonsterAffixId 名，如 Bulwark|Thorns）。空 = 普通怪。仅正式主线关对非精英小怪生效；精英/Boss/签名怪仍走掷骰词缀。")]
     public string tableAffix = "";
+
+    [Header("站位与攻击形态（2026-11-10 主人名单）")]
+    [Tooltip("空中单位：monster_stats.airUnit 列。1 = 战斗里身体上抬 MONSTER_AIR_HOVER、脚下阴影留在地面（留一段可见空隙）；0 = 陆地贴地。")]
+    public bool airUnit;
+    [Tooltip("远程单位：monster_stats.ranged 列。1 = 远程、0 = 近战。当前仅表意记录，攻击逻辑仍走 attackRange 列。")]
+    public bool ranged;
 }

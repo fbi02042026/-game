@@ -589,11 +589,40 @@ public partial class Monster
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
 
         EnsureFootShadow();
+        ApplyAirHoverOffset();
         // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
         // 2026-10-17 上线稳定优先：一次性探针已完成使命，真机不再执行，仅编辑器保留
 #if UNITY_EDITOR
         MonsterTemplateProbe.DumpOnce(transform);
 #endif
+    }
+
+    /// <summary>
+    /// 【2026-11-10 主人拍板：空中单位要和阴影有一段空隙（不用太大，能看出来就行）】
+    /// 空中怪（monster_stats.airUnit=1）：本体在移动根下上抬 GameConfig.MONSTER_AIR_HOVER，
+    /// 脚下阴影按 _airShadowBaseY 基线反向补偿 —— 阴影留在地面、身体浮空。
+    /// 陆地怪把本体 y 归零（清池化残留），阴影一个值不动 —— 零行为变化。
+    /// 幂等：阴影按基线绝对定位（不是每次叠加偏移），池化复用多次 Init 不累积。
+    /// </summary>
+    void ApplyAirHoverOffset()
+    {
+        bool air = config != null && config.airUnit;
+        float hover = air ? GameConfig.MONSTER_AIR_HOVER : 0f;
+
+        // 本体 y 绝对归位（覆盖 EnsureBodyRoot / RectTransform 分支 / 复用残留的任何值）
+        if (Mathf.Abs(transform.localPosition.y - hover) > 0.0001f)
+            transform.localPosition = new Vector3(transform.localPosition.x, hover, transform.localPosition.z);
+
+        if (!air) return;
+
+        Transform shadow = FindFootShadowNode(transform);
+        if (shadow == null) return; // EnsureFootShadow 已对缺失阴影 fail-closed，这里不重复报
+        if (float.IsNaN(_airShadowBaseY)) _airShadowBaseY = shadow.localPosition.y;
+        // 阴影可能挂在本体下的任意子层：按其父链 lossyScale 换算，精英/Boss 根缩放不同也能对准地面
+        float parentLossy = shadow.parent != null ? shadow.parent.lossyScale.y : transform.lossyScale.y;
+        float ls = Mathf.Max(0.001f, Mathf.Abs(parentLossy));
+        Vector3 lp = shadow.localPosition;
+        shadow.localPosition = new Vector3(lp.x, _airShadowBaseY - hover / ls, lp.z);
     }
 
     /// <summary>

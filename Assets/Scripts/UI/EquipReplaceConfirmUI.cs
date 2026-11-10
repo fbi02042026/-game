@@ -446,7 +446,7 @@ public class EquipReplaceConfirmUI : MonoBehaviour
             // 红字压在图标上也要看得清，黑描边保留
             labelGo.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.9f);
             label.font = GameFonts.GetChinese();
-            if (label.font == null) label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            if (label.font == null) label.font = GameFonts.GetDefault();
             var lrt = labelGo.GetComponent<RectTransform>();
             lrt.anchorMin = Vector2.zero;
             lrt.anchorMax = Vector2.one;

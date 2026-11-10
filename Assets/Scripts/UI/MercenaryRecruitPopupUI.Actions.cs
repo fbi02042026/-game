@@ -156,9 +156,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
                 UIManager.Instance?.ShowToast("金币不足");
                 return false;
             }
-            // 【2026-10-24 主人拍板「商店未开启」】金币消费累计喂食点之一（S005/S010）：
-            // 商城按钮隐藏期间，酒馆招募是唯一活跃的金币出口，口径并入消费累计。
-            // 出口唯一 = OnShopGoldSpent（商店 ShopSystem.Buy 是另一喂食点）。
+            // 【2026-10-24 建立；2026-10-31 商店整体删除后更新】金币消费累计唯一喂食点（S005/S010）：
+            // 商店（ShopUI / ShopSystem）已删，酒馆招募是当前唯一活跃的金币出口。
+            // 出口唯一 = OnShopGoldSpent（商店已删，这里是唯一喂食点）。
             AdventureLogAchievements.OnShopGoldSpent(gold);
         }
         else if (!MercHireSession.TrySpendScroll(rarity))

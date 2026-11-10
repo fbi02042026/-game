@@ -20,6 +20,12 @@ public partial class Monster : UnitBase
     private int _chapter;
 
     Transform _bodyRoot;
+    /// <summary>
+    /// 【2026-11-10 空中单位浮空】脚下阴影的「贴地基线」（本地 y）。
+    /// 首次 ApplyAirHoverOffset 时记录（NaN = 未记录），之后每次按 基线 - hover/lossyScale 补偿，
+    /// 保证池化复用多次 Init 不累积偏移。NaN 判定用 float.IsNaN。
+    /// </summary>
+    float _airShadowBaseY = float.NaN;
     Transform _visualRoot;
 
     /// <summary>???????? Body????Body ?????????/summary>

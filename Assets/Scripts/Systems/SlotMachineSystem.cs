@@ -283,16 +283,17 @@ public static class SlotMachineSystem
         Debug.Log($"[SlotMachineSystem] 免费抽已用 {_freeDrawsUsed}/{TotalFreeDraws()}（本次未扣抽奖币）");
     }
 
-    // —— 资源副本定向抽限额（2026-11-09 主人拍板「其他三个抽奖每次只能抽一次 抽一次后变灰」）——
-    // 资源副本（金币/徽记/卷轴/礼物）抽奖全免费：随机抽共用模式免费额度（FreeEntryDraws=5），
+    // —— 免费额度模式定向抽限额（2026-11-09 主人拍板「其他三个抽奖每次只能抽一次 抽一次后变灰」；
+    // 2026-11-10 主人拍板「非用抽奖券的战斗里其他三个抽奖每局只能抽一回」→ 补竞技场）——
+    // 资源副本（金币/徽记/卷轴/礼物）与竞技场抽奖全免费：随机抽共用模式免费额度（5 次），
     // 三个定向（佣兵/装备/技能）各限 1 次。计数随 <see cref="ResetStageFreeDraws"/> 每场清零。
     static readonly Dictionary<DraftCategory, int> _activityFocusUsed = new Dictionary<DraftCategory, int>();
 
-    /// <summary>资源副本某定向方向本场还能抽几次（每类 1 次；非资源副本恒 0，不启用本限额）。</summary>
+    /// <summary>免费额度模式某定向方向本场还能抽几次（每类 1 次；正式关等付费模式恒 0，不启用本限额）。</summary>
     public static int ActivityFocusLeft(DraftCategory cat)
     {
         var bm = BattleManager.Instance;
-        if (bm == null || !bm.IsResourceDungeon) return 0;
+        if (bm == null || !(bm.IsResourceDungeon || bm.IsArena)) return 0;
         _activityFocusUsed.TryGetValue(cat, out int used);
         return Mathf.Max(0, 1 - used);
     }
@@ -302,7 +303,7 @@ public static class SlotMachineSystem
     {
         _activityFocusUsed.TryGetValue(cat, out int used);
         _activityFocusUsed[cat] = used + 1;
-        Debug.Log($"[SlotMachineSystem] 资源副本定向 {cat} 已用 {used + 1}/1（本场限额，未扣抽奖币）");
+        Debug.Log($"[SlotMachineSystem] 免费额度模式定向 {cat} 已用 {used + 1}/1（本场限额，未扣抽奖币）");
     }
 
     /// <summary>【2026-10-11 主人拍板】「再来一次」命中：白送一次免费抽。</summary>

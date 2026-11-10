@@ -38,6 +38,7 @@ public partial class BattleEntryDraftPanel
         // 【2026-10-19 主人拍板】免费次数只惠及普通随机抽；三个定向（佣兵/装备/技能）永远按价扣币。
         // 🔴【2026-10-31 主人拍板「金币也不用了 改成剩余几次」】竞技场例外：四类按钮统一吃
         // 5 次额度、不吃金币 —— 价格位显示「剩余N次」，额度用完整排置灰（真源 = FreeDrawsLeft）。
+        // 【2026-11-10 补】三个定向另受每场 1 次限制（真源 ActivityFocusLeft），抽过即变灰显示「-」。
         bool free = freeLeft > 0;
         bool arenaQuotaMode = BattleManager.Instance != null && BattleManager.Instance.IsArena;
         // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本（金币/徽记/卷轴/礼物）全免费：
@@ -50,9 +51,13 @@ public partial class BattleEntryDraftPanel
             if (s.Btn == null) continue;
             bool isRandom = !s.Cat.HasValue;
             bool has = isRandom || (cats != null && cats.Contains(s.Cat.Value));
+            // 【2026-11-10】免费额度模式（资源副本 / 竞技场）的三个定向每场各限 1 次，抽过即不可再抽；
+            // 付费模式恒 true（那里 ActivityFocusLeft 返回 0，不能拿它判，否则定向全锁死）。
+            bool focusOk = isRandom || !(arenaQuotaMode || activityQuotaMode)
+                           || SlotMachineSystem.ActivityFocusLeft(s.Cat.Value) > 0;
             bool slotFree = activityQuotaMode
-                ? has && freeLeft > 0 && (isRandom || SlotMachineSystem.ActivityFocusLeft(s.Cat.Value) > 0)
-                : free && (arenaQuotaMode || isRandom);
+                ? has && freeLeft > 0 && focusOk
+                : free && (arenaQuotaMode ? focusOk : isRandom);
             // 价格与余额都按<b>各自币种</b>算：
             // 佣兵定向 = 佣兵币的价与余额；装备/技能定向 = 抽奖币的价与余额。
             int price = isRandom ? randomPrice : SlotMachineSystem.FocusPrice(s.Cat.Value);
@@ -67,7 +72,7 @@ public partial class BattleEntryDraftPanel
             // 【2026-10-31 竞技场】额度模式下只认剩余次数（金币余额无关），用完即置灰。
             bool on = !_drawLocked && !_cdActive && has
                       && (activityQuotaMode ? slotFree
-                      : arenaQuotaMode ? freeLeft > 0
+                      : arenaQuotaMode ? (freeLeft > 0 && focusOk)
                       : (slotFree || wallet >= price));
             // 置灰交给 Button.interactable —— 它会按 disabledColor 作用在 icon 上；
             // 不去改 name/金额 的文字颜色，那是主人调好的美术。
@@ -80,7 +85,7 @@ public partial class BattleEntryDraftPanel
                 // 且「免费」要居中显示（见下方对齐处理）；有价数字仍按原样显示。
                 // 【2026-11-09】资源副本用完的方向显示「-」（已置灰，无价可显）。
                 s.CostText.text = !has ? "-"
-                               : arenaQuotaMode ? $"剩余{freeLeft}次"
+                               : arenaQuotaMode ? (focusOk ? $"剩余{freeLeft}次" : "-")
                                : activityQuotaMode ? (slotFree ? "免费" : "-")
                                : slotFree ? "免费"
                                : price.ToString();

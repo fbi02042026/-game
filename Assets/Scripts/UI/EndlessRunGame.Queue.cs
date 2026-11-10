@@ -14,7 +14,7 @@ using UnityEngine;
 /// 【0.7】渲染缩放只进佣兵 transform.localScale；LogicX / 碰撞 / 射程 / 槽位 x 一律逻辑 px。
 /// 【边界】佣兵只在内存：不写佣兵招募存档字段、不调任何钱包 / 存档 API；
 /// 结算 / HUD / 入口 / 存档交 T5~T7，本分部只暴露 PlayerHp / PlayerDied / EnqueueMerc()。
-/// 立绘接入是待确认项：佣兵用空 SpriteRenderer 槽位，不找图 / 不造图 / 不写占位兜底。
+/// 立绘走全项目唯一出口 MercPortraitSprites.GetStand（id 由 MercHead 拾取指定，无参入口才轮换），子节点脚底对齐；不兜底。
 /// </summary>
 public partial class EndlessRunGame
 {
@@ -31,13 +31,19 @@ public partial class EndlessRunGame
     /// <summary>获得佣兵的唯一入口（本期无调用方，机制先就位；不写测试按钮 / 不自动塞佣兵）。</summary>
     public void EnqueueMerc()
     {
+        EnqueueMerc(MERC_STAND_IDS[_qMercSeq++ % MERC_STAND_IDS.Length]);
+    }
+
+    /// <summary>带 hireId 的入队入口：MercHead 拾取时保证「横条 / 立绘 / 队列」同一个 id。</summary>
+    public void EnqueueMerc(string hireId)
+    {
         if (!_qReady || _dead) return;
         if (SuppressWaveSpawn) return;              // 天降窗口未结束，不叠加第二只
 
         if (_mercs.Count < 2)
         {
             // 有空槽：直接天降入队，落地自动生效（验收场景①）。
-            var m = CreateMerc();
+            var m = CreateMerc(hireId);
             m.anim = MercAnim.Drop;
             m.animT = 0f;
             m.curX = SlotX(_mercs.Count);           // 落自己的槽位
@@ -49,7 +55,7 @@ public partial class EndlessRunGame
         else
         {
             // 满员：待定天降（前 1 槽上方），0.35s 内跳=顶替最老、不跳=放弃（验收场景②）。
-            _pending = CreateMerc();
+            _pending = CreateMerc(hireId);
             _pending.anim = MercAnim.PendingDrop;
             _pending.animT = 0f;
             _pending.curX = SlotX(0);               // 新佣兵落被顶替槽位（前 1）
@@ -77,6 +83,7 @@ public partial class EndlessRunGame
         public float refillT;     // 补位剩余秒
         public float atkCd;       // 攻击 CD 剩余秒
         public float dropFromY;   // 天降起点 y
+        public string hireId;     // MercHead 拾取同源 id（横条 / 立绘 / 队列一致）
     }
 
     // ---- 数值（RunTrackTable）----
@@ -84,6 +91,8 @@ public partial class EndlessRunGame
     float _qDropSec, _qReplaceSec, _qRefillSec, _qInvSec, _qNoProtSec;
     float _qFollowDelay, _qAtkCd, _qMeleeRange, _qRangedRange, _qSlotGap, _qRenderScale;
     bool _qReady;
+    int _qMercSeq;                          // 立绘 id 轮换计数（仅内存，不涉存档）
+    static readonly string[] MERC_STAND_IDS = { "H001", "H002", "H003" };
 
     // ---- 运行时 ----
     readonly List<Merc> _mercs = new List<Merc>();   // index 0 = 最前（挡刀位 / FIFO 最老）
@@ -133,6 +142,7 @@ public partial class EndlessRunGame
         _qWasAirborne = false;
         _lastGapSeg = null;
         SuppressWaveSpawn = false;
+        ResetRunOverlays();   // 重开 / 关闭时清残留的慢动作与二选一窗口 / 横条
     }
 
     void DestroyMerc(Merc m)
@@ -140,17 +150,35 @@ public partial class EndlessRunGame
         if (m != null && m.go != null) Object.Destroy(m.go);
     }
 
-    Merc CreateMerc()
+    Merc CreateMerc(string hireId)
     {
         var go = new GameObject("RunMerc");
         go.transform.SetParent(_worldRoot.transform, false);
         go.layer = _worldLayer;
-        var sr = go.AddComponent<SpriteRenderer>();
+
+        // 立绘走全项目唯一出口，id 由 MercHead 拾取指定（跑酷内部同源）；取不到直接 LogError，不兜底。
+        string id = hireId;   // 跑酷内部指定（MercHead 拾取传来），不再按创建数轮换
+        Sprite sp = MercPortraitSprites.GetStand(id);
+        if (sp == null)
+        {
+            Debug.LogError("[跑酷] 佣兵立绘缺失：MercPortraitSprites.GetStand(" + id + ") 返回 null。");
+            return new Merc { go = go, sr = null, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
+        }
+        // 按目标逻辑高度算缩放（同 R2/R3 公式），再叠 0.7（_qRenderScale，只进 localScale）。
+        float s = PORTRAIT_TARGET_H / Mathf.Max(1f, sp.rect.height);
+        s *= _qRenderScale;
+        float halfHU = 0.5f * s * sp.rect.height / Mathf.Max(1f, sp.pixelsPerUnit);   // 渲染身高的一半（unit）
+
+        // 子节点承载渲染并上移半个渲染身高做脚底对齐（pivot 默认中心，go 的 y 是地面顶面）。
+        var portrait = new GameObject("MercPortrait");
+        portrait.transform.SetParent(go.transform, false);
+        portrait.layer = _worldLayer;
+        var sr = portrait.AddComponent<SpriteRenderer>();
+        sr.sprite = sp;
         sr.sortingOrder = 6;
-        // 立绘接入是待确认项：空 SpriteRenderer 槽位（sprite 留 null），不兜底。
-        // 0.7 唯一落点（渲染 localScale），与 T2 玩家 / T3 怪同做法。
-        go.transform.localScale = new Vector3(_qRenderScale, _qRenderScale, 1f);
-        return new Merc { go = go, sr = sr, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
+        portrait.transform.localScale = new Vector3(s, s, 1f);
+        portrait.transform.localPosition = new Vector3(0f, halfHU, 0f);
+        return new Merc { go = go, sr = sr, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
     }
 
     /// <summary>槽位 x：玩家 x − wave_group_gap ×（槽位序号+1），index 0 最前。</summary>
@@ -176,7 +204,7 @@ public partial class EndlessRunGame
         if (IsAirborne && !_qWasAirborne) OnQueueJumpEdge();
         _qWasAirborne = IsAirborne;
 
-        float dt = Time.fixedDeltaTime;
+        float dt = Time.fixedDeltaTime * _runTimeScale;
         TickTimers(dt);
         TickFollowX(dt);
         TickMercAnims(dt);
@@ -191,12 +219,19 @@ public partial class EndlessRunGame
 
     void OnQueueJumpEdge()
     {
-        // 跳=换人：满员天降窗口内起跳 → 最老（前 1 槽）往后跳出，待定佣兵落前 1 槽。
+        // 天降二选一窗口内：不再由跳跃触发顶替，改由「换」按钮回调驱动 ReplacePending()。
+        if (_choiceOpen) return;
+        ReplacePending();
+    }
+
+    /// <summary>顶替替换：最老（前 1 槽）往后跳出，待定佣兵落前 1 槽。按钮「换」与跳信号复用。</summary>
+    void ReplacePending()
+    {
         if (_pending == null) return;
         var old = _mercs[0];
         old.anim = MercAnim.ReplaceJumpOut;
         old.animT = 0f;
-        _pending.anim = MercAnim.Drop;   // animT 保留：总窗口仍是 0.35s
+        _pending.anim = MercAnim.Drop;   // animT 保留：总窗口仍是 merc_drop_time
         _mercs.Insert(0, _pending);
         _pending = null;
         // SuppressWaveSpawn 由这次落地完成时复位。
@@ -286,7 +321,8 @@ public partial class EndlessRunGame
             _pending.animT += dt;
             if (_pending.animT >= _qDropSec)
             {
-                // 不跳=放弃：窗口内没有起跳，待定佣兵离场。
+                // 天降落地 = 「不换」自动收尾（玩家一直没点）：恢复 1.0、清窗口、不播横条。
+                CloseChoiceWindow();
                 DestroyMerc(_pending);
                 _pending = null;
                 SuppressWaveSpawn = false;

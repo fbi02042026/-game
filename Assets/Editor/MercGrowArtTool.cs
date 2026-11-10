@@ -231,7 +231,7 @@ public static class MercGrowArtTool
         t.horizontalOverflow = HorizontalWrapMode.Wrap;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
         return t;
     }
 

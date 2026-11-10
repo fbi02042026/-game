@@ -20,8 +20,8 @@ public static class MainPathPlaytestChecklist
         "9. Boot→Town→引导战→撤离回城\n" +
         "10. 冒险开战耗体力；战前三选一后遗产池减少\n" +
         "11. 清关→宝箱→三选一/折金 Toast→chuansongmen→石墩轮盘\n" +
-        "12. 轮盘仅出现：普通/精英/恢复/Boss\n" +
-        "13. 恢复关：用 Resources/RestStagePopup 预制体回血+材料\n" +
+        "12. 轮盘仅出现：普通/精英/Boss（恢复关已下线）\n" +
+        "13. 波次清完按 WaveClearHealRatio 全队回血（恢复关已下线）\n" +
         "14. 佣兵按名册出战（等级/技能来自存档）；无「即将开放」误点\n" +
         "15. 角色页 SPUM 与战斗换装一致；装备均有 spumName\n" +
         "16. 重开客户端：金/体/遗产/佣兵仍在\n\n" +

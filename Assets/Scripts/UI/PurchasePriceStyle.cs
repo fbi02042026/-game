@@ -55,4 +55,32 @@ public static class PurchasePriceStyle
         ol.effectDistance = EffectDistance;
         ol.useGraphicAlpha = true;
     }
+
+    /// <summary>统一禁用灰（与 ArenaShopInfoPopupUI.OkGray 同档，不新造色系）。</summary>
+    public static readonly Color BuyDisabledColor = new Color(0.55f, 0.55f, 0.55f, 1f);
+
+    /// <summary>
+    /// 【2026-11-10 主人拍板「不能购买时应该是灰的，所有界面里都是，统一化」】
+    /// 购买 / 兑换类按钮的<b>唯一置灰出口</b>：canBuy=false → 禁用 + 统一禁用色；true → 恢复。
+    /// 只改 interactable 与 ColorBlock.disabledColor，不动字号 / 尺寸 / 图片 / 文案（美术归预制体）。
+    /// 运行时 AddComponent&lt;Button&gt; 的按钮 targetGraphic 可能是空的，这里补挂同节点 Graphic，
+    /// 否则 interactable=false 只是不能点、画面上一点没灰。幂等，可放在每次 Refresh 里。
+    /// </summary>
+    public static void ApplyBuyable(Button btn, bool canBuy)
+    {
+        if (btn == null) return;
+        Graphic g = btn.targetGraphic;
+        if (g == null) g = btn.GetComponent<Graphic>();
+        if (g == null) g = btn.GetComponentInChildren<Graphic>(true);
+        if (g == null)
+            Debug.LogError($"[PurchasePriceStyle] 购买按钮 {btn.name} 找不到 Graphic，只会禁点不会变灰");
+        else
+        {
+            if (btn.targetGraphic == null) btn.targetGraphic = g;
+            var cb = btn.colors;
+            cb.disabledColor = BuyDisabledColor;
+            btn.colors = cb;
+        }
+        btn.interactable = canBuy;
+    }
 }

@@ -192,12 +192,20 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// <summary>
     /// 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗开着时若技能弹窗要开，先把它关掉，别叠在一起。
     /// 两个获得弹窗同层 925、互不感知，玩家点佣兵头像看着详情时又抽中技能就会叠 —— 统一「后来的关先前的」。
-    /// Close() 只发一次 onClosed（本入口 _onClosed 本就为 null），自动关协程见 _closeReq 自行退出，无残留。
+    /// Close() 只发一次 onClosed（本入口 _onClosed 本就为 null）；本弹窗已无自动关协程，无残留。
     /// </summary>
     public static void CloseIfOpen()
     {
         if (_instance != null && _instance._root != null && _instance._root.activeSelf)
             _instance.Close();
+    }
+
+    /// <summary>【2026-11-10】升阶弹窗关窗后重评「可进阶」：按 MercStarSystem.CanStarUp 唯一真源
+    /// 刷新进阶钮 / 发光材质 / 指引气泡。弹窗没开着就直接返回（不改存档、不兜底建节点）。</summary>
+    public static void RefreshAscendIfOpen()
+    {
+        if (_instance == null || _instance._root == null || !_instance._root.activeSelf) return;
+        _instance.ApplyAscendButton();
     }
 
     // ============================================================
@@ -214,32 +222,10 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (c != null) UICanvasSetup.RefreshPopup(c, SortOrder);
     }
 
-    void StopAutoClose()
-    {
-        if (_autoCo != null)
-        {
-            StopCoroutine(_autoCo);
-            _autoCo = null;
-        }
-    }
 
-    IEnumerator CoAutoClose()
-    {
-        float t = 0f;
-        while (t < AutoCloseSeconds)
-        {
-            if (_closeReq || _root == null || !_root.activeSelf) yield break;
-            // 抽奖阶段 timeScale=0：一律 unscaledDeltaTime / WaitForSecondsRealtime
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
-        Close();
-    }
-
-    /// <summary>唯一关闭出口：点确认/购买/取消 / 点暗带 / 自动兜底都走这；回调只发一次。</summary>
+    /// <summary>唯一关闭出口：点确认/购买/取消 / 点暗带 / 流程 CloseIfOpen 都走这；回调只发一次。</summary>
     void Close()
     {
-        _closeReq = true;
         if (_recruitMode) ExitRecruitMode();   // 还原按钮/标题文案（确认/替换/获得佣兵），下次普通入口不串味
         if (_fallenMode) ExitFallenMode();     // 同上：还原「复活/取消」双钮，下次普通入口不串味
         ApplyAscendGlow(false);                // 【2026-10-24】关窗摘发光材质、停呼吸动效、缩放还原（下次 Fill 重评）
@@ -304,8 +290,6 @@ public partial class MercObtainPopupUI : MonoBehaviour
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
-        ui.StopAutoClose();
-        // 不启动自动关兜底：这是带购买按钮的交互弹窗，8 秒强关会打断购买
     }
 
     /// <summary>招募模式内容覆盖：标题/名字用招募卡口径（displayName），技能用 offer 的（主动优先、无主动上被动）。</summary>
@@ -338,14 +322,14 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     /// <summary>购买钮文案（【2026-10-19 主人拍板】货币跟稀有度走）：
-    /// 普通佣兵=「600金币」；稀有佣兵=「普通卷×1」；传奇佣兵=「稀有卷×1」。
+    /// 普通佣兵=「600」（前面已有金币图标）；稀有佣兵=「普通卷x1」；传奇佣兵=「稀有卷x1」。
     /// 【2026-10-25 主人拍板】已拥有的候选也可购买（重复转本命碎片），同样显示真实价格。</summary>
     string BuildBuyLabel(MercenaryData offer)
     {
         var rarity = MercHireSession.OfferRarity(offer);
         if (rarity == MercRosterDefs.MercRarity.Common)
-            return MercHireSession.GoldCost(offer) + "金币";
-        return rarity == MercRosterDefs.MercRarity.Legendary ? "稀有卷×1" : "普通卷×1";
+            return MercHireSession.GoldCost(offer).ToString();
+        return rarity == MercRosterDefs.MercRarity.Legendary ? "稀有卷x1" : "普通卷x1";
     }
 
     /// <summary>

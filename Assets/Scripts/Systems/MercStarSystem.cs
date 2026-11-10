@@ -75,7 +75,7 @@ public static class MercStarSystem
     }
 
     /// <summary>
-    /// 该佣兵升星所用**职业徽记**的持有数（2026-10-23 主人拍板：升星 2/3 星加徽记消耗，传奇 1 星起）。
+    /// 该佣兵升星所用**职业徽记**的持有数（2026-11-10 主人拍板：所有品质每星都要徽记，只是职业与档位不同）。
     /// 徽记档位随稀有度：普通=低级、稀有=中级、传奇=高级（MercStarDefs.BadgeTierOf）。
     /// </summary>
     public static int GetBadgeCount(string hireIdOrAssetId)
@@ -136,7 +136,7 @@ public static class MercStarSystem
             return false;
         }
 
-        // 徽记预检（2026-10-23 主人拍板：升星 2/3 星加该职业徽记消耗，传奇 1 星起就要；need>0 才查）
+        // 徽记预检（2026-11-10 主人拍板：所有品质每星都要该职业徽记，首档 普通10/稀有5/传奇2；need>0 才查）
         int badgeNeed = MercStarDefs.BadgeCost(def.Rarity, cur + 1);
         if (badgeNeed > 0)
         {

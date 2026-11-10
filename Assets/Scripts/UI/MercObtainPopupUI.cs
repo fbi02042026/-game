@@ -12,8 +12,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// <summary>预制体路径（ Resources 下，不带后缀）。</summary>
     const string PrefabPath = "Prefabs/Battle/huodeyongbing";
 
-    /// <summary>无操作自动关兜底（秒）——2026-10-14 主人拍板 4→8，让玩家看清。</summary>
-    const float AutoCloseSeconds = 8f;
+    /// 【2026-11-10 主人拍板】本弹窗取消自动关闭：只由玩家点确认/替换/暗带、或流程 CloseIfOpen 关闭。
 
     /// <summary>Canvas sortingOrder：与预制体 Canvas 一致，压过抽奖面板 920。</summary>
     const int SortOrder = 925;
@@ -92,8 +91,6 @@ public partial class MercObtainPopupUI : MonoBehaviour
     System.Action _onClosed;
     /// <summary>「替换」按钮回调（佣兵池 ShowOwnedDetail 传入；Close 时消费一次）。</summary>
     System.Action _onReplace;
-    bool _closeReq;
-    Coroutine _autoCo;
 
     // —— 招募购买模式（2026-10-19 主人拍板：酒馆点卡进详情，按钮换成 购买/取消）——
     bool _recruitMode;
@@ -142,23 +139,20 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (ui == null || !card.IsValid) { onClosed?.Invoke(); yield break; }
         ui.ExitRecruitMode();           // 防串味：任何非招募入口先退出招募模式（还原按钮/标题文案）
         ui._onClosed = onClosed;
-        ui._closeReq = false;
         if (!ui.Fill(card)) { ui.Close(); yield break; }
         ui._onReplace = null;
         ui.ApplyReplaceButton(false);   // 抽中路径永远不带替换钮（替换只在佣兵池详情入口）
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
-        ui.StopAutoClose();
-        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
         while (ui._root != null && ui._root.activeSelf) yield return null;
     }
 
     /// <summary>
     /// 【2026-10-15 主人拍板】点战斗头像栏的佣兵头像查看详情：弹窗不再抽中默认弹出
     /// （抽中当场只流入队横幅 MercJoinBannerUI + Toast，引导局在二抽后教这一步）。
-    /// 数据从局内佣兵条目来（hireId / AssetId / 等级 / 星级），填充、开关、无操作自动关
-    /// 与抽中路径完全同一套，不另写第二份。
+    /// 数据从局内佣兵条目来（hireId / AssetId / 等级 / 星级），填充、开关与抽中路径完全同一套，
+    /// 不另写第二份。
     /// 【2026-10-18 主人拍板】showReplace=true 时右下显示「替换」钮，点击关弹窗并回调 onReplace
     /// （仅佣兵池点未入队的已获得佣兵时传；战斗头像入口/未获得详情走默认值 false，行为不变）。
     /// </summary>
@@ -183,8 +177,6 @@ public partial class MercObtainPopupUI : MonoBehaviour
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
-        ui.StopAutoClose();
-        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
     }
 
     /// <summary>
@@ -215,8 +207,6 @@ public partial class MercObtainPopupUI : MonoBehaviour
         ui.ApplyFallenCharm();   // 复活钮上方「护符 icon + ×N」提示行；没护符时复活钮字变红
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
-        ui.StopAutoClose();
-        ui._autoCo = ui.StartCoroutine(ui.CoAutoClose());
     }
 
     static MercObtainPopupUI Ensure()

@@ -129,7 +129,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     static readonly Color InsufficientLabelColor = MercHireSession.InsufficientPriceColor;
 
     /// <summary>
-    /// 货币钮统一填充：普通=金币钮「600金币」（金币图）；稀有=「普通卷×1」；传奇=「稀有卷×1」（卷图）。
+    /// 货币钮统一填充：普通=金币钮「600」（金币图，不再写「金币」二字）；稀有=「普通卷x1」；传奇=「稀有卷x1」（卷图）。
     /// 外观按快照统一（金币一种样子、卷轴一种样子）：底图/颜色/尺寸/Label颜色都从快照套用，
     /// 字号统一 13（预制体金币钮 Label 16 / 卷钮 Label 11 不一致，主人报「按钮的字大小不一致」）。
     /// 【2026-10-31 主人需求】买不起（affordable=false）→ Label 变红；买得起用快照原色。
@@ -174,12 +174,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
             if (isCommon)
             {
                 if (_goldBtnSprite != null) label.color = affordable ? _goldLabelColor : InsufficientLabelColor;
-                label.text = gold + "金币";
+                label.text = gold.ToString();
             }
             else
             {
                 if (_scrollBtnSprite != null) label.color = affordable ? _scrollLabelColor : InsufficientLabelColor;
-                label.text = isLegendary ? "稀有卷×1" : "普通卷×1";
+                label.text = isLegendary ? "稀有卷x1" : "普通卷x1";
             }
             PurchasePriceStyle.Apply(label);   // 2026-11-08：招募价格统一描边（颜色仍走快照原色 / 不足红）
         }

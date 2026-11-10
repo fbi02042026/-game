@@ -270,7 +270,7 @@ public class GlobalToastUI : MonoBehaviour
         _label = textGo.GetComponent<Text>();
         _label.font = GameFonts.GetChinese();
         if (_label.font == null)
-            _label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _label.font = GameFonts.GetDefault();
         _label.fontSize = 28;
         _label.alignment = TextAnchor.MiddleCenter;
         _label.color = new Color(1f, 0.94f, 0.72f, 1f);

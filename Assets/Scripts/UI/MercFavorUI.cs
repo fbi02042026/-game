@@ -897,7 +897,7 @@ public class MercFavorUI : MonoBehaviour
             var font = GameFonts.GetChinese();
             if (font == null)
             {
-                Debug.LogError(LogTag + "fusion-pixel 字体取不到，好感满遮罩不建（不拿其它字体顶替）");
+                Debug.LogError(LogTag + "PixelFont 字体取不到，好感满遮罩不建（不拿其它字体顶替）");
                 return;
             }
             go = new GameObject("BondFullOverlay", typeof(RectTransform), typeof(Image));

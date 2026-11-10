@@ -97,7 +97,7 @@ public static class ArenaPopupPrefabBuilder
         if (buttonSprite == null) Debug.LogWarning("[ArenaBuilder] 没拉到按钮图，先用纯色，主人在 prefab 里手换图");
 
         var font = GameFonts.GetChinese();
-        if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (font == null) font = GameFonts.GetDefault();
         var powerIcon = Resources.Load<Sprite>(PowerIconPath);
         if (powerIcon == null) Debug.LogWarning("[ArenaBuilder] 战力图标没加载到：" + PowerIconPath + "（主人确认 .meta 已生成后可手拖）");
 

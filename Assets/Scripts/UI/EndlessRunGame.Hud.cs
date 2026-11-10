@@ -18,7 +18,7 @@ public partial class EndlessRunGame
     const string SP_GOLD_BG = "UI/Art/Main/资源条/金币底";   // TopBar GoldBg 同款底图（prefab 内 guid 已悬空，按同路径取图）
     const string SP_HUD_COIN = "UI/Art/Icons/Common/icon_gold";  // HUD 金币图标（项目通用惯例，CoinIcon guid 悬空）；与 World.cs 的场景金币道具图 SP_COIN 是两个资源，勿合并
     const string FONT_FUSION = "Fonts/fusion-pixel";
-    const string FONT_TOPBAR = "Fonts/PixelFont";            // TopBar GoldText 引用的字体
+    const string FONT_TOPBAR = "Fonts/fusion-pixel";            // TopBar GoldText 引用的字体
     const string LEVELUP_TEXT = "队伍升级！！";
 
     // ---- 爱心 ----

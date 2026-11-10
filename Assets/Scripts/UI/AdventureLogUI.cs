@@ -1045,7 +1045,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (!hasCurrent) { current = e; hasCurrent = true; }
             }
             // 2026-11-01 主人报「点条后信息不对（组织/组织）」：行目标槽原先也放 Category，
-            // 与右侧状态字同词重复。改为显示解锁/来源条件（如「首次进入恢复关」），
+            // 与右侧状态字同词重复。改为显示解锁/来源条件（如「通关第一章后解锁」），
             // 右侧状态字保持分类（世界观/组织/地点/物品）。
             AddRow(rows, on ? e.Name : "？？？",
                 on ? e.Category : e.Unlock,

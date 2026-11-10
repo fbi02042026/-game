@@ -1150,7 +1150,7 @@ public partial class BattleManager
             bool wasAutoRound = autoRound;
             // 【2026-11-09 主人拍板「活动副本抽奖统一」】资源副本这里玩家点定向 = 认账该方向
             //（定向「本场限 1 次」按玩家点的方向查/扣，真源 ActivityFocusLeft）；
-            // isTargetedPick=false 的其余三处调用（实时抽 / 引导 / 自动抽）零行为变化。
+            // 【2026-11-10】实时抽已改为按玩家点的方向传值（见 CoLiveDraw）；引导/自动抽仍 false，零行为变化。
             yield return CoInstantPick(target, cost, picked.HasValue);
             autoRound = false;   // 自动抽只影响这一轮（下一轮由等待循环重新置位）
             bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
@@ -1275,6 +1275,9 @@ public partial class BattleManager
     public float LiveDrawCdRemaining => Mathf.Max(0f, _liveDrawCdUntil - Time.unscaledTime);
     /// <summary>CD 截止时刻（unscaledTime）。每次点击（含 reroll / 出卡失败）都重置，口径简单可预期。</summary>
     float _liveDrawCdUntil;
+    /// <summary>【2026-11-10】竞技场定向抽「在途」标志：出货可能停在装备替换确认弹窗上，
+    /// 那期间额度还没记账，必须挡住连点绕过「每场 1 次」。由 CoLiveDraw 的 finally 清。</summary>
+    bool _arenaFocusDrawPending;
 
     /// <summary>
     /// 实时抽入口（<c>BattleEntryDraftPanel</c> LiveMode 四按钮直连）。
@@ -1329,10 +1332,20 @@ public partial class BattleManager
         // · 额度用完 → toast 拦截；按钮置灰与「剩余N次」文案由面板 RefreshLive 同源刷新。
         if (IsArena)
         {
+            if (_arenaFocusDrawPending) return false;   // 上一抽还在出货（可能等确认弹窗），防连点绕过每场 1 次
             if (SlotMachineSystem.FreeDrawsLeft() <= 0)
             {
                 Debug.Log("[BattleManager] 竞技场抽奖拦截：5 次额度已用完");
                 UIManager.Instance?.ShowToast("抽奖次数已用完");
+                BattleEntryDraftPanel.Instance?.RefreshLive();
+                return false;
+            }
+            // 【2026-11-10 主人拍板】竞技场三个定向（佣兵/装备/技能）每场各限 1 次，
+            // 与资源副本同口径；额度真源 = SlotMachineSystem.ActivityFocusLeft。
+            if (picked.HasValue && SlotMachineSystem.ActivityFocusLeft(picked.Value) <= 0)
+            {
+                Debug.Log($"[BattleManager] 竞技场抽奖拦截：定向 {picked.Value} 本场已抽过");
+                UIManager.Instance?.ShowToast("该方向本场只能抽一次");
                 BattleEntryDraftPanel.Instance?.RefreshLive();
                 return false;
             }
@@ -1367,18 +1380,28 @@ public partial class BattleManager
     /// <summary>实时抽的出货协程：复用 <see cref="CoInstantPick"/> 全链路，结束后刷一次常显按钮（价格/余额/可抽类别）。</summary>
     IEnumerator CoLiveDraw(DraftCategory? picked, int cost, List<DraftCategory> cats)
     {
-        var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
-        int drawsBefore = SlotMachineSystem.DrawIndex;
-        yield return CoInstantPick(target, cost);
-        bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
-        // bonusFree 那一抽不推进 DrawIndex，故这类白送抽不会再触发 reroll，与既有 11-02 口径一致
-        if (landed && !picked.HasValue && SlotMachineSystem.RollReroll())
+        if (IsArena && picked.HasValue) _arenaFocusDrawPending = true;
+        try
         {
-            SlotMachineSystem.GrantBonusFreeDraw();
-            UIManager.Instance?.ShowToast("再来一次！这一抽免费", true);
-            SlotMachineAgainBanner.Show();
+            var target = picked.HasValue ? picked.Value : SlotMachineSystem.ResolveCategory(cats);
+            int drawsBefore = SlotMachineSystem.DrawIndex;
+            // 【2026-11-10】玩家点的是定向按钮 → 传 isTargetedPick，免费额度模式才会记「本方向已抽 1 次」；
+            // 付费模式 CoInstantPick 内判据为 false，行为零变化。
+            yield return CoInstantPick(target, cost, picked.HasValue);
+            bool landed = SlotMachineSystem.DrawIndex > drawsBefore;
+            // bonusFree 那一抽不推进 DrawIndex，故这类白送抽不会再触发 reroll，与既有 11-02 口径一致
+            if (landed && !picked.HasValue && SlotMachineSystem.RollReroll())
+            {
+                SlotMachineSystem.GrantBonusFreeDraw();
+                UIManager.Instance?.ShowToast("再来一次！这一抽免费", true);
+                SlotMachineAgainBanner.Show();
+            }
+            BattleEntryDraftPanel.Instance?.RefreshLive();
         }
-        BattleEntryDraftPanel.Instance?.RefreshLive();
+        finally
+        {
+            _arenaFocusDrawPending = false;
+        }
     }
 
     /// <summary>
@@ -1410,6 +1433,9 @@ public partial class BattleManager
     void DoStartFight()
     {
         _preBattleStoryPlaying = false;
+        // 【2026-11-10 主人拍板「只有抽奖面板收回，整个面板下移」】竞技场开战后收面板，
+        // 正式关 / 金币本 / 资源副本保持常显实时抽（10-29 口径不变）。
+        if (IsArena) BattleEntryDraftPanel.CollapseLive();
         ScheduleFirstWaveSpawn();
         // 【2026-10-29 实时抽改版】与旧流程同序（先刷首波再出发，见 BattleStartSequenceCoroutine 分流注释）
         if (_liveStartAdvancePending)
@@ -1449,7 +1475,7 @@ public partial class BattleManager
     /// <param name="cost">这一抽的价格（币）。由 <see cref="BattleManager"/> 的编排层算好传进来，
     /// 本方法不再自己算价，避免两处价格对不上。</param>
     /// </summary>
-    // isTargetedPick（2026-11-09）：玩家点的是不是定向按钮（资源副本「每类限 1 次」限额用）；
+    // isTargetedPick（2026-11-09，2026-11-10 补竞技场）：玩家点的是不是定向按钮（免费额度模式「每类限 1 次」限额用）；
     // 只区分「玩家点的定向」与「随机摇出的类型」——随机摇出 Merc 也算随机抽那一次额度。
     IEnumerator CoInstantPick(DraftCategory cat, int cost, bool isTargetedPick = false)
     {
@@ -1543,8 +1569,9 @@ public partial class BattleManager
             SpendBattleGold(cost);
         // 2026-11-09 口径调整：资源副本定向抽走自己的「每类 1 次」限额
         //（SlotMachineSystem.ConsumeActivityFocusDraw），并同样占用本场 5 次免费总名额；
+        // 【2026-11-10】竞技场同样是免费额度模式，定向也走这套限额（主人拍板「每局只能抽一回」）。
         // bonus 额度本就只发给随机抽，这里按 isTargetedPick 收口，定向永远不会误吃它。
-        else if (isTargetedPick && IsResourceDungeon)
+        else if (isTargetedPick && (IsResourceDungeon || IsArena))
         {
             SlotMachineSystem.ConsumeActivityFocusDraw(cat);
             SlotMachineSystem.ConsumeFreeDraw();   // 定向抽同样占本场 5 次总名额

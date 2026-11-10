@@ -470,7 +470,7 @@ public static class BackpackGridVisual
         t.horizontalOverflow = HorizontalWrapMode.Wrap;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
         var tr = t.rectTransform;
         tr.anchorMin = Vector2.zero;
         tr.anchorMax = Vector2.one;
@@ -504,7 +504,7 @@ public static class BackpackGridVisual
         t.color = new Color(0.85f, 0.95f, 1f, 1f);
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
         var tr = t.rectTransform;
         tr.anchorMin = Vector2.zero;
         tr.anchorMax = Vector2.one;
@@ -527,7 +527,7 @@ public static class BackpackGridVisual
         t.color = Color.white;
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
 
         // 描边，保证压在任何道具/装备底图上都能看清
         var outline = go.AddComponent<Outline>();
@@ -580,7 +580,7 @@ public static class BackpackGridVisual
         t.color = new Color(1f, 0.92f, 0.55f, 1f);
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
         var tr = t.rectTransform;
         tr.anchorMin = Vector2.zero;
         tr.anchorMax = Vector2.one;

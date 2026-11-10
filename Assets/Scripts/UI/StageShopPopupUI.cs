@@ -267,7 +267,8 @@ public class StageShopPopupUI : MonoBehaviour
             }
             if (cv.price != null) cv.price.text = $"{item.price}";
             if (cv.buyLabel != null) cv.buyLabel.text = item.sold ? "已购买" : "购买";
-            if (cv.buy != null) cv.buy.interactable = !item.sold;
+            // 【2026-11-10 统一口径】已购买或抽奖币不够都置灰（原来只判已购买）。
+            if (cv.buy != null) PurchasePriceStyle.ApplyBuyable(cv.buy, !item.sold && item.price <= _gold);
             if (cv.soldMask != null) cv.soldMask.gameObject.SetActive(item.sold);
         }
     }

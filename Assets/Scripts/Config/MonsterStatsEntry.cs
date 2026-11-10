@@ -24,6 +24,10 @@ public class MonsterStatsEntry
     public float baseMagicDefense;
     /// <summary>表定词缀（monster_stats 表 affix 列，| 分隔的 MonsterAffixId 名）。空 = 普通怪（2026-10-26 词缀怪）。</summary>
     public string tableAffix = "";
+    /// <summary>空中单位（monster_stats 表 airUnit 列，2026-11-10 主人名单）：1 = 浮空显示，身体与脚下阴影留一段可见空隙。</summary>
+    public bool airUnit;
+    /// <summary>远程单位（monster_stats 表 ranged 列，2026-11-10 主人名单）：1 = 远程、0 = 近战。仅表意记录，攻击逻辑仍走 attackRange。</summary>
+    public bool ranged;
 
     public MonsterConfig ToRuntimeConfig()
     {
@@ -45,6 +49,8 @@ public class MonsterStatsEntry
         m.baseMagicAttack = baseMagicAttack;
         m.baseMagicDefense = baseMagicDefense;
         m.tableAffix = tableAffix ?? "";
+        m.airUnit = airUnit;
+        m.ranged = ranged;
         return m;
     }
 }

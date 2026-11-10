@@ -3,19 +3,18 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 项目字体：
-/// - 中文：fusion-pixel（OFL-1.1，可商用）
-/// - 数字/拉丁：PixelFont（SPUM Victor's Pixel Font）
+/// 2026-11-10 主人二次拍板：全项目统一 fusion-pixel（Assets/Resources/Fonts/fusion-pixel.ttf）
 /// </summary>
 public static class GameFonts
 {
     static Font _numberFont;
     static Font _chineseFont;
 
-    /// <summary>数字、金币、血量等（原 PixelFont）</summary>
+    /// <summary>数字、金币、血量等（全项目统一 fusion-pixel）</summary>
     public static Font GetNumber()
     {
         if (_numberFont != null) return _numberFont;
-        _numberFont = Resources.Load<Font>("Fonts/PixelFont");
+        _numberFont = Resources.Load<Font>("Fonts/fusion-pixel");
 #if UNITY_EDITOR
         // 2026-09-28 主人拍板：编辑器不再回退美术源目录/AssetDatabase，缺图直接露白框。
         if (DeviceParity.EditorFallbackEnabled)
@@ -23,10 +22,10 @@ public static class GameFonts
             if (_numberFont == null)
             {
                 _numberFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                    "Assets/Resources/Fonts/PixelFont.ttf");
+                    "Assets/Resources/Fonts/fusion-pixel.ttf");
                 if (_numberFont == null)
                     _numberFont = UnityEditor.AssetDatabase.LoadAssetAtPath<Font>(
-                        "Assets/SPUM/Core/Basic_Resources/Font/PixelFont.ttf");
+                        "Assets/Resources/Fonts/fusion-pixel.otf");
             }
         }
 #endif
@@ -87,7 +86,7 @@ public static class GameFonts
     public const float MinLineSpacing = 1.3f;
 
     /// <summary>
-    /// 给一整棵 UI 树套字体：数字类控件用 PixelFont，其余用 fusion-pixel。
+    /// 给一整棵 UI 树套字体：全项目统一 fusion-pixel（含数字类控件）。
     /// </summary>
     public static void ApplyToHierarchy(Transform root)
     {

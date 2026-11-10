@@ -136,6 +136,13 @@ public static partial class GameConfig
     /// <summary>Monstersmoban / ani 片段已按 scale=1 录制，不再做 Canvas→战斗缩放</summary>
     public const float MONSTER_PREFAB_MONSTERS_SCALE = 1f;
     public const float MONSTER_ANCHOR_SCALE_FACTOR = 1f;
+    /// <summary>
+    /// 【2026-11-10 主人拍板「空中单位要和阴影有一段空隙 不用太大 能看出来就行」】
+    /// 空中怪（monster_stats.airUnit=1）身体相对移动根的上抬高度（世界单位），
+    /// 脚下阴影由 Monster.Init.ApplyAirHoverOffset 反向补偿留在地面。
+    /// 只影响视觉（本体 localPosition），移动/判定仍走 _bodyRoot。量级参考：怪根 scale≈2.6~4.5、阴影宽≈0.9。
+    /// </summary>
+    public const float MONSTER_AIR_HOVER = 0.3f;
     // 2026-09-21：精英/Boss 体型倍率已迁 combat_tuning 表（可运行时调）。
     // 【2026-10-10 主人拍板】精英 1.3 → 2.0（「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6 保持 Boss > 精英。
     public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 2.0f);

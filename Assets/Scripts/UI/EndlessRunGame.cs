@@ -31,6 +31,7 @@ public partial class EndlessRunGame : MonoBehaviour
     const float CAM_ORTHO_SIZE = 640f * INV_PX2U;        // 6.4 unit（半高 640 逻辑 px）
     const float CAM_BASE_DEPTH = 90f;
     const float COVER_H_U = 1280f * INV_PX2U;            // 12.8 unit，背景 cover 目标全高
+    const float PORTRAIT_TARGET_H = 108f;                // 玩家/佣兵立绘目标逻辑高度（96~120 区间，真机可调）
 
     // ---- 资源路径（三张图，按路径加载，不兜底）----
     const string SP_BG_1 = "UI/Art/小游戏/跑酷/1";
@@ -254,11 +255,28 @@ public partial class EndlessRunGame : MonoBehaviour
         _playerGo = new GameObject("Player");
         _playerGo.transform.SetParent(_worldRoot.transform, false);
         _playerGo.layer = _worldLayer;
-        var sr = _playerGo.AddComponent<SpriteRenderer>();
+
+        // 立绘走全项目唯一出口（带缓存 + 缺图上报）；取不到 LogError 后保持空，不兜底。
+        Sprite sp = MercPortraitSprites.GetStand("player");
+        if (sp == null)
+        {
+            Debug.LogError("[跑酷] 玩家立绘缺失：MercPortraitSprites.GetStand(player) 返回 null。");
+            return;
+        }
+        // 按目标逻辑高度算缩放（同 ComputeFgGeometry：s = 目标高度 / 原始像素高，再叠 _renderScale）。
+        float s = PORTRAIT_TARGET_H / Mathf.Max(1f, sp.rect.height);
+        s *= _renderScale;
+        float halfHU = 0.5f * s * sp.rect.height / Mathf.Max(1f, sp.pixelsPerUnit);   // 渲染身高的一半（unit）
+
+        // 立绘 pivot 默认中心，而 _playerGo 的 y 是地面顶面 → 子节点上移半个渲染身高做脚底对齐。
+        var portrait = new GameObject("PlayerPortrait");
+        portrait.transform.SetParent(_playerGo.transform, false);
+        portrait.layer = _worldLayer;
+        var sr = portrait.AddComponent<SpriteRenderer>();
+        sr.sprite = sp;
         sr.sortingOrder = 5;
-        // 角色立绘由后续队列任务接入（本框架无角色图，也不写占位兜底）；
-        // 这里只建渲染缩放槽位：0.7 只作用 localScale，判定坐标不动。
-        _playerGo.transform.localScale = new Vector3(_renderScale, _renderScale, 1f);
+        portrait.transform.localScale = new Vector3(s, s, 1f);
+        portrait.transform.localPosition = new Vector3(0f, halfHU, 0f);
     }
 
     void BuildPool()
@@ -318,7 +336,7 @@ public partial class EndlessRunGame : MonoBehaviour
     void Update()
     {
         if (!_built || !_playing || _appPaused) return;
-        float dt = Time.deltaTime;
+        float dt = Time.deltaTime * _runTimeScale;
         UpdateInput();         // 单指跳：唯一输入
         UpdateJump(dt);        // 跳跃 y / IsAirborne / 硬直 / 输入缓冲
         ScrollWorld(dt);       // 两层滚动 + 里程累加；不触碰 _playCam.transform
@@ -329,6 +347,8 @@ public partial class EndlessRunGame : MonoBehaviour
     /// <summary>单指点屏幕任意处 = 跳；其余输入（键盘 / 多指 / 滑动 / 右键等）一律不处理。</summary>
     void UpdateInput()
     {
+        // 天降二选一窗口内：全局单指跳禁用，避免点按钮同时触发跳跃（顶替改由按钮回调驱动）。
+        if (_choiceOpen) return;
         // 单指触摸在 Unity 映射为鼠标左键按下（与竹篓 UpdateDrag 同口径）。
         if (!Input.GetMouseButtonDown(0)) return;
         if (!IsAirborne && _stunT <= 0f)

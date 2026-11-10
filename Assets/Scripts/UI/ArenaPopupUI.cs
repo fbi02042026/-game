@@ -414,7 +414,9 @@ public class ArenaPopupUI : MonoBehaviour
         var tmplRt = _rowTemplate.GetComponent<RectTransform>();
         if (tmplRt != null) _rowH = tmplRt.sizeDelta.y;
         _rowStep = _rowH + 8f;
-        _contentH = RowTotal * _rowStep + 8f;
+        // 2026-11-10 主人报「最下面列表显示不全」：Viewport 下移 47 压进底框装饰带，
+        // content 底部原只留 12px，滚到底时第 101 名下半被切；多留 56px 把最后一行抬出装饰区（不动 prefab）。
+        _contentH = RowTotal * _rowStep + 8f + 56f;
         _content.sizeDelta = new Vector2(tmplRt != null ? tmplRt.sizeDelta.x : 640f, _contentH);   // BotCount 变化时运行时同步
         if (_rowTemplate.activeSelf) _rowTemplate.SetActive(false);   // 模板恒隐藏（防手滑）
 
@@ -1173,8 +1175,9 @@ public class ArenaPopupUI : MonoBehaviour
                 if (buyBtn == null) buyBtn = buyT.gameObject.AddComponent<Button>();
                 var captured = good;
                 buyBtn.onClick.AddListener(() => OnShopUnitClicked(captured));
-                // 【2026-11-01 主人拍板「按钮放大20%」】不好点 → localScale ×1.2（缩放，不改宽高）
-                buyT.localScale = Vector3.one * 1.2f;
+                // 【2026-11-10 主人报「按钮太大了」】撤销 11-01 的 ×1.2 放大，回到预制体原始尺寸。
+                // 统一口径：所有界面的购买按钮都不额外放大，不逐个报。
+                buyT.localScale = Vector3.one;
             }
             else
                 Debug.LogError("[Arena] 商品单元缺节点：购买（购买钮不显示）");
@@ -1319,9 +1322,22 @@ public class ArenaPopupUI : MonoBehaviour
             if (priceT == null) continue;
             bool owned = ArenaShopGoods.IsOwned(data, good);
             bool soldOut = owned && good.repurchasePrice <= 0;   // 买断（弓）→ 变灰「已拥有」
-            priceT.text = soldOut ? "已拥有" : ArenaShopGoods.PriceOf(data, good).ToString();
+            int price = ArenaShopGoods.PriceOf(data, good);
+            priceT.text = soldOut ? "已拥有" : price.ToString();
             priceT.color = soldOut ? new Color(0.6f, 0.6f, 0.6f, 1f) : PurchasePriceStyle.NormalColor;
             PurchasePriceStyle.Apply(priceT);   // 2026-11-08：商店价格统一暖金 + 描边（已拥有灰不变）
+
+            // 【2026-11-10 主人拍板「不能购买时应该是灰的，所有界面里都是，统一化」】
+            // 判据与 OnShopUnitClicked / ArenaShopGoods.TryBuy 同源：买断 / 周限用完 / 满星 / 积分不足。
+            bool weekFull = good.weeklyLimit > 0
+                            && ArenaShopGoods.WeekBuyCount(data, good.id) >= good.weeklyLimit;
+            bool fullStar = good.kind == ArenaShopGoods.GoodKind.Merc && owned
+                            && !string.IsNullOrEmpty(good.hireId)
+                            && MercStarSystem.OutStarOf(good.hireId) >= MercStarDefs.MaxOutStar;
+            bool canBuy = !soldOut && !weekFull && !fullStar && data.arenaPoints >= price;
+            var buyBtn = UiFind.Deep(unit.transform, "购买")?.GetComponent<Button>();
+            if (buyBtn != null) PurchasePriceStyle.ApplyBuyable(buyBtn, canBuy);
+            else Debug.LogError($"[Arena] 商品 {good.id} 缺「购买」按钮，不能购买时无法置灰");
         }
     }
     // ───────────────────────── 档案详情弹窗（已整条删除，2026-10-31 主人拍板） ─────────────────────────

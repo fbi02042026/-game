@@ -62,3 +62,7 @@ wave_4,4|1.2|1,先难后松 250~450m
 wave_5,2|1.0|3|1.0|2,极限连跳 450m+
 wave_6,2|1.5|elite|1.2|3,精英插队 300m+ elite
 wave_7,coin_arc|1.0|3,沟后接波 250m+
+merc_head_interval,150,MercHead 漂浮头像间隔 m（里程锚点去重，默认 150）
+merc_head_float_amp,16,MercHead 上下浮动幅度 逻辑px（Time.time sin，只改渲染 y）
+merc_head_float_hz,0.8,MercHead 上下浮动频率 Hz（Time.time sin）
+slowmo_scale,0.1,天降二选一窗口慢动作倍率（dt 乘它，非 Time.timeScale）

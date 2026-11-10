@@ -48,38 +48,44 @@ public static class MonsterAffixDefs
 
     public static readonly Def[] All =
     {
+        // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：
+        // 狂暴 +30%→+45%、铁壁减伤 25%→37.5%、荆棘 15%→22.5%、迅捷 +40%→+60%、
+        // 吸血 30%→45%、分裂 2→3 只、暴击概率 20%→30%（倍率 1.6 不变，暴击期望增量正好 +50%）。
         new Def { Id = MonsterAffixId.Frenzy,  Name = "狂暴", Tint = new Color(1.00f, 0.42f, 0.32f),
-                  Desc = "攻击速度提升 30%",
-                  AtkSpeedMul = 1.30f, MoveSpeedMul = 1f,   DamageTakenMul = 1f },
+                  Desc = "攻击速度提升 45%",
+                  AtkSpeedMul = 1.45f, MoveSpeedMul = 1f,   DamageTakenMul = 1f },
         new Def { Id = MonsterAffixId.Bulwark, Name = "铁壁", Tint = new Color(0.62f, 0.78f, 1.00f),
-                  Desc = "受到的伤害降低 25%",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.75f },
+                  Desc = "受到的伤害降低 37.5%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.625f },
         new Def { Id = MonsterAffixId.Thorns,  Name = "荆棘", Tint = new Color(0.55f, 0.95f, 0.55f),
-                  Desc = "近战攻击它会被反弹 15% 伤害",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f },
+                  Desc = "近战攻击它会被反弹 22.5% 伤害",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.225f },
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
-                  Desc = "移动速度提升 40%",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1.40f, DamageTakenMul = 1f },
+                  Desc = "移动速度提升 60%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1.60f, DamageTakenMul = 1f },
         // 【2026-11-05 主人拍板】吸血 12% -> 30%：链路验证全通（普攻/弹道/技能都走 TakeDamage 回调），
         // 但 ch2 怪一刀只回 1~2 点、血条动 ~3%，Boss 更是 0.4% —— 肉眼不可见，主人实测「从来没见过回血」。
         // 提到 30% 后怪一刀回 4~6 点（血条动 8%+）肉眼可辨；Boss 血厚回血占比天然低，属合理衰减。
+        // 【2026-11-10 主人拍板】全部词条效果 +50%：吸血 30% -> 45%。
         new Def { Id = MonsterAffixId.Leech,   Name = "吸血", Tint = new Color(0.85f, 0.45f, 0.90f),
-                  Desc = "造成伤害的 30% 转化为自身治疗",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.30f },
+                  Desc = "造成伤害的 45% 转化为自身治疗",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.45f },
         new Def { Id = MonsterAffixId.Split,   Name = "分裂", Tint = new Color(0.75f, 0.75f, 0.80f),
-                  Desc = "死亡时分裂出 2 只小怪",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 2 },
+                  Desc = "死亡时分裂出 3 只小怪",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 3 },
         // 2026-10-26 词缀怪「暴击」：20% 概率 ×1.6，玩家侧看得见暴击飘字
+        // 【2026-11-10 主人拍板】全部词条效果 +50%：暴击概率 20% -> 30%（×1.6 倍率不变，暴击期望增量 +50%）
         new Def { Id = MonsterAffixId.Crit,    Name = "暴击", Tint = new Color(1.00f, 0.55f, 0.10f),
-                  Desc = "攻击有 20% 概率造成 1.6 倍伤害",
+                  Desc = "攻击有 30% 概率造成 1.6 倍伤害",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f,
-                  CritChance = 0.20f,  CritDamageMul = 1.6f },
+                  CritChance = 0.30f,  CritDamageMul = 1.6f },
     };
 
     /// <summary>
     /// 【2026-11-05 主人拍板「boss吸血可以高点 和小怪分开」】Boss 专用吸血比例（覆盖 Def.LeechRatio）。
     /// Boss 攻高血厚：60% 一刀回 20~40 点、绿字醒目；屏幕血条每刀 ~1.5-2%，连打可见累积。
     /// 消费点唯一 = MonsterAffix.OnDealtDamage（按 owner.IsBossUnit 取档）。
+    /// 【2026-11-10 主人拍板】小怪词条整体 +50%，但 Boss 吸血保持 60% 不变（「boss吸血不变还是60%吧」）。
     /// </summary>
     public const float BossLeechRatio = 0.60f;
 
@@ -103,7 +109,7 @@ public static class MonsterAffixDefs
     }
 
     /// <summary>
-    /// 【2026-11-03 主人拍板】把词缀列表拼成「狂暴：攻击速度提升 30%\n…」的展示文本。
+    /// 【2026-11-03 主人拍板】把词缀列表拼成「狂暴：攻击速度提升 45%\n…」的展示文本。
     /// 首次登场弹窗与冒险日志怪物 Tip 共用；空列表返回空串。
     /// </summary>
     public static string Describe(List<MonsterAffixId> list)

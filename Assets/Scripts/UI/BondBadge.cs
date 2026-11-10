@@ -58,7 +58,7 @@ public static class BondBadge
         var font = GameFonts.GetChinese();
         if (font == null)
         {
-            Debug.LogError("[BondBadge] fusion-pixel 字体取不到，角标不建（不拿其它字体顶替）");
+            Debug.LogError("[BondBadge] PixelFont 字体取不到，角标不建（不拿其它字体顶替）");
             return null;
         }
 

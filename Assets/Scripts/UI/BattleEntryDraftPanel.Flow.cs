@@ -56,6 +56,32 @@ public partial class BattleEntryDraftPanel
         Instance.Finish();
     }
 
+    /// <summary>
+    /// 【2026-11-10 主人拍板「只有抽奖面板收回，整个面板下移」】竞技场点「开始战斗」后调用：
+    /// 整块面板一步落位回收起态（600 / 内容归位 / DraftRoot -400），<b>不隐藏抽奖按钮</b>——
+    /// 与 Hide()/Finish() 的「彻底隐藏」区分开，按钮跟着面板一起下移。
+    /// 正式关 / 金币本 / 资源副本仍走 BeginLive 的常显实时抽，不受影响。
+    /// 只由 BattleManager.DoStartFight 在竞技场分支调（「对战」动画藏回之后）。
+    /// </summary>
+    public static void CollapseLive()
+    {
+        var ui = Instance;
+        if (ui == null || !ui._liveMode) return;
+        if (ui._animCo != null) { ui.StopCoroutine(ui._animCo); ui._animCo = null; }
+        ui._expanded = false;
+        ui._animK = 0f;
+        ui.ApplyPanelState(0f);   // 与 BeginLive 的 ApplyPanelState(1f) 对称，不走滑动动画
+        // 面板收回，战斗内「币够了没抽」引导不该再飘在画面上（同 Finish 口径）
+        ui._liveDrawnThisStage = true;
+        ui._liveDrawHintTimer = 0f;
+        if (ui._liveDrawHintShown)
+        {
+            ui._liveDrawHintShown = false;
+            TutorialHintUI.Instance?.Hide();
+        }
+        ui.LogState("CollapseLive");
+    }
+
     // ============================================================
     // 🔴【2026-10-29 主人拍板·实时抽改版】LiveMode（常显实时抽）
     // ============================================================

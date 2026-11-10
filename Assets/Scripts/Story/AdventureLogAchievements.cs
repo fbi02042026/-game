@@ -396,10 +396,10 @@ public static class AdventureLogAchievements
     }
 
     /// <summary>
-    /// 【2026-10-24 主人拍板「商店未开启」】金币消费累计唯一出口（S005 ≥1000 / S010 ≥3000 喂食口）。
-    /// 口径：**金币消费**（商店 + 酒馆招募普通佣兵）——商城按钮 2026-10-15 起隐藏（GuildHallUI.HideUnfinishedHallButtons），
-    /// 只算商店这两条永远够不着，故把当前唯一活跃的金币出口（酒馆招募）一并计入。
-    /// 喂食点：Systems/ShopSystem.Buy（商店扣费结算）与 UI/MercenaryRecruitPopupUI.Actions.TryHireOffer（招募金币扣费）。
+    /// 【2026-10-24 建立；2026-10-31 商店整体删除后更新】金币消费累计唯一出口（S005 ≥1000 / S010 ≥3000 喂食口）。
+    /// 口径：**金币消费**——商店（ShopUI / ShopSystem）已于 2026-10-31 整体删除，
+    /// 当前唯一活跃的金币出口是酒馆招募（招募普通佣兵扣费）。
+    /// 唯一喂食点：UI/MercenaryRecruitPopupUI.Actions.TryHireOffer（招募金币扣费）。
     /// 局内抽奖币池（战斗内金币镜像，出局清零）不算——那是另一套账（铁律 33）。
     /// </summary>
     public static void OnShopGoldSpent(long amount)

@@ -69,11 +69,26 @@ public partial class EndlessRunGame : MonoBehaviour
     static readonly string[] NORMAL_MONSTER_IDS = { "forest_101", "forest_105", "forest_103" };
     const string ELITE_MONSTER_ID = "forest_104";
 
-    // 金币 / 宝箱 / 传送门暂无跑酷专属图（T8 只交付 1/2/草岩三张）。
-    // 按约定路径尝试加载；取不到 LogError 并只保留逻辑数据，绝不建纯色 / 造资源。
-    const string SP_COIN = "UI/Art/小游戏/跑酷/金币";
-    const string SP_CHEST = "UI/Art/小游戏/跑酷/宝箱";
-    const string SP_PORTAL = "UI/Art/小游戏/跑酷/传送门";
+    // 金币 / 宝箱 / 传送门改用工程内现成资源（无跑酷专属图，不复制资源进 Resources/）。
+    // 按路径加载真图；取不到 LogError 并隐藏该 prop 视图，绝不建纯色 / 造资源。
+    const string SP_COIN = "UI/Art/Icons/Common/icon_gold";
+    const string SP_CHEST = "UI/Art/Adventure/宝箱/金箱关闭";
+    const string SP_PORTAL = "UI/Art/battle/像素奇幻蓝晶传送门_1_1";
+
+    // 道具按目标逻辑高度缩到与 32px 怪 / 160px 平台协调（真机可调，只进 localScale）。
+    const float PROP_TARGET_H_COIN = 48f;
+    const float PROP_TARGET_H_CHEST = 72f;
+    const float PROP_TARGET_H_PORTAL = 160f;
+    const float PROP_TARGET_H_MERCHEAD = 84f;
+
+    // MercHead 资源（全部现成图，按路径加载，不复制 / 不造图）
+    const string SP_MERCHEAD_ROOT = "UI/Icons/MercHead/";
+    const string SP_MERCHEAD_FRAME = "UI/Art/Main/头像/头像框";
+    const string SP_MASK_CIRCLE = "VFX/Skills/_Deps/Textures/circle";
+    // 圆形遮罩：circle.png 是 256×256 实心白圆（alpha 覆盖整圆），以 Default(Texture2D) 导入，
+    // 按项目现行 SpriteFromTexture 口径运行时 Sprite.Create 转 Sprite 供 SpriteMask 用。
+    const float MERCHEAD_MASK_LOCAL_SCALE = 0.66f;   // 遮罩圆盘直径 ≈ 头像方块边长的 0.85
+    const float MERCHEAD_FRAME_LOCAL_SCALE = 1.0f;   // 圆形金边框略大于遮罩圆盘，露在外圈
 
     const float HP_TIER_METERS = 100f;     // 文档 §2.4：敌人 HP 每 100m 一档
     const int COIN_ARC_MIN_COUNT = 3;      // 弧线金币最少枚数（保证弧线成形）
@@ -91,6 +106,7 @@ public partial class EndlessRunGame : MonoBehaviour
     float _wPortalIntervalMin, _wPortalIntervalMax, _wPortalBlackout;
     float _wEnemyHpBase, _wEnemyHpPer100m;
     float _wPxPerMeter, _wRenderScale;
+    float _wMercHeadInterval, _wMercHeadFloatAmp, _wMercHeadFloatHz;
 
     // ============================================================
     // 资源
@@ -99,6 +115,9 @@ public partial class EndlessRunGame : MonoBehaviour
     Sprite[] _normalMonsterSprites;     // 已过滤 null
     Sprite _eliteMonsterSprite;
     Sprite _coinSprite, _chestSprite, _portalSprite;   // 可选：无专属图时为 null
+    readonly Dictionary<string, Sprite> _mercHeadSprites = new Dictionary<string, Sprite>();
+    Sprite _mercHeadFrameSprite, _mercHeadMaskSprite;
+    int _wMercHeadSeq;
 
     // ============================================================
     // 内嵌数据类型
@@ -106,7 +125,7 @@ public partial class EndlessRunGame : MonoBehaviour
 
     enum StepKind { Normal, Elite, CoinArc }
     enum SegKind { Platform, Gap, High }
-    enum PropKind { Coin, Chest, Portal }
+    enum PropKind { Coin, Chest, Portal, MercHead }
 
     class WaveStep
     {
@@ -136,6 +155,10 @@ public partial class EndlessRunGame : MonoBehaviour
         public bool alive;
         public GameObject go;     // 无专属图时为 null（纯逻辑数据）
         public SpriteRenderer sr;
+        public string hireId;     // MercHead：头像 / 横条 / 队列共用同一个 id
+        public GameObject maskGo;      // MercHead SpriteMask 子节点
+        public SpriteMask maskComp;
+        public SpriteRenderer frameSr; // MercHead 圆形金边框子节点
     }
 
     // ============================================================
@@ -149,6 +172,7 @@ public partial class EndlessRunGame : MonoBehaviour
     readonly List<Segment> _segments = new List<Segment>();
 
     readonly HashSet<int> _chestAnchors = new HashSet<int>();
+    readonly HashSet<int> _mercAnchors = new HashSet<int>();
 
     WaveTemplate[] _templates;          // 7 个预解析模板
     readonly List<int> _waveBag = new List<int>();
@@ -211,6 +235,9 @@ public partial class EndlessRunGame : MonoBehaviour
         _wEnemyHpPer100m = RunTrackTable.GetFloat("enemy_hp_per_100m", 40f);
         _wPxPerMeter = RunTrackTable.GetFloat("pixels_per_meter", 100f);
         _wRenderScale = RunTrackTable.GetFloat("render_scale", 0.7f);
+        _wMercHeadInterval = RunTrackTable.GetFloat("merc_head_interval", 150f);
+        _wMercHeadFloatAmp = RunTrackTable.GetFloat("merc_head_float_amp", 16f);
+        _wMercHeadFloatHz  = RunTrackTable.GetFloat("merc_head_float_hz", 0.8f);
     }
 
     /// <summary>三个速度 key 一致性自检：相对速度应等于世界卷速 + 怪左行（420 = 300 + 120）。</summary>
@@ -245,9 +272,28 @@ public partial class EndlessRunGame : MonoBehaviour
         _coinSprite = Resources.Load<Sprite>(SP_COIN);
         _chestSprite = Resources.Load<Sprite>(SP_CHEST);
         _portalSprite = Resources.Load<Sprite>(SP_PORTAL);
-        if (_coinSprite == null) Debug.LogError("[跑酷] 金币专属图缺失（本期只保留逻辑数据，不建纯色/造资源）：" + SP_COIN);
-        if (_chestSprite == null) Debug.LogError("[跑酷] 宝箱专属图缺失（本期只建里程锚点占位数据）：" + SP_CHEST);
-        if (_portalSprite == null) Debug.LogError("[跑酷] 传送门专属图缺失（切背景/黑屏逻辑保留，门体渲染待补）：" + SP_PORTAL);
+        if (_coinSprite == null) Debug.LogError("[跑酷] 金币专属图缺失（取不到图隐藏该 prop 视图，不建纯色/造资源）：" + SP_COIN);
+        if (_chestSprite == null) Debug.LogError("[跑酷] 宝箱专属图缺失（取不到图隐藏该 prop 视图，里程锚点逻辑保留）：" + SP_CHEST);
+        if (_portalSprite == null) Debug.LogError("[跑酷] 传送门专属图缺失（取不到图隐藏该 prop 视图，切背景/黑屏逻辑保留）：" + SP_PORTAL);
+
+        _mercHeadSprites.Clear();
+        for (int i = 0; i < MERC_STAND_IDS.Length; i++)
+        {
+            string id = MERC_STAND_IDS[i];
+            var head = Resources.Load<Sprite>(SP_MERCHEAD_ROOT + id);
+            if (head == null) Debug.LogError("[跑酷] 佣兵头像图缺失（该 id 的 MercHead 视图隐藏，不兜底）：" + SP_MERCHEAD_ROOT + id);
+            else _mercHeadSprites[id] = head;
+        }
+        _mercHeadFrameSprite = Resources.Load<Sprite>(SP_MERCHEAD_FRAME);
+        if (_mercHeadFrameSprite == null) Debug.LogError("[跑酷] 圆形头像框缺失（不兜底、不造图）：" + SP_MERCHEAD_FRAME);
+        // circle.png 以 Default(Texture2D) 导入，Resources.Load<Sprite> 取不到；读 Texture2D 再 Sprite.Create，
+        // 与 MercPortraitSprites.SpriteFromTexture 同一套口径（不新增 / 不复制任何美术资源）。
+        var maskTex = Resources.Load<Texture2D>(SP_MASK_CIRCLE);
+        if (maskTex != null)
+            _mercHeadMaskSprite = Sprite.Create(maskTex,
+                new Rect(0f, 0f, maskTex.width, maskTex.height), new Vector2(0.5f, 0.5f), 100f);
+        if (_mercHeadMaskSprite == null)
+            Debug.LogError("[跑酷] 圆形遮罩图缺失（取不到 mask 图 LogError，不兜底、不造图）：" + SP_MASK_CIRCLE);
     }
 
     // ============================================================
@@ -348,6 +394,8 @@ public partial class EndlessRunGame : MonoBehaviour
         _segments.Clear();
         _segPhase = 0;
         _chestAnchors.Clear();
+        _mercAnchors.Clear();
+        _wMercHeadSeq = 0;
 
         _waveBag.Clear();
         RefillWaveBag();
@@ -389,7 +437,7 @@ public partial class EndlessRunGame : MonoBehaviour
         if (IsAirborne && !_wasAirborne) OnJumpEdge();
         _wasAirborne = IsAirborne;
 
-        float dt = Time.deltaTime;
+        float dt = Time.deltaTime * _runTimeScale;
         float sceneDx = _wScrollSpeed * dt;        // 场景（前景/段/金币/宝箱/门）左移
         float monsterDx = _wRelativeSpeed * dt;    // 怪相对屏幕左移（= 世界卷速 + 怪左行，经自检）
 
@@ -398,6 +446,7 @@ public partial class EndlessRunGame : MonoBehaviour
         TickSegments(sceneDx);
         TickEntities(sceneDx, monsterDx);
         TickChests();
+        TickMercHeads();
         TickPortals();
 
         // 黑屏 / 天降窗口：不刷危险（怪波）。金币/宝箱/门为非危险，照常。
@@ -670,6 +719,19 @@ public partial class EndlessRunGame : MonoBehaviour
         SpawnProp(PropKind.Chest, ViewHalfWPx() + _viewMarginPx + _wWaveGroupGap, _groundTopYPx, anchor);
     }
 
+    /// <summary>漂浮佣兵头像：每 merc_head_interval 米一个（里程锚点去重，同 TickChests）。
+    /// 生成在空中，y 取地面 + high_platform_height（同金币弧线峰值高度），并把 hireId 带上。</summary>
+    void TickMercHeads()
+    {
+        int anchor = Mathf.FloorToInt(Meters / Mathf.Max(1f, _wMercHeadInterval));
+        if (_mercAnchors.Contains(anchor)) return;
+        _mercAnchors.Add(anchor);
+        string id = MERC_STAND_IDS[_wMercHeadSeq++ % MERC_STAND_IDS.Length];
+        float x = ViewHalfWPx() + _viewMarginPx + _wWaveGroupGap;
+        float y = _groundTopYPx + _wHighPlatformHeight;
+        SpawnProp(PropKind.MercHead, x, y, anchor, id);
+    }
+
     void TickPortals()
     {
         if (Meters < _nextPortalMeters) return;
@@ -764,16 +826,17 @@ public partial class EndlessRunGame : MonoBehaviour
         e.viewGo.transform.localPosition = new Vector3(e.LogicX * INV_PX2U, e.logicY * INV_PX2U, 0f);
     }
 
-    WorldProp SpawnProp(PropKind kind, float x, float y, int anchorM)
+    WorldProp SpawnProp(PropKind kind, float x, float y, int anchorM, string hireId = null)
     {
         WorldProp p = TakeProp();
         p.kind = kind;
         p.logicX = x;
         p.logicY = y;
         p.anchorM = anchorM;
+        p.hireId = hireId;
         p.alive = true;
 
-        Sprite sp = SpriteFor(kind);
+        Sprite sp = SpriteFor(kind, hireId);
         if (sp != null)
         {
             EnsurePropView(p);
@@ -789,13 +852,15 @@ public partial class EndlessRunGame : MonoBehaviour
         return p;
     }
 
-    Sprite SpriteFor(PropKind kind)
+    Sprite SpriteFor(PropKind kind, string hireId)
     {
         switch (kind)
         {
             case PropKind.Coin: return _coinSprite;
             case PropKind.Chest: return _chestSprite;
             case PropKind.Portal: return _portalSprite;
+            case PropKind.MercHead:
+                return hireId != null && _mercHeadSprites.TryGetValue(hireId, out var head) ? head : null;
             default: return null;
         }
     }
@@ -818,21 +883,91 @@ public partial class EndlessRunGame : MonoBehaviour
 
     void EnsurePropView(WorldProp p)
     {
-        if (p.go != null) return;
-        var go = new GameObject("RunProp");
-        go.transform.SetParent(_worldRoot.transform, false);
-        go.layer = _worldLayer;
-        var sr = go.AddComponent<SpriteRenderer>();
-        sr.sortingOrder = 3;
-        // 0.7 只进 localScale（渲染）。
-        go.transform.localScale = new Vector3(_wRenderScale, _wRenderScale, 1f);
-        p.go = go;
-        p.sr = sr;
+        // 按 sprite 原始像素高缩到目标逻辑高度，再叠 _wRenderScale（只进 localScale，判定坐标不动）。
+        // 目标高度按 p.kind 取具名常量；sprite 取已加载的缓存（不重新 Load）。
+        float targetH = PROP_TARGET_H_PORTAL;
+        switch (p.kind)
+        {
+            case PropKind.Coin: targetH = PROP_TARGET_H_COIN; break;
+            case PropKind.Chest: targetH = PROP_TARGET_H_CHEST; break;
+            case PropKind.Portal: targetH = PROP_TARGET_H_PORTAL; break;
+            case PropKind.MercHead: targetH = PROP_TARGET_H_MERCHEAD; break;
+        }
+        float s = targetH / Mathf.Max(1f, SpriteFor(p.kind, p.hireId).rect.height);
+        s *= _wRenderScale;
+        if (p.go != null)
+        {
+            p.go.transform.localScale = new Vector3(s, s, 1f);   // 池复用后按新 kind 重算
+        }
+        else
+        {
+            var go = new GameObject("RunProp");
+            go.transform.SetParent(_worldRoot.transform, false);
+            go.layer = _worldLayer;
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sortingOrder = 3;
+            go.transform.localScale = new Vector3(s, s, 1f);
+            p.go = go;
+            p.sr = sr;
+        }
+        ConfigureMercHeadView(p);
+    }
+
+    /// <summary>仅 MercHead 挂圆形遮罩 + 金边框；池复用到其它 kind 时复位 maskInteraction 并隐藏子节点。</summary>
+    void ConfigureMercHeadView(WorldProp p)
+    {
+        p.sr.maskInteraction = SpriteMaskInteraction.None;
+        if (p.kind != PropKind.MercHead)
+        {
+            if (p.maskGo != null) p.maskGo.SetActive(false);
+            if (p.frameSr != null) p.frameSr.gameObject.SetActive(false);
+            return;
+        }
+
+        // 圆形金边框（下层）：现成 头像框.png，中间透明，作外框叠在头像下层。
+        if (p.frameSr == null && _mercHeadFrameSprite != null)
+        {
+            var frameGo = new GameObject("MercHeadFrame");
+            frameGo.transform.SetParent(p.go.transform, false);
+            frameGo.layer = _worldLayer;
+            frameGo.transform.localScale = new Vector3(MERCHEAD_FRAME_LOCAL_SCALE, MERCHEAD_FRAME_LOCAL_SCALE, 1f);
+            var fsr = frameGo.AddComponent<SpriteRenderer>();
+            fsr.sprite = _mercHeadFrameSprite;
+            fsr.sortingOrder = p.sr.sortingOrder - 1;
+            p.frameSr = fsr;
+        }
+        if (p.frameSr != null) p.frameSr.gameObject.SetActive(true);
+
+        // 真遮罩：SpriteMask + 实心圆 circle.png。仅在成功拿到遮罩图时才让头像走 VisibleInsideMask，
+        // 取不到图已 LogError，不兜底、不造图、不让头像凭空消失。
+        if (p.maskComp == null && _mercHeadMaskSprite != null)
+        {
+            var maskGo = new GameObject("MercHeadMask");
+            maskGo.transform.SetParent(p.go.transform, false);
+            maskGo.layer = _worldLayer;
+            maskGo.transform.localScale = new Vector3(MERCHEAD_MASK_LOCAL_SCALE, MERCHEAD_MASK_LOCAL_SCALE, 1f);
+            var mask = maskGo.AddComponent<SpriteMask>();
+            mask.sprite = _mercHeadMaskSprite;
+            // 默认范围（最低 order ~ 本遮罩 order）覆盖 Default 层上开了 maskInteraction 的头像；
+            // 取比头像高的 order 确保头像(order=3)落在范围内。全场只有 MercHead 头像开了该标记。
+            mask.sortingOrder = p.sr.sortingOrder + 10;
+            p.maskGo = maskGo;
+            p.maskComp = mask;
+        }
+        if (p.maskComp != null)
+        {
+            p.maskGo.SetActive(true);
+            p.sr.maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
+        }
     }
 
     void SyncPropPos(WorldProp p)
     {
         // 逻辑像素只乘 INV_PX2U 转 unit；不含 0.7。
-        p.go.transform.localPosition = new Vector3(p.logicX * INV_PX2U, p.logicY * INV_PX2U, 0f);
+        float y = p.logicY;
+        // MercHead：基于 Time.time 的 sin 上下浮动，只改渲染 y，逻辑判定坐标（p.logicY）不动。
+        if (p.kind == PropKind.MercHead)
+            y += _wMercHeadFloatAmp * Mathf.Sin(Time.time * _wMercHeadFloatHz * Mathf.PI * 2f);
+        p.go.transform.localPosition = new Vector3(p.logicX * INV_PX2U, y * INV_PX2U, 0f);
     }
 }

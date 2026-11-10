@@ -44,17 +44,19 @@ public class MercAscendUI : MonoBehaviour
     const float PopUpDur = 0.16f;
     const float PopSettleDur = 0.24f;
 
+    /// <summary>【2026-11-10 主人拍板】升星成功特效整体放大 50%（落定 1.5，过冲按比例放大）。
+    /// 只改「进阶成功」节点自身 localScale 做等比缩放，不写死像素、不动任何子节点几何；
+    /// 该节点是 Panel 子节点，随 Panel 的 _fitK 与 Canvas Scaler 一起按屏幕自适应
+    /// （横幅 authored 500 × 0.9 × 1.5 = 675 &lt; 720 逻辑宽，不裁边）。</summary>
+    const float SuccessScale = 1.5f;
+
     /// <summary>竖屏适配（2026-10-23）：Panel 宽超 720 逻辑宽时整体等比缩放系数，Open 时按预制体 sizeDelta 现算。</summary>
     float _fitK = 1f;
 
-    /// <summary>升阶按钮消耗数字颜色（2026-11-08：正常态走 PurchasePriceStyle 全局暖金 + 深描边；
-    /// 不能升阶=红、满星禁用压灰）。「能不能升阶」唯一出口 = MercStarSystem.CanStarUp，不另写第二份判断。</summary>
-    static readonly Color CostOkColor = PurchasePriceStyle.NormalColor;
-    static readonly Color CostShortColor = new Color(1f, 0.4f, 0.4f, 1f);
-    static readonly Color CostDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
-
-    /// <summary>满星时升阶按钮底图灰显色（与卡内升阶钮 MercDrawPoolUI.AscendDimColor 同灰值，2026-10-24 主人拍板）。</summary>
-    static readonly Color StarUpDimColor = new Color(0.5f, 0.5f, 0.5f, 1f);
+    /// <summary>升阶按钮整体禁用态（2026-11-10 主人拍板）：条件不达标时整块按钮一起压暗，代码不再单独改字色。
+    /// 「能不能升阶」唯一出口 = MercStarSystem.CanStarUp。</summary>
+    const float StarUpDisabledAlpha = 0.5f;
+    CanvasGroup _starUpGroup;
 
     /// <summary>钻石图标（传奇佣兵升阶扣钻石时替换金币图标；Resources 路径已核实存在）。</summary>
     const string DiamondIconPath = "UI/Art/Icons/Common/icon_diamond_blue";
@@ -289,11 +291,12 @@ public class MercAscendUI : MonoBehaviour
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
         if (_starUpBtn != null)
         {
+            _starUpGroup = _starUpBtn.GetComponent<CanvasGroup>();
+            if (_starUpGroup == null) _starUpGroup = _starUpBtn.gameObject.AddComponent<CanvasGroup>();
             _starUpImg = _starUpBtn.GetComponent<Image>();
             if (_starUpImg != null) _starUpImgBase = _starUpImg.color;   // 记 authored 底色，灰显还原用
             _costLabel = _starUpBtn.transform.Find("Label")?.GetComponent<Text>();
             if (_costLabel == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/Label（消耗数字 Text）");
-            else PurchasePriceStyle.Apply(_costLabel, outlineColor: PurchasePriceStyle.SoftOutlineColor);   // 2026-11-09：亮黄绿底上纯黑描边偏硬，只这个「×N」走半透浅描边；字号/排版/三态文字色一个值不动
             _costIcon = _starUpBtn.transform.Find("icon")?.GetComponent<Image>();
             if (_costIcon == null) Debug.LogError("[MercAscend] 缺节点 shengjieButton/icon（金币/钻石图标 Image）");
         }
@@ -405,6 +408,9 @@ public class MercAscendUI : MonoBehaviour
         ResourceStrip.Release();   // 2026-10-24 二次：资源条归还主界面顶条（与 EnsureResBar 的 Show 成对）
         // 升星可能改了星级/材料/资金：酒馆队列界面若开着，重刷卡内「升阶」钮与相关显示（2026-10-23）
         MercDrawPoolUI.RefreshForAscendClosed();
+        // 【2026-11-10】压在本窗下面的「佣兵信息」弹窗（DDOL 单例）也要按最新材料重评「可进阶」，
+        // 否则升阶完退出去气泡还挂着。弹窗没开时该入口直接返回，不兜底。
+        MercObtainPopupUI.RefreshAscendIfOpen();
     }
 
     // ============================================================
@@ -626,10 +632,6 @@ public class MercAscendUI : MonoBehaviour
         if (_costLabel != null)
         {
             _costLabel.text = "×" + cost;
-            // 【2026-11-08】能升阶=全局暖金、不能升阶=红（碎片/徽记/资金一体预检走 CanStarUp 唯一出口）；
-            // 满星禁用压灰不变。只换颜色，字号一个值不动（铁律 32）。
-            _costLabel.color = maxed ? CostDimColor
-                : MercStarSystem.CanStarUp(_hireId, out _) ? CostOkColor : CostShortColor;
         }
         if (_costIcon != null)
         {
@@ -653,9 +655,9 @@ public class MercAscendUI : MonoBehaviour
         // ---- 徽记行（2026-10-23 主人拍板）：两行「{职业}·{档位}徽记\n{有}/{需}」。
         // 【2026-11-08 主人拍板】第一行补职业名（直接取 MercGrowSprites.JobKey 唯一出口，职业用词「游侠」），
         // 档位名保留不丢（删档位会丢实用信息）；数量改「有/需」，与碎片区同口径。
-        // 【2026-11-08 主人拍板】「不需要就不显示徽记」：本次升星不需要徽记（badgeNeed==0）时整行不显示，
-        // 避免普通/稀有 0→1 星出现「低级徽记 50/0」这类分母为 0 的文案；满星同样隐藏（升阶已不存在）。
-        // 仅当本次需要徽记（badgeNeed>0）时才显示「{职业}·{档位}徽记\n{有}/{需}」。
+        // 【2026-11-10 主人拍板】所有品质 0→1 星起每星都要徽记（只是职业与档位不同），未满星时 badgeNeed 恒 >0 → 徽记行常显。
+        // 下面 badgeNeed==0 的隐藏分支只保留给满星与异常值，不许改回「普通/稀有首档不用徽记」的旧口径。
+        // 显示文案「{职业}·{档位}徽记\n{有}/{需}」。
         // 图标 = MercGrowSprites 按职业+档位取图，缺图报错不兜底；档位名唯一出口 = MercStarSystem.BadgeTierDisplayName。
         if (_badgeRow != null)
         {
@@ -692,11 +694,12 @@ public class MercAscendUI : MonoBehaviour
         // ---- 技能行：占位文案换成当前佣兵真实技能（2026-11-08）----
         FillSkillRows(def);
 
-        // ---- 升阶按钮：满星灰显 + 点击提示已满星（2026-10-24 主人拍板）----
-        // 灰显只调底图颜色（与卡内升阶钮 MercDrawPoolUI.AscendDimColor 同灰值 0.5）；
+        // ---- 升阶按钮：条件不达标整块一起压暗（2026-11-10 主人拍板）----
+        // 只用 CanvasGroup.alpha 统一压底图/文字/图标；不再单独给字设色，也不再单独压底图。
         // interactable 保持 true —— 设 false 会吞掉点击，OnStarUpClick 里的满星 Toast 就弹不出来了。
-        if (_starUpBtn != null && _starUpImg != null)
-            _starUpImg.color = maxed ? StarUpDimColor : _starUpImgBase;
+        bool canUp = !maxed && MercStarSystem.CanStarUp(_hireId, out _);
+        if (_starUpGroup != null) _starUpGroup.alpha = canUp ? 1f : StarUpDisabledAlpha;
+        if (_starUpImg != null) _starUpImg.color = _starUpImgBase;   // 恢复 authored 底色，防 DDOL 复用残留
 
         // ---- 升阶成功节点收起态（2026-10-24）：每次填充都重置，防 DDOL 复用残留；播放只由 PlaySuccessFx 触发 ----
         if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }
@@ -899,18 +902,31 @@ public class MercAscendUI : MonoBehaviour
         _popCo = StartCoroutine(CoSuccessPop());
     }
 
+    /// <summary>【2026-11-10】自适应封顶：横幅 authored 宽从节点现读（不写死像素）× Panel _fitK × 倍率
+    /// 不得超过可见逻辑宽 GameConfig.DESIGN_WIDTH（全项目 Canvas Scaler 按 720 宽设计），
+    /// 瘦屏自动收一点倍率避免裁边；取不到横幅节点按 1.5 倍播放（EnsureSuccessBannerOnTop 已 LogError）。
+    /// 放大仍是等比 localScale，不写任何 sizeDelta / anchoredPosition。</summary>
+    float ResolveSuccessScale()
+    {
+        var bannerRt = _successRt != null ? FindDeep(_successRt, "成功") as RectTransform : null;
+        if (bannerRt == null) return SuccessScale;
+        float w = Mathf.Abs(bannerRt.rect.width) * (_fitK > 0f ? _fitK : 1f);
+        return w > 0f ? Mathf.Min(SuccessScale, GameConfig.DESIGN_WIDTH / w) : SuccessScale;
+    }
+
     /// <summary>unscaled 时间（弹窗动画既有口径，防 timescale=0 卡死）；两段式 ease-out：
-    /// 0→过冲（先快，「猛」）→1.0 落定。只动 _successRt 自身 localScale，
+    /// 0→过冲（先快，「猛」）→target 落定。只动 _successRt 自身 localScale，
     /// 不写子节点 sizeDelta/anchoredPosition（铁律 32）；与 Panel 开窗 _fitK 缩放复合互不干扰。</summary>
     System.Collections.IEnumerator CoSuccessPop()
     {
+        float target = ResolveSuccessScale();
         float t = 0f;
         while (t < 1f)
         {
             t += Time.unscaledDeltaTime / PopUpDur;
             float k = Mathf.Clamp01(t);
             k = 1f - (1f - k) * (1f - k);   // ease-out quad
-            _successRt.localScale = Vector3.one * (PopOvershoot * k);
+            _successRt.localScale = Vector3.one * (target * PopOvershoot * k);
             yield return null;
         }
         t = 0f;
@@ -919,10 +935,10 @@ public class MercAscendUI : MonoBehaviour
             t += Time.unscaledDeltaTime / PopSettleDur;
             float k = Mathf.Clamp01(t);
             k = 1f - (1f - k) * (1f - k);   // ease-out quad
-            _successRt.localScale = Vector3.one * (PopOvershoot + (1f - PopOvershoot) * k);
+            _successRt.localScale = Vector3.one * (target * (PopOvershoot + (1f - PopOvershoot) * k));
             yield return null;
         }
-        _successRt.localScale = Vector3.one;
+        _successRt.localScale = Vector3.one * target;
         _popCo = null;
     }
 

@@ -316,7 +316,7 @@ public class TutorialHintUI : MonoBehaviour
 
         GameFonts.ApplyToHierarchy(transform);
         if (_label != null && _label.font == null)
-            _label.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            _label.font = GameFonts.GetDefault();
         PlaceBanner(null);
     }
 
@@ -380,7 +380,7 @@ public class TutorialHintUI : MonoBehaviour
         t.color = Color.white;
         t.raycastTarget = false;
         t.font = GameFonts.GetChinese();
-        if (t.font == null) t.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        if (t.font == null) t.font = GameFonts.GetDefault();
         return t;
     }
 
