@@ -86,20 +86,44 @@ public partial class AdventureUI
         rt.sizeDelta = baseSize * DropIconScale;
     }
 
+    /// <summary>徽记副本「可能掉落」最多展示 5 个（预制体已有 8 个槽，够用，不动 prefab）。</summary>
+    const int BadgePreviewMax = 5;
+
+    /// <summary>普通难度可掉档位（真源 GrantBadgeDungeonDrops：普通 90% / 稀有 10%，传奇 0%）。降序。</summary>
+    static readonly MercRosterDefs.MercRarity[] BadgePreviewTiersNoLegendary =
+        { MercRosterDefs.MercRarity.Rare, MercRosterDefs.MercRarity.Common };
+
+    /// <summary>困难/噩梦可掉档位（55/40/5、25/60/15 三档概率均 > 0）。降序。</summary>
+    static readonly MercRosterDefs.MercRarity[] BadgePreviewTiersWithLegendary =
+        { MercRosterDefs.MercRarity.Legendary, MercRosterDefs.MercRarity.Rare, MercRosterDefs.MercRarity.Common };
+
     /// <summary>
     /// 关卡预览掉落（临时按章节规则）。待 <c>stage_preview_drop</c> 表接入后改读表。
     /// </summary>
-    void CollectPreviewDrops(List<PreviewDropKind> outList)
+    void CollectPreviewDrops(List<PreviewDropItem> outList)
     {
         outList.Clear();
         if (!IsModePlayable(_selectedMode)) return;
         if (IsActivityMode(_selectedMode))
         {
             // 【2026-10-23 拍板「活动副本一拆二」+ 2026-10-24 加卷轴】
-            // 金币横条→金币；徽记横条→随机职业徽记（预览用普通档代表图）；
+            // 金币横条→金币；
             // 卷轴横条→按所选难度预览（2026-10-24 主人拍板：普通=普通卷3-5 / 困难=普通3-5+高级0-1 / 噩梦=高级1-3 只掉高级）
             if (_selectedActivityKind == ActivityDungeonKind.Badge)
-                outList.Add(PreviewDropKind.Badge);
+            {
+                // 【2026-11-10】徽记本「可能掉落」按真实掉落池列：真源 = MercGrowInventory.GrantBadgeDungeonDrops
+                // （6 职业等权 × 普通/稀有/传奇，档位概率随难度）。按难度过滤掉概率为 0 的档位，
+                // 稀有度从高到低、职业照 BadgeJobKeys 顺序：先放满最高可掉档，有空位再放下一档，最多 5 个。
+                // ⚠️ 档位可掉性与 GrantBadgeDungeonDrops 概率表对应（普通 90/10 无传奇；
+                //    困难 55/40/5；噩梦 25/60/15），改那边概率时这里必须同步。
+                var tiers = _selectedDiff > 0
+                    ? BadgePreviewTiersWithLegendary
+                    : BadgePreviewTiersNoLegendary;
+                string[] jobs = MercGrowInventory.BadgeJobKeys;
+                for (int t = 0; t < tiers.Length && outList.Count < BadgePreviewMax; t++)
+                    for (int j = 0; j < jobs.Length && outList.Count < BadgePreviewMax; j++)
+                        outList.Add(new PreviewDropItem(PreviewDropKind.Badge, jobs[j], tiers[t]));
+            }
             else if (_selectedActivityKind == ActivityDungeonKind.Gift)
                 outList.Add(PreviewDropKind.Gift);   // 礼物副本：随机好感礼物，难度越高数量越多（2/3/4）
             else if (_selectedActivityKind == ActivityDungeonKind.Scroll)
@@ -133,9 +157,9 @@ public partial class AdventureUI
         if (_selectedChapter >= 7) outList.Add(PreviewDropKind.ScrollLegendary);
     }
 
-    Sprite LoadPreviewDropSprite(PreviewDropKind kind)
+    Sprite LoadPreviewDropSprite(PreviewDropItem item)
     {
-        switch (kind)
+        switch (item.Kind)
         {
             case PreviewDropKind.Gold:
                 return LoadGoldDropSprite();
@@ -150,7 +174,7 @@ public partial class AdventureUI
             case PreviewDropKind.ScrollLegendary:
                 return LoadScrollDropSprite(MercRosterDefs.MercRarity.Legendary);
             case PreviewDropKind.Badge:
-                return LoadBadgeDropSprite();
+                return MercGrowSprites.LoadJobBadge(item.BadgeJobKey, item.BadgeRarity);
             case PreviewDropKind.Gift:
                 // 礼物副本掉落预览：拿礼物图组里的面包当代表图（随机礼物池见 MercFavorDefs.Gifts）
                 return Resources.Load<Sprite>("UI/Art/礼物/32px-item301");
@@ -237,13 +261,6 @@ public partial class AdventureUI
     {
         if (_goldDropSprite != null) return _goldDropSprite;
         return _goldDropSprite = LoadCommonDropIcon("icon_gold");
-    }
-
-    /// <summary>徽记副本掉落预览图（2026-10-23）：随机职业在结算才揭晓，预览固定用剑盾·普通档徽记代表图。</summary>
-    Sprite LoadBadgeDropSprite()
-    {
-        if (_badgeDropSprite != null) return _badgeDropSprite;
-        return _badgeDropSprite = MercGrowSprites.LoadJobBadge("剑盾", MercRosterDefs.MercRarity.Common);
     }
 
     Sprite LoadDraftCoinDropSprite()

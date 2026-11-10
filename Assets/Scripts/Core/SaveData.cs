@@ -786,6 +786,15 @@ public class SaveData
     [NonSerialized] public HashSet<string> unlockedTitleIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> unlockedFrameIds = new HashSet<string>();
     [NonSerialized] public HashSet<string> unlockedSkinIds = new HashSet<string>();
+
+    // === 任务奖励统一领取（完成后不自动发，在冒险日志点「可领取」才发）===
+    // entries 为序列化真源、Ids 为运行时镜像；老档迁移时把已完成任务一律视为已领取防重复发奖。
+    public List<StringIdEntry> claimedMainQuestEntries = new List<StringIdEntry>();
+    public List<IntIdEntry> claimedSideIslandEntries = new List<IntIdEntry>();
+    [NonSerialized] public HashSet<string> claimedMainQuestIds = new HashSet<string>();
+    [NonSerialized] public HashSet<int> claimedSideIslandIds = new HashSet<int>();
+    public bool questClaimMigrated = false;
+
     public int backpackExtraSlots = 0;
     public int staminaBonusMax = 0;
     /// <summary>第一章已通关最高难度：-1 未通关，0 普通，1 困难，2 噩梦</summary>
@@ -1106,6 +1115,16 @@ public class SaveData
 
         completedLogAchIds = ToIdSet(completedLogAchEntries);
         claimedLogAchIds = ToIdSet(claimedLogAchEntries);
+        claimedMainQuestIds = ToIdSet(claimedMainQuestEntries);
+        claimedSideIslandIds = new HashSet<int>();
+        if (claimedSideIslandEntries != null)
+        {
+            for (int i = 0; i < claimedSideIslandEntries.Count; i++)
+            {
+                var e = claimedSideIslandEntries[i];
+                if (e != null && e.id > 0) claimedSideIslandIds.Add(e.id);
+            }
+        }
         unlockedTitleIds = ToIdSet(unlockedTitleEntries);
         unlockedFrameIds = ToIdSet(unlockedFrameEntries);
         unlockedSkinIds = ToIdSet(unlockedSkinEntries);
@@ -2048,6 +2067,9 @@ public class SaveData
     {
         clearedSideIslandIds = new HashSet<int>();
         clearedSideIslandEntries = new List<IntIdEntry>();
+        claimedMainQuestIds = new HashSet<string>();
+        claimedSideIslandIds = new HashSet<int>();
+        questClaimMigrated = false;
         // 【2026-10-26】指引已播记录一并清：新一轮的岛重新弹一次「佣兵信息」指引
         sideIslandGuideIds = new HashSet<int>();
         sideIslandGuideEntries = new List<IntIdEntry>();
@@ -2423,6 +2445,8 @@ public class SaveData
 
         completedLogAchEntries = FromIdSet(completedLogAchIds);
         claimedLogAchEntries = FromIdSet(claimedLogAchIds);
+        claimedMainQuestEntries = FromIdSet(claimedMainQuestIds);
+        claimedSideIslandEntries = FromIntIdSet(claimedSideIslandIds);
         unlockedTitleEntries = FromIdSet(unlockedTitleIds);
         unlockedFrameEntries = FromIdSet(unlockedFrameIds);
         unlockedSkinEntries = FromIdSet(unlockedSkinIds);

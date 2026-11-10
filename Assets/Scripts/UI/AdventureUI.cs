@@ -249,7 +249,6 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     Sprite _scrollCommonSprite;
     Sprite _scrollRareSprite;
     Sprite _scrollLegendarySprite;
-    Sprite _badgeDropSprite;
     Sprite _staminaIconSprite;
     Image _staminaCostIcon;
     Text _staminaCostText;   // 【2026-10-24 主人新布局】消耗值独立在 StaminaCost/Cost 子节点（预制体默认 "X10"）
@@ -262,11 +261,37 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         ScrollCommon,
         ScrollRare,
         ScrollLegendary,
-        Badge,   // 徽记副本掉落预览（2026-10-23 活动副本一拆二）
+        Badge,   // 徽记副本掉落预览：具体职业/档位由 PreviewDropItem 携带
         Gift     // 礼物副本掉落预览（2026-10-26 主人拍板「掉落礼物的活动副本周六开启」）
     }
 
-    readonly List<PreviewDropKind> _previewDrops = new List<PreviewDropKind>(4);
+    /// <summary>
+    /// 「可能掉落」列表项。非徽记项只需 Kind（隐式转换保持原有 Add 写法不变）；
+    /// 徽记项额外带职业 key + 档位，图标才能对应真实掉落的 6 职业 × 3 档组合。
+    /// </summary>
+    struct PreviewDropItem
+    {
+        public readonly PreviewDropKind Kind;
+        public readonly string BadgeJobKey;
+        public readonly MercRosterDefs.MercRarity BadgeRarity;
+
+        public PreviewDropItem(PreviewDropKind kind, string badgeJobKey, MercRosterDefs.MercRarity badgeRarity)
+        {
+            Kind = kind;
+            BadgeJobKey = badgeJobKey;
+            BadgeRarity = badgeRarity;
+        }
+
+        public static implicit operator PreviewDropItem(PreviewDropKind kind)
+            => new PreviewDropItem(kind, null, MercRosterDefs.MercRarity.Common);
+
+        public override string ToString()
+            => string.IsNullOrEmpty(BadgeJobKey)
+                ? Kind.ToString()
+                : Kind + "(" + BadgeJobKey + "/" + MercGrowSprites.TierKey(BadgeRarity) + ")";
+    }
+
+    readonly List<PreviewDropItem> _previewDrops = new List<PreviewDropItem>(4);
 
     const float TOP_H    = 120f;
     const float BOT_H    = 150f;

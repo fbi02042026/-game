@@ -141,7 +141,7 @@ public static class RunEntryUI
     }
 
     /// <summary>点击单一出口：置灰判定 → 扣每日次数 → 进本。人设尾巴由 GlobalToastUI.Persona 统一套，这里只写平文案。</summary>
-    static void OnClicked()
+    public static void OnClicked()
     {
         if (!EndlessRunGame.CanEnterRun)
         {

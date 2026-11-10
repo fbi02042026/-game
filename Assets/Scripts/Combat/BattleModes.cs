@@ -388,9 +388,9 @@ public sealed class SideIslandBattleMode : BattleMode
             return;
         }
         SettleIslandRewards(bm);
-        // 【2026-11-02 修「岛金不到账」】岛金是 SettleIslandRewards 里 GrantRunGold 进 GoldEarned 的，
-        // 而统一门 FinishStageAfterPortalReached 的 PersistBattleGold 走在本方法**之前**（Settlement.cs 2204 行），
-        // EndRunAndReturnToTown 自身不再落账 —— 不在这里补一次写回，+岛金随局丢弃、城镇钱包永远收不到。
+        // 本局战斗内金币统一落回城镇钱包（统一门 FinishStageAfterPortalReached 的 PersistBattleGold
+        // 早于本方法，这里补一次写回，覆盖结算期间新增的部分）。
+        // 岛通关奖励已改为冒险日志手动领取，不再进 GoldEarned / GrantRunGold。
         // resetPool 默认 true = 局末清账口径；增量由 _earnedPaidGold 水位防重，不会双发。
         bm.PersistBattleGold();
         // 【2026-10-27 主人拍板】战斗结果已在统一门播过，不再二次弹「战斗结算」——直接回城
@@ -398,8 +398,8 @@ public sealed class SideIslandBattleMode : BattleMode
     }
 
     /// <summary>
-    /// 岛通关奖励（2026-10-23 主人拍板「10 体力 + 金币/石」；装备 2026-10-30 拍板不给，走 DropsEquipment=false）：
-    /// 这里发固定局外金币 + 天赋石 + 标记通关 + 派第二岛。缺真值（岛定义/存档）→ LogError 不发（铁律 14）。
+    /// 岛通关结算：只标记通关 + 派第二岛（洗牌袋；已派满时内部幂等直接返回）。
+    /// 奖励改到冒险日志手动领取，此处不再发局外金币/天赋石。缺真值（岛定义/存档）→ LogError 后 early return（铁律 14）。
     /// </summary>
     static void SettleIslandRewards(BattleManager bm)
     {
@@ -411,23 +411,11 @@ public sealed class SideIslandBattleMode : BattleMode
             return;
         }
 
-        // 固定局外金币：进「本局获得金币」（GoldEarned），由 SettleStageClear 里的 bm.PersistBattleGold()
-        // 写回城镇钱包（统一门那次 Persist 走在发奖之前，覆盖不到这笔——2026-11-02 修「岛金不到账」）
-        if (isl.goldReward > 0)
-        {
-            bm.GrantRunGold(isl.goldReward);
-            GlobalToastUI.Show($"攻克{isl.name}！金币 +{isl.goldReward}", true);
-        }
-        // 天赋石（照裂隙首通石同款入口）
-        if (isl.talentReward > 0)
-        {
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, isl.talentReward, save: false, notify: true);
-        }
         // 标记通关（一次性打完锁，跨周目持久）+ 派第二岛（洗牌袋；已派满时内部幂等直接返回）
         data.MarkSideIslandCleared(isl.id);
         ChapterRouteTable.EnsureForkRoll(data);
         SaveSystem.Instance?.Save();
-        Debug.Log($"[支线岛] 「{isl.name}」通关结算：金币 +{isl.goldReward} 天赋石 +{isl.talentReward}（支线不给装备）");
+        Debug.Log($"[支线岛] 「{isl.name}」已标记通关，奖励待冒险日志领取");
     }
 }
 
@@ -795,7 +783,8 @@ public sealed class ArenaBattleMode : BattleMode
 
 /// <summary>
 /// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
-/// 玩法（2026-10-29 主人拍板）：每天 3 次 × 15 体力（体力档 10-29 二改 20→15，见 StaminaSystem.ENDLESS_RIFT_COST）；
+/// 玩法（2026-11-10 口径）：每天 2 次机会 × 15 体力（见 StaminaSystem.ENDLESS_RIFT_COST）；
+/// **打通一层才算用掉 1 次机会**，进本不扣（没打通不算），见 EndlessRiftRules.ConsumeStageClear；
 /// **每层开始抽 3 次奖**（免费额度层间重置，定向抽不开启）；抽奖价格按本局已抽数递增；
 /// 难度走分档陡坡（每节 ×1.18~1.20 + 节内每层 +8% 锯齿 + 精英层 ×1.45，见 GameConfig.EndlessDifficultyMul）；
 /// 每 5 层一个 BOSS、**每 10 层一个存档点**（大 BOSS 层，2026-11-02 主人拍板由 5 改 10）；
@@ -893,7 +882,8 @@ public static class EndlessRiftRules
     }
 
     /// <summary>
-    /// 进本：次数 + 体力一起扣，成功计数落盘。任何一步不满足都返回 false 并弹对应提示。
+    /// 进本：只扣体力 + 落盘标记，**不扣每日次数**（次数只在打通一层时扣，见 <see cref="ConsumeStageClear"/>）。
+    /// 次数为 0 或体力不足都返回 false 并弹对应提示。
     /// </summary>
     public static bool TryConsumeEnter()
     {
@@ -907,13 +897,36 @@ public static class EndlessRiftRules
         }
         if (!StaminaSystem.TrySpendForEndlessRift())
             return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
-        data.endlessRiftTriesToday++;
         // 虚拟排行榜的闲置衰减锚点（2026-10-24）：只有真实进本才写，隔了几天没玩排名会回落
         data.endlessRiftLastPlayDayKey = DateTime.UtcNow.ToString("yyyyMMdd");
         // 【2026-11-02 晚】「新纪录」角标的清账点：进本即视为玩家已看到（回城那波展示结束）
         NewRecordPendingShow = false;
         SaveSystem.Instance?.Save();
         return true;
+    }
+
+    /// <summary>
+    /// 【2026-11-10 口径】打通一层 = 用掉 1 次机会，唯一扣次出口（调用点 = SettleEndlessStageClear）。
+    /// 返回扣完是否还有剩余：false = 次数用尽，本局收尾回城，不许自动续层。
+    /// 死亡 / 主动撤离 / 只是进本都不调这里 → 不算用掉机会。
+    /// </summary>
+    public static bool ConsumeStageClear()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            Debug.LogError("[EndlessRift] 打通一层时存档为空，本局收尾");
+            return false;
+        }
+        EnsureDay(data);
+        if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
+        {
+            Debug.LogError("[EndlessRift] 次数已用完仍打通一层，进本闸失效，本局收尾");
+            return false;
+        }
+        data.endlessRiftTriesToday++;
+        SaveSystem.Instance?.Save();
+        return TriesLeft(data) > 0;
     }
 
     /// <summary>

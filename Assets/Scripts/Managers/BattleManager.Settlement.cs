@@ -2096,7 +2096,11 @@ public partial class BattleManager
         // 【2026-11-09 主人拍板「金币按文案设定来发」】金币本金币改走逐怪分摊
         //（OnMonsterDead → GrantGoldDungeonKillGold，总额 = GetGoldDungeonClearGold 文案三档），
         // 关卡固定金那笔对金币本跳过，防双发；其余模式口径一字不动。
-        int stageGold = IsGoldDungeon ? 0 : StageGoldDefs.CurrentStageGold();
+        // 【2026-11-10 修·活动副本不发主线关卡金】上面只挡了金币本，徽记/卷轴/礼物/羁绊本照样领
+        // StageGoldDefs.CurrentStageGold() → PersistBattleGold 进 GoldEarned → 结果界面显示「金币 ×N」，
+        // 看起来像打徽记本只给金币（徽记其实只在 GrantStageGrowDrops 里走 Toast，不进奖励格）。
+        // 活动副本产出各自有发放链（金币本走逐怪分摊），一律不吃主线关卡金。
+        int stageGold = IsActivityDungeon ? 0 : StageGoldDefs.CurrentStageGold();
         if (stageGold > 0 && !IsSideIsland && !IsArena)   // 支线岛不发主线关卡金——岛金=goldReward，走岛结算链；
                                                           // 竞技场（2026-10-30 拍板）打赢不发金币，按关结算金一并停发
             _runStageGoldPending += stageGold;
@@ -2580,6 +2584,9 @@ public partial class BattleManager
         // ⚠ 不能用 MarkCleared 的返回值：那个看的是「本轮进度」，重置后会重新变 true（等于又发一次全额）。
         bool firstEver = EndlessRiftRules.NoteBestStage(stage);
         EndlessRiftRules.MarkCleared(stage);   // 本轮进度照常推进（记录点/起始层靠它）
+        // 【2026-11-10 口径】每天 2 次机会，只有「打通一层」才扣 1 次；扣完没剩余就收局回城，
+        // 不再自动续层。进本不扣：没打通（死亡 / 撤离）不算用掉机会。
+        bool canContinue = EndlessRiftRules.ConsumeStageClear();
 
         // 【2026-11-02 主人拍板「每 10 层一个保存点」】存档点 = 大 BOSS 层（10 的倍数），
         // 小 BOSS（5 的倍数）只当节奏爆点、不存。条件用 IsEndlessSaveStage，不是 isBoss。
@@ -2695,9 +2702,10 @@ public partial class BattleManager
             {
                 StaminaConfirmPopup.ShowNotice(
                     title: "出生点已保存",
-                    body: $"已记录第 {stage} 层\n下次进入无限裂隙可从第 {nextStage} 层继续",
-                    okLabel: "继续深入",
-                    onClose: AdvanceEndlessRiftStage);
+                    body: $"已记录第 {stage} 层\n下次进入无限裂隙可从第 {nextStage} 层继续"
+                        + (canContinue ? "" : "\n今日挑战次数已用完"),
+                    okLabel: canContinue ? "继续深入" : "返回城镇",
+                    onClose: () => { if (canContinue) AdvanceEndlessRiftStage(); else TriggerEvacuation(); });
             };
             if (entries.Count > 0)
                 RewardPopupUI.Show(entries, afterChest);
@@ -2706,10 +2714,13 @@ public partial class BattleManager
             return;
         }
 
+        if (!canContinue) lines.Add("今日挑战次数已用完，返回城镇");
         GlobalToastUI.Show(string.Join("\n", lines), true);
 
         // —— 直接续层（2026-10-19：BOSS 层也自动进下一层，无双选）——
-        AdvanceEndlessRiftStage();
+        // 次数用尽 → 按撤离结算收局回城，不再续层
+        if (canContinue) AdvanceEndlessRiftStage();
+        else TriggerEvacuation();
     }
 
     /// <summary>
@@ -2753,6 +2764,13 @@ public partial class BattleManager
     /// </summary>
     void AdvanceEndlessRiftStage()
     {
+        // 保险：续层前次数必须还有剩余（正常路径由 SettleEndlessStageClear 的 canContinue 拦住，这里防绕过）
+        if (EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data) <= 0)
+        {
+            Debug.LogError("[BattleManager] 无限裂隙次数已用完仍尝试续层，改走撤离收尾");
+            TriggerEvacuation();
+            return;
+        }
         EndlessRiftStage++;
         var cm = ChapterManager.Instance;
         if (cm == null)

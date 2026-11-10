@@ -482,8 +482,9 @@ public static partial class GameConfig
 
     /// <summary>无限裂隙攻击侧吃难度曲线的比例（0 = 攻击不涨，1 = 跟满血量曲线）</summary>
     public const float ENDLESS_ATK_SHARE = 0.45f;
-    /// <summary>无限裂隙每日进入次数（2026-10-29 主人拍板：2 → 3；一次 15 体力见 StaminaSystem.ENDLESS_RIFT_COST）。</summary>
-    public const int ENDLESS_DAILY_TRIES = 3;
+    /// <summary>无限裂隙每日机会数（2026-11-10 口径：3 → 2；每打通一层消耗 1 次，见 EndlessRiftRules.ConsumeStageClear）。
+    /// 一次 15 体力见 StaminaSystem.ENDLESS_RIFT_COST。</summary>
+    public const int ENDLESS_DAILY_TRIES = 2;
 
     /// <summary>记录点间隔：每 5 层一个（第 5/10/15…层 = BOSS 记录点）</summary>
     public const int ENDLESS_CHECKPOINT_INTERVAL = 5;

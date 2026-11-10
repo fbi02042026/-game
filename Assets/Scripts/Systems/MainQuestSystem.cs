@@ -443,6 +443,7 @@ public static class MainQuestSystem
         }
     }
 
+    // 奖励改为在冒险日志手动领取，完成时只标记 done 与完成提示。
     static void Complete(MainQuestDef def)
     {
         EnsureMigrated();
@@ -450,34 +451,10 @@ public static class MainQuestSystem
         if (IsDoneId(def.id)) return;
 
         MarkDone(def.id);
-
-        // 2026-11-01 主人拍板：主线每条都给点奖励（哪怕几十金币），金币 + 天赋石都发；
-        // 【2026-11-04 主人拍板】完成提示统一左侧滑入横幅（只说任务完成，不再写奖励明细）
-        // 【2026-11-06 主人拍板】奖励明细汇总成一条中央 toast（排队播，不顶前）：金币在前。
-        var lines = new List<string>();
-        if (def.rewardGold > 0)
-        {
-            var gold = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.rewardGold, save: true, notify: false);
-            if (gold.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + " +" + gold.added);
-            if (gold.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + "已满，溢出进邮箱");
-        }
-        if (def.rewardStones > 0)
-        {
-            var stone = ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.rewardStones,
-                save: true, notify: false);
-            if (stone.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + " +" + stone.added);
-            if (stone.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
-        }
         QuestDoneToast.Show(def.title);
-        if (lines.Count > 0)
-            GlobalToastUI.ShowQueued(string.Join("\n", lines));
 
         Debug.Log("[MainQuest] done: " + def.id);
-        Analytics.QuestComplete(def.id); // 埋点：主线任务完成
+        // 埋点在领取时上报，完成时不再上报
         OnChanged?.Invoke();
     }
 

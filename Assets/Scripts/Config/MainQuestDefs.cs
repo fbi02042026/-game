@@ -159,7 +159,7 @@ public static class MainQuestDefs
     /// <summary>NPC 显示名（新增 NPC 在这里加，UI 与自动文案都读这里）。</summary>
     public static string NpcName(string npcId)
     {
-        if (npcId == NpcInnkeeper) return "酒馆老板娘";
+        if (npcId == NpcInnkeeper) return "老板娘";
         if (npcId == NpcGuildmaster) return "会长";
         if (npcId == NpcAlia) return "艾丽娅";
         if (npcId == NpcHaldon) return "劳顿";
@@ -177,7 +177,7 @@ public static class MainQuestDefs
         return string.IsNullOrEmpty(storyId) ? "一段剧情" : storyId;
     }
 
-    /// <summary>desc 留空时的自动文案。</summary>
+    /// <summary>desc 留空时的自动文案。任务栏单行展示，统一 ≤7 字（含空格与数字）。</summary>
     public static string AutoDesc(MainQuestDef def)
     {
         if (!string.IsNullOrEmpty(def.desc)) return def.desc;
@@ -187,13 +187,13 @@ public static class MainQuestDefs
                 int idx = StageIndexOf(def);
                 return "通关 " + def.chapter + "-" + (idx + 1);
             case MainQuestType.ClearStages:
-                return "本章累计通关 " + Math.Max(1, def.targetCount) + " 关";
+                return "通关 " + Math.Max(1, def.targetCount) + " 关";
             case MainQuestType.TalkNpc:
                 return "去找" + NpcName(def.param) + "聊聊";
             case MainQuestType.WatchStory:
                 return "回顾剧情：" + StoryTitle(def.param);
             case MainQuestType.RecruitMerc:
-                return "在酒馆雇佣 " + Math.Max(1, def.targetCount) + " 名佣兵";
+                return "招募 " + Math.Max(1, def.targetCount) + " 人";
             case MainQuestType.UpgradeTalent:
                 return "点 " + Math.Max(1, def.targetCount) + " 次天赋";
             default:

@@ -286,11 +286,12 @@ public partial class Monster
         // 【2026-10-23 主人拍板「引导的不要动」】引导局 Boss 也不吃本批倍率，保持原数值。
         float bossHpMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_HP_MUL : 1f;
         float bossAtkMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_ATTACK_MUL : 1f;
-        // 【2026-11-09 主人拍板「所有的活动本精英和boss血量*2」】资源副本（金币/徽记/卷轴/礼物；
-        // 羁绊本不算，见 IsResourceDungeon）精英/Boss MaxHp ×2，只动血量不动攻击；
-        // 主线 / 引导 / 裂隙 / 竞技场不受影响。
-        float activityEliteBossHpMul = BattleManager.Instance != null && BattleManager.Instance.IsResourceDungeon
-            && (eliteWave || bossUnit) ? 2f : 1f;
+        // 【2026-11-10 主人拍板「活动副本里的精英和boss血量*3」+「羁绊本要*3」】
+        // 活动副本（金币/徽记/卷轴/礼物/羁绊，真源 IsActivityDungeon）精英/Boss MaxHp ×3，
+        // 只动血量不动攻击；主线 / 引导 / 裂隙 / 竞技场不受影响。
+        // （11-09 口径原为 ×2 且不含羁绊本，此处按 11-10 改为 ×3 并纳入羁绊本）
+        float activityEliteBossHpMul = BattleManager.Instance != null && BattleManager.Instance.IsActivityDungeon
+            && (eliteWave || bossUnit) ? 3f : 1f;
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * activityEliteBossHpMul);
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
@@ -601,19 +602,37 @@ public partial class Monster
     /// 【2026-11-10 主人拍板：空中单位要和阴影有一段空隙（不用太大，能看出来就行）】
     /// 空中怪（monster_stats.airUnit=1）：本体在移动根下上抬 GameConfig.MONSTER_AIR_HOVER，
     /// 脚下阴影按 _airShadowBaseY 基线反向补偿 —— 阴影留在地面、身体浮空。
-    /// 陆地怪把本体 y 归零（清池化残留），阴影一个值不动 —— 零行为变化。
+    /// 陆地怪：本体 y 归零，阴影回到基线、正常贴在脚下。
+    /// 【2026-11-10 主人拍板「活动副本里的怪不要有空中的」「陆地就是和影子在正常脚下」】
+    /// 活动副本内一律按陆地处理（不改配表、不换模板），只有其它玩法保留浮空表现。
     /// 幂等：阴影按基线绝对定位（不是每次叠加偏移），池化复用多次 Init 不累积。
     /// </summary>
     void ApplyAirHoverOffset()
     {
-        bool air = config != null && config.airUnit;
+        bool activityGrounded = BattleManager.Instance != null && BattleManager.Instance.IsActivityDungeon;
+        bool air = !activityGrounded && config != null && config.airUnit;
         float hover = air ? GameConfig.MONSTER_AIR_HOVER : 0f;
 
         // 本体 y 绝对归位（覆盖 EnsureBodyRoot / RectTransform 分支 / 复用残留的任何值）
         if (Mathf.Abs(transform.localPosition.y - hover) > 0.0001f)
             transform.localPosition = new Vector3(transform.localPosition.x, hover, transform.localPosition.z);
 
-        if (!air) return;
+        if (!air)
+        {
+            // 陆地阴影归位：池化复用上一只是浮空怪时，阴影会残留上抬补偿值 → 影子不在脚下。
+            // 基线没记录过（这只怪从没浮空过）说明阴影本来就是预制体摆好的位置，一个值不动。
+            if (!float.IsNaN(_airShadowBaseY))
+            {
+                Transform groundShadow = FindFootShadowNode(transform);
+                if (groundShadow != null)
+                {
+                    Vector3 glp = groundShadow.localPosition;
+                    if (Mathf.Abs(glp.y - _airShadowBaseY) > 0.0001f)
+                        groundShadow.localPosition = new Vector3(glp.x, _airShadowBaseY, glp.z);
+                }
+            }
+            return;
+        }
 
         Transform shadow = FindFootShadowNode(transform);
         if (shadow == null) return; // EnsureFootShadow 已对缺失阴影 fail-closed，这里不重复报

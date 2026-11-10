@@ -75,25 +75,25 @@ C8_Q5,主线,8,裂隙前夕,,clear_stages,,2,0,2,,新增密度行,,120,0
 C8_Q2,主线,8,雪境行,,clear_stage,3,1,0,3,,,,120,0
 C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,,,120,0
 C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,,,120,0
-daily_login,日常,0,每日登录,领取今日登录奖励,daily_login,,1,0,1,经验 ×70,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,70,,0
-daily_clear,日常,0,今日通关,今日通关 {0}/{1} 关,daily_clear_stages,,3,0,4,经验 ×120,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回),,,0
-daily_gold,日常,0,财源广进,获取 {0}/{1} 金币,daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50,,0
-daily_kill_20,日常,0,除害,今日击败 {0}/{1} 个小怪,daily_kill_normal,,20,0,3,经验 ×50,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),50,,0
-daily_recruit,日常,0,招贤纳士,获取 {0}/{1} 个佣兵,daily_recruit_merc,,1,0,5,经验 ×70,计数=SaveData.UnlockMerc 新解锁(任何来源都算),70,,0
-daily_kill_50,日常,0,清剿,今日击败 {0}/{1} 个小怪,daily_kill_normal,,50,0,6,经验 ×120,与除害共用计数,120,,0
-daily_boss,日常,0,讨伐首领,今日击杀 {0}/{1} 个首领,daily_kill_boss,,1,0,7,经验 ×190,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,190,,0
-weekly_starup,周常,0,百战精锐,本周升星 {0}/{1} 个佣兵,weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释,,,0
+daily_login,日常,0,每日登录,领取登录奖励,daily_login,,1,0,1,经验 ×70,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,70,,0
+daily_clear,日常,0,今日通关,通关 {0}/{1},daily_clear_stages,,3,0,4,经验 ×120,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回),,,0
+daily_gold,日常,0,财源广进,金币 {0},daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50,,0
+daily_kill_20,日常,0,除害,怪 {0}/{1},daily_kill_normal,,20,0,3,经验 ×50,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),50,,0
+daily_recruit,日常,0,招贤纳士,人 {0}/{1},daily_recruit_merc,,1,0,5,经验 ×70,计数=SaveData.UnlockMerc 新解锁(任何来源都算),70,,0
+daily_kill_50,日常,0,清剿,怪 {0}/{1},daily_kill_normal,,50,0,6,经验 ×120,与除害共用计数,120,,0
+daily_boss,日常,0,讨伐首领,首领 {0}/{1},daily_kill_boss,,1,0,7,经验 ×190,计数=战斗击杀 IsBossUnit(主线首领/活动副本/无限裂隙)，原「弑君」改名（2026-10-29 主人拍板：Boss 是怪物不用「君」字）,190,,0
+weekly_starup,周常,0,百战精锐,升星 {0}/{1},weekly_merc_starup,,1,50,1,钻石 ×50,周一刷新；计数=MercStarSystem.TryStarUp 成功；reward_stones 列在周常类别按钻石解释,,,0
 #
 # 挑战任务（2026-11-05 主人拍板）：独立 category=挑战，不进主线链、不阻塞推进；线性出题，同一时间只出当前一条。
 #   目标 = 该章章末 Boss（clear_stage param=9 = 第 10 关，与主线链尾同关号），判定读难度真源 HasStageClearedAtDiff。
 #   只保留困难第 1~8 章各 1 条（order=1）。
 #   金币 = 同章普通主线金币（40+章号×10）× 困难倍率 1.8（GameConfig.GetDifficultyGoldMul），
 #   Mathf.RoundToInt 取整（本组 8 条乘积均为整数，无小数）；天赋石/经验跟普通主线口径一致 = 0（普通主线这列也全是 0，不凭空发石）。
-C1_HARD,挑战,1,困难·第 1 章,通关困难难度第 1 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,90,1
-C2_HARD,挑战,2,困难·第 2 章,通关困难难度第 2 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,108,1
-C3_HARD,挑战,3,困难·第 3 章,通关困难难度第 3 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,126,1
-C4_HARD,挑战,4,困难·第 4 章,通关困难难度第 4 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,144,1
-C5_HARD,挑战,5,困难·第 5 章,通关困难难度第 5 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,162,1
-C6_HARD,挑战,6,困难·第 6 章,通关困难难度第 6 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,180,1
-C7_HARD,挑战,7,困难·第 7 章,通关困难难度第 7 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,198,1
-C8_HARD,挑战,8,困难·第 8 章,通关困难难度第 8 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,216,1
+C1_HARD,挑战,1,困难 1 章,困难第 1 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,90,1
+C2_HARD,挑战,2,困难 2 章,困难第 2 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,108,1
+C3_HARD,挑战,3,困难 3 章,困难第 3 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,126,1
+C4_HARD,挑战,4,困难 4 章,困难第 4 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,144,1
+C5_HARD,挑战,5,困难 5 章,困难第 5 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,162,1
+C6_HARD,挑战,6,困难 6 章,困难第 6 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,180,1
+C7_HARD,挑战,7,困难 7 章,困难第 7 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,198,1
+C8_HARD,挑战,8,困难 8 章,困难第 8 章,clear_stage,9,1,0,1,,新增难度挑战 2026-11-05,0,216,1

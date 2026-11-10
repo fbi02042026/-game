@@ -11,7 +11,7 @@ using System.Collections.Generic;
 /// </para>
 /// <para>
 /// 2026-09-17：冷却好了≠该放，还要等<b>战场状态触发条件</b>。例：护盾/加血在血量降到 80% 时才开；
-/// 其余技能在身边范围内有怪时就放（2026-11-08 主人拍板，不再数怪的数量）。见 <see cref="IsTriggerMet"/>。
+/// 其余技能在身边范围内有怪时就放（2026-11-08 主人拍板，不再数怪的数量）；2026-11-10 起该怪还必须在战斗镜头内。见 <see cref="IsTriggerMet"/>。
 /// </para>
 /// </summary>
 public static class PlayerSkillPassive
@@ -25,7 +25,7 @@ public static class PlayerSkillPassive
         Always,                 // 冷却好就放（默认；未映射的技能走这个）
         HpBelow,               // 自身血量比例 <= hpRatio 才放
         AnyAllyHpBelow,        // 我方任意单位（玩家或佣兵）血量比例 <= hpRatio 才放
-        NearbyMonstersAtLeast   // 自身半径内有怪就放（2026-11-08 起 monsterCount 统一 = 1）
+        NearbyMonstersAtLeast   // 自身半径内、且在战斗镜头内的怪才放（2026-11-08 起 monsterCount 统一 = 1）
     }
 
     /// <summary>单个技能的触发条件。</summary>
@@ -59,11 +59,11 @@ public static class PlayerSkillPassive
                     return false;
                 }
                 case TriggerKind.NearbyMonstersAtLeast:
-                    // 2026-10-21（当日报，回归修复）：精英/Boss 进入半径即视为满足。2026-11-08 起怪数阈值统一为 1，
-                    // 这条 OR 已被 CountNearbyMonsters>=1 覆盖（精英/Boss 也在 monsters 列表里），按最小改动保留不动。
-                    // OR 仍限定「进入半径」：Boss 刚在远处刷出不触发，逼近到身边才放。
-                    if (CountNearbyMonsters(radius) >= monsterCount) return true;
-                    return HasEliteOrBossOnField(radius);
+                    // 2026-11-10 主人拍板「只有看到怪才打 如果没看到怪即使怪在范围内也不打 也就是说怪必须在镜头里」：
+                    // 触发与伤害链同尺 —— 半径内且 GameConfig.IsInCombatViewport 为真才算数。
+                    // 旧 OR（HasEliteOrBossOnField）不做视口过滤，会绕过本规则；且其判定已被
+                    // CountNearbyMonsters>=1 完全覆盖（精英/Boss 也在 monsters 列表里）→ 整段删除，不留第二出口。
+                    return CountNearbyMonsters(radius) >= monsterCount;
                 default:
                     return true;
             }
@@ -84,7 +84,7 @@ public static class PlayerSkillPassive
 
     /// <summary>
     /// 风龙卷专属触发半径（2026-11-08 主人拍板「范围太远，怪还没进镜头就触发技能」）：
-    /// 共用 NearbyRadius=9 是镜头半屏宽(≈3.04)的 3 倍，且 CountNearbyMonsters 明确不做视口过滤，
+    /// 共用 NearbyRadius=9 是镜头半屏宽(≈3.04)的 3 倍，且当时 CountNearbyMonsters 不做视口过滤（11-10 已统一补上），
     /// 怪还在屏外就满足触发。单独收到 3 —— 怪进镜头才放；其余技能仍用 NearbyRadius，不受影响。
     /// 2026-11-08 后续拍板：怪数阈值统一 1，半径 3 保持不变。
     /// </summary>
@@ -97,6 +97,15 @@ public static class PlayerSkillPassive
     const float StarfallTriggerRadius = 3f;
 
     /// <summary>
+    /// 重斩专属触发半径（2026-11-10 主人反馈「还没看到怪就释放了，这个应该是近距离才释放的」）：
+    /// 原先共用 NearbyRadius=9，是镜头半屏宽(≈3.04)的 3 倍，且当时 CountNearbyMonsters 不做视口过滤（11-10 已统一补上），
+    /// 怪还在屏外就满足触发；更关键的是重斩 aoeRadius 只有 4.5，触发半径 9 > 伤害半径 4.5，
+    /// 远处那只怪根本劈不到，白进 25 秒 CD。收到 3 与风龙卷/星落同口径：怪进镜头才放，
+    /// 且 3 &lt; 4.5 保证触发时 AOE 覆盖得到目标。其余技能半径不动。
+    /// </summary>
+    const float HeavyCleaveTriggerRadius = 3f;
+
+    /// <summary>
     /// 各玩家技能触发条件（按 skillId，与 player_skills.csv 的 useHint 对应）。
     /// 血线两技（治疗/护盾）不参与本次改动，保持原口径：
     ///  holy_barrier    圣盾壁垒(护盾)   → 自身血 <= 80% 开
@@ -107,11 +116,11 @@ public static class PlayerSkillPassive
     /// 未在表里的技能（如装备附带技）走 Always，保持旧行为。
     /// 🔴 2026-11-08 主人拍板「不用写身边有几个释放，机制全部改成身边有怪在范围内释放」：
     ///    NearbyMonstersAtLeast 的 monsterCount 一律 = 1，不再数怪的数量；
-    ///    半径仍按各技能原值（NearbyRadius=9；风龙卷/星落=3，怪进镜头才放 —— 2026-11-08 早前口径不动）。
+    ///    半径按各技能原值（NearbyRadius=9；重斩/风龙卷/星落=3，怪进镜头才放 —— 2026-11-08 口径，重斩 11-10 补齐）。
     ///    血线两技保持血线，改成「有怪就放」会满血空放治疗/护盾，且推翻 10-20 拍板。
-    /// 2026-10-21（当日报，回归修复）：怪群阈值外曾加一条 OR —— 场上精英/Boss 进入半径即视为满足。
-    ///    现在阈值统一 1 后这条 OR 已被 CountNearbyMonsters 覆盖，但保留不动（同口径、不影响结果）。
-    ///    OR 仍限定「进入半径」：Boss 刚在远处刷出、还没接战不触发，逼近到身边才放。
+    /// 2026-11-10：原 2026-10-21 加的「精英/Boss 进入半径即满足」OR 整段删除 ——
+    ///    它不做视口过滤，会绕过「怪必须在镜头里」；且其判定已被 CountNearbyMonsters>=1 完全覆盖。
+    ///    现在只有一条判定：半径内 + 战斗镜头内。Boss 远处刷出不触发，逼近且进镜头才放。
     /// 玩家可见文案在 <see cref="TriggerText"/>（技能弹窗里展示的就是它，改表记得同步语义）。
     /// </summary>
     static readonly Dictionary<string, Trigger> Triggers = new Dictionary<string, Trigger>
@@ -123,32 +132,11 @@ public static class PlayerSkillPassive
         ["deadly_focus"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
         ["gale_stance"]     = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
         // 2026-11-05 新技；2026-11-08 起统一「范围内有怪就放」，半径仍各自保留
-        ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
+        // 2026-11-10：半径 9 → 3，修「怪还没看见就空放」（见 HeavyCleaveTriggerRadius）
+        ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = HeavyCleaveTriggerRadius },
         ["whirlwind"]       = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = WhirlwindTriggerRadius },
         ["starfall"]        = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = StarfallTriggerRadius },
     };
-
-    /// <summary>
-    /// 场上是否存在精英或 Boss，且**进入半径**（与 CountNearbyMonsters 同口径）：
-    /// Boss/精英是「重要目标」，但其刚在远处刷出、还没接战时不应触发技能 → 必须逼近到身边（距离 ≤ radius）才算。
-    /// 不做视口过滤（Boss 体型大，屏幕边缘也算战斗目标）。
-    /// </summary>
-    static bool HasEliteOrBossOnField(float radius)
-    {
-        var bm = BattleManager.Instance;
-        var hero = Hero.Instance;
-        if (bm == null || hero == null || bm.monsters == null) return false;
-        Vector2 self = hero.transform.position;
-        for (int i = 0; i < bm.monsters.Count; i++)
-        {
-            var u = bm.monsters[i];
-            if (u == null || u.isDead) continue;
-            // monsters 是 List<UnitBase>，精英/Boss 标记在 Monster 上（同 BattleManager.MonsterDeath.cs:13 口径）
-            if (!(u is Monster m)) continue;
-            if ((m.IsEliteWave || m.IsBossUnit) && Vector2.Distance(self, m.transform.position) <= radius) return true;
-        }
-        return false;
-    }
 
     /// <summary>
     /// 触发条件的中文文案（2026-10-21 主人拍板：释放条件要写进技能弹窗信息里）。
@@ -173,7 +161,7 @@ public static class PlayerSkillPassive
                 return $"任意队友血量 ≤{Mathf.RoundToInt(t.hpRatio * 100f)}% 时自动释放";
             case TriggerKind.NearbyMonstersAtLeast:
                 // 2026-11-08 主人拍板「不用写身边有几个释放」：不再输出数量 / 半径数字，
-                // 统一写「身边范围内有怪就放」；精英/Boss 仍在句尾注明（与 IsSatisfied 的 OR 对齐）。
+                // 统一写「身边范围内有怪就放」；精英/Boss 仍在句尾注明（它们也在 monsters 列表里，同样走镜头判定）。
                 // 旧的数字模板整段删除，防止以后调 monsterCount 又把数字文案带回来。
                 return "身边范围内有敌人（含精英/Boss）时自动释放";
             default:
@@ -214,8 +202,11 @@ public static class PlayerSkillPassive
         {
             var m = bm.monsters[i];
             if (m == null || m.isDead) continue;
-            // 2026-10-21（当日报）：改为纯自身半径检测，去掉视口（全屏）过滤 —— 只在主角半径内的怪才算数，
-            // 不管怪在屏幕上/外、不管是不是场上远处目标；半径外的怪一律不触发（主人拍板「以自身范围，不要全屏检测」）。
+            // 2026-11-10 主人拍板「只有看到怪才打 如果没看到怪即使怪在范围内也不打 也就是说怪必须在镜头里」：
+            // 在半径条件上**叠加**战斗镜头判定，与伤害链 GetEnemiesInRangeAt(SkillSystem.cs:326)、
+            // MoveAoeExecutor.Scan(:159) 共用 GameConfig.IsInCombatViewport 同一把尺，屏外怪一律不计数。
+            // 不是回退 2026-10-21 去掉的「全屏检测」：半径仍在，视口只是附加条件（半径外、哪怕屏内也不触发）。
+            if (!GameConfig.IsInCombatViewport(m)) continue;
             if (Vector2.Distance(self, m.transform.position) <= radius) n++;
         }
         return n;

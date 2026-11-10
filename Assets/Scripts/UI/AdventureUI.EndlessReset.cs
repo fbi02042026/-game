@@ -32,6 +32,10 @@ public partial class AdventureUI
     const string EndlessResetSpritePath = "UI/Art/Adventure/重置徽章";
     /// <summary>徽章显示边长（原图 131 见方，缩到 96 与层数牌（125 宽）同一量级）。</summary>
     const float EndlessResetBadgeSize = 96f;
+    /// <summary>【2026-11-10】整体放大 20%：只改 localScale，不动 sizeDelta / 锚点。</summary>
+    const float EndlessResetBadgeScale = 1.2f;
+    /// <summary>【2026-11-10】在「世界地图 spot 上抬 100」的基础上再往下 20。</summary>
+    const float EndlessResetBadgeDownY = 20f;
     /// <summary>徽章中心距「关卡」容器右下角的外扩距离（【2026-11-03 起】仅回退路径用——
     /// 正常路径徽章已改按世界地图按钮位置对位 + 上抬 100，见 <see cref="PositionEndlessResetBadge"/>）。
     /// 算得开：容器半宽 50 + 48 = 98 &gt; 层数牌右缘 75.5 → 徽章（半边长 48）左缘落在 50+48+48−48 = 98，
@@ -105,8 +109,8 @@ public partial class AdventureUI
         StaminaConfirmPopup.ShowChoice(
             title: "无限裂隙",
             body: body,
-            okLabel: checkpoint > 0 ? $"继续第 {startStage} 层" : "从第 1 层开始",
-            cancelLabel: canJump ? $"直达第 {bestStart} 层" : "暂不进入",
+            okLabel: checkpoint > 0 ? $"继续第 {startStage} 层" : "进入",
+            cancelLabel: canJump ? $"直达第 {bestStart} 层" : "退出",
             onOk: () =>
             {
                 // 继续 = 什么都不用改：StartStage() 天然 = 保存点 + 1，构筑由 EndlessRiftCheckpoint 接回。
@@ -194,11 +198,17 @@ public partial class AdventureUI
         // 【2026-11-08 主人拍板】新号无进度 → 灰态不可点，不白烧周额度（data 非空已由 worthShowing 保证）。
         bool hasProgress = data.endlessRiftClearedStage > 0 || data.endlessRiftBestStage > 0;
         bool canReset = hasProgress && EndlessRiftRules.CanResetThisWeek(data);
-        // 图标本身没字，下面挂一行小字说明「这是重置」，顺便承载「本周用过了」的冷却信息
+        // 【2026-11-10】下面不再常驻「重置」两字；只留「本周用过了」的冷却信息。
         if (_endlessResetLbl != null)
             _endlessResetLbl.text = !hasProgress || canReset
-                ? "重置"
+                ? ""
                 : $"{EndlessRiftRules.DaysUntilReset(data)}天后";
+
+        // 【2026-11-10】灰态关掉按压反馈：UiButtonPressFeedback.OnPointerUp 无条件 Restore，
+        // 会把 Awake 时抓的白色写回底图、顶掉下面的压暗（同 DailyLoginUI.SyncPressFeedback 口径）。
+        // 必须在写色之前切：组件 OnDisable/OnEnable 会 Restore 写基准色，写色放后面才能盖住它。
+        var press = _endlessResetBtn.GetComponent<UiButtonPressFeedback>();
+        if (press != null) press.enabled = canReset;
 
         // 不可用时压暗、不隐藏 —— 玩家要看得见「为什么现在点不了」
         if (_endlessResetIcon != null)
@@ -246,7 +256,8 @@ public partial class AdventureUI
         var rt = (RectTransform)_endlessResetBtn.transform;
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = (Vector2)local - anchorRef + new Vector2(0f, 100f);
+        // 历史口径：世界地图 spot 再往上 100；【2026-11-10】在此基础上整体往下 20
+        rt.anchoredPosition = (Vector2)local - anchorRef + new Vector2(0f, 100f - EndlessResetBadgeDownY);
     }
 
     bool BuildEndlessResetButton()
@@ -290,6 +301,7 @@ public partial class AdventureUI
         rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(EndlessResetBadgeSize, EndlessResetBadgeSize);
+        rt.localScale = Vector3.one * EndlessResetBadgeScale;   // 【2026-11-10】整体放大 20%（不动 sizeDelta / 锚点）
         if (fellBackToGuanka)
         {
             // 回退老挂法：锚「关卡」容器右下角 + 往外让一段（此路径 PositionEndlessResetBadge 找不到
@@ -319,13 +331,18 @@ public partial class AdventureUI
         lbl.alignment = TextAnchor.MiddleCenter;
         lbl.color = new Color(0.98f, 0.88f, 0.62f);
         lbl.horizontalOverflow = HorizontalWrapMode.Overflow;
-        lbl.text = "重置";
+        lbl.text = "";   // 常驻文字已去掉；「N天后」冷却信息由 RefreshEndlessResetButton 写
         lbl.raycastTarget = false;   // 点击统一落到徽章底图上
 
         var btn = go.GetComponent<Button>();
         btn.transition = Selectable.Transition.None;   // 观感由 RefreshEndlessResetButton 统一控制
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(OnEndlessResetClicked);
+
+        // 【2026-11-10】这颗钮是运行时才建的，赶不上 UICanvasSetup.AttachUnder（只在场景加载时扫一遍
+        // Canvas 子树）→ 手动补挂按压反馈：按下缩到 0.94 再弹回，和其它 UI 按钮同款「弹一下」。
+        // 必须放在 localScale / color 设好之后：组件 Awake 抓此刻的 scale 与 color 作为还原基准。
+        go.AddComponent<UiButtonPressFeedback>();
 
         _endlessResetBtn = btn;
         _endlessResetLbl = lbl;

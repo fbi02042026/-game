@@ -179,6 +179,15 @@ public static class MercGrowInventory
         Add(BadgeId(jobKey, tier), n);
         SaveSystem.Instance?.Save();
         GlobalToastUI.Show("获得 " + jobKey + "徽记 ×" + n, true);   // 2026-10-23 拍板：掉落获得 force 弹（照 GrantStageDrops 风格）
+        // 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】按实际掷出的职业/档位取图，记一格
+        var stats = BattleManager.Instance != null ? BattleManager.Instance.RunStats : null;
+        if (stats != null)
+        {
+            var rarity = tier == "传奇" ? MercRosterDefs.MercRarity.Legendary
+                       : tier == "稀有" ? MercRosterDefs.MercRarity.Rare
+                       : MercRosterDefs.MercRarity.Common;
+            stats.AddActivityReward(jobKey + "徽记", n, MercGrowSprites.LoadJobBadge(jobKey, rarity));
+        }
         Debug.Log($"[MercGrow] 徽记副本掉落 难度{difficulty} → {jobKey}徽记({tier}) ×{n}");
         return n;
     }
@@ -232,6 +241,20 @@ public static class MercGrowInventory
         if (legendary > 0) data.mercScrollLegendary += legendary;
         SaveSystem.Instance?.Save();
         GlobalToastUI.Show(msg, true);
+        // 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】普通/高级各记一格，图标照
+        // HeroVaultSystem 持有列表同款口径（高级卷轴新图，缺图回落普通卷图）
+        var stats = BattleManager.Instance != null ? BattleManager.Instance.RunStats : null;
+        if (stats != null)
+        {
+            if (common > 0)
+                stats.AddActivityReward("普通招募卷轴", common, ItemDefs.LoadIcon("item_scroll_merc_common"));
+            if (legendary > 0)
+            {
+                var advIcon = Resources.Load<Sprite>("UI/Art/Icons/Common/高级招募卷轴");
+                stats.AddActivityReward("高级招募卷轴", legendary,
+                    advIcon != null ? advIcon : ItemDefs.LoadIcon("item_scroll_merc_common"));
+            }
+        }
         Debug.Log($"[MercGrow] 卷轴副本掉落 难度{difficulty} → 普通×{common} 高级×{legendary}");
     }
 
@@ -252,6 +275,20 @@ public static class MercGrowInventory
         int n = difficulty == 2 ? 4 : difficulty == 1 ? 3 : 2;
         // 礼物副本是「副本」来源：允许掉传奇（includeLegendary=true）；传奇只在副本 / 里程商店获得
         var granted = MercFavorSystem.GrantRandomGifts(n, true);
+        // 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】按实际掷出的礼物逐种记一格（同名合并）
+        var stats = BattleManager.Instance != null ? BattleManager.Instance.RunStats : null;
+        if (stats != null && granted != null)
+        {
+            foreach (var kv in granted)
+            {
+                if (!MercFavorDefs.TryGetGift(kv.Key, out var def))
+                {
+                    Debug.LogError($"[MercGrow] 礼物副本奖励格：礼物表查不到 {kv.Key}，该格不上（不静默）");
+                    continue;
+                }
+                stats.AddActivityReward(def.Name, kv.Value, Resources.Load<Sprite>(def.IconPath));
+            }
+        }
         Debug.Log($"[MercGrow] 礼物副本掉落 难度{difficulty} → 礼物×{(granted != null ? n : 0)}");
     }
 

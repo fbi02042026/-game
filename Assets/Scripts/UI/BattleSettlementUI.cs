@@ -512,6 +512,14 @@ public class BattleSettlementUI : MonoBehaviour
             }
         }
 
+        // 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】活动副本实际产出由发放链写进
+        // RunStats.ActivityRewardCells，这里统一追加；战斗结果界面与结算界面共用同一份数据，不开第二条链。
+        if (s.ActivityRewardCells != null)
+        {
+            for (int i = 0; i < s.ActivityRewardCells.Count; i++)
+                if (s.ActivityRewardCells[i] != null) list.Add(s.ActivityRewardCells[i]);
+        }
+
         return list;
     }
 

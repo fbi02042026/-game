@@ -65,6 +65,13 @@ public class RewardPopupUI : MonoBehaviour
     const float ROW_GAP = 4f;       // 行间距：主人要「上下拉伸」，不留大缝
     const float COL_GAP = 12f;      // 列间距
 
+    /// <summary>
+    /// 【2026-11-10 主人拍板「把弹窗升高30 特效不动」】Panel（底图 + 标题飘带 + 装饰 + 确定 + 奖励格）
+    /// 整体上抬 30 逻辑像素；特效 ItemSparkleYellow / effect 挂在 root 下、与 Panel 平级，不跟着动。
+    /// 只在 Layout 里从预制体 base 重算一次，不改 prefab、不累积。
+    /// </summary>
+    const float PanelRaiseY = 30f;
+
     /// <summary>2026-10-15 主人拍板：获得弹窗内的「物品图标和字」放大 30%。格子/面板几何不动，只放大内容。</summary>
     const float CellContentScale = 1.3f;
 
@@ -759,7 +766,13 @@ public class RewardPopupUI : MonoBehaviour
         // 面板：只改高度（九宫格 m_Type=1，中间被拉伸、边框不变形）；宽度永远是 base 的 720
         var prt = _panel.transform as RectTransform;
         if (prt != null && _base.Panel.Has)
+        {
             prt.sizeDelta = new Vector2(_base.Panel.SizeDelta.x, _base.Panel.SizeDelta.y + grow);
+            // 【2026-11-10 主人拍板「弹窗升高30 特效不动」】只抬 Panel：标题飘带/装饰/确定/奖励格都是它的子节点，
+            // 一起上移；root 下平级的 ItemSparkleYellow / effect 两个特效节点不在子树里 → 原地不动。
+            // 从 base 重算（每次 Show 都重来），不写死坐标、不累积、不碰 prefab。
+            prt.anchoredPosition = _base.Panel.AnchoredPos + new Vector2(0f, PanelRaiseY);
+        }
 
         // Title 上移半程、ConfirmBtn 下移半程：先 Apply 回 base，再叠半程增量 —— 从 base 重算，不累积
         if (_titleRt != null)

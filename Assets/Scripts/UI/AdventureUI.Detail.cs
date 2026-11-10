@@ -125,6 +125,8 @@ public partial class AdventureUI
     /// 主线一关一次（2026-10-29 主人拍板「未通关和已通关」）：当前关没打过=未通关，
     /// 选中的章整章通关（当前关号被钳到最后一个已通关）=已通关；
     /// 金币/徽记/卷轴副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
+    /// 无限裂隙（2026-11-10）：显示 TriesLeft 真值 x/2，不再硬编码 "0" —— 显示 0 却还能进本就是这么来的。
+    /// 裂隙的次数只在打通一层时扣，见 EndlessRiftRules.ConsumeStageClear。
     /// </summary>
     string FormatRemainChances(bool playable, bool main, bool activity)
     {
@@ -139,6 +141,8 @@ public partial class AdventureUI
         }
         if (activity)
             return $"{ActivityDungeonRules.TriesLeft(SaveSystem.Instance?.Data, _selectedActivityKind)}/{ActivityDungeonRules.DAILY_TRIES}";
+        if (IsEndlessMode(_selectedMode))
+            return $"{EndlessRiftRules.TriesLeft(SaveSystem.Instance?.Data)}/{GameConfig.ENDLESS_DAILY_TRIES}";
         return "0";
     }
     void EnsureStaminaCostIcon()

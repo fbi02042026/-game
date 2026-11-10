@@ -3,7 +3,7 @@ using NUnit.Framework;
 /// <summary>
 /// EndlessRiftRules 纯逻辑单测（EditMode，传 SaveData 直测；SaveSystem.Instance 为空时全部 ?. 短路安全）。
 /// 锚定拍板口径：
-///   - 每日 3 次 × 15 体力（10-29 拍板）；本地 0 点刷新（10-28 UTC→本地）
+///   - 每日 2 次机会 × 15 体力（11-10 口径：3 → 2，打通一层扣 1 次）；本地 0 点刷新（10-28 UTC→本地）
 ///   - 保存点间隔 10 层、起始层 = 保存点 + 1（不重打保存层）
 ///   - 每周可主动重置 1 次（11-02 拍板，周一 0 点刷新），重置不动生涯最高
 ///   - 重打旧层不发首通：NoteBestStage/MarkCleared 双轨（本轮进度 vs 生涯最高）
@@ -13,9 +13,9 @@ public class EndlessRiftRulesTests
     [Test]
     public void Constants_Pinned()
     {
-        Assert.AreEqual(3, GameConfig.ENDLESS_DAILY_TRIES, "每日 3 次（10-29 拍板）");
+        Assert.AreEqual(2, GameConfig.ENDLESS_DAILY_TRIES, "每日 2 次机会（11-10 口径：每打通一层消耗 1 次）");
         Assert.AreEqual(10, GameConfig.ENDLESS_SAVE_INTERVAL, "保存点每 10 层");
-        Assert.AreEqual(15, StaminaSystem.ENDLESS_RIFT_COST, "进本 15 体力与每日 3 次配套");
+        Assert.AreEqual(15, StaminaSystem.ENDLESS_RIFT_COST, "进本 15 体力与每日 2 次配套");
     }
 
     [Test]
@@ -44,13 +44,13 @@ public class EndlessRiftRulesTests
     [Test]
     public void TriesLeft_Null_ReturnsFull()
     {
-        Assert.AreEqual(3, EndlessRiftRules.TriesLeft(null), "null 存档不炸，按满次数报");
+        Assert.AreEqual(2, EndlessRiftRules.TriesLeft(null), "null 存档不炸，按满次数报");
     }
 
     [Test]
-    public void TriesLeft_FreshSave_ThreePerDay()
+    public void TriesLeft_FreshSave_TwoPerDay()
     {
-        Assert.AreEqual(3, EndlessRiftRules.TriesLeft(new SaveData()));
+        Assert.AreEqual(2, EndlessRiftRules.TriesLeft(new SaveData()));
     }
 
     [Test]
@@ -59,7 +59,7 @@ public class EndlessRiftRulesTests
         var data = new SaveData();
         data.endlessRiftDayKey = DayKeyUtil.TodayKey();
         data.endlessRiftTriesToday = 1;
-        Assert.AreEqual(2, EndlessRiftRules.TriesLeft(data));
+        Assert.AreEqual(1, EndlessRiftRules.TriesLeft(data));
         data.endlessRiftTriesToday = 5;   // 异常超领
         Assert.AreEqual(0, EndlessRiftRules.TriesLeft(data), "超领钳 0 不出负数");
     }

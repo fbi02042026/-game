@@ -5,14 +5,14 @@
 # 本表 .bytes = 本表去 UTF-8 BOM 的逐字副本（CRLF 保留）
 key,value,note
 pixels_per_meter,100,1m=100 逻辑像素（里程换算）
-world_scroll_speed,300,世界卷速 px/s（起步）
+world_scroll_speed,200,世界卷速 px/s（起步）
 monster_move_speed,120,怪左行速度 px/s
-relative_speed,420,世界与怪相对速度 px/s（300+120）
+relative_speed,320,世界与怪相对速度 px/s（200+120）
 sword_attack_range,120,剑盾攻距 px
 attack_cd,0.62,攻击 CD 秒
 wave_group_gap,130,组内间距 D px
 wave_5_length,520,5 只波长 px
-jump_height,180,跳跃高度 px
+jump_height,120,跳跃高度 px
 jump_air_time,0.8,滞空 秒
 jump_land_stun,0.2,落地硬直 秒
 input_buffer,0.15,输入缓冲 秒
@@ -20,7 +20,7 @@ platform_len_min,400,平台段最短 px（400~900）
 platform_len_max,900,平台段最长 px（400~900）
 gap_min,120,断沟最窄 px（120~200）
 gap_max,200,断沟最宽 px（120~200）
-high_platform_height,180,高台 +高度 px
+high_platform_height,100,高台 +高度 px
 coin_density,100,金币基础密度 枚/100m
 bg_scroll_multiplier,0.30,背景滚动倍率
 fg_scroll_multiplier,1.00,前景滚动倍率
@@ -30,7 +30,7 @@ exp_per_level,100,升级每级所需 runExp
 atk_per_level,40,每级攻击 ATK=40×Lv
 enemy_hp_base,40,敌人 HP 基数
 enemy_hp_per_100m,40,敌人 HP 每 100m 增量
-daily_tries,3,每日次数
+daily_tries,9999,每日次数（测试期不限，出包前改回 3）
 portal_interval_min,200,传送门间隔最短 m（200~300）
 portal_interval_max,300,传送门间隔最长 m（200~300）
 chest_interval,100,宝箱间隔 m

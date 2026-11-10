@@ -851,15 +851,19 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 bool reachable = ch <= curChapter;   // 未推到的章节行整体锁定（先做完前面的）
                 string how = MainQuestDefs.AutoDesc(v.def);
                 string name = string.IsNullOrEmpty(v.def.title) ? how : v.def.title;
-                string status = v.done ? "已完成"
+                bool claimed = v.done && QuestRewardClaim.IsClaimedMain(v.def.id);
+                bool claimable = v.done && !claimed;
+                string status = claimed ? "已领取"
+                    : v.done ? "已完成"
                     : !reachable ? "未开启"
                     : v.need > 1 ? v.progress + "/" + v.need
                     : "进行中";
-                AddRow(v.done ? doneRows : rows, name, status,
+                AddRow(claimed ? doneRows : rows, name, status,
                     "第" + ch + "章 · " + how,
                     !reachable,
                     v.done ? "已完成：" + how : how,
-                    questId: v.def.id, questMain: true);
+                    questId: v.def.id, questMain: true,
+                    claimed: claimed, claimable: claimable);
             }
         }
         rows.AddRange(doneRows);
@@ -883,6 +887,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var currentSide = QuestBarData.CurrentSideIsland();
         int total = SideIslandDefs.Count;
         int clearedCount = 0;
+        var doneRows = new List<LogRow>();
         for (int id = 1; id <= total; id++)
         {
             var isl = SideIslandDefs.Get(id);
@@ -895,13 +900,20 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             if (cleared) clearedCount++;
             bool current = currentSide != null && currentSide.Value.islandId == id;
             // 2026-11-01 主人报「待派定什么玩意」：状态词改直白——没轮到的岛就是「未开启」
-            string status = cleared ? "已通关" : current ? "可挑战" : "未开启";
-            AddRow(rows, isl.name, status,
+            bool claimed = cleared && QuestRewardClaim.IsClaimedSide(id);
+            bool claimable = cleared && !claimed;
+            string status = claimed ? "已领取"
+                : cleared ? "已通关"
+                : current ? "可挑战"
+                : "未开启";
+            AddRow(claimed ? doneRows : rows, isl.name, status,
                 "奖励 金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward,
                 !cleared && !current,
                 cleared ? "已通关「" + isl.name + "」" : "通关「" + isl.name + "」",
-                questId: id.ToString(), questMain: false);
+                questId: id.ToString(), questMain: false,
+                claimed: claimed, claimable: claimable);
         }
+        rows.AddRange(doneRows);
 
         title = currentSide != null ? currentSide.Value.name : "支线岛";
         // 2026-11-01 主人拍板：副标题一行短话，别写「暂无待打支线」这类绕口文案
@@ -1197,6 +1209,46 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     RefreshBody();
             }
         });
+
+        var claimBtnTr = go.transform.Find("Progress/ClaimButton");
+        if (claimBtnTr != null)
+        {
+            var claimBtn = claimBtnTr.GetComponent<Button>();
+            if (claimBtn != null)
+            {
+                claimBtn.onClick.RemoveAllListeners();
+                if (copy.Claimable && !string.IsNullOrEmpty(copy.QuestId))
+                {
+                    claimBtnTr.gameObject.SetActive(true);
+                    claimBtn.onClick.AddListener(() =>
+                    {
+                        bool ok;
+                        if (copy.QuestMain)
+                        {
+                            ok = QuestRewardClaim.ClaimMain(copy.QuestId);
+                        }
+                        else
+                        {
+                            if (!int.TryParse(copy.QuestId, out int islandId))
+                            {
+                                Debug.LogError("[AdventureLogUI] 支线任务 id 非数字，无法领奖：" + copy.QuestId);
+                                return;
+                            }
+                            ok = QuestRewardClaim.ClaimSide(islandId);
+                        }
+                        if (ok)
+                        {
+                            RefreshBody();
+                            RedDot.RefreshCommon();
+                        }
+                    });
+                }
+                else
+                {
+                    claimBtnTr.gameObject.SetActive(false);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1267,7 +1319,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 hint = "任意一次加点都计入";
                 break;
             default:
-                hint = "完成后自动发放奖励";
+                hint = "完成后在冒险日志领取奖励";
                 break;
         }
         return string.IsNullOrEmpty(objective) ? hint : objective + "\n\n" + hint;
@@ -1298,7 +1350,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string lore;
             if (done)
             {
-                lore = "已完成（奖励已发放）";
+                lore = QuestRewardClaim.IsClaimedMain(questId)
+                    ? "已领取奖励"
+                    : "已完成，可在列表右侧领取奖励";
             }
             else
             {
@@ -1329,7 +1383,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string lore;
             if (cleared)
             {
-                lore = "已通关（奖励已发放）";
+                lore = QuestRewardClaim.IsClaimedSide(id)
+                    ? "已领取奖励"
+                    : "已通关，可在列表右侧领取奖励";
             }
             else
             {
@@ -1378,6 +1434,67 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     /// </summary>
     static void ApplyRowState(Transform row, LogRow data)
     {
+        // 主线/支线任务行：可领取时右侧「可领取」按钮铺满 Progress 节点，状态字让位；
+        // 成就行红点逻辑保持原样，仅处理成就行。
+        bool questRow = !string.IsNullOrEmpty(data.QuestId);
+        bool showClaim = data.Claimable && questRow;
+        var prog = row.Find("Progress");
+        var progText = prog != null ? prog.GetComponent<Text>() : null;
+        if (showClaim && prog != null)
+        {
+            var claimBtn = prog.Find("ClaimButton");
+            if (claimBtn == null)
+            {
+                var go = new GameObject("ClaimButton", typeof(RectTransform), typeof(Image), typeof(Button));
+                go.transform.SetParent(prog, false);
+                var brt = (RectTransform)go.transform;
+                brt.anchorMin = Vector2.zero;
+                brt.anchorMax = Vector2.one;
+                brt.offsetMin = Vector2.zero;
+                brt.offsetMax = Vector2.zero;
+                var bimg = go.GetComponent<Image>();
+                bimg.color = new Color(1f, 0.84f, 0.3f, 0.5f);
+                bimg.raycastTarget = true;
+                var bbtn = go.GetComponent<Button>();
+                bbtn.transition = Selectable.Transition.None;
+
+                var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
+                label.transform.SetParent(go.transform, false);
+                var lrt = (RectTransform)label.transform;
+                lrt.anchorMin = Vector2.zero;
+                lrt.anchorMax = Vector2.one;
+                lrt.offsetMin = Vector2.zero;
+                lrt.offsetMax = Vector2.zero;
+                var lt = label.GetComponent<Text>();
+                lt.font = GameFonts.GetChinese();
+                lt.text = "可领取";
+                lt.fontSize = 20;
+                lt.alignment = TextAnchor.MiddleCenter;
+                lt.raycastTarget = false;
+                claimBtn = go.transform;
+            }
+            claimBtn.gameObject.SetActive(true);
+            if (progText != null)
+            {
+                progText.enabled = false;
+                progText.raycastTarget = false;
+            }
+        }
+        else
+        {
+            var stale = prog != null ? prog.Find("ClaimButton") : null;
+            if (stale != null) stale.gameObject.SetActive(false);
+            if (progText != null)
+            {
+                progText.enabled = true;
+                progText.raycastTarget = true;
+            }
+        }
+
+        // 任务行的可领状态已由按钮消费，置 false 后下面原样的红点分支只作用于成就行，
+        // 也不会给主线/支线行挂红点。
+        if (questRow) data.Claimable = false;
+
         var red = row.Find("ClaimRedDot");
         if (red == null && data.Claimable)
         {

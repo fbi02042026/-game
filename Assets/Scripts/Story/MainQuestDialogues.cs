@@ -15,7 +15,22 @@ public static class MainQuestDialogues
     const string Landlady = "\u8001\u677f\u5a18";
 
     /// <summary>NPC 对话。npcId 见 MainQuestDefs.NpcName；找不到就给一句兜底旁白。</summary>
+    /// <remarks>任务点出来的对话统一在酒馆页播，首拍固定挂酒馆底图；台词一字不动。</remarks>
     public static List<StoryBeat> NpcTalk(string npcId, int chapter)
+    {
+        return WithTavernBg(NpcTalkCore(npcId, chapter));
+    }
+
+    /// <summary>只给首拍挂底图，不播地点揭示黑场；底图真源 = StoryBackgrounds.Tavern（项目现成酒馆内景）。</summary>
+    static List<StoryBeat> WithTavernBg(List<StoryBeat> beats)
+    {
+        if (beats == null || beats.Count == 0) return beats;
+        beats[0].backgroundId = StoryBackgrounds.Tavern;
+        beats[0].skipLocationReveal = true;
+        return beats;
+    }
+
+    static List<StoryBeat> NpcTalkCore(string npcId, int chapter)
     {
         if (npcId == MainQuestDefs.NpcGuildmaster)
         {

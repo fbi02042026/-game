@@ -299,6 +299,24 @@ public partial class EndlessRunGame : MonoBehaviour
         if (_canvas != null) UICanvasSetup.RefreshPopup(_canvas, SortOrder);
         if (_built) ResetRun();
         _playing = true;
+        CompensateStageScale();
+    }
+
+    /// <summary>
+    /// 玩法世界挂在 Canvas 根下，会继承项目统一的 0.01 缩放（720 逻辑 px = 7.2 unit）；
+    /// 但相机 orthographicSize=6.4 不吃 transform 缩放，1 unit = 100 逻辑 px 的世界坐标
+    /// 就全挤到屏幕中心 1%，画面一片空白（2026-11-10 实测 worldLossyScale=0.01）。
+    /// 这里把世界层的缩放抵消回 1，并把相机 z=-10 按同倍率还原，保证近平面裁不到 sprite。
+    /// 只在 Open() 调用：此时 Canvas 已 ApplyPopup，lossyScale 是最终值；幂等，重复调用结果不变。
+    /// </summary>
+    void CompensateStageScale()
+    {
+        float s = transform.lossyScale.x;
+        if (s <= 0.0001f || Mathf.Approximately(s, 1f)) return;
+        if (_worldRoot != null)
+            _worldRoot.transform.localScale = Vector3.one * (1f / s);
+        if (_playCam != null)
+            _playCam.transform.localPosition = new Vector3(0f, 0f, -10f / s);
     }
 
     public void Close()

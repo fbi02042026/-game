@@ -156,6 +156,9 @@ public partial class EndlessRunGame : MonoBehaviour
         _settled = true;
         _runStarted = false;
         _playing = false;   // 冻结 T2/T3/T4 的 tick
+        // 结算必须连玩法相机一起关：该相机 depth=90、clearFlags=SolidColor，会清掉主相机上
+        // 的所有 ScreenSpaceCamera UI（主界面 / 本玩法的 HUD / 结算弹窗），不关就是一片空白。
+        Close();
         long gold = RunGold;
         int meters = Mathf.FloorToInt(Meters);
         RunGold = 0;

@@ -65,6 +65,33 @@ public class BattleRunStats
     /// <summary>本局实际获得的装备（弹出「恭喜获得」时记一笔）。</summary>
     public List<EquipGainEntry> EquipGains = new List<EquipGainEntry>();
 
+    /// <summary>
+    /// 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】活动副本本局实际产出的奖励格，
+    /// 由各副本发放链写入，结算界面 BuildRewardCells 统一追加（数据出口唯一）。
+    /// </summary>
+    public List<SettlementRewardCell> ActivityRewardCells = new List<SettlementRewardCell>();
+
+    /// <summary>活动副本奖励格唯一写入口：同名合并数量，同类只占一格。</summary>
+    public void AddActivityReward(string label, int count, Sprite icon)
+    {
+        if (string.IsNullOrEmpty(label) || count <= 0) return;
+        for (int i = 0; i < ActivityRewardCells.Count; i++)
+        {
+            var c = ActivityRewardCells[i];
+            if (c != null && c.label == label)
+            {
+                c.count += count;
+                return;
+            }
+        }
+        ActivityRewardCells.Add(new SettlementRewardCell
+        {
+            label = label,
+            count = count,
+            icon = icon
+        });
+    }
+
     public void AddEquipGain(EquipInstance eq)
     {
         if (eq == null) return;
@@ -108,6 +135,7 @@ public class BattleRunStats
         MvpScore = 0f;
         AllyContributions.Clear();
         EquipGains.Clear();
+        ActivityRewardCells.Clear();
     }
 
     public AllyContribution EnsureAlly(string key, string displayName)

@@ -212,7 +212,7 @@ public class BattleStateSaver : MonoBehaviour
 
     /// <summary>
     /// 启动检查：有残留档 = 上次被强杀 → 按「撤离失败」结算（经济/清档规则同在线撤离失败）。
-    /// 2026-09-22 起**不弹结算面板**，只静默结算 + 一条轻提示。
+    /// 2026-09-22 起**不弹结算面板**；2026-11-10 起连轻提示也去掉，纯静默结算。
     /// 返回 true 表示弹了面板（调用方应跳过本轮其它弹窗）；本流程恒返回 false。
     /// </summary>
     public static bool SettleInterruptedRun()
@@ -276,8 +276,8 @@ public class BattleStateSaver : MonoBehaviour
 
         // 2026-09-22 主人要求：中断退出不再弹结算面板，隔很久再上线看到一屏结算很怪。
         // 结算面板只在「在线撤离 / 在线失败」时弹（见 BattleManager）。
-        // 这里的经济与清档规则**一字不改**，只把面板换成一条轻提示。
-        GlobalToastUI.Show("上次战斗被中断，已按撤离失败结算，本局金币已保留");
+        // 2026-11-10 起连轻提示也去掉：中断结算纯静默，不弹任何说明。
+        // 这里的经济与清档规则**一字不改**。
         return false;
     }
 

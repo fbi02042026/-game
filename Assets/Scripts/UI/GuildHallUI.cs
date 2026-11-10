@@ -699,6 +699,8 @@ public class GuildHallUI : MonoBehaviour
         DiamondAdEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 跑酷入口（T7，独立新入口，不动 MiniGameEntryUI.EntryEnabled）：放在领钻入口之后成为新的列尾。
         RunEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 小游戏合集入口：运行时克隆每日登录按钮落到右列列尾，点击打开合集弹窗。
+        MiniGameHubEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店入口：2026-10-31 主人拍板「商店功能删掉」→ ShopUI / ShopSystem 已整体删除，
