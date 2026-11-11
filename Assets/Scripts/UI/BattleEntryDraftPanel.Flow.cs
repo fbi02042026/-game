@@ -465,7 +465,14 @@ public partial class BattleEntryDraftPanel
                 _mapRt.anchoredPosition = new Vector2(_mapRt.anchoredPosition.x, targetY);
             }
         }
-        _mapRt.localScale = Vector3.one * scale;
+        // 【2026-11-11 主人拍板「进场场景在抽奖时又变动位置」】恒终态下每帧写回必须幂等：
+        // 位置上面已有差值闸门，scale 原来却无条件写。面板常驻后 LateUpdate 每帧
+        // ApplyMapState(1f) 会把 map 一直标脏 → 每帧触发 Canvas 重建，揭幕后头一帧
+        // 就是主人看到的「背景卡一下」。只在真值变化时落笔：350/1.4 终态、
+        // WriteMapTransform 单一出口、11-09「map 恒终态」口径一个字不动。
+        var want = Vector3.one * scale;
+        if ((_mapRt.localScale - want).sqrMagnitude > 1e-8f)
+            _mapRt.localScale = want;
     }
 
     /// <summary>
@@ -526,7 +533,6 @@ public partial class BattleEntryDraftPanel
         {
             _animK = to;
             ApplyMapState(to);
-            ApplyWorldLift(to);
             return;
         }
         _animCo = StartCoroutine(CoGlideMap(to));
@@ -539,7 +545,6 @@ public partial class BattleEntryDraftPanel
         {
             _animK = to;
             ApplyMapState(to);
-            ApplyWorldLift(to);
             _animCo = null;
             yield break;
         }
@@ -550,12 +555,10 @@ public partial class BattleEntryDraftPanel
             float p = Mathf.Clamp01(t / AnimSec);
             _animK = Mathf.Lerp(from, to, EaseOut(p));
             ApplyMapState(_animK);
-            ApplyWorldLift(_animK);
             yield return null;
         }
         _animK = to;
         ApplyMapState(to);
-        ApplyWorldLift(to);
         _animCo = null;
     }
 

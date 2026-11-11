@@ -187,6 +187,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 这里不再赋值（原先只在这一处设，换关只走 LoadStage 时会残留上一关的值）。
         runGoldGainMul = 1f;
         runMonsterAtkSpeedMul = 1f;
+        runAllyDamageTakenMul = 1f;
         ApplyChapter1RunModifiersFromSave();
         if (Rules.Active)
             Debug.Log("[BattleManager] 新手引导战斗：短关+强制撤离（规则包 TutorialRules）");

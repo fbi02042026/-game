@@ -6,7 +6,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 【2026-11-03 主人拍板】表定词条怪（monster_stats.affix 列）首次登场提示：
 /// - 该怪在正式主线关第一次出现时，屏幕左缘出现它的头像 + 大号黄色感叹号；
-/// - 点击后弹出与冒险日志图鉴<b>同一个</b>怪物信息弹窗（共用 MonsterTipPanel，主人拍板「用的是一个就行」），
+/// - 点击后弹出与冒险日志图鉴<b>同一个</b>怪物信息弹窗（共用 MonsterTipPanel，主人拍板「用的是一个就行」；
+///   2026-11-11 主人拍板「怪物信息用通用窗体」→ 弹窗皮已换 Common/通用窗体1 九宫格），
 ///   正文为该怪的词条介绍；点弹窗任意处关闭 = 已看过 → 写存档标记，之后永久消失；
 /// - 不强制观看：不点也照常打，没看过的怪下次进战斗还会再提示；
 /// - 同一场战斗（场景）同一种怪只提示一次，场景重载后自动重置。
@@ -30,6 +31,17 @@ public static class AffixMonsterNoticeUI
     const int SortOrder = 420;
     const float IconSize = 88f;
     const float IconGap = 14f;
+    /// <summary>
+    /// 【2026-11-11 主人报「手机上图标偏下、和下面的面板重叠」】图标栈顶距屏幕顶的距离（逻辑像素）。
+    /// 根因：原写法锚画布中心 (0,0.5)+y120 —— 逻辑宽恒 720、瘦屏逻辑高 = 720÷屏比（≤1600，铁律 13），
+    /// 画布越高中心越靠下，图标栈跟着往下漂（1600 高屏比 1280 设计屏低 160px）；
+    /// 再加上 4 种词条怪叠满 4 格（4×88+3×14 = 394），底端直接压进底部战斗背包面板（锚底、高 600）顶边。
+    /// 改为锚顶 + 固定距顶（与 2026-10-22 BossBar 改贴顶锚同一口径：贴顶锚不随画布中心漂）。
+    /// 取值依据：BossBar 锚顶 y=-173、美术半高约 60 → 顶栏区底约 233（再叠加刘海 inset，约 293），
+    /// 取 340 既躲开血条又不贴刘海；手机 1600 逻辑高上 4 格栈底 = 734，仍远在背包面板顶 1000 之上。
+    /// 要整体上下微调只动这一个数（每 −1 上移 1，每 +1 下移 1）。
+    /// </summary>
+    const float NoticeTopOffset = 340f;
     static readonly Color SlotBg = new Color(0.10f, 0.08f, 0.06f, 0.95f);
     static readonly Color YellowBang = new Color(1f, 0.84f, 0.10f);
 
@@ -74,15 +86,15 @@ public static class AffixMonsterNoticeUI
         // 统一出口：Camera 模式 + 排序 + 根铺满（AGENTS.md 4.6）
         UICanvasSetup.ApplyPopup(_canvas, SortOrder);
 
-        // 左缘竖排图标栈：锚左中（略高于中心，避开血条/摇杆区），手动向下排布
+        // 左缘竖排图标栈：锚【左上】+ 固定距顶（不随画布中心漂，见 NoticeTopOffset 注释），手动向下排布
         var stackGo = new GameObject("NoticeStack", typeof(RectTransform));
         stackGo.transform.SetParent(_canvas.transform, false);
         _stack = (RectTransform)stackGo.transform;
-        _stack.anchorMin = new Vector2(0f, 0.5f);
-        _stack.anchorMax = new Vector2(0f, 0.5f);
+        _stack.anchorMin = new Vector2(0f, 1f);
+        _stack.anchorMax = new Vector2(0f, 1f);
         _stack.pivot = new Vector2(0f, 1f);
         _stack.sizeDelta = new Vector2(IconSize, 0f);
-        _stack.anchoredPosition = new Vector2(10f, 120f);
+        _stack.anchoredPosition = new Vector2(10f, -NoticeTopOffset);
     }
 
     static void BuildSlot(MonsterConfig cfg)
@@ -144,21 +156,18 @@ public static class AffixMonsterNoticeUI
     // ---------------------------------------------------------------- popup
 
     /// <summary>
-    /// 弹出词条介绍。弹窗即图鉴同一个 MonsterTipPanel（挂本 Canvas 下）；
+    /// 弹出怪物信息。弹窗即图鉴同一个 MonsterTipPanel（挂本 Canvas 下）；
+    /// 内容走 MonsterTipContent 单一出口（战力速览 / 词条 / 弱点 三段，与冒险日志 Tip 完全一致），
     /// 点弹窗关闭 = 已看过 → 存档标记永久消失 + 移除左缘图标。
     /// </summary>
     static void ShowPopup(MonsterConfig cfg)
     {
         if (_canvas == null || cfg == null) return;
-
-        string affixText = MonsterAffixDefs.Describe(MonsterAffixDefs.ParseAffixList(cfg.tableAffix));
-        string title = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
-        string body = string.IsNullOrEmpty(affixText)
-            ? "这个怪带着特殊词条。"
-            : affixText;
-        body += "\n\n这种怪的词条是固定的。";
-        // 排版：词条正文（≤2 行）+ 空行 + 注释行 → 280×210 刚好容纳，与图鉴 Tip 同宽同风格
-        MonsterTipPanel.Show(_canvas.transform, title, body, new Vector2(280f, 210f), () => OnViewed(cfg));
+        int chapter = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : 1;
+        MonsterTipPanel.Show(_canvas.transform,
+            MonsterTipContent.Title(cfg),
+            MonsterTipContent.BuildBody(cfg, chapter),
+            () => OnViewed(cfg));
     }
 
     static void OnViewed(MonsterConfig cfg)

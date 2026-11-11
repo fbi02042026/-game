@@ -302,7 +302,11 @@ public partial class BattleUI : MonoBehaviour
     void RefreshLiveBars()
     {
         var hero = Hero.Instance;
-        if (playerSlot != null && hero != null && !hero.isDead)
+        // 【2026-11-11 修「还有 27 滴血就判输」】致命一击那帧先扣血再判死（UnitBase.Damage.cs:84/159），
+        // isDead 此时已为 true，旧门 !hero.isDead 会整段跳过刷新 → 名牌永久停在死亡前的数字。
+        // 放开一次：死亡后若上次显示仍是正数，补刷一次（UpdateSlot 已把负值钳成 0）；
+        // _lastPlayerHp 随即记为当前负值，之后本分支永久关闭，不会反复刷或取消压暗。
+        if (playerSlot != null && hero != null && (!hero.isDead || _lastPlayerHp > 0f))
         {
             float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
             float energy = BattleManager.Instance != null ? BattleManager.Instance.PlayerSkillEnergyPeak : 0f;

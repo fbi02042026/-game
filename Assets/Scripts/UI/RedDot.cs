@@ -183,10 +183,11 @@ public static class RedDot
         Set(Activity, achReward || worldReward);
         Set(Achievement, achReward);
         Set(LogWorld, worldReward);
-        // 2026-09-29：天赋入口红点 —— 还有「新开通、整批没碰过」的右列天赋就亮。
-        // 挂在这里是为了**登录 / 回城就亮**，不用等玩家先打开一次天赋页。
+        // 天赋入口红点：登录 / 回城就刷，不用等玩家打开天赋页。
+        // 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】只对门槛等级高于「已看等级」的新批次亮，
+        // 判定唯一口径 = TalentDefs.EntryDotShouldLight（打开天赋页即记已看，见 TalentUI.Show）。
         var data = SaveSystem.Instance?.Data;
-        Set(Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
+        Set(Talent, data != null && TalentDefs.EntryDotShouldLight(data.talents, data.talentNewSeenLevel));
         Set(DailyLogin, DailyLoginSystem.HasClaimable());
         // 2026-11-08：酒馆入口红点 = 有佣兵能升星（底部导航「酒馆」+ 酒馆页「佣兵队列」入口共用 Tavern 键）。
         // 判定/刷新收口在 MercStarRedDot，别在这里抄第二份 CanStarUp 遍历。

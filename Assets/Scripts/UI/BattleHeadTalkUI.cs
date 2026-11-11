@@ -168,6 +168,9 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// <summary>可被外部直接 yield（TutorialDirector 上跑，不二次 StartCoroutine）。</summary>
     public IEnumerator CoPlayLine(UnitBase speaker, string content, float hold = -1f)
     {
+        // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001，
+        // 装备替换确认弹窗(925)开着时恒被气泡盖住 —— 弹窗在屏期间新台词一律不出（单一出口闸）。
+        if (EquipReplaceConfirmUI.IsOpen) yield break;
         _skipTyping = false;
         _advance = false;
         _typingDone = false;

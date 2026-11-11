@@ -49,12 +49,14 @@ public partial class BattleManager
         string c = StoryProgress.GetChoice(1);
         if (c == "A") runMonsterAtkSpeedMul = 1.05f;
         else if (c == "B") runGoldGainMul = 1.1f;
+        else if (c == "C") runAllyDamageTakenMul = 0.95f;
     }
 
     public void ApplyChapter1ChoiceModifiers(string choiceId)
     {
         if (choiceId == "A") runMonsterAtkSpeedMul = 1.05f;
         else if (choiceId == "B") runGoldGainMul = 1.1f;
+        else if (choiceId == "C") runAllyDamageTakenMul = 0.95f;
     }
 
     public int GetAliveMonsterCount() => CountAliveMonsters();

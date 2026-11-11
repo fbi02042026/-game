@@ -60,6 +60,13 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     Button _keepBtn;
     Button _dimBtn;
 
+    /// <summary>
+    /// 弹窗当前是否在屏。【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】
+    /// 佣兵头顶气泡（BattleHeadTalkUI）置顶在 Effects 层 13001，恒在本弹窗(925)之上；
+    /// 弹窗开着时气泡要让位（HideNow + 不再接新台词），判据就这一个出口。
+    /// </summary>
+    public static bool IsOpen => _inst != null && _inst._root != null && _inst._root.activeSelf;
+
     System.Action<bool> _onDone;
     bool _answered;
     bool _answer;
@@ -81,6 +88,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         ui._answered = false;
         ui._answer = false;
+        // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001 盖着本弹窗，
+        // 弹窗打开瞬间先收掉正在播的头顶气泡；在屏期间新台词由 BattleHeadTalkUI.CoPlayLine 入口闸拦掉。
+        if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
+            BattleHeadTalkUI.Instance.HideNow();
         ui.Fill(newEq, oldEq);
 
         // 【2026-10-20 主人拍板】引导局抽到装备：替换确认弹窗也带引导 —— 圈住「换上新的」按钮，

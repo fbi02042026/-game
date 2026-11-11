@@ -487,7 +487,18 @@ public partial class BattleManager
         else ChapterStoryBeats.WarmupChapterAssets(CurrentChapter);
         // 【2026-10-19 防卡死】剧情开播前把抽奖面板强制收起（幂等）：Prewarm 失败时面板会停在
         // 预制体展开态（4 个黑金按钮），剧情一播就被盖住、点击全被吃 → 全场定格（第 2 章事故根因）。
-        BattleEntryDraftPanel.Hide();
+        // 【2026-11-11 主人拍板「主线关卡和支线要一开始就出现抽奖按钮」】常显实时抽面板的
+        // 开出时点已挪到 BattleStartSequenceCoroutine（Loading 收起后、队伍走进场前，见该文件），
+        // 本协程不再二次 BeginLive —— 二次 Begin 会重置抽奖 CD / 引导 /「开始战斗」回调。
+        // 剧情窗 order=13000（UiSort.StoryDialogue）高于面板嵌套 Canvas（100），播放时序不变；
+        // 裂隙 / 资源副本仍走旧面板（先收，剧情播完再 Begin 展开）；引导局 / 羁绊本无抽奖，照旧收。
+        bool liveStartEarly = !IsTutorialRun && !IsBondDungeon && !IsEndlessRift && !IsResourceDungeon;
+        if (liveStartEarly)
+        {
+            // 幂等压制（与 Waves.cs 提前置位同源）：解除唯一由 DoStartFight（点开始战斗）触发。
+            _preBattleStoryPlaying = true;
+        }
+        else BattleEntryDraftPanel.Hide();
         // 剧情播放定义在别处，任何异常都不能把战斗卡在“无首波”状态：捕住异常并直接放行。
         // 【2026-11-11 主人拍板「一进战斗就出现的半透剧情」】会播战前剧情的关，进战斗先闪半透氛围横幅
         // （本章铺垫/吐槽一句，不暂停、免点击、约 3.6s 自动淡出，不挡操作），播完再弹正式战前剧情窗——
@@ -562,8 +573,10 @@ public partial class BattleManager
                 _preBattleStoryPlaying = false;
                 ScheduleFirstWaveSpawn();
             }
-            else
+            else if (!liveStartEarly)
             {
+                // 【2026-11-11】剧情开播前已提前 BeginLive 的模式不再重复开（二次 Begin 会重置
+                // 抽奖 CD / 引导 / 「开始战斗」回调状态）；只有旧面板模式才在这里开。
                 EnterLiveStartPhase();
             }
             yield break;
@@ -613,7 +626,8 @@ public partial class BattleManager
             ScheduleFirstWaveSpawn();
             yield break;
         }
-        EnterLiveStartPhase();
+        if (!liveStartEarly)
+            EnterLiveStartPhase();   // 【2026-11-11】提前开过的不再重复 Begin（同上）
         yield break;
     }
 

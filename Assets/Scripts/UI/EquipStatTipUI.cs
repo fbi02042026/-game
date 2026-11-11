@@ -16,16 +16,19 @@ public class EquipStatTipUI : MonoBehaviour
 {
     public static EquipStatTipUI Instance { get; private set; }
 
-    /// <summary>【2026-10-12 主人拍板】浮框宽度 300 → 150（原话「缩短一半　两边空余太多」）。
-    /// 只改宽度：字号 20（2026-10-10 定的）与行高 28 都不动，属性多了会按 Wrap 折行。</summary>
-    const float PanelWidth = 150f;
-    const float HeadHeight = 44f;
-    const float LineHeight = 28f;
+    /// <summary>
+    /// 【2026-11-11 主人拍板「战斗装备的信息太小了」】整框等比放大一档（覆盖 10-12 的「宽 150」与 10-10 的字号 20/18）：
+    /// 宽 150→220、正文 20→26、标题 18→24、行高 28→36、头高 44→56。
+    /// 宽度必须跟着字号一起加，否则「火枪伤害 -21.6%」这类长词条会被迫折行、更显小。要再调只动下面这 5 个常量。
+    /// </summary>
+    const float PanelWidth = 220f;
+    const float HeadHeight = 56f;
+    const float LineHeight = 36f;
     const float PadBottom = 12f;
-    /// <summary>属性行字号（2026-10-10 主人拍板：13 太小看费劲，提到 20；要再大改这一个常量即可）。</summary>
-    const int BodyFontSize = 20;
-    /// <summary>装备名标题字号（2026-10-10 主人拍板：16 太小看费劲，提到 18；要再大改这一个常量即可）。</summary>
-    const int TitleFontSize = 18;
+    /// <summary>属性行字号（2026-11-11：20 → 26）。</summary>
+    const int BodyFontSize = 26;
+    /// <summary>装备名标题字号（2026-11-11：18 → 24）。</summary>
+    const int TitleFontSize = 24;
     /// <summary>浮框底边离图标顶边的间距（像素）。</summary>
     const float GapAbove = 10f;
     const float EdgePad = 6f;
@@ -90,8 +93,8 @@ public class EquipStatTipUI : MonoBehaviour
         tRt.anchorMin = new Vector2(0f, 1f);
         tRt.anchorMax = new Vector2(1f, 1f);
         tRt.pivot = new Vector2(0.5f, 1f);
-        tRt.anchoredPosition = new Vector2(0f, -8f);
-        tRt.sizeDelta = new Vector2(-24f, 26f);
+        tRt.anchoredPosition = new Vector2(0f, -10f);
+        tRt.sizeDelta = new Vector2(-24f, 32f);
 
         // 属性行（多行）
         _body = MakeText(_panel.transform, "Body", BodyFontSize, TextAnchor.UpperLeft, new Color(0.86f, 0.86f, 0.9f, 1f));

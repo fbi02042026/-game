@@ -32,6 +32,19 @@ public static class SkillOrderGuide
 
     const float ShowSeconds = 5f;
 
+    /// <summary>
+    /// 【2026-11-11 主人拍板】本条引导的专属排版：两行紧凑、框更矮（约 120px）。
+    /// 只经 <c>TutorialHintUI.Show</c> 的可选参数传入，全局常量与其余引导一律不动；
+    /// 框宽（sizeDelta.x）不碰。文案 <see cref="Text"/> 一字不改，行数由字号与文字区宽度间接决定。
+    /// </summary>
+    static readonly TutorialHintUI.HintLayout Layout = new TutorialHintUI.HintLayout
+    {
+        FontSize = 30,
+        PadX = 32f,
+        PadY = 20f,
+        LineSpacing = 1.15f,
+    };
+
     /// <summary>已经教过了（换局也不再弹）。</summary>
     public static bool Shown => PlayerPrefs.GetInt(PrefsKey, 0) != 0;
 
@@ -105,7 +118,7 @@ public static class SkillOrderGuide
         if (bui != null && bui.skillSlotRoot != null)
             target = bui.skillSlotRoot as RectTransform;
 
-        hint.Show(Text, target, ShowSeconds);
+        hint.Show(Text, target, ShowSeconds, false, Layout);
 
         PlayerPrefs.SetInt(PrefsKey, 1);
         PlayerPrefs.Save();

@@ -185,9 +185,8 @@ public partial class BattleManager
         if (MercSkillMigrate.IsMercSkillAutoCast()) return false;
         if (mercIndex < 0 || mercIndex >= mercMp.Length) return false;
 
-        var mercs = MercenaryManager.Instance?.GetActiveMercs();
-        if (mercs == null || mercIndex >= mercs.Count) return false;
-        Mercenary merc = mercs[mercIndex];
+        // 【2026-11-11】与蓝条 / 扣蓝同源于槽位解析：场上列表阵亡后会压缩前移，按 index 取会点错人。
+        Mercenary merc = MercAt(mercIndex);
         if (merc == null || merc.isDead) return false;
         if (merc.SkillCaster == null || !merc.SkillCaster.HasActiveSkill) return false;
 

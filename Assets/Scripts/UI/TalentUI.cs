@@ -246,9 +246,16 @@ public partial class TalentUI : MonoBehaviour
         TavernUI.SetGuildHallOverlayMode(true);
         ApplyFit(); // 2026-10-24 主人拍板：每次打开现算瘦屏适配（9:16 零变化，见 TalentUI.Fit.cs）
         EnsureLists();
+        // 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】打开天赋页 = 本批新天赋已看过：
+        // 记下当时人物等级（持久化），入口红点灭；以后升级跨过**更高**门槛才重新亮。
+        // 必须在 RefreshAll 之前写，RefreshRight 按同一口径算红点；行内红色「新」字不受影响（仍走 IsNewlyOpen）。
+        var sd = SaveSystem.Instance?.Data;
+        if (sd != null && sd.talentNewSeenLevel < LevelSystem.CurrentLevel)
+        {
+            sd.talentNewSeenLevel = LevelSystem.CurrentLevel;
+            SaveSystem.Instance.Save();
+        }
         RefreshAll();
-        // 2026-09-29 主人纠正：**打开天赋页不清红点** —— 玩家点左列时本来就在天赋页里，
-        // 那样红点等于永远看不到。红点只在「点了右侧那个新天赋」之后才灭，见 RefreshRight / TalentSystem。
     }
 
     public void Hide()

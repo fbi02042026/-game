@@ -354,6 +354,25 @@ public static class TalentDefs
         return false;
     }
 
+    /// <summary>
+    /// 天赋入口红点的唯一判定口径：
+    /// 还有「新开通未点」的右列节点，**且其门槛等级高于 <paramref name="seenLevel"/>**（上次打开天赋页时记下的人物等级）。
+    /// 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】打开天赋页 = 本批已看过，红点灭；
+    /// 人物等级再跨过新门槛才重新亮。右列行的红色「新」字仍走 <see cref="IsNewlyOpen"/>，不受此影响。
+    /// </summary>
+    public static bool EntryDotShouldLight(IDictionary<string, int> talents, int seenLevel)
+    {
+        if (talents == null) return false;
+        int playerLv = LevelSystem.CurrentLevel;
+        for (int i = 0; i < RightNodes.Length; i++)
+        {
+            var n = RightNodes[i];
+            if (n == null || n.unlockLeftIndex <= seenLevel) continue;
+            if (IsNewlyOpen(n, talents, playerLv)) return true;
+        }
+        return false;
+    }
+
     // ===== 任务7：背包 / 技能槽 / 双修 查询 =====
     /// <summary>是否已解锁背包第 4 行（R_BAG 点了即 true）。实际网格改造由另一子代理做。</summary>
     public static bool IsBagRow4Unlocked(IDictionary<string, int> talents) =>

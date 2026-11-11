@@ -68,6 +68,22 @@ public partial class UnitBase
     protected virtual float GetCombatMoveSpeed()
     {
         float spd = attr != null ? attr.GetAttr(AttrType.MoveSpeed) : 1f;
+        // 【2026-11-11 主人拍板「佣兵基础速度要和玩家一致」】
+        // 我方佣兵基础移速改吃玩家当前移速。原口径按各自配表分职业：
+        //   佣兵 merc_roster.MoveSpeed 2.8~4.2 → 0.768~1.152；玩家按所选职业 → 0.768~1.152。
+        // 同职业相等，但队伍是混编：玩家选游侠(1.152)时，队里剑盾(0.864)/重武(0.768)
+        // 永远追不上，一路掉到队伍后面甚至走出屏幕（主人报「走着走着就跑后面不见了」）。
+        // 现在全队基础速度恒等于玩家，职业快慢差只由玩家职业决定；
+        // 敌方佣兵（竞技场机器人）/ 怪物 / 玩家自身取速一字不动。
+        // Hero 不可用（玩家阵亡 / 结算 / 传送门）属合法暂态：沿用自身基础值，不刷 Error，
+        // 与 FollowHeroOrIdle 的同款处理一致。
+        // ⚠ 连杀加速仍在下方统一乘，这里不抄第二份（同语义单一出口）。
+        if (isAlly && this is Mercenary)
+        {
+            var hero = Hero.Instance;
+            if (hero != null && hero.attr != null)
+                spd = hero.attr.GetAttr(AttrType.MoveSpeed);
+        }
         if (isAlly && BattleManager.Instance != null)
             spd *= BattleManager.Instance.KillComboSpeedMul;
         // 【2026-10-11 主人拍板：删除玩家 10% 加速】原 2026-09-28「玩家行走速度再加快 10%」（只加玩家、佣兵不动）

@@ -51,8 +51,14 @@ public partial class UnitBase
             }
         }
 
-        if (isAlly && PlayerPassiveCombat.Instance != null)
-            finalDamage *= PlayerPassiveCombat.Instance.GetAllyIncomingDamageMul(this);
+        if (isAlly)
+        {
+            if (PlayerPassiveCombat.Instance != null)
+                finalDamage *= PlayerPassiveCombat.Instance.GetAllyIncomingDamageMul(this);
+            // 【2026-11-11 第一章三选一 C「先活下去」】我方承伤 ×0.95（存档选边持久生效，默认 1 无感）
+            if (BattleManager.Instance != null)
+                finalDamage *= BattleManager.Instance.runAllyDamageTakenMul;
+        }
         // 佣兵「圣光庇护」类团队护盾落在玩家身上的那层：先吸收再扣血（数值取自 merc_skills 表）
         if (this is Hero && PlayerPassiveCombat.Instance != null)
             finalDamage = PlayerPassiveCombat.Instance.AbsorbTeamShield(finalDamage);

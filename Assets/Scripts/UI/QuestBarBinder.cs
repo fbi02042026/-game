@@ -135,7 +135,7 @@ public class QuestBarBinder : MonoBehaviour
         // 【2026-10-27 主人反馈「任务栏正文字太小、第一行字看不清」】
         // prefab 三行 Info 都是 fontSize 15，小到难辨认。这里抬高基础字号并统一框高
         //（铁律 20：字体可改；纵向高度属必要介入）：Info 框纵向 40→52，x 与位置一律不动。
-        // 字号具体大小走 FitInfoFont 动态档位（字少大、字多小、超长截断），见 Refresh。
+        // 字号统一走 FitInfoFont（2026-11-11 主人拍板统一 18 号 + 保留超长截断），见 Refresh。
         ApplyInfoStyle(_mainText);
         ApplyInfoStyle(_sideText);
         ApplyInfoStyle(_dailyText);
@@ -184,7 +184,7 @@ public class QuestBarBinder : MonoBehaviour
         Debug.Log($"[QuestBarBinder] 任务栏绑定完成（正文 Text：主线={(_mainText != null)} 支线={(_sideText != null)} 日常={(_dailyText != null)}；折叠按钮={fold != null}）");
     }
 
-    /// <summary>任务栏正文基础样式：只定框高（x/位置不碰），字号由 FitInfoFont 按文案长度动态定。</summary>
+    /// <summary>任务栏正文基础样式：只定框高（x/位置不碰），字号由 FitInfoFont 统一设 18 号。</summary>
     static void ApplyInfoStyle(Text t)
     {
         if (t == null) return;
@@ -194,46 +194,29 @@ public class QuestBarBinder : MonoBehaviour
     }
 
     /// <summary>
-    /// 任务栏正文动态字号（2026-10-27 主人拍板「字少的时候大点、多的时候小点，限定最多字数」）：
-    /// 框宽 160 / 高 52 / 行距 1.3（GameFonts 下限）。
-    ///   基础档按字数：≤7 字 → 20 号；≤14 字 → 18 号；≤20 字 → 16 号；超过 → 截断到 19 字 + 「…」、15 号。
-    ///   【2026-11-01 主人「右边还有一点空位就换行了」】再按估算像素宽沿档位降号（数字/字母按半宽），
-    ///   能塞进 160 宽单行就不换行；15 号仍放不下才维持换行（框高 52 容两行），最小 15 号保证看得清。
+    /// 任务栏正文统一字号（2026-11-11 主人拍板「现在不是已经规定最长字的吗，所以可以统一字体大小了」）：
+    /// 文案长度已有真源上限——主线 AutoDesc 统一 ≤7 字、日常表文案最长 10 字（含 {0}/{1}）、
+    /// 展示层还有 InfoMaxChars=20 截断，所以不再需要按字数分档（原 20/18/16/15 会让三行看起来不一致）。
+    /// 统一取 18 号 = 原档位之一：现有文案在 160 宽框里都能单行放下；
+    /// 极端 9~10 字纯中文会换两行，行距 1.4 下 2 × 18 × 1.4 = 50.4 ≤ 框高 52，不会被裁。
+    /// 20 号两行 56 > 52 会裁字、16 号比原短文案小 4 号，故都不取。
+    /// ⚠ 边界（2026-11-11 静态实测）：InfoMaxChars=20 截出的 20 字全中文在 18 号下要 3 行（75.6 > 52）会裁字；
+    ///   但真源上限只到 10 字（主线 AutoDesc ≤7 / 日常表 ≤10 / 支线 5~6），当前触发不了，不为脏数据单开兜底。
     /// </summary>
+    const int InfoFontSize = 18;
     const int InfoMaxChars = 20;   // 每条任务最多展示字数（含省略号），超出截断
-    /// <summary>Info 框宽（预制体值 160，只拿来估算放不放得下，不改框本身——铁律 20）。</summary>
-    const float InfoBoxWidth = 160f;
-    /// <summary>字号档位（与旧字数档同源）：估宽放不下就沿档位往下降，最低 15 号。</summary>
-    static readonly int[] InfoFontTiers = { 20, 18, 16, 15 };
 
-    /// <summary>估算一行文案在指定字号下的像素宽：全角字 ≈ 字号，半角（数字/字母/符号）≈ 字号 × 0.5。</summary>
-    static float EstimatedTextWidth(string s, int size)
-    {
-        float w = 0f;
-        for (int i = 0; i < s.Length; i++)
-            w += s[i] > 0x2E7F ? size : size * 0.5f;   // CJK 及全角区按全宽，ASCII 按半宽
-        return w;
-    }
-
+    /// <summary>超长截断 + 统一字号；三行走同一出口，字号不再随文案长短变化。</summary>
     static void FitInfoFont(Text t)
     {
         if (t == null) return;
         string s = t.text ?? "";
-        int len = s.Length;
-        int sizeIdx = len <= 7 ? 0 : len <= 14 ? 1 : 2;
-        if (len > InfoMaxChars)
+        if (s.Length > InfoMaxChars)
         {
             s = s.Substring(0, InfoMaxChars - 1) + "…";
             t.text = s;
-            sizeIdx = 3;
         }
-        // 【2026-11-01 主人「右边还有一点空位就换行了」】按字数定档只看字数不看宽窄，
-        // 「今日获取375/500金币」数字按半宽本可塞下却按全角估 → 差一点也换行。
-        // 这里沿档位降号直到估宽 ≤ 框宽（最低 15 号）；15 号还放不下才维持换行（框高 52 容两行）。
-        while (sizeIdx < InfoFontTiers.Length - 1
-               && EstimatedTextWidth(s, InfoFontTiers[sizeIdx]) > InfoBoxWidth)
-            sizeIdx++;
-        t.fontSize = InfoFontTiers[sizeIdx];
+        t.fontSize = InfoFontSize;
     }
 
     /// <summary>按候选名找折叠按钮；顺带检查它别挂在三行里面（挂行里 = 折叠时连按钮一起藏，展开不了）。</summary>
@@ -336,7 +319,7 @@ public class QuestBarBinder : MonoBehaviour
             var m = snap.main;
             // 【2026-11-01 主人「不要括号里的，全部短点」】去掉（进度/总数）尾巴——主线文案本身不带实时数字也按主人口径砍掉
             _mainText.text = m != null ? m.Desc : "本章主线已完成";
-            FitInfoFont(_mainText);   // 按最终文案长度定字号/截断
+            FitInfoFont(_mainText);   // 超长截断 + 统一字号
         }
 
         bool sideVisible = snap.side != null;
@@ -362,7 +345,7 @@ public class QuestBarBinder : MonoBehaviour
             // 【2026-11-01 主人「今日获取375/500金币后面怎么又有括号375/500」】表文案已带 {0}/{1}
             //（DailyViews/WeeklyViews 里 string.Format 过），再补括号就是重复 → 只显示 desc。
             _dailyText.text = d.HasValue ? d.Value.desc : "今日已完成";
-            FitInfoFont(_dailyText);   // 按最终文案长度定字号/截断
+            FitInfoFont(_dailyText);   // 超长截断 + 统一字号
         }
     }
 

@@ -146,13 +146,17 @@ public partial class BattleEntryDraftPanel
         _animK = k;
         ApplyPanelState(k);
 
-        // 【2026-11-09 主人拍板】map / 世界层不再随两态变化：恒写终态（中心Y 350 / scale 1.4 /
-        // 世界层 +0.85）。预制体已直接摆在该位置，运行时只做「防适配重锚」的恒定写回。
+        // 【2026-11-09 主人拍板】map 不再随两态变化：恒写终态（中心Y 350 / scale 1.4）。
+        // 预制体已直接摆在该位置，运行时只做「防适配重锚」的恒定写回。
         // 写的是「Pos Y / 中心 Y」这把尺子，不是「离父级底边多少」—— 换算错尺子会把 map 顶飞。
         ApplyMapState(1f);
 
-        // 世界层固定在终态：不让玩家在面板展开时看着像「人掉下去了」（2026-10-06 口径保留）。
-        ApplyWorldLift(1f);
+        // 【2026-11-11 主人拍板 A：取消世界层 +0.85 抬升，原 ApplyWorldLift(1f) 已删净】
+        // 预制体本身就是「map 350 + unit 原始 y」这组自洽状态；11-09 把 map 定死在展开位、
+        // 去掉 250→350 过渡后，10-06 那笔「配平 map 上移 100 像素」的抬升就失去对象 ——
+        // 它只把 unitRoot 抬高 0.85，而 PlacePartyAt 按世界坐标把玩家/佣兵钉回 GROUND_Y，
+        // 结果人相对地面/背景偏下 0.85，正是「一进战斗玩家位置变一下」。
+        // 现在 unitRoot 恒在 GROUND_Y，玩家、佣兵、怪物、地面同一条线；不留开关。
     }
 
     /// <summary>
@@ -167,14 +171,32 @@ public partial class BattleEntryDraftPanel
         if (_panel != null)
             _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, panelH);
 
-        // 内容整体上移：zhuangshi 是位移真源，GridContainer 加<b>同一个位移量</b>跟着走。
+        // 内容整体上移：zhuangshi 是唯一位移真源。
         float contentY = Mathf.Lerp(ContentCollapsedY, ContentExpandedY, k);
         SetY(_contentRt, contentY);
-        float delta = contentY - ContentCollapsedY;
-        for (int i = 0; i < _followers.Count; i++)
+
+        // 【2026-11-11 主人拍板「背包弹窗固定在屏幕中间就行」】覆盖 2026-10-05
+        // 「GridContainer 与 zhuangshi 走同一个位移量」口径：网格背包不再随两态上移，
+        // 恒钉在屏幕正中，与面板 600/750、屏高（标准 1280 / 瘦屏更高）全部无关。
+        // 推导：父 BackpackPanel 锚点(0.5,0)、pivot(0.5,0) 贴屏幕底边，父 rect 为 0~panelH；
+        // 子节点取点锚点 a 时，屏幕 y = -屏高/2 + a×panelH + PosY，令 y=0 得
+        // PosY = 屏高/2 - a×panelH。屏高取父 RectTransform 当前 rect，禁写死 DESIGN_HEIGHT；
+        // a 取子节点当时的 anchorMin.y（竖屏重锚可能把 0.5 改成 0/1，见 SetPivotLocalY 注释）。
+        // _followers 里目前只有 GridContainer；BaseY 因此不再参与计算（死字段只报告不清理）。
+        var parentRt = _panel != null ? _panel.parent as RectTransform : null;
+        if (parentRt == null || parentRt.rect.height <= 1f)
         {
-            var f = _followers[i];
-            if (f != null && f.Rt != null) SetY(f.Rt, f.BaseY + delta);
+            Debug.LogError("[BattleEntryDraftPanel] 拿不到战斗 UI 根的逻辑高，背包弹窗无法固定屏幕中间");
+        }
+        else
+        {
+            float halfScreenH = parentRt.rect.height * 0.5f;
+            for (int i = 0; i < _followers.Count; i++)
+            {
+                var f = _followers[i];
+                if (f == null || f.Rt == null) continue;
+                SetY(f.Rt, halfScreenH - f.Rt.anchorMin.y * panelH);
+            }
         }
 
         // 抽奖容器：主人给的是 Inspector 的 Pos Y（锚点 0.5 语义），
@@ -183,28 +205,10 @@ public partial class BattleEntryDraftPanel
         SetPivotLocalY(_draftRt, panelH * DraftAnchorY + draftPosY, panelH);
     }
 
-    /// <summary>
-    /// 【2026-10-06 主人拍板】map 上移 100 逻辑像素时，世界层要抬多少（世界单位）。
-    /// <para>两把尺子不一样：map 走 UI 逻辑像素（250→350 = +100），世界层是 Unity 单位。
-    /// 按「竖屏可视高 ≈ 1280 逻辑像素 = 2 × orthographicSize(5.4) ≈ 10.8 世界单位」折算，
-    /// 100 像素 ≈ 0.85 世界单位。<b>主人在团结里看着差一点，只改这一个数。</b></para>
-    /// </summary>
-    const float WorldLiftY = 0.85f;
-
-    /// <summary>
-    /// 世界层跟随位移：只挪 <c>unitRoot</c> 这一层（玩家/佣兵都是它的子节点，会整体跟着走），
-    /// 基准恒取 <c>UnitBase.GROUND_Y</c>（主人给的站立线），<b>不缓存</b>——
-    /// 二次进战斗 unitRoot 重建也不会算错。
-    /// </summary>
-    void ApplyWorldLift(float k)
-    {
-        var bm = BattleManager.Instance;
-        var root = bm != null ? bm.unitRoot : null;
-        if (root == null) return;
-        var p = root.position;
-        p.y = UnitBase.GROUND_Y + Mathf.Lerp(0f, WorldLiftY, k);
-        root.position = p;
-    }
+    // 【2026-11-11 主人拍板 A】原 `WorldLiftY = 0.85f` 与 `ApplyWorldLift(k)` 已整体删除。
+    // 理由见 ApplyState 末尾注释：11-09 把 map 定死在展开位后，抬升的配平对象消失，
+    // 只留下「unitRoot 抬高、玩家被 PlacePartyAt 钉回 GROUND_Y」的 0.85 错位。
+    // 站立线真源恢复为唯一一条：UnitBase.GROUND_Y（= 预制体 unit.y）。
 
     static void SetY(RectTransform rt, float y)
     {

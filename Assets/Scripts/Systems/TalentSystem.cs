@@ -114,13 +114,13 @@ public static class TalentSystem
     const string RightUnlockHint = "升级了！右侧有新的天赋可以解锁";
 
     /// <summary>
-    /// 天赋入口红点 = **还有没有「新开通未点」的右列节点**。
-    /// 2026-09-29 主人纠正：玩家点左列时本来就已经在天赋页里了，所以「打开天赋页就清」等于永远看不到红点；
-    /// 正确口径是**点了右侧那个新天赋**才灭（level &gt; 0 → 不再是新）。
+    /// 天赋入口红点 = 还有「新开通未点」且**门槛等级高于已看等级**的右列节点。
+    /// 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】打开天赋页即记已看（见 TalentUI.Show），
+    /// 红点灭；人物升级再跨过新门槛才重新亮。判定唯一口径 = TalentDefs.EntryDotShouldLight。
     /// </summary>
     static void RefreshTalentEntryRedDot(SaveData data)
     {
-        RedDot.Set(RedDot.Talent, data != null && TalentDefs.AnyNewlyOpen(data.talents));
+        RedDot.Set(RedDot.Talent, data != null && TalentDefs.EntryDotShouldLight(data.talents, data.talentNewSeenLevel));
     }
 
     /// <summary>

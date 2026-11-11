@@ -139,12 +139,74 @@ public partial class BattleManager
     SkillCastService _skillCast;
     internal SkillCastService SkillCast => _skillCast ?? (_skillCast = new SkillCastService(this));
 
-    /// <summary>取第 index 个在场佣兵（越界 / 无管理器 → null）。</summary>
+    /// <summary>
+    /// 槽位真源：局内正式关 = 本局出战名单（入队顺序即槽序，阵亡占位不删），与
+    /// <c>BattleUI.AlignActiveMercsToSlots</c> 同源；引导 / 单人 / 非局内返回 null，
+    /// 仍按场上列表索引取，保证这些模式零变化。
+    /// 【2026-11-11 根因修复】佣兵阵亡 Destroy 后 <c>GetActiveMercs()</c> 会原地压缩前移，
+    /// 按 index 直接取会把活人错配到别的槽 → MP 池取错 / 取不到 → 蓝条瞬间归零。
+    /// </summary>
+    static List<RunMercEntry> SlotRoster()
+    {
+        if (!RunLoadout.IsActive || GameConfig.SOLO_PLAYER_BATTLE) return null;
+        // 不写 TutorialDirector.IsTutorialBattle：那个 getter 每次 FindObjectOfType<BattleManager>()，
+        // 而 MercAt 每帧要跑好几次（TickMercMp / GetMercMp / Pool / Regen），会平白拖帧。
+        // 用 InstanceQuiet 读同一真源 IsTutorialRun：只读缓存、不建物、实例缺失时也不刷 Error。
+        var bm = InstanceQuiet;
+        if (bm != null && bm.IsTutorialRun) return null;
+        var roster = RunLoadout.Mercs();
+        return roster != null && roster.Count > 0 ? roster : null;
+    }
+
+    /// <summary>按 hireId 优先、mercId 次之在场上列表里找（与 UI 对齐同一套 key）。</summary>
+    static Mercenary FindOnField(List<Mercenary> onField, string hireId, string mercId)
+    {
+        for (int k = 0; k < onField.Count; k++)
+        {
+            var cand = onField[k];
+            if (cand == null) continue;
+            if (!string.IsNullOrEmpty(hireId) && cand.hireId == hireId) return cand;
+            if (!string.IsNullOrEmpty(mercId) && cand.mercId == mercId) return cand;
+        }
+        return null;
+    }
+
+    /// <summary>取第 index 个<b>出战槽</b>上的在场佣兵（越界 / 阵亡占位 / 无管理器 → null）。</summary>
     static Mercenary MercAt(int index)
     {
-        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs == null || index < 0 || index >= mercs.Count) return null;
-        return mercs[index];
+        var mm = MercenaryManager.Instance;
+        if (mm == null) return null;
+        var onField = mm.GetActiveMercs();
+        var roster = SlotRoster();
+        if (roster != null)
+        {
+            if (index < 0 || index >= roster.Count) return null;
+            var e = roster[index];
+            return e == null ? null : FindOnField(onField, e.hireId, e.mercId);
+        }
+        if (index < 0 || index >= onField.Count) return null;
+        return onField[index];
+    }
+
+    /// <summary>
+    /// 佣兵 → 出战槽位，与 <see cref="MercAt"/> 互为逆运算（扣蓝落槽与蓝条显示同源）。
+    /// 找不到 → -1，由调用方按「槽位非法」处理，不猜槽、不就近顶替。
+    /// </summary>
+    static int MercSlotOf(Mercenary merc)
+    {
+        if (merc == null) return -1;
+        var mm = MercenaryManager.Instance;
+        if (mm == null) return -1;
+        var onField = mm.GetActiveMercs();
+        var roster = SlotRoster();
+        if (roster == null) return onField.IndexOf(merc);
+        for (int i = 0; i < roster.Count; i++)
+        {
+            var e = roster[i];
+            if (e == null) continue;
+            if (FindOnField(onField, e.hireId, e.mercId) == merc) return i;
+        }
+        return -1;
     }
 
     /// <summary>该槽 MP 池上限（该佣兵是「无蓝」技能 → 0，蓝条不显示）。</summary>
@@ -181,13 +243,13 @@ public partial class BattleManager
     /// </summary>
     public bool TrySpendMercMp(Mercenary merc, float cost)
     {
-        var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs == null || merc == null) return false;
+        if (merc == null || MercenaryManager.Instance == null) return false;
         // 【2026-10-30 竞技场】敌方佣兵不在 _activeMercs 槽位表里（不进友军编队），无蓝条 UI——
         // 耗蓝按免费放行，否则敌方牧师的治疗技会被蓝闸永远拦下（找不到槽 → slot<0 → false）。
         if (!merc.isAlly)
             return true;
-        int slot = mercs.IndexOf(merc);
+        // 【2026-11-11】槽位与蓝条显示同源：阵亡压缩后不再把蓝扣到别的槽。
+        int slot = MercSlotOf(merc);
         if (slot < 0 || slot >= mercMp.Length) return false;
         if (cost <= 0f) return true;
         if (mercMp[slot] + 0.001f < cost) return false;

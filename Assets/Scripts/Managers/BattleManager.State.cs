@@ -151,6 +151,9 @@ public partial class BattleManager
     internal bool _tutorialHpFromTable;
     /// <summary>本局怪物攻速倍率（剧情选择等）</summary>
     public float runMonsterAtkSpeedMul = 1f;
+    /// <summary>【2026-11-11 第一章三选一 C「先活下去」】我方（主角+佣兵）受到的最终伤害倍率，
+    /// 选 C = 0.95，存档选边持久生效（进战斗按存档重套，消费点 UnitBase.TakeDamage）。与 runMonsterAtkSpeedMul 同族。</summary>
+    public float runAllyDamageTakenMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
     public bool PortalWalkMode => _portalActive && !_stageCleared;
     /// <summary>佣兵相对主角前后间距（世界单位）；近战前/远程后由 UnitCrowd 决定符号。</summary>

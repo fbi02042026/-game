@@ -84,7 +84,10 @@ public partial class TalentUI
             // 节点始终显示；仅灰态表示锁定
             if (v.root != null) v.root.SetActive(true);
             SetRowGray(v.root, locked);
-            SetRowRedDot(v.root, ref v.redDot, can);
+            // 左列行右缘超出视口被 Mask 裁（左内边距 51 + 行宽 258.6 = 309.6 > 视口 302），
+            // 默认贴角 (-12,-12) 的红点右侧约 11px 会被裁掉 —— 左列红点内收到 (-26,-12)，
+            // 右缘 299 距裁切线留 3px。右列行居中不越界，仍走默认贴角。
+            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-26f, -12f));
             if (v.line != null)
             {
                 // 最底 L1（index 0）不画向下连接线；其余连线
@@ -113,9 +116,11 @@ public partial class TalentUI
         for (int i = 0; i < _rightViews.Count; i++)
             RefreshOneRightNode(_rightViews[i], talents, playerLv);
 
-        // 2026-09-29：入口红点 = 还有没有「新开通未点」的右列节点。
-        // 玩家点了右侧那个新天赋 → 它不再是新 → 没有其它新节点时红点自动灭。
-        RedDot.Set(RedDot.Talent, TalentDefs.AnyNewlyOpen(talents));
+        // 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】入口红点唯一口径 = EntryDotShouldLight：
+        // 只对门槛等级高于「已看等级」（打开天赋页时记录，见 Show）的新批次点亮。
+        var dotData = SaveSystem.Instance?.Data;
+        RedDot.Set(RedDot.Talent, dotData != null
+            && TalentDefs.EntryDotShouldLight(dotData.talents, dotData.talentNewSeenLevel));
 
         if (rightTipText != null)
             rightTipText.text = "消耗天赋石解锁/升级天赋（分批开放）";
@@ -411,7 +416,9 @@ public partial class TalentUI
         SetGraphicAlpha(root, Mathf.Clamp01(alpha));
     }
 
-    static void SetRowRedDot(GameObject rowRoot, ref GameObject dot, bool show)
+    /// <param name="offset">红点相对行右上角的偏移；null = 默认贴角 (-12,-12)。
+    /// 行右缘被视口 Mask 裁的列（当前是左列）传内收值，避免红点右半被裁。</param>
+    static void SetRowRedDot(GameObject rowRoot, ref GameObject dot, bool show, Vector2? offset = null)
     {
         if (rowRoot == null) return;
         if (!show)
@@ -427,11 +434,16 @@ public partial class TalentUI
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(RedDot.DefaultSize, RedDot.DefaultSize);
-            rt.anchoredPosition = new Vector2(-12f, -12f);
+            rt.anchoredPosition = offset ?? new Vector2(-12f, -12f);
             var img = dot.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.raycastTarget = false;
             img.preserveAspect = true;
+        }
+        else if (offset.HasValue)
+        {
+            // 已建过的红点也按调用方偏移校正（幂等），防止旧实例残留默认位置
+            dot.GetComponent<RectTransform>().anchoredPosition = offset.Value;
         }
         dot.SetActive(true);
     }

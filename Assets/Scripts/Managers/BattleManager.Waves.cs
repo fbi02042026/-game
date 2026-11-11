@@ -433,11 +433,29 @@ public partial class BattleManager
         }
 
         // 章节开场卡已由 GameSceneManager 在 Loading 关闭后演出完毕（2026-10-20 起顺序：Loading → 章节卡 → 开打）。
+        // 【2026-11-11 主人拍板「所有战斗除了引导一开始抽奖面板都是常驻」+「按钮出来时别窜一下」】
+        // 常显实时抽面板开出时点：章节卡演完立刻开出，压在 Loading 遮罩收起之前 ——
+        // 面板 600→750 一步落位、DraftPool 首次装载全藏在遮罩底下，揭幕第一帧按钮就在屏上，
+        // 「一上来没看到常驻 / 按钮出来时玩家和场景窜一下」从根上关掉。
+        // 本批覆盖：主线正式关 / 金币本 / 竞技场 / 支线岛（裂隙与资源副本仍走各自旧面板流程，
+        // 并入要动抽奖经济分流，主人叮嘱「别把别的改出毛病」→ 本批不动）。
+        // 引导局走脚本化硬引导、羁绊本 T8 拍板全程无抽奖，两者排除。
+        // 剧情窗(13000) / 半透横幅(928) 的播放顺序与层级一律不动：面板先开出，剧情照播仍盖在其上。
+        // ⚠ 必须同时提前压住硬刷：CoFirstWaveHardFallback 的等待闸门是一次性的，
+        //   从现在起直到 DoStartFight（点「开始战斗」）才解除，中途不得再有置 false 的窗口。
+        bool liveStartEarly = !IsTutorialRun && !IsBondDungeon && !IsEndlessRift && !IsResourceDungeon;
+        if (liveStartEarly)
+        {
+            _preBattleStoryPlaying = true;
+            EnterLiveStartPhase();
+        }
+
         // 【2026-11-09】走进场必须等 Loading 遮罩真正收起再播：开场定位与相机跳位仍留在遮罩底下执行，
         // 遮罩收起后画面是「空战斗场景 + 队伍在屏外」，再连续走进来 —— 位置变更全程不可见。
         // 非主线玩法没有章节卡（GameSceneManager 里 splash=null），原先这里没有任何人等 Loading，
         // 走进场在黑罩底下就走完了，揭幕瞬间直接切到已就位的画面，表现为「闪一下 + 位置被重置」。
         yield return CoWaitForLoadingOverlayGone();
+
         yield return CoPartyWalkInFromLeft(startX, z);
 
         FinishBattleIntro(follow);
@@ -457,6 +475,12 @@ public partial class BattleManager
             // 时序：过场卡→队伍进场→战前剧情→抽奖→首波。
             // 协程内部已包含“剧情不可用则直接放行首波”的兜底逻辑。
             yield return CoPreBattleStoryThenFirstWave();
+
+        // 【2026-11-11 主人拍板「三选一就是战前剧情之后出现的」】Boss 关的 boss 线引子 + 三选一
+        // 统一挂在章节线战前剧情之后：剧情窗收干净了才弹，不再压在剧情前面。
+        // 门槛与防卡死仍收口在 CoBossStageBlessingChoice（非主线正式关/难度局/引导局直接 yield break）；
+        // 正式关此时抽奖面板已开出但首波未刷（_preBattleStoryPlaying 压着），选完仍由「开始战斗」放行。
+        yield return CoBossStageBlessingChoice();
 
         // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】抽奖等待期间撤离/死亡 → 上游协程当场退场：
         // 不再 StartPartyAdvance（结算界面后面队伍乱跑），也不再走开战日志分支。
@@ -1279,6 +1303,12 @@ public partial class BattleManager
                     mercMp[i] = 0f;
                     BattleUI.Instance?.UpdateSkillEnergy(i + 1, 0f);
                 }
+                // 【2026-11-11 根因修复】槽位暂时失效（阵亡 / 取不到人 / 技能未就绪）时把
+                // 「本关已灌满」标志一并复位，单位回来后按每关开局口径重新灌满。
+                // 否则按 MpProfile 的 1.2~1.3/秒 从 0 爬，池 150 要近两分钟才回得来 —— 主人报的
+                // 「蓝条一下变成 0% 且一直不回」就是这里。换佣兵（同槽、名单不变）不进这分支，
+                // 「换人不回满防刷蓝」的口径不受影响（只有 ResetMpForNewStage 才该整关重置）。
+                _mercMpFilled[i] = false;
                 continue;
             }
 

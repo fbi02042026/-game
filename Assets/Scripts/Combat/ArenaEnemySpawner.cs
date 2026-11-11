@@ -14,6 +14,14 @@ using UnityEngine;
 ///    改为「玩家当前战力 × 榜位系数」（<see cref="RankMatchFactor"/>：榜底 0.75 → 榜首 1.75，带 ±8% 确定性浮动），
 ///    越往前排名强度越高；其中 <see cref="EliteChancePercent"/> 概率抽到「偶发强敌」（系数再 ×<see cref="ElitePowerMul"/>，
 ///    封顶 <see cref="ArenaRules.ValveHardPowerMul"/>），确定性由机器人 seed 决定，同一对手每次进场强度一致。</para>
+/// <para>【2026-11-11 主人拍板 (A)：保持真战斗，放水局按血量真实压制】阀门系数此前只作用于
+/// 「战力 → 等级/星级」反推，而敌方血量由佣兵表定（DeriveUnitLevelStar 有 70 保底 → 至少 Lv1★1），
+/// 系数压不动血量：Editor.log 实锤「玩家战力 700 ×0.35 → 战斗战力 245」却生成 212+303=515 血的敌人，
+/// 新赛季第一场 2 打 1 被磨死。现把同一系数落到血量真源 attr.MaxHp（<see cref="ApplyEaseValveHp"/>），
+/// 并屏蔽治疗/护盾类主动技（<see cref="IsEaseBlockedActiveSkill"/>）；胜负仍由真实战斗产出，不掷骰判胜。
+/// 🔴 只作用放水局（easeValve），常规局 / 熔断加压局 / 其它战斗模式一概不动。
+/// 第 4 项口径同步定稿：arenaFreshWinsLeft 只在胜局递减（「送够 3 场胜利」语义，败局不消耗继续保护），
+/// ApplyBattleOutcome 现状即如此，不改。</para>
 /// </summary>
 public static class ArenaEnemySpawner
 {
@@ -51,6 +59,38 @@ public static class ArenaEnemySpawner
 
     /// <summary>新一关重置（LoadStage 竞技场分支调；竞技场单场，进本即一次）。</summary>
     public static void ResetForStage() => _spawnedThisStage = false;
+
+    /// <summary>
+    /// 放水局敌方血量压制（2026-11-11 主人拍板 (A)，唯一出口）：把 <see cref="ArenaRules.GetValvePowerMultiplier"/>
+    /// 的同一个系数落到血量真源 attr.MaxHp —— 此前系数只喂 BuildBotBattleSquad 反推等级/星级，
+    /// 而血量由佣兵表定（DeriveUnitLevelStar 有 70 保底 → 至少 Lv1★1），放水局血量纹丝不动。
+    /// SetBaseAndCurrent 同时写基底与当前值（防之后 RecalcAllAttr 把血量还原），currentHp 同步到满血。
+    /// 只在 easeValve 调用；加压局（valve &gt; 1）不缩放，血量本来就该更硬。
+    /// </summary>
+    static void ApplyEaseValveHp(Mercenary merc, float valve)
+    {
+        if (merc == null || merc.attr == null || valve <= 0f || valve >= 1f) return;
+        float scaled = Mathf.Max(1f, Mathf.RoundToInt(merc.attr.GetAttr(AttrType.MaxHp) * valve));
+        merc.attr.SetBaseAndCurrent(AttrType.MaxHp, scaled);
+        merc.currentHp = scaled;
+    }
+
+    /// <summary>
+    /// 放水局屏蔽「续航类」主动技（2026-11-11 主人拍板 (A)）：治疗/群疗/护盾/自身防御增益
+    /// 会把残血敌人拖回满血，血量压到 0.35 也照样磨死主角（Editor.log 262→265 回升实锤）。
+    /// 判定走项目现成唯一出口 <see cref="MercSkillExecutor.Resolve"/>（与 MercSkillCaster.MercSkillNeedsTarget
+    /// 同款口径），只屏蔽目标是自己人的续航类；攻击类主动技与被动技照挂，不放水成木桩。
+    /// </summary>
+    static bool IsEaseBlockedActiveSkill(string activeId)
+    {
+        if (string.IsNullOrEmpty(activeId)) return false;
+        var kind = MercSkillExecutor.Resolve(activeId);
+        return kind == MercSkillExecutor.Kind.HealSingle
+            || kind == MercSkillExecutor.Kind.HealTeam
+            || kind == MercSkillExecutor.Kind.TeamHealAtk
+            || kind == MercSkillExecutor.Kind.TeamShield
+            || kind == MercSkillExecutor.Kind.SelfDefBuff;
+    }
 
     /// <summary>
     /// 本场敌方战斗战力（唯一出口；只服务组队，🔴 不得进 IsChallengeable/CanEnter 等查询函数）：
@@ -178,6 +218,8 @@ public static class ArenaEnemySpawner
         }
 
         int spawned = 0;
+        float enemyHpTotal = 0f;     // 判别性探针：敌方合计 maxHp（缩放后真值）
+        int blockedHealSkills = 0;   // 判别性探针：放水局被屏蔽的续航类主动技数
         // 【2026-11-01 主人报「机器人拿着弓还是走的很近」】入场列队位按射程排：射程越远越靠后。
         // 根因：列队位原按 i 顺序排、不看职业，而第 0 位（机器人「玩家形象」）在游侠两套模板里
         // 就是弓手（gongshou101），加 startOffset 钳制下限 1.5 → 弓手恒排最前排、贴脸站桩平射。
@@ -202,6 +244,10 @@ public static class ArenaEnemySpawner
                     ? MercenaryManager.Instance.SpawnEnemyHeroFigure(e.mercId, pos, e.level, e.star, figureOutfit)
                     : MercenaryManager.Instance.SpawnEnemyMercenary(e.mercId, pos, e.level, e.star);
             if (merc == null) continue;   // 单个生成失败已在内部 LogError，其余照常
+            // 【2026-11-11 主人拍板 (A)】放水局把阀门系数真正落到血量（单一出口 ApplyEaseValveHp）；
+            // 常规局/加压局不走这里，敌方血量仍由佣兵表定。
+            if (easeValve) ApplyEaseValveHp(merc, valve);
+            enemyHpTotal += merc.attr != null ? merc.attr.GetAttr(AttrType.MaxHp) : 0f;
             // 【2026-10-31 主人拍板「只给玩家形象挂机器人名」】名字牌只挂形象位：佣兵也挂同名牌子
             // 会让场上出现「两个一样的玩家名」—— 这正是「敌人出现两个玩家形象」的观感来源。
             if (e.isHeroFigure) merc.SetDisplayName(ctx.BotName);
@@ -214,7 +260,18 @@ public static class ArenaEnemySpawner
             merc.BeginMapEnter(baseX + startOffset + slot * 1.4f, -1);
             // 花名册默认技能（主动+被动）——敌方队伍照常放技能（牧师奶队友等）
             MercRosterDefs.GetSkillIds(e.mercId, out string activeId, out string passiveId);
-            if (!string.IsNullOrEmpty(activeId) || !string.IsNullOrEmpty(passiveId))
+            bool hadAnySkill = !string.IsNullOrEmpty(activeId) || !string.IsNullOrEmpty(passiveId);
+            // 【2026-11-11 主人拍板 (A)】放水局不挂治疗/护盾类主动技：残血被奶回去会把主角磨死。
+            // 攻击类主动技与被动技照挂（不放水成木桩）；activeId 传 null 由 SetupBattleSkills 安全吞掉
+            //（SkillRegistry.Get/MpProfile.OfMercSkill 对空串均返回空，不产 LogError）。
+            // 🔴 用屏蔽前的 hadAnySkill 决定是否挂组件：主动技被屏蔽且被动也空时仍照常 Bind，
+            // 不让该单位从「有 SkillCaster」变成「没有组件」，AI 侧拿不到空引用。
+            if (easeValve && IsEaseBlockedActiveSkill(activeId))
+            {
+                activeId = null;
+                blockedHealSkills++;
+            }
+            if (hadAnySkill)
                 merc.SetupBattleSkills(activeId, passiveId);
             bm.monsters.Add(merc);              // 🔴 敌方阵营只进怪物列表
             bm._totalMonstersSpawnedThisStage++;
@@ -231,11 +288,18 @@ public static class ArenaEnemySpawner
         _spawnedThisStage = true;
         // 诊断日志（2026-11-11 主人报「排名最下面还遇到强敌」）：一行看全 名次 / 榜位战力 / 玩家当前战力 /
         // 阀门 / 放水标记 / 偶发强敌 / 战斗战力，下次贴日志就能判断是敌人太强还是玩家侧太弱。
+        // 【2026-11-11 补判别性探针（铁律 22）】再加 我方主角 maxHp / 敌方合计 maxHp / 比值 / 屏蔽续航技数：
+        // 一行分清「敌方太肉」「我方太薄」「治疗拖时间」三类瓶颈，确认主瓶颈前不再加码调数。
         bool elite = valve == 1f && IsEliteOpponent(bot.seed);
+        float myHeroHp = bm.hero != null && bm.hero.attr != null ? bm.hero.attr.GetAttr(AttrType.MaxHp) : 0f;
+        float hpRatio = myHeroHp > 0.01f ? enemyHpTotal / myHeroHp : 0f;
         Debug.Log($"[Arena] 敌方小队生成完成：{bot.name}（排名 {ArenaRules.RankOfIndex(data, ctx.LadderIdx)}" +
                   $" / 榜位战力 {ArenaRules.GetBotPower(data, ctx.LadderIdx)}" +
                   $" / 玩家当前战力 {RunLoadout.TotalPower()} / 阀门 ×{valve:F2}{(easeValve ? "（放水局）" : "")}" +
-                  $"{(elite ? "（偶发强敌）" : "")} → 战斗战力 {battlePower}）× {spawned} 名");
+                  $"{(elite ? "（偶发强敌）" : "")} → 战斗战力 {battlePower}）× {spawned} 名" +
+                  $" ｜ 血量：我方主角 maxHp {myHeroHp:F0} vs 敌方合计 maxHp {enemyHpTotal:F0}" +
+                  $"（比值 {hpRatio:F2}）" +
+                  (easeValve ? " ｜ 放水屏蔽续航技 " + blockedHealSkills + " 个" : ""));
         return true;
     }
 }

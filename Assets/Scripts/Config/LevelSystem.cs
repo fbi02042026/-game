@@ -75,6 +75,27 @@ public static class LevelSystem
         }
     }
 
+    /// <summary>
+    /// 倾向属性每升 1 级的**实际收益**文案（升级弹窗「升级后」格用，delta = 本次升级级数）。
+    /// 与 AttrSystem.ApplyDerivedAttributes 派生系数同源，改派生系数时同步这里：
+    /// 剑盾/重装=体质→每级+10血、游侠=敏捷→每级+1%攻速、法师/牧师=智力→每级+2魔攻、狂战=力量点本身+1。
+    /// 2026-11-11 主人「把文案对齐一下」：弹窗原来显示的是倾向点数（+1），被误读成只加 1 点血，改显真实收益。
+    /// </summary>
+    public static string JobTendencyGainText(PlayerJobId job, int delta)
+    {
+        int d = Mathf.Max(1, delta);
+        switch (job)
+        {
+            case PlayerJobId.SwordShield:
+            case PlayerJobId.Heavy:       return "+" + 10 * d;   // 血
+            case PlayerJobId.Ranger:      return "+" + d + "%";  // 攻速
+            case PlayerJobId.Mage:
+            case PlayerJobId.Priest:      return "+" + 2 * d;    // 魔攻
+            case PlayerJobId.Berserker:   return "+" + d;        // 力量点
+            default:                      return "+" + 10 * d;
+        }
+    }
+
     /// <summary>倾向属性设为绝对值（进战斗回填用：基底 + level-1）。</summary>
     static void SetTendencyPoint(AttrSystem attr, AttrType tendency, int value)
     {

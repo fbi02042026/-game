@@ -11,6 +11,11 @@ public static class BackpackGridVisual
 {
     const string LayerName = "ItemOverlayLayer";
     const float IconPad = 2f;
+
+    /// <summary>碎片视觉 X 偏移真源（2026-11-11 主人指令：背包里的碎片整体往右 3）：
+    /// 覆盖三条路径 —— 本命碎片道具格（item_frag_ 框体+头像）、角色页本命碎片展示位
+    /// （主人的 yongbingsuipian 预制体卡）、日志碎片展示位；数量角标/锁标不跟。</summary>
+    const float FragmentOffsetX = 3f;
     const string LockOverlayName = "LockedOverlay";
     const string LockIconName = "LockIcon";
 
@@ -178,6 +183,7 @@ public static class BackpackGridVisual
             bool hasIcon = false;
             // 【2026-10-24 编译修复】iconImg 提到 if 块外声明：走碎片预制体路径（ownerFragCard）时没有图标 Image，interactive 段只对图标路径生效
             Image iconImg = null;
+            bool isFragItem = isItem && !string.IsNullOrEmpty(MercStarDefs.HireIdOfFragmentItem(p.item.defId));
             bool ownerFragCard = p.IsDisplay && !string.IsNullOrEmpty(p.displayFragHireId)
                 && TryAddOwnerFragmentCard(go.transform, rt, p.displayFragHireId, iconScale);
 
@@ -200,6 +206,11 @@ public static class BackpackGridVisual
                 img.type = Image.Type.Simple;
                 img.enabled = true;
                 PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip, iconScale);
+
+                // 碎片整体往右 3（2026-11-11 主人指令，偏移真源见 FragmentOffsetX）：
+                // 本命碎片道具 / 日志碎片展示位；头像是 Icon 子节点一起动，数量角标不跟
+                if (isFragItem || p.displayIconKind == DisplayIconKind.LogFragment)
+                    iconGo.transform.localPosition += Vector3.right * FragmentOffsetX;
 
                 // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
                 // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
@@ -347,6 +358,8 @@ public static class BackpackGridVisual
         float side = Mathf.Min(hostRt.rect.width, hostRt.rect.height);
         if (side > 1f)
             card.Rect.localScale = Vector3.one * Mathf.Min(1f, side / 100f) * iconScale;   // 碎片倍率由真源表给出（2026-11-08 起再 +3%）
+        // 碎片整体往右 3（2026-11-11 主人指令，偏移真源见 FragmentOffsetX）：只动卡根，预制体内部不动
+        card.Rect.localPosition += Vector3.right * FragmentOffsetX;
         return true;
     }
 

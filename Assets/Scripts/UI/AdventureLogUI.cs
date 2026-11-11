@@ -1102,7 +1102,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     // 2026-10-31 主人报「这些字有点小」：只调字号不动框（字号属允许项）。
     // 2026-11-01 主人再报「字还是有点小」：整体再上一档 —— 图上标题 22→26、
     // 图上描述 20→24、当前目标正文 22→24、当前目标小标 16→18、行任务名 22→24、
-    // 行状态字 18→20（20 为「首次击败森之守护者」这类长条件折行的上限，不再加）。
+    // 行状态字 18→20（20 为「首次击败森林守护者」这类长条件折行的上限，不再加）。
     void ApplyReadableFontSizes()
     {
         var paperT = transform.Find("Root/Frame/Paper");

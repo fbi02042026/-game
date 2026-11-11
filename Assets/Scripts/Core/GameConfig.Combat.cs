@@ -728,14 +728,23 @@ public static partial class GameConfig
 
     /// <summary>
     /// 按「章内第几节（0 起）+ 本章节数」取章内爬坡倍率（【2026-11-03 方案A】B3 遗留修复）。
-    /// 节数 5/8/10 都摊满 10 档：首节恒行0（1.00）、末节 Boss 恒行9（1.50 卡点3），
-    /// 中间节等距取样（Mathf.RoundToInt 半偶舍入，subs=5 时结果与旧 {0,2,4,7,9} 完全一致，第 1 章零变化）。
+    /// 第 1 章（subs=5）缓坡 1.00/1.03/1.06/1.11/1.18（2026-11-11 主人拍板「第一章不要太卡」）；
+    /// 8/10 节章仍摊满 10 档：首节恒行0（1.00）、末节 Boss 恒行9（1.50 卡点3），
+    /// 中间节等距取样（Mathf.RoundToInt 半偶舍入）。
     /// </summary>
     public static float GetStageStatScale(int stageIndex0Based, int subsPerGrand)
     {
         if (stageIndex0Based < 0) stageIndex0Based = 0;
         if (subsPerGrand < 1) subsPerGrand = 1;
         if (stageIndex0Based >= subsPerGrand) stageIndex0Based = subsPerGrand - 1;
+        // 【2026-11-11 主人拍板「第一章不要太卡 最后boss可以稍微卡一下」】第 1 章章内缓坡：
+        //   1.00/1.03/1.06/1.11/1.18（旧行 {0,2,4,7,9} 让每座大关都冲到 1.50，10 个 Boss 全是墙）。
+        //   仅第 1 章（subs=5 唯一对应）；8/10 节章的等距摊档不动。
+        //   副本/竞技场/支线岛进本 currentStageIndex 恒 0 → 落行 0，两条映射结果相同，零影响。
+        if (subsPerGrand == 5)
+        {
+            return StageStatScaleTable.Get0Based(Mathf.Clamp(stageIndex0Based, 0, 4));
+        }
         // ⚠ 尾行号必须取 stage_stat_scale 表的行数（10 档，行9 = 1.50）——
         // 不能拿 StageSubToRampRow.Length（那是 5 元素旧映射）当行数，否则全部钳到 1.18。
         int lastRow = StageStatScaleTable.Fallback.Length - 1;
@@ -786,6 +795,10 @@ public static partial class GameConfig
 
     public static float GetGrandWallBonus(int gameChapter, int grandIndex1Based, int stageIndex0Based)
     {
+        // 【2026-11-11 主人拍板「第一章不要太卡 最后boss可以稍微卡一下」】第 1 章只留章末大关
+        // （第 10 座）Boss 卡点，半程（第 5 座）墙对第 1 章关闭；第 2 章起维持「每章 2 个卡点关」不动。
+        // 副本/裂隙/支线岛 grand 恒 1，两条路径都不命中，零影响。
+        if (gameChapter == 1 && grandIndex1Based != ActProgressionDefs.GRANDS_PER_ACT) return 1f;
         if (grandIndex1Based != 5 && grandIndex1Based != ActProgressionDefs.GRANDS_PER_ACT) return 1f;
         if (stageIndex0Based != ActProgressionDefs.SubsPerGrandOf(gameChapter) - 1) return 1f;
         return 1f + GRAND_WALL_STEP;

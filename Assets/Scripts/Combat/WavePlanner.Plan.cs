@@ -26,9 +26,9 @@ public partial class WavePlanner
 
     /// <summary>
     /// 【2026-10-25 主人拍板】正式关每回合波数：全章**定表**（不随机摇）——
-    /// ch1=1/2/3、ch2=2/3/4、ch3 起=3/4/5（GameConfig.FormalRoundWaveFixedCounts，公式 = 基数 + 回合下标）。
+    /// ch1=1/2/3、ch2=2/3/4、ch3 起=2/3/4（与 ch2 同表；GameConfig.FormalRoundWaveFixedCounts，公式 = 基数 + 回合下标）。
     /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.2「按章区间随机摇」口径作废（Min/Max 已删）；
-    /// 【2026-11-05】Σ 还要减去 FORMAL_ROUND_WAVE_CUT（末回合扣，见函数内）；Ch3+ 双段爆发会补回 1 波。
+    /// 【2026-11-05】Σ 还要减去 GameConfig.FormalRoundWaveCut(chapter)（Ch2=3、其余=2；末回合扣，见函数内）；Ch3+ 双段爆发补 1 波口径不变。
     /// v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」更早作废（常量保留退役）。
     /// </summary>
     static int[] RollFormalRoundWaveCounts(int chapter)
@@ -37,12 +37,12 @@ public partial class WavePlanner
         int[] counts = GameConfig.FormalRoundWaveFixedCounts(chapter);
         if (counts.Length != rounds)
             Debug.LogError($"[WavePlanner] 回合波数定表长度 {counts.Length} ≠ 回合数 {rounds}（ch{chapter}），请核对 FormalRoundWaveFixedCounts");
-        // 【2026-11-05 主人拍板】所有关卡波次减 1~2 波：从最后一回合扣（保底 1 波），前两回合不动
+        // 【2026-11-05 / 2026-11-11 主人拍板】Ch1 减 2（6→4 波）、Ch2 减 3（9→6 波）、Ch3+ 减 2（9→7 波 + 爆发 = 8 波）：从最后一回合扣（保底 1 波），前两回合不动
         // → 3 回合结构与回合末标记 isRoundEnd 不变；正式主线关普通 / 精英 / Boss 共用本出口。
-        // Ch3+ 的「双段爆发」会在第 3 波后补插 1 波，净减 1 波，正好落在 1~2 波区间。
+        // Ch3+ 的「双段爆发」会在第 3 波后补插 1 波；【2026-11-11 主人拍板】Ch1 减 2（6→4 波）、Ch2 减 3（9→6 波）、Ch3+ 减 2（9→7 波 + 爆发 = 8 波）。
         if (counts.Length > 0)
         {
-            int cut = Mathf.Clamp(GameConfig.FORMAL_ROUND_WAVE_CUT, 0, Mathf.Max(0, counts[counts.Length - 1] - 1));
+            int cut = Mathf.Clamp(GameConfig.FormalRoundWaveCut(chapter), 0, Mathf.Max(0, counts[counts.Length - 1] - 1));
             counts[counts.Length - 1] -= cut;
         }
         return counts;
@@ -106,7 +106,7 @@ public partial class WavePlanner
         bool formalMain = bm != null && bm.IsFormalMainRun;
         // 【2026-10-22 主人拍板】正式关（主线 Normal 模式）波数口径：
         // v4.0「定死 9 波」已作废（v4.2）——改按「3 回合 × 每回合按章取数」累加
-        // （2026-10-25 主人拍板：全章定表 ch1=1/2/3=6 波、ch2=2/3/4=9 波、ch3 起=3/4/5=12 波；
+        // （2026-10-25 主人拍板：全章定表 ch1=1/2/3=6 波、ch2=2/3/4=9 波、ch3 起=2/3/4=9 波（与 ch2 同表）；
         // Boss 关另加末位 1 Boss 波，见 SetupBossWave）。
         // 引导局（TutorialDirector 直刷）/金币本/无限裂隙不摇（IsFormalMainRun 过滤），口径一行不动。
         // 刷怪点 hardMax 钳制对正式关**不生效**（v4.0 同口径延续）：anchor 取 usable[Mathf.Min(i, count-1)]、
@@ -192,7 +192,7 @@ public partial class WavePlanner
         // 无论模式池路径还是公式兜底路径，正式关统一每波 Random.Range(10,16)（新常量
         // GameConfig.FORMAL_WAVE_MONSTERS_MIN/MAX），不再把关卡总怪数均摊到波（上午的 DistributeMonstersKeepTotal 停用保留）。
         // 【2026-10-25 主人拍板】波数改按章定表（formalTotalWaves），覆盖段照新波数循环即可，怪数口径不变。
-        // 总怪量随总波数浮动（ch1 6 波 ~60-90 / ch2 9 波 ~90-135 / ch3+ 12 波 ~120-180）；精英末波同口径（编成为精英）。
+        // 总怪量随总波数浮动（ch1 6 波 ~60-90 / ch2 9 波 ~90-135 / ch3+ 7 波 ×10~15）；精英末波同口径（编成为精英）。
         // ⚠ 性能口径不变：怪是分波刷的、前波不死光不刷后波，同屏峰值仍 ~15 只，与此前性能测试口径一致。
         // 引导局 / 金币本 / 无限裂隙不走本段，怪数口径一行不动。
         // 【2026-10-23 主人拍板】第 1 波减半、第 2 波减 1/4（折扣真源 = GameConfig.FORMAL_WAVE1/2_DISCOUNT），
@@ -232,7 +232,12 @@ public partial class WavePlanner
                     var a0 = WaveArchetypeTable.Get(archIds[i]);
                     if (a0 != null) archElite = a0.elite;
                 }
-                int wantElite = Mathf.Clamp(UnityEngine.Random.Range(2, 5), 1, perWave[i] - 1);
+                // 【2026-11-11 主人拍板「前期精英波只有一个精英」】第 1 章精英波固定 1 只精英
+                //   （1-3 试了 3 次、3 个职业都过不去，精英波来得太早战力跟不上）；
+                //   第 2 章起维持 2~4 随缘口径不动。
+                int wantElite = CurrentChapter <= 1
+                    ? 1
+                    : Mathf.Clamp(UnityEngine.Random.Range(2, 5), 1, perWave[i] - 1);
                 eliteWaveBonus = Mathf.Max(0, wantElite - archElite);
             }
             Transform anchor = (usable.Count > 0) ? usable[Mathf.Min(i, usable.Count - 1)] : null;
@@ -728,7 +733,7 @@ public partial class WavePlanner
         int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
         int[] perWave;
-        // 【2026-10-25 主人拍板】正式关 Boss 关 = 3 回合小怪波（每回合按章定表：ch1=6…ch3+ =12 波）
+        // 【2026-10-25 主人拍板】正式关 Boss 关 = 3 回合小怪波（每回合按章定表：ch1=6…ch3+ =9 波，削减后 7 波）
         // + 末位 1 Boss 波；v4.2「按章区间随机摇」口径作废；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」更早作废（常量保留退役）。
         // Boss 波放末位（原「小怪波 + 末尾 isBossWave」结构不动），且 Boss 波本身不算回合末（isRoundEnd 恒 false，走通关链）。
         // 【2026-10-22 主人拍板 v4.1】小怪波每波怪数独立摇 10-15（不再用 DistributeMonstersKeepTotal 均摊，

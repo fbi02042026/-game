@@ -301,27 +301,12 @@ public partial class AdventureUI
     void ShowMonsterTip(MonsterConfig cfg, RectTransform iconAnchor = null)
     {
         if (cfg == null) return;
-        string title = string.IsNullOrEmpty(cfg.monsterName) ? cfg.id : cfg.monsterName;
-        int mch = GameConfig.GetMonsterChapter(_selectedChapter);
-        var style = MonsterAttackStyleTable.Get(mch, cfg.spriteIndex);
-        string styleName = style == MonsterAttackStyle.Ranged ? "远程" : "近战";
-        // 图鉴要显示「实战血量」而非裸配置值：Monster.Init 会把 baseHp
-        // 乘上章节系数与 MONSTER_HP_GLOBAL_MUL，这里跟着乘回来，避免面板写 78、实战只有 46。
-        // 2026-10-05：难度新增「章内爬坡」后，图鉴是静态展示、没有"当前第几关"的概念，
-        // 统一按**章首（章内第 1 关）**算 —— 也就是该章的基准血量。
-        // ⚠ 倍率仍走唯一出口 GetStatScale，只是 stage 固定传 0，不在别处另算一遍。
-        float hpScale = GameConfig.GetStatScale(_selectedChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL;
-        float shownHp = cfg.baseHp * hpScale;
-        // 【2026-11-03 主人拍板】冒险日志同步词条信息：表定词条怪（monster_stats.affix）在 Tip 里
-        // 追加词条名 + 一句话介绍（与首次登场提示共用 MonsterAffixDefs.Describe，口径一致）。
-        string affixText = MonsterAffixDefs.Describe(MonsterAffixDefs.ParseAffixList(cfg.tableAffix));
-        string baseText = cfg.isBoss
-            ? $"BOSS\n攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}"
-            : $"攻击 {cfg.baseAttack:0}\n生命 {shownHp:0}\n{styleName}";
-        string body = string.IsNullOrEmpty(affixText) ? baseText : $"{baseText}\n词条：{affixText}";
-        // 排版：词条行会让正文到 6 行，默认 140 高装不下 → 有词条时加高到 196。
-        float h = string.IsNullOrEmpty(affixText) ? 140f : 196f;
-        MonsterTipPanel.Show(transform, title, body, new Vector2(280f, h));
+        // 【2026-11-11 主人拍板「注意排版 主要就是说明词条和弱点」】文案与排版权威搬到
+        // MonsterTipContent 单一出口（与战斗内词条怪提示同一份内容）：战力速览 / 词条 / 弱点 三段，
+        // 血量按章首实战值、弱点按战斗公式的物法分流如实写。高度由 MonsterTipPanel 按正文自动算。
+        MonsterTipPanel.Show(transform,
+            MonsterTipContent.Title(cfg),
+            MonsterTipContent.BuildBody(cfg, _selectedChapter));
         PlaceTipAbove(iconAnchor);
     }
 

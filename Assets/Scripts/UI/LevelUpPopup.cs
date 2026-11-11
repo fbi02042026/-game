@@ -8,7 +8,7 @@ using UnityEngine.UI;
 ///
 /// 预制体 = Resources/Prefabs/Town/恭喜升级（主人摆好：根自带 Canvas，Dim 黑幕带 Button，
 /// 升级特效粒子 quan/MagicDust 挂在 effect 节点下、playOnAwake）。代码只写文本
-/// （第一行 等级前后；第二行 轮换职业 + 其倾向属性 + 点数，2026-10-25 主人拍板「轮流来」）
+/// （第一行 等级前后；第二行 轮换职业 + 其倾向属性 + 每级实际收益，2026-10-25 主人拍板「轮流来」）
 /// + 播弹出动效，其余全用预制体本身——不改预制体、不造节点、不动布局尺寸（铁律 20）。
 ///
 /// 弹出动效（2026-10-25 主人口述时序，各段时长为动效常量可调）：
@@ -94,7 +94,7 @@ public static class LevelUpPopup
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.LevelUpPopup, UICanvasSetup.ResolveUiCamera());
 
         // 文本绑定（按行作用域取，两行各有一个「升级后」，不能全局按名找）：
-        // 第一行 = 等级 1 → 2；第二行 = 轮换职业名 + 其倾向属性名 + 本次升级点数
+        // 第一行 = 等级 1 → 2；第二行 = 轮换职业名 + 其倾向属性名 + 每级实际收益（2026-11-11 文案对齐）
         var row1 = FindDeep(_host.transform, "第一行");
         if (row1 == null)
             Debug.LogError("[LevelUpPopup] 恭喜升级预制体缺「第一行」节点，等级数字不显示（不兜底）");
@@ -116,7 +116,8 @@ public static class LevelUpPopup
             _jobCursor = (_jobCursor + 1) % playable.Length;
             SetText(row2, "职业", PlayerJobDefs.Get(job).DisplayName);
             SetText(row2, "属性", LevelSystem.JobTendencyLabel(job));   // 玩家口径：生命/攻速/魔攻（10-25 拍板）
-            SetText(row2, "升级后", "+" + Mathf.Max(1, afterLevel - beforeLevel));
+            // 2026-11-11 主人「文案对齐」：这里原来显倾向点数（+1），改显每级实际收益（剑盾 +10 血、法师 +2 魔攻、游侠 +1% 攻速）
+            SetText(row2, "升级后", LevelSystem.JobTendencyGainText(job, afterLevel - beforeLevel));
         }
 
         var dim = FindDeep(_host.transform, "Dim");

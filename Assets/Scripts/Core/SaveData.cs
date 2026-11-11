@@ -108,6 +108,12 @@ public class SaveData
     /// </summary>
     public int mercGold = 0;
     public int talentPoints = 0;
+    /// <summary>
+    /// 天赋入口红点「已看到的人物等级」：打开天赋页时记为当时人物等级。
+    /// 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】红点只对**门槛等级高于此值**的
+    /// 新开通批次点亮（人物升级跨过新门槛才重新亮）；判定唯一口径 = TalentDefs.EntryDotShouldLight。
+    /// </summary>
+    public int talentNewSeenLevel = 0;
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石
     public int decomposeMats = 0;   // 分解材料

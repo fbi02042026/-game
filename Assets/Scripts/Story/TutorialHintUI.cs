@@ -95,6 +95,28 @@ public class TutorialHintUI : MonoBehaviour
         _bannerSpriteOverride = sp;
     }
 
+    // ── 单次排版覆盖（【2026-11-11 主人拍板】只调「拖动改顺序」这一条引导，全局常量一字不动）──
+    /// <summary>一次 Show 的排版值。只经 Show 的可选参数传入，Hide 即清空；其余引导全走全局常量。</summary>
+    public struct HintLayout
+    {
+        public int FontSize;
+        public float PadX;
+        public float PadY;
+        public float LineSpacing;
+    }
+
+    HintLayout? _activeLayout;
+    /// <summary>本框覆盖行距前的原值；Hide / 下一条引导 Show 时原样还原，绝不外泄。</summary>
+    float _lineSpacingBeforeOverride;
+    bool _lineSpacingOverrideApplied;
+
+    /// <summary>气泡引导有自己一套版式（400×192 + 26 号深灰），不吃这套排版覆盖。</summary>
+    bool UseLayoutOverride => _activeLayout.HasValue && _bannerSpriteOverride == null;
+    int CurFontSize => UseLayoutOverride ? _activeLayout.Value.FontSize : HintFontSize;
+    float CurPadX => UseLayoutOverride ? _activeLayout.Value.PadX : BannerPadX;
+    float CurPadY => UseLayoutOverride ? _activeLayout.Value.PadY : BannerPadY;
+    float CurLineSpacing => UseLayoutOverride ? _activeLayout.Value.LineSpacing : HintLineSpacing;
+
     /// <summary>Show 时按 override 换底框；没有 override 但上次挂过 override → 还原默认底框。</summary>
     void ApplyBannerSpriteForShow()
     {
@@ -409,7 +431,23 @@ public class TutorialHintUI : MonoBehaviour
     {
         if (_label == null) return;
         bool bubble = _bannerSpriteOverride != null;
-        _label.fontSize = bubble ? BattleHeadTalkUI.BubbleFontSize : HintFontSize;
+        _label.fontSize = bubble ? BattleHeadTalkUI.BubbleFontSize : CurFontSize;
+        // 【2026-11-11】只在本框覆盖态写行距，并记住原值；退出覆盖态立刻还原，
+        // 既不碰其它引导的既有行距，也不把本框的 1.15 留在单例上串给下一条。
+        if (UseLayoutOverride)
+        {
+            if (!_lineSpacingOverrideApplied)
+            {
+                _lineSpacingBeforeOverride = _label.lineSpacing;
+                _lineSpacingOverrideApplied = true;
+            }
+            _label.lineSpacing = CurLineSpacing;
+        }
+        else if (_lineSpacingOverrideApplied)
+        {
+            _label.lineSpacing = _lineSpacingBeforeOverride;
+            _lineSpacingOverrideApplied = false;
+        }
         _label.color = bubble ? BattleHeadTalkUI.BubbleTextColor : HintTextColor;
         if (_label.font == null) _label.font = GameFonts.GetChinese();
     }
@@ -432,11 +470,13 @@ public class TutorialHintUI : MonoBehaviour
         RefreshLayout();
     }
 
-    public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard)
+    public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard,
+        HintLayout? layout = null)
     {
         if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
             return;
 
+        _activeLayout = layout;   // 【2026-11-11】本次 Show 的排版；null = 走全局常量，其余引导零影响
         EnsureBuilt();
         ApplyDefaultTextStyle();      // 【2026-11-08 方案 A】本次 Show 从默认字起步，杜绝上次抽奖气泡的深灰小字泄漏
         ApplyBannerSpriteForShow();   // 【2026-10-31】有 override 换自定义底框，没有且上次换过 → 还原默认
@@ -519,6 +559,7 @@ public class TutorialHintUI : MonoBehaviour
     public void Hide()
     {
         _hard = false;
+        _activeLayout = null;           // 【2026-11-11】先清覆盖：ApplyDefaultTextStyle 按无覆盖态还原行距
         ApplyDefaultTextStyle();        // 【2026-11-08 方案 A】一次性字样式到此为止（自动隐藏也走这里）
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         if (_group != null)
@@ -785,8 +826,8 @@ public class TutorialHintUI : MonoBehaviour
         {
             var lrt = _label.rectTransform;
             float lift = _bannerSpriteOverride != null ? BubbleTextLift : 0f;
-            lrt.offsetMin = new Vector2(BannerPadX, BannerPadY + lift);
-            lrt.offsetMax = new Vector2(-BannerPadX, -BannerPadY + lift);
+            lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
+            lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
         }
 
         bool hasText = _label != null && !string.IsNullOrEmpty(_label.text);
@@ -816,12 +857,12 @@ public class TutorialHintUI : MonoBehaviour
         const float minH = 120f;
         const float maxH = 460f;
         if (_label == null || string.IsNullOrEmpty(_label.text)) return minH;
-        float textW = Mathf.Max(40f, bannerWidth - BannerPadX * 2f); // 与 HintText 左右边距对应
+        float textW = Mathf.Max(40f, bannerWidth - CurPadX * 2f); // 与 HintText 左右边距对应
         var settings = _label.GetGenerationSettings(new Vector2(textW, 9999f));
         float pref = _label.cachedTextGeneratorForLayout.GetPreferredHeight(_label.text, settings);
         if (pref <= 0f) return minH;
-        // 上下各留 BannerPadY，再多给 8 抵消行距取整误差
-        return Mathf.Clamp(Mathf.CeilToInt(pref) + BannerPadY * 2f + 8f, minH, maxH);
+        // 上下各留 CurPadY，再多给 8 抵消行距取整误差
+        return Mathf.Clamp(Mathf.CeilToInt(pref) + CurPadY * 2f + 8f, minH, maxH);
     }
 
     void BeginSwipeToTarget()

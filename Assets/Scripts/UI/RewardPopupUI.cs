@@ -333,9 +333,43 @@ public class RewardPopupUI : MonoBehaviour
 
         SetupConfirmButton(btnT);     // B4-1：修预制体自带的确定按钮
         SetupTapAnywhereToClose();    // B4-2：点屏幕任意地方关闭（用预制体已有的 Mask 节点）
+        SetupFxLayering();            // 【2026-11-11 主人选 B】特效挂 canvas sorting，确定性显示（见方法注释）
 
         _cellTemplate.gameObject.SetActive(false);
         gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 【2026-11-11 主人选 B「特效挂 canvas sorting，任何场景稳定显示」】
+    /// 根因：ItemSparkleYellow / effect 是 layer 0 的 3D 世界空间粒子（ParticleSystemRenderer，不走画布），
+    /// 预制体原生 sortingOrder=0、useUnscaledTime=0，导致：
+    ///   ① 画在弹窗画布(905)之下 → 被全屏 Mask(66%黑)/Panel 压暗，粒子飘出面板边缘才看得见 → 观感时有时无；
+    ///   ② 结算/剧情链把 timeScale 压 0 时弹的窗（BattleManager.Settlement），粒子动画冻在静帧。
+    /// 修法（只改运行时组件参数，绝不碰 .prefab）：
+    ///   ① Renderer.sortingOrder = RewardPopup+1 → 与画布同走 ScreenSpaceCamera 的 sorting：
+    ///      弹窗画布被渲染时特效必然一起被渲染，且画在面板上方清晰显示；绑到哪台相机都不再「玄学」；
+    ///   ② main.useUnscaledTime = true → timeScale=0 时也正常闪烁（正常时间下速度不变，零观感差异）。
+    /// 注意：order 在「画布之下/之上」只有两档，没有中间档（画布内部元素排序不与粒子逐个比较）；
+    ///       若嫌特效压住奖励格子，一句话即可改回画布之下（= RewardPopup-1），再往下就得拆画布。
+    /// </summary>
+    void SetupFxLayering()
+    {
+        int fxOrder = GameConfig.UiSort.RewardPopup + 1;
+        var renderers = GetComponentsInChildren<ParticleSystemRenderer>(true);
+        if (renderers == null || renderers.Length == 0)
+            Debug.LogError("[RewardPopup] 找不到特效粒子 Renderer（ItemSparkleYellow/effect），特效 sorting 挂接失效");
+        foreach (var r in renderers)
+        {
+            if (r == null) continue;
+            r.sortingOrder = fxOrder;
+        }
+        var systems = GetComponentsInChildren<ParticleSystem>(true);
+        foreach (var ps in systems)
+        {
+            if (ps == null) continue;
+            var main = ps.main;
+            main.useUnscaledTime = true;
+        }
     }
 
     /// <summary>

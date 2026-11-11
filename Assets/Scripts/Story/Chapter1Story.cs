@@ -59,30 +59,24 @@ public static class Chapter1Story
     {
         string id = index == 0 ? "A" : index == 1 ? "B" : "C";
         StoryProgress.MarkChapter1Choice(id);
-        var bm = BattleManager.Instance;
-        var hero = bm != null ? bm.hero : Hero.Instance;
 
+        // 【2026-11-11 主人拍板】选项后果只留玩家可感知的战斗加成：
+        // 剧情 NPC 好感（NpcXiaomei/NpcMaster）是隐藏数值，好感界面看不到、图鉴判定也用不上（教程完成即达标），全部删；
+        // C 原「当场回 5% 血」打完 Boss 才结算属无感 → 改「我方受到伤害 ×0.95」持久生效（BattleManager.Query 同 A/B 一套模式）。
         if (index == 0)
         {
-            StoryProgress.AddBond(StoryProgress.NpcXiaomei, 10);
             BattleManager.Instance?.ApplyChapter1ChoiceModifiers("A");
         }
         else if (index == 1)
         {
             BattleManager.Instance?.ApplyChapter1ChoiceModifiers("B");
+            var bm = BattleManager.Instance;
             if (bm != null)
                 bm.currentGold = (long)(bm.currentGold * 1.1f);
         }
         else
         {
-            StoryProgress.AddBond(StoryProgress.NpcMaster, 5);
-            StoryProgress.AddBond(StoryProgress.NpcXiaomei, -5);
-            if (hero != null && hero.attr != null)
-            {
-                float maxHp = hero.attr.GetAttr(AttrType.MaxHp);
-                hero.attr.AddAttr(AttrType.MaxHp, maxHp * 0.05f, false);
-                hero.currentHp = Mathf.Min(hero.currentHp + maxHp * 0.05f, hero.attr.GetAttr(AttrType.MaxHp));
-            }
+            BattleManager.Instance?.ApplyChapter1ChoiceModifiers("C");
         }
     }
 
@@ -95,8 +89,7 @@ public static class Chapter1Story
         // 选完选项时 StoryDirector 的 choice 分支已 ui.Hide() + ResumeGame()（StoryDirector.cs:345-352），
         // 这里直接发奖励即可，不必再开一次 Play（空 beats 会打 LogError、还会二次暂停游戏）。
         // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原「分解材料×3」按锚价（1材料=30金）折成金币×90
-        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 20, save: false, notify: true);
-        ResourceWallet.Add(ResourceWallet.ResourceType.Gold, 90, save: true, notify: true);
+        // 【2026-11-11 主人拍板：剧情金币奖励全删】+20、+90 两笔都删，本段剧情不再发任何钱
         StoryProgress.QueueChapter1TownReturn();
         onDone?.Invoke();
     }

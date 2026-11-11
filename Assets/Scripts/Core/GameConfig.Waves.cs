@@ -98,9 +98,15 @@ public static partial class GameConfig
     /// <summary>
     /// 【2026-11-05 主人拍板】主线正式关每关削减的波数（从最后一回合扣，每回合保底 1 波）。
     /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts；引导局 / 活动副本 / 无限裂隙不走定表，不受影响。
-    /// 2 = ch1 6→4、ch2 9→7、ch3+ 12→10（Ch3+ 双段爆发补 1 波 → 11，净减 1~2 波）。
+    /// 2 = ch1 6→4、ch2 9→6（Boss 关 7 波）、ch3+ 9→7（Ch3+ 双段爆发补 1 波 → 8，净减 3 波）。
+    /// Ch2 例外走 FormalRoundWaveCut，本常量只代表「其余章」。
     /// </summary>
     public const int FORMAL_ROUND_WAVE_CUT = 2;
+    // 【2026-11-11 第二批主人拍板】第二章改成6和7波：Ch2 正式关普通关 6 波 / Boss 关 7 波（小怪波 6 + Boss 本体 1）
+    public const int FORMAL_ROUND_WAVE_CUT_CH2 = 3;
+    /// <summary>正式关本关削减波数的唯一真源；唯一消费方 WavePlanner.RollFormalRoundWaveCounts</summary>
+    public static int FormalRoundWaveCut(int chapter)
+        => chapter == 2 ? FORMAL_ROUND_WAVE_CUT_CH2 : FORMAL_ROUND_WAVE_CUT;
 
     /// <summary>
     /// 【2026-10-25 主人拍板】正式关每回合波数**按章 × 回合位置定死**（不随机摇）：
@@ -109,11 +115,16 @@ public static partial class GameConfig
     /// 第三章在第二章基础上也加一波 然后以后的章节就固定成第三章的」。
     /// 旧「Min/Max 区间随机摇」整条退役已删（2026-10-25，此前唯一消费点就是定表覆盖处）。
     /// 唯一消费方 <see cref="WavePlanner.RollFormalRoundWaveCounts"/>（普通/精英/Boss 关共用，单一出口）。
+    /// 【2026-11-11 主人拍板】主人原话「21-2 打的时间太长了 往后的都减少三分之一波」→ 覆盖 2026-10-25 旧口径：
+    /// Ch3+ 正式主线关（含 21-1）与 Boss 关小怪波一起减波，ch3+ 基数由 3 收到 2（与 ch2 同表 [2,3,4]）；
+    /// 削减后 7 波 + Ch3+ 双段爆发补 1 波 = 8 波（原 3/4/5=12 → 扣 2=10 → 爆发=11 波口径作废）。
+    /// Ch1 / Ch2 一个字不动（ch1 [1,2,3]→4 波、ch2 [2,3,4]→7 波结果完全不变），3 回合结构不变。【本段 ch2 部分已于同日第二批作废，见下一行；ch1 部分仍有效】
+    /// 【2026-11-11 第二批主人拍板】「第二章改成6和7波」→ Ch2 经 FormalRoundWaveCut 额外再削 1 波，普通关 6 / Boss 关 7；Ch1 与 Ch3+ 仍不动。
     /// </summary>
     public static int[] FormalRoundWaveFixedCounts(int chapter)
     {
-        // 每回合波数 = 基数 + 回合下标：基数 ch1=1、ch2=2、ch3 及以后=3
-        int first = Mathf.Clamp(Mathf.Max(1, chapter), 1, 3);
+        // 每回合波数 = 基数 + 回合下标：基数 ch1=1、ch2=2、ch3 及以后=2（2026-11-11 拍板，与 ch2 同表）
+        int first = Mathf.Clamp(Mathf.Max(1, chapter), 1, 2);
         var counts = new int[FORMAL_STAGE_ROUND_COUNT];
         for (int r = 0; r < counts.Length; r++)
             counts[r] = first + r;

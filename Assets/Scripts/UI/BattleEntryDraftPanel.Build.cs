@@ -82,12 +82,12 @@ public partial class BattleEntryDraftPanel
         // 先按真值表拍回收起态，之后 Begin→SetExpanded(true) 才能从 0 平滑动到 1；
         // 不拍这一步，第一次展开会先把面板从 750 抽回 600 再展开，看着就是「跳一下」。
         SetDraftVisible(false);
-        // 【2026-11-09 主人拍板】map / 世界层不再跟着面板两态走：预制体已直接摆成战斗中的
+        // 【2026-11-09 主人拍板】map 不再跟着面板两态走：预制体已直接摆成战斗中的
         // 常驻位置（中心Y 350 / scale 1.4）。这里只把面板 UI 拍回收起态，并一次性把 map
-        // 与世界层落到终态（初始化期、Loading 底下完成，玩家看不到任何位移）。
+        // 落到终态（初始化期、Loading 底下完成，玩家看不到任何位移）。
+        // 【2026-11-11 主人拍板 A】世界层 +0.85 抬升已删净，unitRoot 恒在 GROUND_Y。
         ApplyPanelState(0f);
         ApplyMapState(1f);
-        ApplyWorldLift(1f);
     }
 
     /// <summary>

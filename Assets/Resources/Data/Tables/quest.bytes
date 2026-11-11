@@ -77,7 +77,7 @@ C8_Q3,主线,8,最后一杯,,talk_npc,innkeeper,1,1,4,,,,120,0
 C8_Q4,主线,8,终末之刃,,clear_stage,9,1,0,5,,,,120,0
 daily_login,日常,0,每日登录,领取登录奖励,daily_login,,1,0,1,经验 ×70,打开游戏即完成(进度=loginLastDay==今天，SaveData.GetTaskCounter)；DailyTaskSystem 自动发奖；id 必须小写——QuestJumpRouter.GoDaily 按字面量匹配,70,,0
 daily_clear,日常,0,今日通关,通关 {0}/{1},daily_clear_stages,,3,0,4,经验 ×120,need 真源=SaveData.DAILY_CLEAR_TASK_NEED(发奖同一处，改数量两处同步)；钻石×5 展示已删(2026-10-20 拍板不发钻，ChapterManager:453 恢复时再改回),,,0
-daily_gold,日常,0,财源广进,金币 {0},daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50,,0
+daily_gold,日常,0,财源广进,金币 {0}/{1},daily_gain_gold,,500,0,2,经验 ×50,计数=ResourceWallet.Add 金币收入(实到账)； DailyTaskSystem 自动发奖,50,,0
 daily_kill_20,日常,0,除害,怪 {0}/{1},daily_kill_normal,,20,0,3,经验 ×50,计数=BattleManager.OnMonsterDead 非 Boss 击杀(精英算小怪),50,,0
 daily_recruit,日常,0,招贤纳士,人 {0}/{1},daily_recruit_merc,,1,0,5,经验 ×70,计数=SaveData.UnlockMerc 新解锁(任何来源都算),70,,0
 daily_kill_50,日常,0,清剿,怪 {0}/{1},daily_kill_normal,,50,0,6,经验 ×120,与除害共用计数,120,,0

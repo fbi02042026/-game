@@ -13,14 +13,14 @@ public static class BattleQuestConfig
 
     static readonly string[] ChapterBossObjective =
     {
-        "击败 Boss 森之守护者",
-        "击败 Boss 墓园守卫",
-        "击败 Boss 雨林巨蟒",
-        "击败 Boss 海妖蟹",
-        "击败 Boss 时之风车精灵",
-        "击败 Boss 晶石巨像",
-        "击败 Boss 裂隙化身 · 艾丽娅",
-        "击败 Boss 裂隙意志"
+        "击败 Boss 森林守护者",
+        "击败 Boss 墓园仲裁者",
+        "击败 Boss 秘境骇兽",
+        "击败 Boss 洞穴沉睡者",
+        "击败 Boss 深海之王",
+        "击败 Boss 魔灵监视者",
+        "击败 Boss 异种主宰",
+        "击败 Boss 冰之守护神"
     };
 
     public struct StageQuest

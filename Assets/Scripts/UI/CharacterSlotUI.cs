@@ -134,7 +134,9 @@ public class CharacterSlotUI
         if (hpText != null)
         {
             hpText.gameObject.SetActive(true);
-            hpText.text = $"{Mathf.RoundToInt(currentHp)}";
+            // 【2026-11-11 主人拍板】阵亡当帧伤害溢出会把 currentHp 打成负数（日志实锤 -17/max=336），
+            // 血量数字一律钳到 ≥0；唯一出口在这里，主角/佣兵/阵亡占位所有槽共用，别处不再钳。
+            hpText.text = $"{Mathf.RoundToInt(Mathf.Max(0f, currentHp))}";
         }
         if (hpBarFill != null)
         {
