@@ -122,8 +122,23 @@ public partial class BattleUI : MonoBehaviour
         // 与 ResolveMercSlotCount（走 RunLoadout）的槽数不同源：抽到佣兵后 mercIds 仍为空，
         // SetupMercSlot 里 `index < mercIds.Count` 恒 false → 槽位被判成「空」，头像永不显示
         //（主人报的「第二次抽到塔克不显示」）。局内一律以 RunLoadout 为准；非局内（旧存档）才回退存档名册。
-        List<string> mercIds;
-        List<string> mercHireIds;
+        BuildMercSlotLists(out List<string> mercIds, out List<string> mercHireIds, mm);
+        // 【2026-11-11】场上存活列表在阵亡 Destroy 后会原地压缩前移，而出战名单的阵亡占位不删，
+        // 两者按同一 index 配对就会错位（主人报「两个佣兵头像位置显示的是一个佣兵」）→ 按 id 对齐。
+        var activeMercs = AlignActiveMercsToSlots(mercIds, mercHireIds, mm);
+        int maxSlots = ResolveMercSlotCount();
+
+        SetupMercSlot(mercSlot1, 0, mercIds, mercHireIds, activeMercs, maxSlots, mm);
+        SetupMercSlot(mercSlot2, 1, mercIds, mercHireIds, activeMercs, maxSlots, mm);
+    }
+
+    /// <summary>
+    /// 【2026-11-11 主人报「两个佣兵头像位置显示的是一个佣兵」根因修复】
+    /// 槽位名单唯一真源：局内 = RunLoadout（阵亡占位不删、入队顺序即槽序），非局内才回退存档名册。
+    /// UpdateCharacterSlots 与 RefreshLiveBars 共用，保证两处同源。
+    /// </summary>
+    static void BuildMercSlotLists(out List<string> mercIds, out List<string> mercHireIds, MercenaryManager mm)
+    {
         if (RunLoadout.IsActive)
         {
             var runMercs = RunLoadout.Mercs();
@@ -135,17 +150,37 @@ public partial class BattleUI : MonoBehaviour
                 mercIds.Add(e != null ? e.mercId : null);
                 mercHireIds.Add(e != null ? e.hireId : null);
             }
+            return;
         }
-        else
-        {
-            mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
-            mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
-        }
-        var activeMercs = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
-        int maxSlots = ResolveMercSlotCount();
+        mercIds = mm != null ? mm.GetActiveMercIds() : new List<string>();
+        mercHireIds = mm != null ? mm.GetActiveMercHireIds() : new List<string>();
+    }
 
-        SetupMercSlot(mercSlot1, 0, mercIds, mercHireIds, activeMercs, maxSlots, mm);
-        SetupMercSlot(mercSlot2, 1, mercIds, mercHireIds, activeMercs, maxSlots, mm);
+    /// <summary>
+    /// 把「场上存活佣兵」按槽位名单对齐：阵亡单位 Destroy 后 GetActiveMercs() 会压缩前移，
+    /// 直接按 index 取会把后面的活单位刷进阵亡槽（或钻石复活重新生成后两槽对调）。
+    /// 按 hireId / mercId 找，找不到的槽 = null = 阵亡，SetupMercSlot 已有的压暗分支原样处理，不用改它。
+    /// </summary>
+    static List<Mercenary> AlignActiveMercsToSlots(List<string> mercIds, List<string> mercHireIds, MercenaryManager mm)
+    {
+        var onField = mm != null ? mm.GetActiveMercs() : new List<Mercenary>();
+        int count = mercIds != null ? mercIds.Count : 0;
+        var bySlot = new List<Mercenary>(count);
+        for (int i = 0; i < count; i++)
+        {
+            string id = mercIds[i];
+            string hire = (mercHireIds != null && i < mercHireIds.Count) ? mercHireIds[i] : null;
+            Mercenary found = null;
+            for (int k = 0; k < onField.Count; k++)
+            {
+                var cand = onField[k];
+                if (cand == null) continue;
+                if (!string.IsNullOrEmpty(hire) && cand.hireId == hire) { found = cand; break; }
+                if (!string.IsNullOrEmpty(id) && cand.mercId == id) { found = cand; break; }
+            }
+            bySlot.Add(found);
+        }
+        return bySlot;
     }
 
     // ============================================================

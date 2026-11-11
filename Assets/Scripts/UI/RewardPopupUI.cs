@@ -38,6 +38,10 @@ public class RewardPopupUI : MonoBehaviour
         public bool isFragment;
         public MercRosterDefs.MercRarity fragRarity;
         public string fragHireId;
+        /// <summary>2026-11-11 主人报「装备图标框换金的」：名字稀有度色（邮件装备附件传奇=金字+黑描边）；null=不动，老调用零变化。</summary>
+        public Color? nameColor;
+        /// <summary>【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备条目框体换装备框三档图（唯一出口 EquipRarityFrame）；null=框不动。</summary>
+        public Sprite frameSprite;
 
         public Entry(Sprite icon, string label)
         {
@@ -46,6 +50,8 @@ public class RewardPopupUI : MonoBehaviour
             isFragment = false;
             fragRarity = MercRosterDefs.MercRarity.Common;
             fragHireId = null;
+            nameColor = null;
+            frameSprite = null;
         }
 
         /// <summary>碎片条目：rarity 决定底框，hireId（或 assetId）决定头像。</summary>
@@ -830,6 +836,7 @@ public class RewardPopupUI : MonoBehaviour
         string countPart = null;   // 【2026-11-05 主人拍板「数量写到图标框里」】从 label 拆出的 ×N，末尾统一建角标
         var iconT = FindChild(cell, "Icon");
         var iconImg = iconT != null ? iconT.GetComponent<Image>() : null;
+        var cellImg = cell.GetComponent<Image>();   // 2026-11-11 装备条目框体染色用（nameColor 非空才动）
         // 2026-10-15 主人拍板：获得弹窗「物品图标和字放大 30%」——只放 Icon 的 sizeDelta 与 Label 的 fontSize，
         // 位置/锚点/格子/面板几何一律不动（从预制体 base 重算，不累积偏移）。
         var iconRt = iconT as RectTransform;
@@ -872,6 +879,16 @@ public class RewardPopupUI : MonoBehaviour
                     ol.effectColor = RarityPalette.Outline;
                     ol.effectDistance = new Vector2(1.5f, -1.5f);
                 }
+                // 2026-11-11 主人报「装备图标框不能换成金的吗」：装备条目名字按传入稀有度色 + 黑描边（与碎片同款）；
+                // 其余条目 nameColor=null 完全不动（零行为变化）。框体染色见下方 cellImg 分支。
+                else if (e.nameColor.HasValue)
+                {
+                    t.color = e.nameColor.Value;
+                    var ol = lblT.GetComponent<Outline>();
+                    if (ol == null) ol = lblT.gameObject.AddComponent<Outline>();
+                    ol.effectColor = RarityPalette.Outline;
+                    ol.effectDistance = new Vector2(1.5f, -1.5f);
+                }
             }
             // 文字只做展示：关掉射线，避免它压在确定按钮上方时把点击吃掉
             var lg = lblT.GetComponent<Graphic>();
@@ -906,6 +923,16 @@ public class RewardPopupUI : MonoBehaviour
         {
             iconImg.enabled = true;
             ApplyIconSprite(iconImg, e.icon);
+        }
+
+        // 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备条目框体换装备框三档图
+        //（金/蓝/白，Simple+preserveAspect；图自带色 → 不染 RarityPalette 色防脏，名字色仍走 nameColor）。
+        // frameSprite=null（其余全部调用方）不动格子。
+        if (e.frameSprite != null && cellImg != null)
+        {
+            cellImg.sprite = e.frameSprite;
+            cellImg.type = Image.Type.Simple;
+            cellImg.preserveAspect = true;
         }
 
         // 数量角标最后建（与碎片卡同挂 Icon 下、且在其后 → 永远在最上层，碎片条目不被盖）。

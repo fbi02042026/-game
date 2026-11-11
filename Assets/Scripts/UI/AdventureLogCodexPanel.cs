@@ -567,9 +567,18 @@ public class AdventureLogCodexPanel
 
         WireClick(go, () =>
         {
-            if (!chapterUnlocked || !seen)
+            if (!chapterUnlocked)
             {
-                UIManager.Instance?.ShowToast(chapterUnlocked ? "尚未遇见这只怪物" : "该章节尚未解锁");
+                UIManager.Instance?.ShowToast("该章节尚未解锁");
+                return;
+            }
+            if (!seen)
+            {
+                // 【2026-11-11 主人拍板】没遇到的怪也点得开看预告：形象黑影，只给「在哪能遇到」+传闻，
+                // 怪名/外号/介绍一律「未知」。
+                // ⚠ 这里绝对不能调 MarkMonsterViewed —— 它内部会 seenMonsterIds.Add()，
+                // 看过一眼就算「已遇到」，存档会脏。
+                ShowMonsterCodex(e, isBoss, seen: false, defeated: false);
                 return;
             }
             AdventureCodex.MarkMonsterViewed(e.Id);
@@ -584,17 +593,7 @@ public class AdventureLogCodexPanel
             // }
             AdventureCodex.TryClaimCodexReward(e.Id, isBoss, out _);   // 只记领取标记，不再发钻
 
-            bool defeated = AdventureCodex.IsDefeatedMonster(e.Id);
-            string body = defeated ? e.Desc : e.Lore;
-            string tip = defeated
-                ? e.Lore
-                : "（已遭遇：趣闻已解锁；击败后解锁完整描述）";
-            // 【2026-11-07 主人拍板】头部（原「怪物图鉴」）以后固定放怪物名字；大字位置改放出现地点；
-            // 种类（普通/精英/首领）与「·XX关」一律不写，副行清空。
-            // 2026-11-07 图鉴怪物详情：头部怪名普通红/首领紫；大字地点名前加「出现：」前缀
-            CodexInfoPopupUI.Show("出现：" + CodexPlaceName(e.Place), "", body, tip,
-                AdventureCodex.LoadMonsterSprite(e), zoomSprite: null, codexKind: false,
-                topTitleOverride: e.Name, nameColor: isBoss ? BossMonsterNameColor : NormalMonsterNameColor);
+            ShowMonsterCodex(e, isBoss, seen: true, defeated: AdventureCodex.IsDefeatedMonster(e.Id));
         });
         _spawned.Add(go);
     }
@@ -650,8 +649,10 @@ public class AdventureLogCodexPanel
             ApplyRedDot(go.transform, false);
             // 【2026-11-07 主人拍板】头部=真名；大字位置=职业（弹窗里比原名字放大两号）；
             // 副行=地点名（去掉「·教学关」等后缀）。与怪物详情共用 CodexPlaceName 单一出口。
+            // 【2026-11-11 主人拍板】职业前加「职业」两字 —— 光写「剑盾卫士」会被当成佣兵名字。
             if (string.IsNullOrEmpty(e.Role))
                 Debug.LogError($"[Codex] 佣兵 {e.Id} 缺 Role（职业），图鉴大字会空 —— 去 AdventureLogCatalog 补");
+            string roleLine = string.IsNullOrEmpty(e.Role) ? "" : "职业：" + e.Role;
             // 佣兵弹窗显示头像；点头像可放大看全身立绘（2026-10-20 用户拍板）
             // 【2026-11-01 主人拍板「点头像出现立绘的功能先注释掉」】不再传立绘大图，头像不可点；
             // 想恢复时把下面注释的三行换回去即可（CodexInfoPopupUI 内部放大层逻辑保留未动）。
@@ -659,7 +660,7 @@ public class AdventureLogCodexPanel
             //     AdventureCodex.LoadMercHead(e), AdventureCodex.LoadMercStand(e), codexKind: true,
             //     topTitleOverride: display, nameColor: RarityPalette.Get(rarity));
             // 【2026-11-07 主人拍板】头部名字按稀有度颜色（RarityPalette 全局唯一出口）。
-            CodexInfoPopupUI.Show(e.Role, CodexPlaceName(e.Place), e.Desc, e.Lore,
+            CodexInfoPopupUI.Show(roleLine, CodexPlaceName(e.Place), e.Desc, e.Lore,
                 AdventureCodex.LoadMercHead(e), zoomSprite: null, codexKind: true,
                 topTitleOverride: display, nameColor: RarityPalette.Get(rarity));
         });
@@ -703,6 +704,47 @@ public class AdventureLogCodexPanel
     }
 
     static Color MercRarityColor(MercRosterDefs.MercRarity rarity) => RarityPalette.Get(rarity);
+
+    /// <summary>
+    /// 怪物图鉴详情弹窗（2026-11-11 抽成方法，三态共用）。
+    /// seen=false —— 还没遇到：形象黑影剪影，只给「在哪能遇到」+传闻，怪名/外号/介绍一律「未知」。
+    /// seen=true, defeated=false —— 遇到过没打赢：怪名+外号，正文=传闻，小字提示击败后解锁完整介绍。
+    /// defeated=true —— 打赢过：正文=介绍，小字=传闻。
+    /// </summary>
+    void ShowMonsterCodex(AdventureLogCatalog.MonsterEntry e, bool isBoss, bool seen, bool defeated)
+    {
+        string body, tip, nickLine, topTitle;
+        bool silhouette = false;
+        if (!seen)
+        {
+            topTitle = "未知";
+            nickLine = "未知";
+            body = e.Lore;      // 传闻当正文
+            tip = "未知";
+            silhouette = true;  // 形象给黑影
+        }
+        else
+        {
+            topTitle = e.Name;
+            // 外号是独立字段（v3 定稿 96 个）；外号就是本号的那两条不重复显示。
+            nickLine = (!string.IsNullOrEmpty(e.Nickname) && e.Nickname != e.Name)
+                ? "江湖人称「" + e.Nickname + "」"
+                : "";
+            body = defeated ? e.Desc : e.Lore;
+            tip = defeated
+                ? e.Lore
+                : "（已遭遇：击败后解锁完整介绍）";
+        }
+        // 【2026-11-07 主人拍板】头部（原「怪物图鉴」）以后固定放怪物名字；大字位置改放出现地点；
+        // 种类（普通/精英/首领）与「·XX关」一律不写。
+        // 2026-11-07 图鉴怪物详情：头部怪名普通红/首领紫；大字地点名前加「出现：」前缀
+        // 【2026-11-11】副行改放图鉴外号；未遇到的怪副行/头部/小字一律「未知」。
+        CodexInfoPopupUI.Show("出现：" + CodexPlaceName(e.Place), nickLine, body, tip,
+            AdventureCodex.LoadMonsterSprite(e), zoomSprite: null, codexKind: false,
+            topTitleOverride: topTitle,
+            nameColor: seen ? (isBoss ? BossMonsterNameColor : NormalMonsterNameColor) : (Color?)null,
+            silhouette: silhouette);
+    }
 
     void ApplyPortrait(Transform cell, Sprite sp, bool lit)
     {

@@ -161,6 +161,37 @@ public static class WeaponAffixSystem
     }
 
     /// <summary>
+    /// 给武器实例追加 1 条随机词缀（照 <see cref="ApplyWeaponRoll"/> 的池子/数值/钳制口径，不重命名）。
+    /// 【2026-11-11 主人拍板「有可能多一个属性」】抽奖出的传奇/紫主手武器概率触发，DraftPool 专用出口；
+    /// 尽量避开实例已有的词缀属性（同属性叠加意义小，池子全有时回退全池）。
+    /// </summary>
+    public static void AppendOneAffix(EquipInstance inst)
+    {
+        if (inst == null || inst.template == null) return;
+        if (inst.slotType != EquipSlotType.MainHand && inst.slotType != EquipSlotType.OffHand)
+            return;
+        var kind = WeaponCombatTable.ResolveKind(inst.template);
+        var pool = GetRollableAttrs(kind);
+        if (pool.Count == 0) return;
+        if (inst.attrBonus != null)
+        {
+            var existing = new HashSet<AttrType>();
+            foreach (var b in inst.attrBonus)
+                if (b != null) existing.Add(b.attrType);
+            var fresh = pool.FindAll(a => !existing.Contains(a));
+            if (fresh.Count > 0) pool = fresh;
+        }
+        AttrType attr = pool[Random.Range(0, pool.Count)];
+        float value = RollAttrValue(attr, AffixValueMul(inst.rarity), inst);
+        inst.attrBonus.Add(new AttrBonusData
+        {
+            attrType = attr,
+            value = EquipRollCeiling.ClampAffixValue(inst, attr, value, IsPercentAttr(attr)),
+            isPercent = IsPercentAttr(attr)
+        });
+    }
+
+    /// <summary>
     /// 2026-10-10 主人拍板：PhyPower / MagicPower 从本表**移除**（即对它们返回 false = 加算）。
     /// 这两条是「加成量」（基础值恒为 0、从不登记），isPercent = true 会走 _attr[type] *= (1 + value) → 0 × 1.12 = 0，
     /// 武器的「物理强度 / 魔法强度」词缀在面板上显示 12%、实际生效 0。改加算后与派生口径一致，真正生效。

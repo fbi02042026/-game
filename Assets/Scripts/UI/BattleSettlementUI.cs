@@ -611,15 +611,20 @@ public class BattleSettlementUI : MonoBehaviour
     }
 
     // 奖励格图标弹出：小 → 过冲 → 回原大小；纯代码插值（Time.unscaledDeltaTime），只动 Icon 的 localScale。
-    const float PopStartScale = 0.1f;       // 起手缩放（别用 0，免得某些布局算不出尺寸）
-    const float PopOverScale = 1.18f;       // 过冲峰值
+    // 【2026-11-11 主人拍板】三个数字都改成「预制体 Icon 原始缩放 × 倍率」，
+    // 主人改预制体里 Icon 的大小后，运行时弹出区间会跟着整体缩放。
+    const float PopStartScale = 0.1f;       // 起手倍率（别用 0，免得某些布局算不出尺寸）
+    const float PopOverScale = 1.18f;       // 过冲峰值倍率
     const float PopUpSec = 0.18f;           // 段一：起手 → 过冲
     const float PopBackSec = 0.12f;         // 段二：过冲 → 回原大小
 
     IEnumerator CoPopRewardIcon(RectTransform rt)
     {
         if (rt == null) yield break;
-        rt.localScale = Vector3.one * PopStartScale;
+        // 基准 = 预制体给的 Icon 原始 localScale，必须在第一次写入前抓
+        Vector3 baseScale = rt.localScale;
+        if (baseScale.x <= 0.0001f || baseScale.y <= 0.0001f || baseScale.z <= 0.0001f) baseScale = Vector3.one;
+        rt.localScale = baseScale * PopStartScale;
 
         float t = 0f;
         while (t < PopUpSec)
@@ -628,7 +633,7 @@ public class BattleSettlementUI : MonoBehaviour
             t += Time.unscaledDeltaTime;
             float k = Mathf.Clamp01(t / PopUpSec);
             float e = 1f - (1f - k) * (1f - k) * (1f - k);   // EaseOutCubic
-            rt.localScale = Vector3.one * Mathf.Lerp(PopStartScale, PopOverScale, e);
+            rt.localScale = baseScale * Mathf.Lerp(PopStartScale, PopOverScale, e);
             yield return null;
         }
 
@@ -638,11 +643,11 @@ public class BattleSettlementUI : MonoBehaviour
             if (rt == null) yield break;
             t += Time.unscaledDeltaTime;
             float k = Mathf.Clamp01(t / PopBackSec);
-            rt.localScale = Vector3.one * Mathf.Lerp(PopOverScale, 1f, k);   // 线性
+            rt.localScale = baseScale * Mathf.Lerp(PopOverScale, 1f, k);   // 线性
             yield return null;
         }
 
-        if (rt != null) rt.localScale = Vector3.one;
+        if (rt != null) rt.localScale = baseScale;
     }
 
     void ClearSpawnedCells()

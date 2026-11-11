@@ -49,7 +49,7 @@ public static class MonsterAffixDefs
     public static readonly Def[] All =
     {
         // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：
-        // 狂暴 +30%→+45%、铁壁减伤 25%→37.5%、荆棘 15%→22.5%、迅捷 +40%→+60%、
+        // 狂暴 +30%→+45%、铁壁减伤 25%→37.5%、荆棘 15%（11-11 主人拍板回退，不吃本批 +50%）、迅捷 +40%→+60%、
         // 吸血 30%→45%、分裂 2→3 只、暴击概率 20%→30%（倍率 1.6 不变，暴击期望增量正好 +50%）。
         new Def { Id = MonsterAffixId.Frenzy,  Name = "狂暴", Tint = new Color(1.00f, 0.42f, 0.32f),
                   Desc = "攻击速度提升 45%",
@@ -57,9 +57,10 @@ public static class MonsterAffixDefs
         new Def { Id = MonsterAffixId.Bulwark, Name = "铁壁", Tint = new Color(0.62f, 0.78f, 1.00f),
                   Desc = "受到的伤害降低 37.5%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.625f },
+        // 【2026-11-11 主人拍板】荆棘反弹回到 15%（撤销 11-10 的 15%→22.5% 加成）。
         new Def { Id = MonsterAffixId.Thorns,  Name = "荆棘", Tint = new Color(0.55f, 0.95f, 0.55f),
-                  Desc = "近战攻击它会被反弹 22.5% 伤害",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.225f },
+                  Desc = "近战攻击它会被反弹 15% 伤害",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f },
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
                   Desc = "移动速度提升 60%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1.60f, DamageTakenMul = 1f },

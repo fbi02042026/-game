@@ -398,8 +398,28 @@ public partial class BattleEntryDraftPanel
         return map;
     }
 
+    // ── map 缩放基准（2026-11-11 主人拍板）────────────────────────────────────
+    // 首次碰 map 时缓存【预制体原始 localScale】作为基准，之后两态只写「基准 × 倍率」，
+    // 不再写死 1.4 —— 主人改预制体后运行时跟着变。必须在任何写入之前调用。
+    float _mapBaseScaleX = 1f;
+    bool _mapBaseCaptured;
+
+    float CaptureMapBaseScale()
+    {
+        if (_mapBaseCaptured || _mapRt == null) return _mapBaseScaleX;
+        float s = _mapRt.localScale.x;
+        if (s <= 0.0001f) s = 1f;   // 预制体 scale 被误设成 0 时按 1 兜底，防整块缩没
+        _mapBaseScaleX = s;
+        _mapBaseCaptured = true;
+        return _mapBaseScaleX;
+    }
+
+    /// <summary>倍率 → 绝对缩放（基准来自预制体）。</summary>
+    float MapScaleAt(float mul) => CaptureMapBaseScale() * mul;
+
     /// <summary>
-    /// map 的两态：<b>中心 Y = 250 → 350</b>（主人给的绝对值），缩放两态恒 <b>1.4</b>（2026-10-27 主人拍板）。
+    /// map 的两态：<b>中心 Y = 250 → 350</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
+    /// （原 2026-10-27 拍板恒 1.4；2026-11-11 改为基准派生，见 <c>MapScaleMulCollapsed</c>）。
     ///
     /// <para>读位置恒用 <c>anchoredPosition.y</c> —— 点锚点与拉伸锚点下它都是「中心相对父级中心的偏移」，
     /// 是同一把尺子（见 <c>MapCollapsedPosY</c> 处注释）。</para>
@@ -416,7 +436,7 @@ public partial class BattleEntryDraftPanel
     {
         WriteMapTransform(
             Mathf.Lerp(MapCollapsedPosY, MapExpandedPosY, k),
-            Mathf.Lerp(MapCollapsedScale, MapExpandedScale, k));
+            MapScaleAt(Mathf.Lerp(MapScaleMulCollapsed, MapScaleMulExpanded, k)));
     }
 
     /// <summary>
@@ -460,7 +480,7 @@ public partial class BattleEntryDraftPanel
         if (_mapRt == null) return;
 
         bool atRest = Mathf.Abs(_mapRt.anchoredPosition.y - MapCollapsedPosY) < 0.5f
-                      && Mathf.Abs(_mapRt.localScale.x - MapCollapsedScale) < 0.001f;
+                      && Mathf.Abs(_mapRt.localScale.x - MapScaleAt(MapScaleMulCollapsed)) < 0.001f;
         if (atRest)
         {
             ApplyMapState(0f);
@@ -480,7 +500,7 @@ public partial class BattleEntryDraftPanel
             t += Time.unscaledDeltaTime / AnimSec;
             float e = Mathf.Clamp01(t);
             WriteMapTransform(Mathf.Lerp(fromY, MapCollapsedPosY, e),
-                              Mathf.Lerp(fromS, MapCollapsedScale, e));
+                              Mathf.Lerp(fromS, MapScaleAt(MapScaleMulCollapsed), e));
             yield return null;
         }
         _settleCo = null;
@@ -551,8 +571,8 @@ public partial class BattleEntryDraftPanel
         if (_mapBaseLogged || _mapRt == null) return;
         _mapBaseLogged = true;
         bool stretch = !Mathf.Approximately(_mapRt.anchorMin.y, _mapRt.anchorMax.y);
-        Debug.Log($"[BattleEntryDraftPanel] map 对照：主人定 收起 中心Y={MapCollapsedPosY:F0}/scale {MapCollapsedScale}" +
-                  $" 展开 中心Y={MapExpandedPosY:F0}/scale {MapExpandedScale}；" +
+        Debug.Log($"[BattleEntryDraftPanel] map 对照：收起 中心Y={MapCollapsedPosY:F0}/scale {MapScaleAt(MapScaleMulCollapsed):F3}" +
+                  $" 展开 中心Y={MapExpandedPosY:F0}/scale {MapScaleAt(MapScaleMulExpanded):F3}（基准=预制体 {CaptureMapBaseScale():F3}）；" +
                   $"适配后实测 anchorMin.y={_mapRt.anchorMin.y:F2} anchorMax.y={_mapRt.anchorMax.y:F2}" +
                   $"{(stretch ? "（拉伸锚点）" : "（点锚点）")}" +
                   $" 中心Y(PosY)={_mapRt.anchoredPosition.y:F0}" +
@@ -763,30 +783,49 @@ public partial class BattleEntryDraftPanel
         _idleGuideShown = true;
     }
 
-    // ── 「继续」按钮呼吸缩放（2026-11-09 主人拍板）──────────────────────────
-    // 预制体 BtnContinue 默认 m_LocalScale = 1.45（BattleUI.prefab 实测），放大到 1.55，
-    // 一个完整来回 4 秒、循环；按钮隐藏时归位，下次亮起从 1.45 重新起步。
+    // ── 「继续」按钮呼吸缩放（2026-11-09 主人拍板；2026-11-11 改为跟随预制体基准）──
+    // 缩放基准 = 预制体里 BtnContinue 的 localScale（主人自己调的，如 1.7），
+    // 运行时只在这个基准上乘呼吸倍率，不再写死 1.45 → 1.55：
+    // 主人改预制体后重新 Play 就能看到按钮跟着变大 / 变小。
+    // 一个完整来回 4 秒、循环；按钮隐藏时归位到基准，下次亮起从基准重新起步。
     // 只写 localScale，不动锚点 / 位置 / 尺寸，也不改预制体；与 ApplyPanelState 两态位移互不干涉。
-    const float ContinueBaseScale = 1.45f;
-    const float ContinueMaxScale = 1.55f;
+    const float ContinueBreathGrow = 1.55f / 1.45f;   // 相对基准的最大放大倍率（约 +6.9%，沿用原呼吸幅度）
     const float ContinueBreathSec = 4f;
     float _continueBreathT;
+    bool _continueBaseCaptured;
+    Vector3 _continueBaseScale = Vector3.one;
+
+    /// <summary>
+    /// 首次碰到按钮时缓存它的<b>原始 localScale</b>（预制体值），后续一切写入都从这份基准派生。
+    /// 必须在任何写入之前调用，避免把本类自己写的呼吸值当成基准。
+    /// </summary>
+    Vector3 CaptureContinueBaseScale(RectTransform rt)
+    {
+        if (_continueBaseCaptured) return _continueBaseScale;
+        var s = rt.localScale;
+        // 预制体 scale 被误设成 0 时按 1 处理，否则按钮会被永久缩没（项目里踩过 scale=0 的坑）
+        if (s.x <= 0.0001f || s.y <= 0.0001f || s.z <= 0.0001f) s = Vector3.one;
+        _continueBaseScale = s;
+        _continueBaseCaptured = true;
+        return _continueBaseScale;
+    }
 
     /// <summary>每帧驱动 BtnContinue 的等比缩放（只在按钮可见时推进计时）。</summary>
     void TickContinueBreath()
     {
         var rt = ContinueButtonRect;
         if (rt == null) return;
+        var baseScale = CaptureContinueBaseScale(rt);
         if (!rt.gameObject.activeInHierarchy)
         {
             _continueBreathT = 0f;
-            rt.localScale = Vector3.one * ContinueBaseScale;
+            rt.localScale = baseScale;
             return;
         }
         _continueBreathT += Time.unscaledDeltaTime;
         float phase = (_continueBreathT % ContinueBreathSec) / ContinueBreathSec;
         float k = 0.5f - 0.5f * Mathf.Cos(2f * Mathf.PI * phase);   // 0→1→0，4 秒一个来回
-        rt.localScale = Vector3.one * Mathf.Lerp(ContinueBaseScale, ContinueMaxScale, k);
+        rt.localScale = baseScale * Mathf.Lerp(1f, ContinueBreathGrow, k);
     }
 
 }

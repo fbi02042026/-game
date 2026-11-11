@@ -22,6 +22,8 @@ public static class IslandStoryBeats
         public string Note;         // 独眼字条
         public string YouLine;      // 你
         public string AfterLine;    // 战后
+        /// <summary>【2026-11-11 主人拍板「震惊时可以颤一下镜头」】旁白播放时震一下画面（如王座间的黑曜王座在喘）。</summary>
+        public bool NarrShake;
     }
 
     // 顺序 = 岛 id 1..8（与 SideIslandDefs 对齐）
@@ -67,13 +69,16 @@ public static class IslandStoryBeats
             YouLine   = "又是你。怎么哪儿都有你的字条。",
             AfterLine = "划掉编号的人想让人忘掉这些箱子。偏不。",
         },
+        // 【2026-11-11 主人拍板「『小一号的沉座』意思不明白」】「沉座」是主线第 6 章才揭晓的名词，
+        // 支线与主线并行推进、玩家可能还没打过第 6 章 → 副标/旁白不再依赖该词，直接描述眼前这把缩小版的黑曜王座。
         new IslandText
         {
-            Caption   = "王座间 · 小一号的沉座",
-            Narration = "洞厅正中蹲着一枚黑曜结晶，只有半人高——像大深处那个东西的胚。",
+            Caption   = "王座间 · 半人高的黑曜王座",
+            Narration = "洞厅正中蹲着一把半人高的黑曜王座，黑得发亮，正像呼吸一样一鼓一缩。它还没长成——深处那个更大的东西，大概就是它长大的样子。",
             Note      = "「它在喘。别管它喘的是什么，砸就是了。——独眼（这条我写得手都在抖）」",
             YouLine   = "知道害怕还把字条贴这么整齐，你这家伙到底来过多少个岛。",
             AfterLine = "不喘了。深处那个大的，今天应该打了个喷嚏。",
+            NarrShake = true,
         },
         new IslandText
         {
@@ -142,6 +147,8 @@ public static class IslandStoryBeats
             StoryDirector.Narration(t.Note),
             StoryDirector.Solo("你", t.YouLine, StoryPortraits.Player),
         };
+        // 【2026-11-11 主人拍板「震惊时可以颤一下镜头」】岛 6 黑曜王座在喘 → 旁白震一下。
+        if (t.NarrShake) beats[0].Shake();
         // 黑幕字幕优先用 Caption（岛名·副标），而不是背景 DisplayName —— 见 StoryDirector 首拍换背景分支
         StoryDirector.Ensure().Play(beats, onDone, null, false, t.Caption);
         return true;

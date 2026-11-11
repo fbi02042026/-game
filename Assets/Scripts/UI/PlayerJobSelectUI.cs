@@ -44,6 +44,8 @@ public class PlayerJobSelectUI : MonoBehaviour
         public Transform RatingRoot;
         public CanvasGroup DimGroup;
         public Outline SelectOutline;
+        /// <summary>预制体里这张卡的原始 localScale（2026-11-11 起，选中/置灰缩放都以它为基准）。</summary>
+        public Vector3 BaseScale;
     }
 
     Action _onEnterRift;
@@ -389,6 +391,10 @@ public class PlayerJobSelectUI : MonoBehaviour
                 if (legacy != null) bind.HpStat = legacy;
             }
             EnsureCardSelectFx(ref bind, cardTf);
+            // 基准 = 预制体里 JobCard 的原始缩放；后续选中/置灰只写「基准 × 倍率」，
+            // 主人改预制体卡片大小后，选中放大/置灰缩小都跟着整体变。
+            var bs = cardTf.localScale;
+            bind.BaseScale = (bs.x <= 0.0001f || bs.y <= 0.0001f || bs.z <= 0.0001f) ? Vector3.one : bs;
             int idx = i;
             bind.Button.onClick.RemoveAllListeners();
             bind.Button.onClick.AddListener(() => OnCardClicked(idx));
@@ -756,13 +762,15 @@ public class PlayerJobSelectUI : MonoBehaviour
         if (c.DimGroup != null)
         {
             c.DimGroup.alpha = anySelected && !selected ? 0.4f : 1f;
-            // 默认三卡 0.98；有选中时：选中 1.02，另外两张 0.95
+            // 默认三卡 0.98；有选中时：选中 1.02，另外两张 0.95（均以预制体卡片原缩放为基准）
+            var bs = (c.BaseScale.x <= 0.0001f || c.BaseScale.y <= 0.0001f || c.BaseScale.z <= 0.0001f)
+                ? Vector3.one : c.BaseScale;
             if (!anySelected)
-                c.DimGroup.transform.localScale = Vector3.one * 0.98f;
+                c.DimGroup.transform.localScale = bs * 0.98f;
             else
                 c.DimGroup.transform.localScale = selected
-                    ? Vector3.one * 1.02f
-                    : Vector3.one * 0.95f;
+                    ? bs * 1.02f
+                    : bs * 0.95f;
         }
 
         if (c.SelectOutline != null)

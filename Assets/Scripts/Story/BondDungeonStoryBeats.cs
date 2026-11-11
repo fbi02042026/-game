@@ -31,7 +31,8 @@ public static class BondDungeonStoryBeats
         {
             StoryDirector.Narration("心防试炼：好感攒满才会打开的门，门后是" + name + "最不愿意被人看见的那段路。"),
             StoryDirector.Narration(name + "：「你真要进去？里面没什么好看的，就是我当" + job + "那会儿，没扛住的那几次。」"),
-            StoryDirector.Narration("「那就一起再走一遍。这次不是你一个人。」"),
+            // 【2026-11-11 主人拍板「剧情不要光叙事」】玩家的回应改成真对话（名牌 + 立绘），不再旁白装对白。
+            StoryDirector.Solo("你", "那就一起再走一遍。这次不是你一个人。", StoryPortraits.Player),
             StoryDirector.Narration("门在身后合上。风里全是旧铁锈的味道。"),
         };
         var dir = StoryDirector.Ensure();
@@ -51,8 +52,9 @@ public static class BondDungeonStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("路到头了。前面那团影子，是这段记忆自己长出来的形状。"),
-            StoryDirector.Narration("「我勒个豆……这就是你一直不肯说的东西？」"),
-            StoryDirector.Narration("影子抬起头。它没有脸，却准确地看向了你身边那个人。"),
+            // 【2026-11-11 主人拍板「剧情不要光叙事」】玩家的惊呼改成真对话；影子抬头一拍加震屏。
+            StoryDirector.Solo("你", "我勒个豆……这就是你一直不肯说的东西？", StoryPortraits.Player),
+            StoryDirector.Narration("影子抬起头。它没有脸，却准确地看向了你身边那个人。").Shake(),
         };
         var dir = StoryDirector.Ensure();
         if (dir == null)

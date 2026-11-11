@@ -3,13 +3,15 @@ using UnityEngine;
 
 /// <summary>
 /// 竞技场赛季冠军限定武器（2026-10-29 晚主人拍板）：
-/// · 每个赛季结算第 1 名随结算邮件发一把「赛季限定传奇武器」，12 把轮换，只有竞技场能给；
+/// · 每个赛季结算第 1 名随结算邮件发一把「赛季限定传奇武器」，6 把轮换（2026-11-11 主人拍板
+///   「先用每个职业两把」：攻高属性弱 / 攻低属性强，游侠暴击流+攻速流，剑盾=剑+盾），只有竞技场能给；
 ///   【2026-11-03】赛季已由自然月改为自然周 → 轮换同步改为按周（同一周恒定同一把，周一 0 点切下一把）。
 /// · 模板纯运行时注册（<see cref="ConfigManager.RegisterRuntimeEquip"/>），不落 Resources 目录
 ///   —— 掉落/抽奖的模板池走 Resources.LoadAll，永远扫不到这批 id，天然「竞技场独占」；
 /// · 拥有判定真源 = 随身仓库 legacyEquipPool 里有没有这批 id（邮件 equip 附件领取时写入，
 ///   单一事实来源，不另设存档字段）；出战时（PlayerJobDefs.ApplyForBattle）若拥有与当前职业
-///   匹配的冠军武器 → 生成传奇品质实例替换初始主手（照「稀有·暮火之杖替换法师初始武器」先例）；
+///   匹配的冠军武器 → 生成传奇品质实例替换初始主手；冠军之盾（磐石·冠军之盾）替换初始副手
+///   （照里程钢骨盾先例，仅剑盾职业，主手照常发初始武器）；
 /// · 外观三者同款：图标 iconFileName 与手上贴图 spumName 用同一组现役武器外观对
 ///   （全部取自现有模板已在用的组合，不新增美术资源，铁律「不改 prefab/meta/asset」零触碰）。
 /// </summary>
@@ -31,67 +33,54 @@ public static class ArenaSeasonWeapons
         public AttrBonusData passive;      // 传奇专属被动一条
     }
 
-    // ── 12 把轮换表（2026-11-03 赛季改自然周后按周序号取模，同一周恒同一把）──
-    // 数值档位对齐现网传奇武器（守誓长枪 ATK55/MaxHp160/Defense13+global86+被动32%爆伤）──
-    // 职业轮转 1剑盾 2法牧 3游侠 循环，保证每个职业每季度轮到一把；
-    // 外观全用现役模板同款对（剑盾=刀剑/枪/斧，法牧=法杖 New_Weapon_03，游侠=弓）。
+    // ── 6 把轮换表（2026-11-11 主人拍板「先用每个职业两把」+「差异化：攻高属性弱 / 攻低属性强」）──
+    // 职业轮转：1剑盾·剑 2法师·杖 3游侠·弓(暴击) 4剑盾·盾 5牧师·杖 6游侠·弓(攻速)，6 周一轮、每职业每 3 周轮到一把；
+    // 主手武器替换初始主手；第 4 周「磐石·冠军之盾」替换初始副手（照里程钢骨盾先例，仅剑盾职业）。
+    // 差异化口径：主攻实战会被传奇档表格重 roll（与战斗内传奇同源同量），流派差异靠被动——
+    //   【2026-11-11 主人拍板「不要比战斗内的数值高属性好」】对比战斗内 9 把传奇主手武器（守誓长枪等）：
+    //   模板均无 globalBonus、被动最高守誓枪爆伤 32% → 主手武器一律不带 globalBonus（null），被动全部 ≤ 32% 口径；
+    //   【同上「武器不要加血 盾可以加血不要加攻」】主手武器一律不带 MaxHp；盾（m04）无攻词条、血防拉满
+    //   （战斗内无传奇盾对标，副手生存装 + 全局血 180 为主人特批口径）；游侠两把：m03 暴击流（被动爆率 8%）、
+    //   m06 攻速流（被动攻速 +18%，AttackSpeed 词条按 % 口径）。
+    // 外观全用现役模板同款对（盾=New_Shield_01，杖=New_Weapon_03，剑=New_Weapon_06，弓=New_Weapon_12/10），不新增美术。
     static readonly Def[] Roster =
     {
         new Def{ month=1,  id="weapon_arena_m01", name="裂空·冠军之刃", job=PlayerJobId.SwordShield, twoHand=false,
                  attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Sword, art="New_Weapon_06",
-                 baseAttr=new[]{ A(AttrType.Attack,55f), A(AttrType.MaxHp,180f), A(AttrType.Defense,12f) },
-                 globalBonus=A(AttrType.Attack,90f), passive=A(AttrType.CritDamage,0.35f) },
+                 baseAttr=new[]{ A(AttrType.Attack,40f) },
+                 globalBonus=null,                            // 【不超模口径】战斗内传奇模板无 global，主手武器一律不带 global
+                 passive=A(AttrType.CritDamage,0.12f) },
         new Def{ month=2,  id="weapon_arena_m02", name="誓约·冠军之杖", job=PlayerJobId.Mage, twoHand=false,
                  attackType=WeaponAttackType.Magic, weaponKind=(int)WeaponCombatTable.WeaponKind.Staff, art="New_Weapon_03",
-                 baseAttr=new[]{ A(AttrType.MagicAttack,50f), A(AttrType.MaxHp,220f), A(AttrType.MagicDefense,14f) },
-                 globalBonus=A(AttrType.MagicAttack,70f), passive=A(AttrType.MagicPower,0.30f) },
+                 baseAttr=new[]{ A(AttrType.MagicAttack,36f), A(AttrType.MagicDefense,6f) },
+                 globalBonus=null,                            // 同上
+                 passive=A(AttrType.MagicPower,0.10f) },
         new Def{ month=3,  id="weapon_arena_m03", name="赤焰·冠军猎弓", job=PlayerJobId.Ranger, twoHand=true,
                  attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Bow, art="New_Weapon_12",
-                 baseAttr=new[]{ A(AttrType.Attack,60f), A(AttrType.MaxHp,120f) },
-                 globalBonus=A(AttrType.Attack,85f), passive=A(AttrType.CritRate,0.08f) },
-        new Def{ month=4,  id="weapon_arena_m04", name="黎明·冠军长枪", job=PlayerJobId.SwordShield, twoHand=false,
-                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Polearm, art="New_Weapon_09",
-                 baseAttr=new[]{ A(AttrType.Attack,55f), A(AttrType.MaxHp,180f), A(AttrType.Defense,12f) },
-                 globalBonus=A(AttrType.Attack,90f), passive=A(AttrType.CritDamage,0.35f) },
-        new Def{ month=5,  id="weapon_arena_m05", name="灰烬·冠军钉锤", job=PlayerJobId.Priest, twoHand=false,
+                 baseAttr=new[]{ A(AttrType.Attack,24f) },
+                 globalBonus=null,                            // 同上
+                 passive=A(AttrType.CritRate,0.08f) },
+        new Def{ month=4,  id="weapon_arena_m04", name="磐石·冠军之盾", job=PlayerJobId.SwordShield, twoHand=false,
+                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Shield, art="New_Shield_01",
+                 baseAttr=new[]{ A(AttrType.MaxHp,220f), A(AttrType.Defense,18f) },
+                 globalBonus=A(AttrType.MaxHp,180f), passive=A(AttrType.Defense,25f) },
+        new Def{ month=5,  id="weapon_arena_m05", name="灰烬·冠军法杖", job=PlayerJobId.Priest, twoHand=false,
                  attackType=WeaponAttackType.Magic, weaponKind=(int)WeaponCombatTable.WeaponKind.Staff, art="New_Weapon_03",
-                 baseAttr=new[]{ A(AttrType.MagicAttack,50f), A(AttrType.MaxHp,220f), A(AttrType.MagicDefense,14f) },
-                 globalBonus=A(AttrType.MagicAttack,70f), passive=A(AttrType.MagicPower,0.30f) },
-        new Def{ month=6,  id="weapon_arena_m06", name="暗潮·冠军短弓", job=PlayerJobId.Ranger, twoHand=true,
+                 baseAttr=new[]{ A(AttrType.MagicAttack,14f), A(AttrType.MagicDefense,16f) },
+                 globalBonus=null,                            // 同上
+                 passive=A(AttrType.MagicPower,0.28f) },
+        new Def{ month=6,  id="weapon_arena_m06", name="疾风·冠军短弓", job=PlayerJobId.Ranger, twoHand=true,
                  attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Bow, art="New_Weapon_10",
-                 baseAttr=new[]{ A(AttrType.Attack,60f), A(AttrType.MaxHp,120f) },
-                 globalBonus=A(AttrType.Attack,85f), passive=A(AttrType.CritRate,0.08f) },
-        new Def{ month=7,  id="weapon_arena_m07", name="守誓·冠军之枪", job=PlayerJobId.SwordShield, twoHand=false,
-                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Polearm, art="New_Weapon_16",
-                 baseAttr=new[]{ A(AttrType.Attack,55f), A(AttrType.MaxHp,180f), A(AttrType.Defense,12f) },
-                 globalBonus=A(AttrType.Attack,90f), passive=A(AttrType.CritDamage,0.35f) },
-        new Def{ month=8,  id="weapon_arena_m08", name="星辉·冠军法杖", job=PlayerJobId.Mage, twoHand=false,
-                 attackType=WeaponAttackType.Magic, weaponKind=(int)WeaponCombatTable.WeaponKind.Staff, art="New_Weapon_03",
-                 baseAttr=new[]{ A(AttrType.MagicAttack,50f), A(AttrType.MaxHp,220f), A(AttrType.MagicDefense,14f) },
-                 globalBonus=A(AttrType.MagicAttack,70f), passive=A(AttrType.MagicPower,0.30f) },
-        new Def{ month=9,  id="weapon_arena_m09", name="猎手·冠军长弓", job=PlayerJobId.Ranger, twoHand=true,
-                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Bow, art="Bow_1",
-                 baseAttr=new[]{ A(AttrType.Attack,60f), A(AttrType.MaxHp,120f) },
-                 globalBonus=A(AttrType.Attack,85f), passive=A(AttrType.CritRate,0.08f) },
-        new Def{ month=10, id="weapon_arena_m10", name="骑士·冠军战斧", job=PlayerJobId.SwordShield, twoHand=false,
-                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Sword, art="New_Weapon_08",
-                 baseAttr=new[]{ A(AttrType.Attack,55f), A(AttrType.MaxHp,180f), A(AttrType.Defense,12f) },
-                 globalBonus=A(AttrType.Attack,90f), passive=A(AttrType.CritDamage,0.35f) },
-        new Def{ month=11, id="weapon_arena_m11", name="虚空·冠军宝杖", job=PlayerJobId.Priest, twoHand=false,
-                 attackType=WeaponAttackType.Magic, weaponKind=(int)WeaponCombatTable.WeaponKind.Staff, art="New_Weapon_03",
-                 baseAttr=new[]{ A(AttrType.MagicAttack,50f), A(AttrType.MaxHp,220f), A(AttrType.MagicDefense,14f) },
-                 globalBonus=A(AttrType.MagicAttack,70f), passive=A(AttrType.MagicPower,0.30f) },
-        new Def{ month=12, id="weapon_arena_m12", name="霜寒·冠军猎弓", job=PlayerJobId.Ranger, twoHand=true,
-                 attackType=WeaponAttackType.Physical, weaponKind=(int)WeaponCombatTable.WeaponKind.Bow, art="New_Weapon_12",
-                 baseAttr=new[]{ A(AttrType.Attack,60f), A(AttrType.MaxHp,120f) },
-                 globalBonus=A(AttrType.Attack,85f), passive=A(AttrType.CritRate,0.08f) },
+                 baseAttr=new[]{ A(AttrType.Attack,12f) },
+                 globalBonus=null,                            // 同上
+                 passive=A(AttrType.AttackSpeed,0.18f, true) },
     };
 
-    static AttrBonusData A(AttrType t, float v) => new AttrBonusData { attrType = t, value = v, isPercent = false };
+    static AttrBonusData A(AttrType t, float v, bool percent = false) => new AttrBonusData { attrType = t, value = v, isPercent = percent };   // percent=true 用于攻速这类按百分比的词条（装备面板对 AttackSpeed 强制按 % 口径）
 
     static readonly List<EquipTemplate> _registered = new List<EquipTemplate>();
 
-    /// <summary>把 12 把冠军武器模板注册进 ConfigManager（幂等；ArenaRules.EnsurePeriods 调）。</summary>
+    /// <summary>把 6 把冠军武器模板注册进 ConfigManager（幂等；ArenaRules.EnsurePeriods 调）。</summary>
     public static void EnsureRegistered()
     {
         if (ConfigManager.Instance == null) return;
@@ -109,13 +98,14 @@ public static class ArenaSeasonWeapons
         tpl.templateId = d.id;
         tpl.equipName = d.name;
         tpl.iconFileName = d.art;          // ResolveIcon 按 EquipIcons 文件名加载
-        tpl.gridWidth = d.twoHand ? 2 : 1; // 照 ApplyDefaultGridSize 口径：双手 2×3 / 单手 1×2
-        tpl.gridHeight = d.twoHand ? 3 : 2;
+        bool isShield = d.weaponKind == (int)WeaponCombatTable.WeaponKind.Shield;
+        tpl.gridWidth = isShield ? 2 : (d.twoHand ? 2 : 1);   // 盾 2×2（照现役钢骨盾 equip_new_shield_01）；双手 2×3 / 单手 1×2
+        tpl.gridHeight = isShield ? 2 : (d.twoHand ? 3 : 2);
         tpl.baseRarity = Rarity.Legendary;
         tpl.minLevel = 1;
-        tpl.slotType = EquipSlotType.MainHand;
-        tpl.weaponType = d.twoHand ? WeaponType.TwoHand : WeaponType.OneHand;
-        tpl.weaponHand = WeaponHandSlot.MainHand;
+        tpl.slotType = isShield ? EquipSlotType.OffHand : EquipSlotType.MainHand;
+        tpl.weaponType = isShield ? WeaponType.None : (d.twoHand ? WeaponType.TwoHand : WeaponType.OneHand);
+        tpl.weaponHand = isShield ? WeaponHandSlot.OffHand : WeaponHandSlot.MainHand;
         tpl.weaponAttackType = d.attackType;
         tpl.attackRange = 96f;
         tpl.weaponKindOverride = d.weaponKind;
@@ -206,9 +196,10 @@ public static class ArenaSeasonWeapons
 
     /// <summary>
     /// 出战选装：在随身仓库（legacyEquipPool，邮件领取时写入）里找已拥有的冠军武器，
-    /// 只认与当前职业匹配的；拥有多把取月份最大的（最新的那把）。没有返回 null。
+    /// 只认与当前职业匹配的；offHand=false 找主手类（剑/杖/弓），true 只找盾（仅剑盾职业会命中）；
+    /// 同槽位拥有多把取月份最大的（最新的那把）。没有返回 null。
     /// </summary>
-    public static EquipTemplate OwnedTemplateForJob(SaveData data, PlayerJobId job)
+    public static EquipTemplate OwnedTemplateForJob(SaveData data, PlayerJobId job, bool offHand = false)
     {
         var pool = data?.legacyEquipPool;
         if (pool == null || pool.Count == 0) return null;
@@ -224,6 +215,8 @@ public static class ArenaSeasonWeapons
         {
             var d = Roster[i];
             if (d.job != job || !owned.Contains(d.id)) continue;
+            bool isShield = d.weaponKind == (int)WeaponCombatTable.WeaponKind.Shield;
+            if (isShield != offHand) continue;   // 盾走副手查询，主手武器走主手查询
             if (!best.HasValue || d.month > best.Value.month) best = d;
         }
         if (!best.HasValue) return null;
@@ -237,17 +230,28 @@ public static class ArenaSeasonWeapons
     /// <summary>
     /// 生成出战用的传奇品质实例（照 PlayerJobDefs.GrantAndEquipWeapon 的钳制口径 + 传奇待遇）：
     /// 表格 roll 传奇主攻击 + 词缀 + 模板 globalBonus/被动；requireLevel 钳到当前等级必能穿上。
+    /// 冠军之盾（模板 slotType=OffHand）按副手槽生成（weaponType=None + kind=Shield），主手武器照旧替换主手。
     /// </summary>
     public static EquipInstance CreateBattleInstance(EquipTemplate tpl, WeaponCombatTable.WeaponKind jobKind, int heroLevel)
     {
         if (tpl == null) return null;
         var inst = EquipInstance.GenerateFromTemplate(tpl, 0, Mathf.Max(1, heroLevel), true, Rarity.Legendary);
         inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, heroLevel));
-        if (inst.weaponHand == WeaponHandSlot.None) inst.weaponHand = WeaponHandSlot.MainHand;
-        inst.slotType = EquipSlotType.MainHand;
-        inst.weaponKindOverride = (int)jobKind;   // 与职业起步武器同口径：写死逻辑类型
-        if (jobKind == WeaponCombatTable.WeaponKind.Staff)
-            inst.weaponAttackType = WeaponAttackType.Magic;
+        if (tpl.slotType == EquipSlotType.OffHand)
+        {
+            // 冠军之盾：装副手（照钢骨盾先例），逻辑类型写死 Shield
+            inst.weaponHand = WeaponHandSlot.OffHand;
+            inst.slotType = EquipSlotType.OffHand;
+            inst.weaponKindOverride = (int)WeaponCombatTable.WeaponKind.Shield;
+        }
+        else
+        {
+            if (inst.weaponHand == WeaponHandSlot.None) inst.weaponHand = WeaponHandSlot.MainHand;
+            inst.slotType = EquipSlotType.MainHand;
+            inst.weaponKindOverride = (int)jobKind;   // 与职业起步武器同口径：写死逻辑类型
+            if (jobKind == WeaponCombatTable.WeaponKind.Staff)
+                inst.weaponAttackType = WeaponAttackType.Magic;
+        }
         int unlocked = GameConfig.GetUnlockedBackpackRows(SaveSystem.Instance?.Data);
         if (inst.gridHeight > unlocked) inst.gridHeight = Mathf.Max(1, unlocked);
         if (inst.gridWidth > GameConfig.BACKPACK_WIDTH) inst.gridWidth = GameConfig.BACKPACK_WIDTH;

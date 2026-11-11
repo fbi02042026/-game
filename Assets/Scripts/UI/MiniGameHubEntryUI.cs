@@ -11,6 +11,9 @@ using UnityEngine.UI;
 /// </summary>
 public static class MiniGameHubEntryUI
 {
+    /// <summary>入口总开关（2026-11-11 主人拍板：小游戏入口隐藏，玩法本体保留，置 true 即恢复）。</summary>
+    public const bool EntryEnabled = false;
+
     /// <summary>运行时生成的入口节点名（RightBar 下，与每日登录同父）。</summary>
     public const string NodeName = "MiniGameHubButton";
 
@@ -26,6 +29,8 @@ public static class MiniGameHubEntryUI
     /// <summary>在右列补「礼盒派对」入口。可重复调用（已有则只重新接线 + 重算位置，不重建）。</summary>
     public static void EnsureInGuildHall(Button dailyLoginButton)
     {
+        if (!EntryEnabled) return;
+
         if (dailyLoginButton == null)
         {
             Debug.LogError("[MiniGameHubEntry] 每日登录按钮为空，无法定位右列，合集入口未生成");

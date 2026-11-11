@@ -219,7 +219,23 @@ public static class MailSystem
             }
 
             var sp = !string.IsNullOrEmpty(att.iconOverride) ? Resources.Load<Sprite>(att.iconOverride) : null;
-            items.Add(new RewardPopupUI.Entry(sp, $"{AttachmentPopupName(att)} ×{att.amount}"));
+            var entry = new RewardPopupUI.Entry(sp, $"{AttachmentPopupName(att)} ×{att.amount}");
+            // 2026-11-11 主人报「装备图标框不能换成金的吗」：装备附件条目按模板稀有度上色（传奇=橙金），
+            // 与邮件详情格同口径；模板查不到 LogError 不上色（fail closed）。
+            if (att.type == "equip")
+            {
+                ArenaSeasonWeapons.EnsureRegistered();
+                var eqTpl = ConfigManager.Instance != null
+                    ? ConfigManager.Instance.GetEquipTemplate(string.IsNullOrEmpty(att.defId) ? att.hireId : att.defId)
+                    : null;
+                if (eqTpl != null)
+                {
+                    entry.nameColor = RarityPalette.Get(eqTpl.baseRarity);   // 名字金色
+                    entry.frameSprite = EquipRarityFrame.SpriteOf(eqTpl.baseRarity);   // 框走装备框三档图
+                }
+                else Debug.LogError("[Mail] 装备附件条目上色：模板查不到 defId=" + att.defId);
+            }
+            items.Add(entry);
         }
         return items;
     }
@@ -249,6 +265,18 @@ public static class MailSystem
                 }
             }
             return "职业徽记";
+        }
+        // 2026-11-11 主人报「名字怎么是个英文的」：装备附件原走 default 返回原始 key「equip」。
+        // 改走模板真源取中文名（竞技场冠军武器/里程补偿弓同一出口）；查不到 LogError 退「装备」，不再露英文 key。
+        if (att.type == "equip")
+        {
+            ArenaSeasonWeapons.EnsureRegistered();   // 运行时模板兜底注册（照 ItemGrantSystem.GrantEquip 先例，幂等）
+            var eqTpl = ConfigManager.Instance != null
+                ? ConfigManager.Instance.GetEquipTemplate(string.IsNullOrEmpty(att.defId) ? att.hireId : att.defId)
+                : null;
+            if (eqTpl != null && !string.IsNullOrEmpty(eqTpl.equipName)) return eqTpl.equipName;
+            Debug.LogError("[Mail] 装备附件显示名：模板查不到 defId=" + att.defId);
+            return "装备";
         }
         switch (att.type)
         {
@@ -769,6 +797,19 @@ public static class MailSystem
         if (SaveSystem.Instance == null || SaveSystem.Instance.Data == null)
             throw new InvalidOperationException("SaveSystem 未就绪");
         SaveSystem.Instance.Data.mailInbox ??= new List<MailEntry>();
+        // 2026-11-11 主人报「发的邮件排到最下面」：历史邮件有漏写 createTime 的（如竞技场赛季结算信），
+        // 默认 0 = 列表时间倒序恒排最底、时间列空白。读档口统一补当前时间（补过即 >0 不再动，幂等）。
+        var inbox = SaveSystem.Instance.Data.mailInbox;
+        bool patched = false;
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        for (int i = 0; i < inbox.Count; i++)
+        {
+            var m = inbox[i];
+            if (m == null || m.createTime > 0) continue;
+            m.createTime = now;
+            patched = true;
+        }
+        if (patched) SaveSystem.Instance.Save();
     }
 }
 

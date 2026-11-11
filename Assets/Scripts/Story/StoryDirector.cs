@@ -24,6 +24,11 @@ public class StoryBeat
     public bool skipLocationReveal;
     /// <summary>结局终幕：全屏黑屏 + 一句字幕（无立绘 / 无对话框）。见 <see cref="StoryDirector.BlackLine"/>。</summary>
     public bool blackScreen;
+    /// <summary>
+    /// 【2026-11-11 主人拍板「震惊时可以颤一下镜头」】本句播放时整窗震一下（衰减式短抖，unscaled）。
+    /// 用于惊变/冲击拍：沉座搏动、黑雾崩散、碎成八瓣等。见 DialogueUI.PlayShake。
+    /// </summary>
+    public bool shake;
 
     public StoryBeat Bg(string id)
     {
@@ -40,6 +45,13 @@ public class StoryBeat
     public StoryBeat SkipReveal()
     {
         skipLocationReveal = true;
+        return this;
+    }
+
+    /// <summary>本句播放时震一下画面（震惊/冲击演出，2026-11-11 主人拍板）。</summary>
+    public StoryBeat Shake()
+    {
+        shake = true;
         return this;
     }
 }
@@ -302,6 +314,10 @@ public class StoryDirector : Singleton<StoryDirector>
                 }
                 continue;
             }
+
+            // 【2026-11-11 主人拍板「震惊时可以颤一下镜头」】本句带 Shake 标记则先触发震屏（fire-and-forget，不拦打字与点击推进）。
+            if (b.shake)
+                ui.PlayShake();
 
             ui.ShowLine(
                 b.leftName,

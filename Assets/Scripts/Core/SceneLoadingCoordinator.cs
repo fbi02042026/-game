@@ -37,6 +37,15 @@ public static class SceneLoadingCoordinator
 
     public static void Begin(string tip, LoadTarget target)
     {
+        // 【2026-11-11 防重入守卫】上一次 Loading 还没结束时再 Begin → 拒绝并打日志，
+        // 避免进度突然掉回 0、UI 被重建。诊断线索在上一次 LoadDiag 日志里找触发源。
+        if (_active)
+        {
+            Debug.LogError($"[LoadDiag] Begin 被重入拒绝（上次 Loading 尚未结束）" +
+                           $" target={target} display={_displayProgress:F3} real={_realProgress:F3} " +
+                           $"finishRequested={_finishRequested} tickRunning={_tickRunning}");
+            return;
+        }
         _target = target;
         _realProgress = 0f;
         _displayProgress = 0f;
@@ -163,6 +172,7 @@ public static class SceneLoadingCoordinator
                     _realProgress = 0f;
                     _displayProgress = 0f;
                     _tickRunning = false;
+                    Debug.Log("[LoadDiag] End（正常走完 100%）");
                     yield break;
                 }
             }

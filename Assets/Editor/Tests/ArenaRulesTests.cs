@@ -9,7 +9,7 @@ using UnityEngine.TestTools;
 ///   - 每日 5 次免费 + 每看 1 次广告 +3、广告每天 2 次封顶（2026-10-31）
 ///   - 可挑战窗口 = 上方 3 名、下方 0 名（2026-10-31「能挑战的改成上面3个」）
 ///   - 名次按积分重排（2026-10-30 20:00）、同分玩家排在同分机器人之后（2026-10-31）
-///   - 积分新口径：赢 WinBasePoints 基础 + 连赢加成（每场 StreakBonusStep、封顶 StreakBonusCap）；输 LosePointsDelta；积分永不负（2026-10-30）
+///   - 积分新口径：赢 WinBasePoints 固定值（与连胜场次无关，2026-11-11 拍板）；输 LosePointsDelta；积分永不负（2026-10-30）
 ///   - 机器人无 0 分、垫底保底 10 分（2026-10-31「0 分太多」）；DistVersion 当前值由专门用例断言
 ///   - 胜局升名 1~3 名、前 10 名 1 名（RankGainMax / TopTenRank）
 ///   - 阀门战力系数：新手/连输保底/低分保底 ×0.35、连赢熔断 ×1.9（2026-10-30 晚 + 10-31 重校准）
@@ -46,14 +46,14 @@ public class ArenaRulesTests
     }
 
     [Test]
-    public void TriesLeft_AdBonus_AddsThreePerView()
+    public void TriesLeft_AdBonus_AddsTwoPerView()
     {
         var data = NewSave();
         data.arenaTriesToday = ArenaRules.DailyTries;   // 免费用完
         Assert.AreEqual(0, ArenaRules.TriesLeft(data));
-        data.arenaAdViewsToday = 1;                     // 看 1 次广告 +3
+        data.arenaAdViewsToday = 1;                     // 看 1 次广告 +2（2026-11-11 拍板）
         Assert.AreEqual(ArenaRules.AdBonusTries, ArenaRules.TriesLeft(data));
-        data.arenaAdViewsToday = ArenaRules.AdViewCapPerDay;   // 2 次 = +6
+        data.arenaAdViewsToday = ArenaRules.AdViewCapPerDay;   // 5 次 = +10（2026-11-11 拍板）
         Assert.AreEqual(ArenaRules.AdViewCapPerDay * ArenaRules.AdBonusTries, ArenaRules.TriesLeft(data));
     }
 
@@ -108,21 +108,21 @@ public class ArenaRulesTests
     }
 
     [Test]
-    public void ApplyBattleOutcome_Win_StreakBonus_StepAndCap()
+    public void ApplyBattleOutcome_Win_NoStreakBonus()
     {
+        // 2026-11-11 主人拍板「连胜不应该有积分加成」：本场前连赢多少场，胜利得分都等于 WinBasePoints。
         var data = NewSave();
-        // 本场前连赢 2 场：加成按 StreakBonusStep 叠加、封顶 StreakBonusCap
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离胜局重排
         data.arenaWinStreak = 2;
         int rowIdx = data.arenaPlayerPos - 1;
         ExpectWalletNoSaveWarning();            // 第 1 次赢局
         ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out int pts, out _);
-        Assert.AreEqual(ArenaRules.WinBasePoints + Mathf.Min(ArenaRules.StreakBonusCap, 2 * ArenaRules.StreakBonusStep),
-            pts, "本场前连赢 2 场 → 按步长叠加加成");
-        // 本场前连赢 5 场：加成封顶 StreakBonusCap
+        Assert.AreEqual(ArenaRules.WinBasePoints, pts, "本场前连赢 2 场也只得基础分");
+        // 本场前连赢 5 场：同样只得基础分，不再有封顶加成
         data.arenaWinStreak = 5;
         ExpectWalletNoSaveWarning();            // 第 2 次赢局
         ArenaRules.ApplyBattleOutcome(data, data.arenaPlayerPos - 1, won: true, out pts, out _);
-        Assert.AreEqual(ArenaRules.WinBasePoints + ArenaRules.StreakBonusCap, pts, "连赢加成应封顶");
+        Assert.AreEqual(ArenaRules.WinBasePoints, pts, "连胜场次高也不加分");
     }
 
     [Test]
@@ -340,16 +340,16 @@ public class ArenaRulesTests
     [Test]
     public void SeasonRewards_Pinned()
     {
-        // 与预制体「排行奖励」面板 5 档同值（2026-10-29 深夜拍板）。改档位必须两边一起动。
-        Assert.AreEqual(3000, ArenaRules.SeasonGoldRank1);
-        Assert.AreEqual(300, ArenaRules.SeasonDiamondRank1);
-        Assert.AreEqual(1600, ArenaRules.SeasonGoldRank2);
-        Assert.AreEqual(100, ArenaRules.SeasonDiamondRank2);
-        Assert.AreEqual(1200, ArenaRules.SeasonGoldRank3);
-        Assert.AreEqual(80, ArenaRules.SeasonDiamondRank3);
-        Assert.AreEqual(1000, ArenaRules.SeasonGoldRank4_10);
-        Assert.AreEqual(50, ArenaRules.SeasonDiamondRank4_10);
-        Assert.AreEqual(600, ArenaRules.SeasonGoldRank11_50);
+        // 与预制体「排行奖励」面板 5 档同值（2026-10-29 深夜拍板；2026-11-11 周赛季调档：第 1 名 1000 金 + 100 钻主人定，其余按月档同比例取整）。改档位必须两边一起动。
+        Assert.AreEqual(1000, ArenaRules.SeasonGoldRank1);
+        Assert.AreEqual(100, ArenaRules.SeasonDiamondRank1);
+        Assert.AreEqual(500, ArenaRules.SeasonGoldRank2);
+        Assert.AreEqual(30, ArenaRules.SeasonDiamondRank2);
+        Assert.AreEqual(400, ArenaRules.SeasonGoldRank3);
+        Assert.AreEqual(20, ArenaRules.SeasonDiamondRank3);
+        Assert.AreEqual(300, ArenaRules.SeasonGoldRank4_10);
+        Assert.AreEqual(10, ArenaRules.SeasonDiamondRank4_10);
+        Assert.AreEqual(200, ArenaRules.SeasonGoldRank11_50);
         Assert.AreEqual(0, ArenaRules.SeasonDiamondRank11_50);
         Assert.AreEqual(50, ArenaRules.SeasonRewardTopRank);
     }

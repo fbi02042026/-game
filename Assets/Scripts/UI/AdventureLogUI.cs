@@ -744,7 +744,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (worldTab != null)
             RedDot.Bind(worldTab, RedDot.LogWorld);
         if (_claim != null)
-            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -16f));
+            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -11f));
     }
 
     void SelectTab(LogTab tab, bool force = false)
@@ -943,14 +943,18 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             string status = on ? tag : (e.LaterChapter ? "后续层" : e.Unlock);
             if (e.Kind == "首领" && !on)
                 status = status + " 【Boss】";
-            AddRow(rows, on ? e.Name : "？？？",
+            // 【2026-11-11】标签带图鉴外号（外号就是本号的那两条不重复显示）
+            string label = on ? e.Name : "？？？";
+            if (on && !string.IsNullOrEmpty(e.Nickname) && e.Nickname != e.Name)
+                label = e.Name + " · " + e.Nickname;
+            AddRow(rows, label,
                 status,
                 on ? e.Desc + "\n" + e.Lore : (e.LaterChapter ? "在后续裂隙层中可解锁。" : "解锁条件：" + e.Unlock),
                 !on,
                 on ? e.Place : "尚未解锁");
         }
         title = hasCurrent ? current.Name : "怪物图鉴";
-        desc = hasCurrent ? current.Desc + "\n" + current.Lore : "本版描述偏趣闻与冒险者口耳相传，不代表公会官方立场。";
+        desc = hasCurrent ? current.Desc + "\n" + current.Lore : "本版描述偏传闻与实地记录，不代表公会官方立场。";
         objective = hasCurrent ? current.Place : "在裂隙中遭遇并记录";
         progress = unlocked + "/" + list.Length;
     }

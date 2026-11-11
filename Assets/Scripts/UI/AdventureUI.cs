@@ -458,6 +458,11 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             // 放 warmupOnly 块内：进镇预热点亮那遍不触发、不写标记（同 SideIslandGuide 口径）。
             TryShowArenaUnlockToast();
 
+            // 【2026-11-11 主人拍板「切了后台不要中断战斗」】恢复中断局询问（10-22 原话「上一局意外退出是否继续」）：
+            // 切后台被系统杀掉 App 不算放弃 —— 构筑档还在就先弹「继续上一局 / 重新开始」，快照留给
+            // ConfirmResumeInterruptedRun 接回被打断那关的关号与局内金币池；SettleInterruptedRun 已让位不再静默结算。
+            TryPromptInterruptedRun();
+
             // 【2026-10-28 主人拍板】会长支线岛情报指引：不在主界面主动弹（相关剧情以后一律不主动出来），
             // 只在玩家进冒险界面时播（每岛每次洗牌轮一次，播过记档）。有待续局的局让路给续局询问，
             // 本次不播、标记不写，下次进冒险页再播。
@@ -465,11 +470,30 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             {
                 SideIslandGuide.TryShowForCurrent(SaveSystem.Instance?.Data);
             }
-
-            // 【2026-11-07 口径】中断局不再弹「继续上一局 / 重新开始」：
-            // 启动进城镇时已由 BattleStateSaver.SettleInterruptedRun 统一静默判撤离失败结算，
-            // 关号 / 构筑 / 局内金币池一律不保留，这里不再询问。
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-11 主人拍板「切了后台不要中断战斗」】恢复 10-22 的中断局询问弹窗（11-07 曾停用）：
+    /// 主线局中途退出（切后台被杀 / 强退）→ 构筑档 midBattle 还在 → 弹「继续上一局 / 重新开始」。
+    /// 确定 = ConfirmResumeInterruptedRun（接回被打断那关重打 + 局内金币池）；
+    /// 取消 = 构筑整档作废 + 清中断快照，下次进本照旧发启动金从第一个未通关开打。
+    /// </summary>
+    void TryPromptInterruptedRun()
+    {
+        if (!RunLoadout.HasInterruptedRun()) return;
+        var snapshot = BattleStateSaver.PeekInterrupted();
+        var saved = RunLoadout.PeekResumable();
+        int chapter = snapshot != null && snapshot.chapterId >= 1
+            ? snapshot.chapterId
+            : (saved != null ? saved.chapter : 1);
+        RunResumeChoiceUI.Show(chapter,
+            onConfirm: () => RunLoadout.ConfirmResumeInterruptedRun(snapshot),
+            onCancel: () =>
+            {
+                RunLoadout.Clear();
+                BattleStateSaver.ClearInterruptedSave();
+            });
     }
 
     /// <summary>
@@ -486,8 +510,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         GlobalToastUI.Show("试炼场已开启，快去看看吧！", true);
     }
 
-    // 「继续上一局 / 重新开始」询问已于 2026-11-07 停用：中断一律在启动进城镇时
-    // 由 BattleStateSaver.SettleInterruptedRun 静默判撤离失败结算，不接回进度。
+    // 「继续上一局 / 重新开始」询问：2026-11-07 曾停用（中断一律静默判撤离失败结算）。
+    // 【2026-11-11 主人拍板「切了后台不要中断战斗」】已恢复 —— 实现见上方 TryPromptInterruptedRun。
 
 
     /// <summary>

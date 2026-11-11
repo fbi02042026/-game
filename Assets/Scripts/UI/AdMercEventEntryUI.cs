@@ -56,7 +56,7 @@ public static class AdMercEventEntryUI
         {
             hand.gameObject.SetActive(true);
             Wire(hand.GetComponent<Button>());
-            RedDot.Bind(hand, RedDot.AdMercEvent, new Vector2(-16f, -16f), RedDot.DefaultSize);
+            RedDot.Bind(hand, RedDot.AdMercEvent, new Vector2(-16f, -11f), RedDot.DefaultSize);
             GuildHallUI.Instance?.FitRightBarBgToButtons();   // 【2026-11-03 主人】按钮在列黑底按按钮拉长
             return;
         }

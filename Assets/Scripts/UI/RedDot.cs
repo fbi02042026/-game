@@ -156,7 +156,7 @@ public static class RedDot
         rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(size, size);
-        rt.anchoredPosition = offset ?? new Vector2(-12f, -12f);
+        rt.anchoredPosition = offset ?? new Vector2(-12f, -7f);
 
         var img = go.GetComponent<Image>();
         img.sprite = Sprite;

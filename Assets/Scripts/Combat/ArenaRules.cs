@@ -28,12 +28,12 @@ public static class ArenaRules
     // ───────────────────────── 可调参数（改这里就够） ─────────────────────────
     /// <summary>排行榜机器人数量（加上玩家共 101 名）。2026-10-29 主人拍板 30→100：怕几天就登顶。</summary>
     public const int BotCount = 100;
-    /// <summary>每天免费挑战次数。【2026-10-31 主人拍板】10 → 5（配广告位：看一次 +3 次）。</summary>
+    /// <summary>每天免费挑战次数。【2026-10-31 主人拍板】10 → 5（配广告位；2026-11-11 广告改 +2/次、每天 5 次）。</summary>
     public const int DailyTries = 5;
-    /// <summary>每看 1 次激励视频加的挑战次数。【2026-10-31 主人拍板】2 → 3。</summary>
-    public const int AdBonusTries = 3;
-    /// <summary>每天最多看几次激励视频。</summary>
-    public const int AdViewCapPerDay = 2;
+    /// <summary>每看 1 次激励视频加的挑战次数。【2026-11-11 主人拍板「看一次加2次」】3 → 2。</summary>
+    public const int AdBonusTries = 2;
+    /// <summary>每天最多看几次激励视频。【2026-11-11 主人拍板「每天可以看5次」】2 → 5。</summary>
+    public const int AdViewCapPerDay = 5;
     /// <summary>只能挑战排名上方的 N 名（2026-10-31 主人拍板「能挑战的数量改成上面3个」：1 → 3，上方换位赛窗口）。</summary>
     public const int ChallengeableCount = 3;
     /// <summary>排名下方可挑战的 N 名（积分赛窗口）。2026-10-31 主人拍板「能挑战的数量改成上面3个」：
@@ -66,7 +66,7 @@ public static class ArenaRules
     /// 身边永远有同分的人；「越远越多」由分差（曲线越陡越大）+ 距离奖励双保险。
     /// </summary>
     // 【2026-10-30 拍板作废】原「吃分差 + 距离奖励 5/10/15」积分口径随积分版商店改版退役
-    //（计分口径见 WinBasePoints / StreakBonusStep / StreakBonusCap / LosePointsDelta 常量区）。
+    //（计分口径见 WinBasePoints / LosePointsDelta 常量区；胜利得分与连胜场次无关，2026-11-11 主人拍板）。
     // public static readonly int[] ChallengeBonusPoints = { 5, 10, 15 };
 
     // ── 机器人积分分布（2026-10-29 主人拍板：开局一大群 0 分，越往前同分的人越少）──
@@ -88,12 +88,8 @@ public static class ArenaRules
     // public const int LosePoints = 5;
 
     // ── 积分新口径（2026-10-30 主人拍板「竞技场积分版商店」：积分 = 排名数字 + 商店消费货币）──
-    /// <summary>赢一场基础积分。</summary>
+    /// <summary>赢一场基础积分（每场固定，与连胜场次无关——2026-11-11 主人拍板「连胜不应该有积分加成」）。</summary>
     public const int WinBasePoints = 20;
-    /// <summary>连赢加成：本场前连赢数 ≥1 时按连赢数叠加的每场步长。</summary>
-    public const int StreakBonusStep = 5;
-    /// <summary>连赢加成累计上限。</summary>
-    public const int StreakBonusCap = 15;
     /// <summary>胜局单场最多升名位数（等于可挑战窗口上方人数）。</summary>
     public const int RankGainMax = ChallengeableCount;
     /// <summary>前 10 名内胜局固定升 1 名的名次阈值。</summary>
@@ -140,33 +136,33 @@ public static class ArenaRules
     // 【2026-10-29 深夜主人再拍板】档位按主预制体里手摆的「排行奖励」面板来——5 档：1 / 2 / 3 / 4~10 / 11~50。
     // 两处改动：① 原「第 2~3 名」合并档拆成第 2 名、第 3 名两档（第 3 名 1200 金 + 80 钻）；
     //          ② 原「第 11 名及以后」收成「第 11~50 名」，<see cref="SeasonRewardTopRank"/> 名开外不发奖。
-    // 面板展示文案已烤在预制体里（档位两边必须同值，改档位要一起动）。
+    // 面板展示文案已烤在预制体里（档位两边必须同值，改档位要一起动）。【2026-11-11 周赛季调档】赛季改 1 周（ArenaSeasonClock），第 1 名主人定 1000 金 + 100 钻（传奇武器照发），其余按月档同比例取整：2 名 500/30、3 名 400/20、4~10 名 300/10、11~50 名 200/0；prefab 文案与测试锚已同步。
     /// <summary>第 1 名金币。</summary>
-    public const int SeasonGoldRank1 = 3000;
+    public const int SeasonGoldRank1 = 1000;
     /// <summary>第 1 名钻石。</summary>
-    public const int SeasonDiamondRank1 = 300;
+    public const int SeasonDiamondRank1 = 100;
     /// <summary>第 2 名金币（只有金币+钻石，不给武器）。</summary>
-    public const int SeasonGoldRank2 = 1600;
+    public const int SeasonGoldRank2 = 500;
     /// <summary>第 2 名钻石。</summary>
-    public const int SeasonDiamondRank2 = 100;
+    public const int SeasonDiamondRank2 = 30;
     /// <summary>第 3 名金币。</summary>
-    public const int SeasonGoldRank3 = 1200;
+    public const int SeasonGoldRank3 = 400;
     /// <summary>第 3 名钻石。</summary>
-    public const int SeasonDiamondRank3 = 80;
+    public const int SeasonDiamondRank3 = 20;
     /// <summary>第 4~10 名金币。</summary>
-    public const int SeasonGoldRank4_10 = 1000;
+    public const int SeasonGoldRank4_10 = 300;
     /// <summary>第 4~10 名钻石。</summary>
-    public const int SeasonDiamondRank4_10 = 50;
+    public const int SeasonDiamondRank4_10 = 10;
     /// <summary>第 11~50 名金币。</summary>
-    public const int SeasonGoldRank11_50 = 600;
+    public const int SeasonGoldRank11_50 = 200;
     /// <summary>第 11~50 名钻石。</summary>
     public const int SeasonDiamondRank11_50 = 0;
     /// <summary>发奖名次上限：第 11~50 名有奖，此名次开外不发（与预制体「11-50」档同值）。</summary>
     public const int SeasonRewardTopRank = 50;
-    /// <summary>机器人每日积分漂移下限（有涨有跌，纯数值味道，不影响换位链）。</summary>
-    public const int BotDriftMin = -3;
-    /// <summary>机器人每日积分漂移上限（涨多跌少）。</summary>
-    public const int BotDriftMax = 12;
+    /// <summary>机器人每日积分漂移下限（有涨有跌，纯数值味道，不影响换位链；2026-11-11 主人拍板：积分一律 10 倍数，-3 → -10）。</summary>
+    public const int BotDriftMin = -10;
+    /// <summary>机器人每日积分漂移上限（涨多跌少；2026-11-11 主人拍板：12 → 30 保持 10 倍数，+30 让机器人涨得更明显）。</summary>
+    public const int BotDriftMax = 30;
     // 【2026-10-31 主人拍板「只有积分有变动的时候排名才会变」】BotSwapsPerDay / ShuffleBots（每日随机换位）已删。
 
     // ── 机器人分数随游玩进度水涨船高（2026-10-30 20:10 主人拍板：开局分差别太大、游玩中分数定期刷）──
@@ -192,9 +188,10 @@ public static class ArenaRules
 
     static SaveData D => SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
 
-    // ───────────────────────── 周期结算（每日 + 每周） ─────────────────────────
+    // ───────────────────────── 周期结算（每日 + 赛季） ─────────────────────────
 
-    /// <summary>每日 + 每周 + 换位链自检（读档收口 / 弹窗打开 / 入口点击都会调，幂等）。</summary>
+    /// <summary>每日 + 赛季 + 换位链自检（读档收口 / 弹窗打开 / 入口点击都会调，幂等）。
+    /// 【2026-11-11 主人拍板】赛季键统一走 <see cref="ArenaSeasonClock.SeasonKey"/>（5 分钟测试周期 / 月周期 / 周周期都由那边集中控制）。</summary>
     public static void EnsurePeriods(SaveData data)
     {
         ArenaSeasonWeapons.EnsureRegistered();   // 冠军武器模板注册（幂等；邮件领取/出战选装都依赖查表）
@@ -227,49 +224,48 @@ public static class ArenaRules
             data.arenaLowPityLeft = 0;
             EnsureValveTargets(data);   // 保底/熔断目标开局各掷一次（真战斗版阀门，2026-10-30 晚）
         }
-        else
+        else if (!ArenaSeasonClock.IsFrozen())   // 结算冻结期：榜单一动不动，连每日漂移也跳过（2026-11-11 主人拍板）
         {
             DriftBots(data);
         }
     }
 
     /// <summary>
-    /// 跨周（自然周赛季，2026-11-03 测试用改）：结算上赛季 → 发奖励邮件 → 积分清零 → 机器人重新生成 → 换位链重建。
-    /// 赛季键 = 本周周一的 yyyyMMdd（复用 SaveData.WeekMondayKey 口径，周一 0 点跨周）。
+    /// 赛季结算（2026-11-11 主人拍板：周期从"自然周"改成 ArenaSeasonClock 通用 N 秒周期，默认 5 分钟测试）：
+    /// 结算上赛季 → 发奖励邮件 → 积分清零 → 机器人重新生成 → 换位链重建。
+    /// 赛季键 = ArenaSeasonClock.SeasonKey()（= 当前赛季起始 Unix 秒的 string，赛季周期对齐）。
     /// 首次（无机器人）只做初始化，不发结算。
     /// </summary>
     public static void EnsureWeek(SaveData data)
     {
         if (data == null) return;
-        string week = SaveData.WeekMondayKey().ToString();
-        if (data.arenaMonthKey == week) return;
+        string sk = ArenaSeasonClock.SeasonKey();
+        if (data.arenaMonthKey == sk) return;
 
         bool hadSeason = data.arenaBots != null && data.arenaBots.Count > 0;
         if (hadSeason)
         {
             int finalRank = PlayerRank(data);
             var rw = RewardFor(finalRank);
-            string lastWeek = "上周";
             var mail = new MailEntry
             {
-                title = $"竞技场·{lastWeek}赛季结算",
-                body = $"上周战绩出炉，你最终排在第 {finalRank} 名！奖励已随信附上，签收开冲～\n\n" +
-                       "新一周榜单已重开，这回冲个更猛的！",
-                sender = "竞技场组委会",
+                title = $"竞技场·上赛季结算",
+                body = $"上赛季战绩出炉，你最终排在第{finalRank}名！奖励已随信附上，签收开冲～\n\n" +
+                       "新赛季榜单已重开，这回冲个更猛的！",
+                sender = "竞技场·王座议会",   // 2026-11-11 主人拍板：「组委会」不够霸气官方，换有排面的名号
+                createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),   // 2026-11-11 主人报「邮件排到最下面」：原来漏写时间戳（默认 0 = 时间倒序恒排最底、时间列空白）
                 type = MailType.Reward,
                 gold = rw.gold,
                 diamond = rw.diamond,
             };
-            // 【2026-10-29 晚主人拍板】冠军限定武器：第 1 名随邮件发当周轮换传奇武器（仅竞技场可获得）；
-            // 【2026-11-03 赛季改自然周】武器同步改按周轮换（同一周恒定同一把，周一 0 点切换）。
-            // equip 附件领取时进随身仓库，出战时若职业匹配自动替换初始主手（ArenaSeasonWeapons 口径）。
+            // 冠军限定武器：第 1 名随邮件发当赛季轮换传奇武器（赛季周期同步改由 ArenaSeasonClock 控制）。
             if (finalRank <= 1)
             {
                 string weaponId = ArenaSeasonWeapons.CurrentSeasonWeaponId();
                 string wname = ArenaSeasonWeapons.WeaponName(weaponId);
-                mail.title = $"竞技场·{lastWeek}冠军是你？！";
-                mail.body = $"上周最终排名：第 {finalRank} 名！我勒个豆，冠军真给你拿下了？\n\n" +
-                            $"限定传奇武器「{wname}」已随信附上（赛季冠军限定，每周换一把），出战对应职业会自动替换初始武器。新一周继续守擂！";
+                mail.title = $"竞技场·冠军是你？！";
+                mail.body = $"上赛季最终排名：第{finalRank}名！我勒个豆，冠军真被你拿下了！！全场起立鼓掌——王座上从今天起刻的就是你的名字，这就是实力的含金量！\n\n" +
+                            $"限定传奇武器「{wname}」已随信附上（赛季冠军限定，每赛季换一把），出战对应职业会自动替换初始武器。新赛季挑战者已在排队，继续守擂，传奇未完待续！";   // 2026-11-11 主人拍板：文案改满祝贺情绪价值；「第{finalRank}名」去空格防折行甩字
                 mail.attachments = new List<MailAttachment>
                 {
                     new MailAttachment
@@ -284,10 +280,10 @@ public static class ArenaRules
             }
             if (rw.gold > 0 || rw.diamond > 0 || mail.attachments != null)
                 MailSystem.Enqueue(mail, notifyToast: false);   // 读档期不发提示，进竞技场时看结算横幅
-            data.arenaSeasonNotice = $"上周赛季结算：第 {finalRank} 名" +
+            data.arenaSeasonNotice = $"上赛季结算：第 {finalRank} 名" +
                 (rw.gold > 0 || rw.diamond > 0 ? "，奖励已发到邮箱。" : "。");
         }
-        data.arenaMonthKey = week;
+        data.arenaMonthKey = sk;
         data.arenaPoints = 0;
         // 新赛季开局：新手必赢重置（「刚进来的玩家可以赢几次」），低分保底清零
         data.arenaFreshWinsLeft = NewbieWinsPerSeason;
@@ -320,8 +316,7 @@ public static class ArenaRules
     /// <see cref="ArenaSeasonWeapons.CurrentWeaponIcon"/> 提供。</summary>
     public static string SeasonRewardInfoText()
     {
-        var now = DateTime.Now;
-        return $"每周一 0 点按最终排名发奖并清零积分重开（当前 {now.Year}年{now.Month}月，冠军武器按月轮换）：\n" +
+        return $"{ArenaSeasonClock.RuleLine} 按最终排名发奖并清零积分重开：\n" +
                $"第 1 名　金币×{SeasonGoldRank1} + 钻石×{SeasonDiamondRank1} + 冠军限定武器\n" +
                $"第 2 名　金币×{SeasonGoldRank2} + 钻石×{SeasonDiamondRank2}\n" +
                $"第 3 名　金币×{SeasonGoldRank3} + 钻石×{SeasonDiamondRank3}\n" +
@@ -330,9 +325,9 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 机器人每日积分漂移：涨多跌少。漂移后按原名次对齐积分序，玩家名次保持不变；
-    /// 机器人涨分不再带动玩家位被动变化，名次动效只跟战斗结算走。
-    /// 0 分不漂移——守卫保留（垫底保底分之下没有 0 分机器人，此分支正常走不到）。
+    /// 机器人每日积分漂移：涨多跌少。2026-11-11 主人拍板：积分一律 10 倍数 →
+    /// 漂移档位改为 -10/0/10/20/30（随机 -1 到 +3 乘 10），并量化落位；
+    /// 玩家名次保持不变（RepositionByPoints(data, 0) 对齐积分序）。
     /// </summary>
     static void DriftBots(SaveData data)
     {
@@ -341,7 +336,9 @@ public static class ArenaRules
         {
             var b = data.arenaBots[i];
             if (b == null || b.points <= 0) continue;
-            b.points = Mathf.Max(0, b.points + UnityEngine.Random.Range(BotDriftMin, BotDriftMax + 1));
+            // 随机 -1/0/1/2/3 → 乘 10 得到 -10/0/+10/+20/+30；净增钳 ≥0（积分整体只会更高）
+            int drift = UnityEngine.Random.Range(-1, 4) * 10;
+            b.points = ((b.points + Mathf.Max(0, drift)) / 10) * 10;   // 量化到 10 倍数
         }
         RepositionByPoints(data, 0);   // 只把积分序对齐回原位次，玩家名次不变（唯一重排口复用）
     }
@@ -436,10 +433,11 @@ public static class ArenaRules
         return Mathf.Max(BotMinScore, QuantizeScore(raw));
     }
 
-    /// <summary>按分数段取整制造同分：低分段步子小（同分多）、高分段步子大（同分少）。</summary>
+    /// <summary>按分数段取整制造同分（2026-11-11 主人拍板：积分一律 10 倍数，step 改成 10/20/50/100，
+    /// 删掉原 v&lt;50 时的 step=5（会造 5 结尾假数），<500 段从 25 改 20（25 也会造 5 结尾））。</summary>
     static int QuantizeScore(float v)
     {
-        int step = v < 50f ? 5 : v < 200f ? 10 : v < 500f ? 25 : v < 1000f ? 50 : 100;
+        int step = v < 200f ? 10 : v < 500f ? 20 : v < 1000f ? 50 : 100;
         return Mathf.RoundToInt(v / step) * step;
     }
 
@@ -1139,8 +1137,8 @@ public static class ArenaRules
 
     /// <summary>
     /// 真战斗结算（2026-10-30 主人拍板「竞技场真战斗」，替代原掷骰制 <c>ResolveChallenge</c>——已删）：
-    /// 【2026-10-30 晚积分版商店拍板】积分口径：赢 = WinBasePoints 基础 + 连赢加成（本场前连赢 ≥1 时
-    ///     min(StreakBonusCap, 连赢数×StreakBonusStep)；具体数值见常量区）；
+    /// 【2026-10-30 晚积分版商店拍板】积分口径：赢 = WinBasePoints（每场固定，与连胜无关，
+    ///     2026-11-11 主人拍板「连胜不应该有积分加成」）；
     /// 【2026-10-30 20:00 主人拍板】输 = -10（扣分掉名；原「输 +10 不掉名」口径随「名次按积分」一并作废）；
     /// 【2026-10-30 16:45 主人拍板】金币照发 +200（WinGold，走 ResourceWallet 入账；
     ///     胜局结算面板金币格在 BattleManager.SettleArenaVictoryCells）。
@@ -1184,11 +1182,9 @@ public static class ArenaRules
             // 上一把若是踩着保底线赢的（来时连输已达标）→ 保底消费完毕，重掷目标（只掷「场次」，不定胜负）
             bool pityConsumed = data.arenaLossStreak >= data.arenaPityTarget;
 
-            // 连赢加成用「本场前」的连赢数：min(StreakBonusCap, 连赢数 × StreakBonusStep) 叠加到 WinBasePoints
-            int streakBonus = data.arenaWinStreak >= 1
-                ? Mathf.Min(StreakBonusCap, data.arenaWinStreak * StreakBonusStep)
-                : 0;
-            pts = WinBasePoints + streakBonus;
+            // 胜利得分 = WinBasePoints 固定值（2026-11-11 主人拍板「连胜不应该有积分加成」：
+            // 原「连赢数 × StreakBonusStep 封顶 StreakBonusCap」叠加已删，连胜计数只留熔断门用）。
+            pts = WinBasePoints;
 
             // 换位制退役（2026-10-30 20:00 主人拍板「名次按积分」）：不再 RemoveAt/Insert 换位，
             // 名次统一由积分落账后的 RepositionByPoints 按分重排（上下方目标同口径）。
@@ -1199,7 +1195,7 @@ public static class ArenaRules
 
             powerDelta = Mathf.RoundToInt(myPower * PowerGainOnWin);
             data.arenaPlayerPower = Mathf.Max(100, myPower + powerDelta);
-            data.arenaWinStreak++;                                        // 连赢计数（积分加成 + 熔断门共用）
+            data.arenaWinStreak++;                                        // 连赢计数（熔断门用；不参与积分，2026-11-11 拍板）
             data.arenaLossStreak = 0;                                     // 赢即断连输链
             if (data.arenaFreshWinsLeft > 0) data.arenaFreshWinsLeft--;   // 新手必赢消耗
             if (data.arenaLowPityLeft > 0) data.arenaLowPityLeft--;       // 低分保底消耗
@@ -1244,7 +1240,7 @@ public static class ArenaRules
     /// 返回名次位移（正=上升 / 负=下降 / 0=没动）：战斗结算按胜负给出升/降位数并写 LastBattleAnim 动效；
     /// 跨天漂移、游玩中刷新、商店消费传 0，只把积分序对齐回原位次、玩家名次不变。
     /// </summary>
-    static int RepositionByPoints(SaveData data, int desiredGain)
+    public static int RepositionByPoints(SaveData data, int desiredGain)
     {
         int oldPos = Mathf.Clamp(data.arenaPlayerPos, 0, data.arenaBots.Count);
         data.arenaBots.Sort((a, b) => (b == null ? 0 : b.points).CompareTo(a == null ? 0 : a.points));
@@ -1322,7 +1318,7 @@ public static class ArenaRules
     }
 
     /// <summary>记一条对战记录（新→旧，超出 BattleRecordMax 裁尾）。只记 对手头像/名字/胜败/分值/时间。
-    /// 【2026-10-30 20:00 拍板】points = 当场积分变化（胜 = WinBasePoints + 连赢加成（封顶 StreakBonusCap）为正 / 败 = LosePointsDelta 为负），显示侧统一带符号。</summary>
+    /// 【2026-10-30 20:00 拍板】points = 当场积分变化（胜 = WinBasePoints 固定值，与连胜无关 / 败 = LosePointsDelta 为负），显示侧统一带符号。</summary>
     static void AddBattleRecord(SaveData data, ArenaBotEntry bot, bool won, int points)
     {
         if (bot == null) return;

@@ -80,6 +80,8 @@ public class ArenaBattleRecord
     public int points;
     /// <summary>对战时间（Unix 秒，UTC；显示时转本地）。</summary>
     public long time;
+    /// <summary>true=防守战（离线期间被机器人挑战，2026-11-11 拍板「防守有输有赢」）；false=我主动发起的挑战。旧档缺省 false。</summary>
+    public bool isDefense;
 }
 
 [Serializable]
@@ -215,7 +217,7 @@ public class SaveData
     public string arenaMonthKey = "";
     /// <summary>今日已用挑战次数（每天 10 次 + 广告 2 次×每次 +2）</summary>
     public int arenaTriesToday = 0;
-    /// <summary>今日已看广告次数（每天最多 2 次，每次 +2 挑战次数）</summary>
+    /// <summary>今日已看广告次数（2026-11-11 主人拍板：每天最多 5 次，每次 +2 挑战次数）</summary>
     public int arenaAdViewsToday = 0;
     /// <summary>我的竞技场积分（战绩数值；换位制下排名由换位链决定，积分是累计战绩；输了会掉，0 分保护）</summary>
     public int arenaPoints = 0;
@@ -245,6 +247,13 @@ public class SaveData
     public int arenaBattlesTotal = 0;
     /// <summary>机器人分数上次「游玩中刷新」的 Unix 时间戳（0=未刷过，下次检查立即刷；间隔见 ArenaRules.BotRefreshSeconds）。</summary>
     public long arenaBotRefreshAt = 0;
+    /// <summary>
+    /// 竞技场「离线漂移」上次结算时间（Unix 秒；0/非法值回落到 lastSaveTime = 上次在线）。
+    /// 只服务离线结算（ArenaLadderDrift），不参与赛季判定（赛季键仍是 arenaMonthKey）。
+    /// </summary>
+    public long arenaLadderSettleAt = 0;
+    /// <summary>「赛季结算倒计时」信息框最近弹出键（5 分钟测试周期按赛季起始秒去重，月周期按 yyyyMMdd 去重；见 ArenaSeasonClock.ShouldPrompt）</summary>
+    public string arenaSeasonHintDayKey = "";
     /// <summary>赛季结算横幅（跨月后第一次打开竞技场时展示一次后清空）</summary>
     public string arenaSeasonNotice = "";
     /// <summary>新赛季新手必赢剩余场次（赛季开始/首进竞技场置为 NewbieWinsPerSeason，每打一场 -1；2026-10-29 晚主人拍板「刚进来的玩家可以赢几次」）</summary>

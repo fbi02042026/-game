@@ -350,11 +350,13 @@ public static class ArenaShopGoods
             else
             {
                 // 首购 = 现有招募入队链（解锁进三选一池 + 图鉴 + 获得演出，照 TavernUnlockUI.TryUnlock 口径）
-                data.UnlockMerc(good.hireId);
-                AdventureCodex.MarkMercSeen(good.hireId);
-                MercGainCinematicUI.Show(good.hireId, null);
-                granted = true;
-                msg = $"{mercDef.Name} 已入册，三选一池见！";
+                granted = data.UnlockMerc(good.hireId);
+                if (granted)
+                {
+                    AdventureCodex.MarkMercSeen(good.hireId);
+                    MercGainCinematicUI.Show(good.hireId, null);
+                    msg = $"{mercDef.Name} 已入册，三选一池见！";
+                }
             }
         }
         else if (good.kind == GoodKind.Gold)

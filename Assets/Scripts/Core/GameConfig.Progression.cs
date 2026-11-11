@@ -139,8 +139,10 @@ public static partial class GameConfig
     public const int AD_SLOT_REVIVE_DIAMOND = 10;
 
     /// <summary>
-    /// 复活时恢复的生命比例（0.5 = 半血原地复活）。【2026-10-24 主人拍板】想调手感只改这一个数。
+    /// 战斗内复活血量比例（0.6 = 六成血）。【2026-11-11 主人拍板「只要是死了的都拉起来，恢复60%的血」】
+    /// 钻石复活时<b>主角与所有阵亡佣兵</b>一律按此比例拉起，唯一真源在
+    /// <c>BattleManager.DoReviveHero</c> / <c>ReviveFallenMercsOnHeroRevive</c>。想调手感只改这一个数。
     /// </summary>
-    public const float REVIVE_HP_RATIO = 0.5f;
+    public const float REVIVE_HP_RATIO = 0.6f;
 
 }

@@ -420,12 +420,15 @@ public static class MercHireSession
         return sp;
     }
 
-    // ⚠️ 这是「三选一招募卡」自己的边框，美术已调好，不要再改成头像框那套。
+    // ⚠️ 这是「三选一招募卡」自己的边框，不要再改成头像框那套。
+    // 【2026-11-11 主人拍板】真源 = Resources/UI/Art/招募/ 的三张酒馆卡面（传奇金框/稀有蓝框/普通银框）。
+    // 旧 UI/Recruit/frame_* 是另一版旧图（主人报「看的效果不对」「总是不按我的来」）—— 三张酒馆图
+    // 的 meta guid 是团结 56 字符长串拖预制体必断链，按 AGENTS.md §2.3 一律路径加载、不修 guid。
     public static Sprite LoadRarityFrame(MercRosterDefs.MercRarity rarity)
     {
-        string name = rarity == MercRosterDefs.MercRarity.Legendary ? "frame_legendary"
-            : rarity == MercRosterDefs.MercRarity.Rare ? "frame_rare" : "frame_common";
-        return CachedSprite("UI/Recruit/" + name);
+        string name = rarity == MercRosterDefs.MercRarity.Legendary ? "酒馆_0000s_0006_传奇"
+            : rarity == MercRosterDefs.MercRarity.Rare ? "酒馆_0000s_0010_稀有" : "酒馆_0000s_0009_普通";
+        return CachedSprite("UI/Art/招募/" + name);
     }
 
     /// <summary>

@@ -20,12 +20,20 @@ public partial class EndlessRunGame
     const string FONT_FUSION = "Fonts/fusion-pixel";
     const string FONT_TOPBAR = "Fonts/fusion-pixel";            // TopBar GoldText 引用的字体
     const string LEVELUP_TEXT = "队伍升级！！";
+    const string SP_MERC_FRAME = "UI/Art/Main/头像/头像框";      // 底部佣兵面板头像底框（World.cs 的 MercHead 同款）
 
     // ---- 爱心 ----
     const float HEART_SIZE = 48f;
     const float HEART_GAP = 10f;
     static readonly Color HeartFull = Color.white;
     static readonly Color HeartEmpty = new Color(0.5f, 0.5f, 0.5f, 0.35f);   // 同图灰度 + 降透明（§9-6 选项一，待主人拍板）
+
+    // ---- 底部佣兵面板（2026-11-11 T6：主人「下面有佣兵面板」）----
+    const int MERC_SLOT_COUNT = 3;        // 1 玩家 + 2 佣兵（队列上限 2，见 Queue.EnqueueMerc）
+    const float MERC_SLOT_SIZE = 72f;
+    const float MERC_SLOT_GAP = 10f;
+    const float MERC_PANEL_Y = 56f;       // 与 LvText / GoldPanel 同一底边高度，面板居中
+    const float MERC_HEAD_INSET = 6f;     // 头像相对底框内缩（头像 200×200、框 192×180）
 
     // ---- 升级飘字 ----
     const float FLY_HEAD_PAD_U = 1.2f;   // 头顶偏移（unit）
@@ -35,6 +43,8 @@ public partial class EndlessRunGame
     RectTransform _hudRoot;
     Image[] _hearts;
     Text _metersText, _lvText, _goldText, _flyText;
+    Image[] _mercHeadImgs;                 // 底部佣兵面板：0=玩家，1/2=队列前两位
+    string _mercBarSig;                    // 面板签名（玩家 + 前两位 hireId），变化才重取头像
     Sprite _heartSprite, _goldBgSprite, _hudCoinSprite;
     Font _fusionFont, _topbarFont;
     Coroutine _hudLoop, _flyRoutine;
@@ -98,6 +108,7 @@ public partial class EndlessRunGame
         }
         _hudLastHp = _hudLastMeters = _hudLastLevel = -1;
         _hudLastGold = long.MinValue;
+        _mercBarSig = null;      // 重开 / 重进必须重刷佣兵面板（否则空签名会跳过首次刷新）
         _hudReady = true;
     }
 
@@ -170,6 +181,51 @@ public partial class EndlessRunGame
         _goldText = NewHudText("GoldText", panel,
             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-2.2f, -2.9f), new Vector2(110f, 40f),
             _topbarFont, 26, new Color(1f, 0.85f, 0.35f, 1f), TextAnchor.MiddleCenter);
+
+        BuildMercPanel();
+    }
+
+    /// <summary>
+    /// 底部佣兵面板（2026-11-11 T6）：3 个槽 = 玩家 + 队列前两位佣兵，居中排布在 Lv 文本与金币条之间。
+    /// 只读内存队列 `_mercs`，绝不碰存档 hiredMercs；头像走 MercPortraitSprites.GetHead 单一出口。
+    /// </summary>
+    void BuildMercPanel()
+    {
+        float total = MERC_SLOT_COUNT * MERC_SLOT_SIZE + (MERC_SLOT_COUNT - 1) * MERC_SLOT_GAP;
+        var panel = NewHudRect("MercPanel", _hudRoot);
+        panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 0f);
+        panel.pivot = new Vector2(0.5f, 0f);
+        panel.anchoredPosition = new Vector2(0f, MERC_PANEL_Y);
+        panel.sizeDelta = new Vector2(total, MERC_SLOT_SIZE);
+
+        Sprite frame = Resources.Load<Sprite>(SP_MERC_FRAME);
+        if (frame == null) Debug.LogError("[跑酷HUD] 佣兵头像框加载失败：" + SP_MERC_FRAME);
+
+        _mercHeadImgs = new Image[MERC_SLOT_COUNT];
+        for (int i = 0; i < MERC_SLOT_COUNT; i++)
+        {
+            var slot = NewHudRect("MercSlot" + i, panel);
+            slot.anchorMin = slot.anchorMax = new Vector2(0f, 0.5f);
+            slot.pivot = new Vector2(0f, 0.5f);
+            slot.anchoredPosition = new Vector2(i * (MERC_SLOT_SIZE + MERC_SLOT_GAP), 0f);
+            slot.sizeDelta = new Vector2(MERC_SLOT_SIZE, MERC_SLOT_SIZE);
+
+            var bg = NewHudRect("Bg", slot);
+            StretchRect(bg);
+            var bgImg = bg.gameObject.AddComponent<Image>();
+            bgImg.sprite = frame;
+            bgImg.raycastTarget = false;
+
+            var head = NewHudRect("Head", slot);
+            StretchRect(head);
+            head.offsetMin = new Vector2(MERC_HEAD_INSET, MERC_HEAD_INSET);
+            head.offsetMax = new Vector2(-MERC_HEAD_INSET, -MERC_HEAD_INSET);
+            var headImg = head.gameObject.AddComponent<Image>();
+            headImg.preserveAspect = true;
+            headImg.raycastTarget = false;
+            headImg.enabled = false;          // 空槽不显示图，只留底框
+            _mercHeadImgs[i] = headImg;
+        }
     }
 
     // ============================================================
@@ -183,12 +239,57 @@ public partial class EndlessRunGame
         if (m != _hudLastMeters) { _hudLastMeters = m; _metersText.text = m + "m"; }
         if (RunGold != _hudLastGold) { _hudLastGold = RunGold; _goldText.text = RunGold.ToString(); }
         if (RunLevel != _hudLastLevel) { _hudLastLevel = RunLevel; _lvText.text = "Lv." + RunLevel; }
+        RefreshMercPanel();
     }
 
     void RefreshHearts()
     {
         for (int i = 0; i < _hearts.Length; i++)
             _hearts[i].color = i < PlayerHp ? HeartFull : HeartEmpty;
+    }
+
+    /// <summary>
+    /// 底部佣兵面板刷新：签名 = 玩家 + 队列前两位 hireId，没变就早退（每帧调用不产生额外开销）。
+    /// 队列变化（入队 / 顶替 / 弹飞）只影响前两位，所以签名只看这两位。
+    /// </summary>
+    void RefreshMercPanel()
+    {
+        if (_mercHeadImgs == null) return;
+
+        string sig = "player";
+        for (int i = 0; i < MERC_SLOT_COUNT - 1 && i < _mercs.Count; i++)
+            sig += "|" + (_mercs[i] != null ? _mercs[i].hireId : "");
+        if (sig == _mercBarSig) return;
+        _mercBarSig = sig;
+
+        ApplyMercSlot(0, "player");
+        for (int i = 1; i < MERC_SLOT_COUNT; i++)
+        {
+            int q = i - 1;
+            ApplyMercSlot(i, q < _mercs.Count && _mercs[q] != null ? _mercs[q].hireId : null);
+        }
+    }
+
+    /// <summary>单个槽位贴头像：hireId 为空＝空槽（只留底框）；取不到头像 LogError 且不显示假图。</summary>
+    void ApplyMercSlot(int idx, string hireId)
+    {
+        var img = _mercHeadImgs[idx];
+        if (string.IsNullOrEmpty(hireId))
+        {
+            img.sprite = null;
+            img.enabled = false;
+            return;
+        }
+        Sprite sp = MercPortraitSprites.GetHead(hireId);
+        if (sp == null)
+        {
+            Debug.LogError("[跑酷HUD] 佣兵头像缺失：" + hireId);
+            img.sprite = null;
+            img.enabled = false;
+            return;
+        }
+        img.sprite = sp;
+        img.enabled = true;
     }
 
     // ============================================================

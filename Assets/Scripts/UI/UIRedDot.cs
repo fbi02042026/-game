@@ -13,7 +13,7 @@ public class UIRedDot : MonoBehaviour
     [Tooltip("若节点上还没有 Image，是否自动补齐红点图")]
     public bool autoCreate = true;
     public float size = RedDot.DefaultSize;
-    public Vector2 offset = new Vector2(-12f, -12f);
+    public Vector2 offset = new Vector2(-12f, -7f);
 
     Image _image;
 

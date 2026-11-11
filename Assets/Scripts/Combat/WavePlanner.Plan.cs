@@ -715,6 +715,13 @@ public partial class WavePlanner
 
         float startX = GetStageStartX();
         int minions = GameConfig.GetBossStageMinionTotal(stageIdx, CurrentChapter);
+
+        // 支线岛（IsSideIsland）本身就是场单 Boss 战，再加 9 只小怪显得空 → 翻 1.8 倍（16±2 只）
+        // 终章追查关/竞技场/金币本同样加量（也是单人 Boss 战，正式关链不走这里）。
+        bool isSoloBossStage = bm != null && (bm.IsSideIsland || bm.IsFinale || bm.IsGiftDungeon || bm.IsArena);
+        if (isSoloBossStage)
+            minions = Mathf.RoundToInt(minions * 1.8f);
+
         int bossCount = GameConfig.GetBossStageMonsterTotal();
 
         // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss

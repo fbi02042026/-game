@@ -104,8 +104,11 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// </summary>
     const float MapCollapsedPosY = 250f;
     const float MapExpandedPosY = 350f;
-    const float MapCollapsedScale = 1.4f;
-    const float MapExpandedScale = 1.4f;
+    // 【2026-11-11 主人拍板】缩放不再写死绝对值：以预制体 map 的原始 localScale 为基准 × 倍率。
+    // 预制体里 map 本来就是 1.4（与旧写死值一致），所以两态倍率都取 1；
+    // 主人以后在预制体里调大调小，运行时两态会跟着一起变（位置 Y 仍按主人给的绝对值写）。
+    const float MapScaleMulCollapsed = 1f;
+    const float MapScaleMulExpanded = 1f;
 
     const float AnimSec = 0.25f;
 

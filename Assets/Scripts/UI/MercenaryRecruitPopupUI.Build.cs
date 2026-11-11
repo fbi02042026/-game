@@ -185,19 +185,16 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-11-08】卡片两组文字放大约 50%：名字/职业行 + 技能名/技能信息行。
-    /// prefab 字号不动（铁律：不碰预制体），只在运行时统一设；写死目标值保证幂等，
-    /// 不会因 AutoBind 多次调用而层层放大。括号内是 prefab 实测原值。
+    /// 卡片字号运行时覆盖。【2026-11-11 主人拍板】技能名(Skill*_name)/技能信息(Skill*_内容)
+    /// 停用运行时覆盖、以主人预制体设置为准（此前 11-08 的 30/24/26 硬设会把预制体字号冲掉，
+    /// 主人报「技能字和信息没用预制体里的设置」）；名字/外号两行维持 11-08 拍板的 26 不变。
     /// </summary>
     static void ApplyCardFontSizes(CardView c)
     {
         if (c == null) return;
-        SetFontSize(c.nameText, 26);        // 名字 17 → 26
-        SetFontSize(c.nicknameText, 26);    // 外号/职业行 17 → 26
-        SetFontSize(c.skill1Name, 30);      // 技能名 20 → 30
-        SetFontSize(c.skill2Name, 30);
-        SetFontSize(c.skill1Desc, 24);      // 技能信息 16 → 24
-        SetFontSize(c.skill2Desc, 26);      // 技能信息 17 → 26
+        SetFontSize(c.nameText, 26);        // 名字（2026-11-08 拍板 17 → 26，维持）
+        SetFontSize(c.nicknameText, 26);    // 外号/职业行（同上）
+        // 技能名/技能信息不再设字号 —— 2026-11-11 主人拍板：预制体说了算，代码不碰
     }
 
     static void SetFontSize(Text t, int size)

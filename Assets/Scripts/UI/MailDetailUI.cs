@@ -517,6 +517,10 @@ public class MailDetailUI : MonoBehaviour
         public long amount;
         public bool isMerc; // 2026-10-16 主人拆分：佣兵附件走 RewardCellTemplate (1) 头像格
         public Color? nameColor; // 2026-11-08 主人拍板：本体/碎片格「名字 + 框体」共用该佣兵稀有度色（仅 merc/mercfrag 填）
+        // 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备格专用：框体换装备框三档图
+        //（金/蓝/白，图自带色 → tintFrame=false 不再染 RarityPalette 色，防染色发脏）；null=框不动。
+        public Sprite frameSprite;
+        public bool tintFrame;
     }
 
     /// <summary>按奖励清单克隆物品格（RewardCellTemplate 当模板），已领取则整格变灰盖印章。</summary>
@@ -625,7 +629,15 @@ public class MailDetailUI : MonoBehaviour
                         var baseImg = _rewardCellTemplate.GetComponent<Image>();
                         if (baseImg != null && baseImg.sprite != null) cellImg.sprite = baseImg.sprite;
                     }
-                    cellImg.color = rarityColor;
+                    // 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备格：框换装备框三档图
+                    //（Simple+preserveAspect，图自带色不染色）；本体/碎片格维持染色口径不变。
+                    if (item.frameSprite != null)
+                    {
+                        cellImg.sprite = item.frameSprite;
+                        cellImg.type = Image.Type.Simple;
+                        cellImg.preserveAspect = true;
+                    }
+                    if (item.tintFrame) cellImg.color = rarityColor;
                 }
             }
 
@@ -684,12 +696,33 @@ public class MailDetailUI : MonoBehaviour
             // 【2026-11-08 主人拍板】本体 / 碎片格都按该佣兵稀有度取色（名字 + 框体共用这一个值）；
             // 查不到花名册 → LogError 不填色不换框（fail closed）；徽记 / 货币格保持 null。
             Color? nameColor = null;
+            Sprite frameSprite = null;
+            bool tintFrame = true;
             if (att.type == "mercfrag" || att.type == "merc")
             {
                 if (MercRosterDefs.TryGetByHireId(att.hireId, out var def))
                     nameColor = RarityPalette.Get(def.Rarity);
                 else
                     Debug.LogError($"[MailDetail] 本体/碎片附件格上色：花名册查不到 {att.hireId}，不上色不换框");
+            }
+            // 2026-11-11 主人报「装备图标框不能换成金的吗 / 名字怎么是个英文的」：装备附件格
+            // 名字改走模板中文名（覆盖上面 RewardTypeName 兜底的英文 key），名字+框体按模板稀有度上色
+            //（传奇=橙金，与本体/碎片格同款机制，色源唯一出口 RarityPalette）；模板查不到 LogError 保持原样。
+            if (att.type == "equip")
+            {
+                ArenaSeasonWeapons.EnsureRegistered();   // 运行时模板兜底注册（照 ItemGrantSystem.GrantEquip 先例，幂等）
+                var eqTpl = ConfigManager.Instance != null
+                    ? ConfigManager.Instance.GetEquipTemplate(string.IsNullOrEmpty(att.defId) ? att.hireId : att.defId)
+                    : null;
+                if (eqTpl != null)
+                {
+                    attName = eqTpl.equipName;
+                    nameColor = RarityPalette.Get(eqTpl.baseRarity);   // 名字仍按稀有度（金字+黑描边）
+                    frameSprite = EquipRarityFrame.SpriteOf(eqTpl.baseRarity);   // 框走装备框三档图
+                    tintFrame = false;   // 框图自带色，不再染 RarityPalette 色防脏
+                }
+                else
+                    Debug.LogError("[MailDetail] 装备附件格：模板查不到 defId=" + att.defId);
             }
             items.Add(new RewardItem
             {
@@ -698,6 +731,8 @@ public class MailDetailUI : MonoBehaviour
                 amount = att.amount,
                 isMerc = att.type == "merc",
                 nameColor = nameColor,
+                frameSprite = frameSprite,
+                tintFrame = tintFrame,
             });
         }
     }

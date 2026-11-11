@@ -154,9 +154,10 @@ public partial class Mercenary : UnitBase
     bool _outStarApplied;
 
     /// <summary>
-    /// 局外星（outStar）加成：每星 物攻(Attack)/物防(Defense) +8%、魔攻(MagicAttack)/魔防(MagicDefense) +7%
-    /// （2026-10-22 三次拍板「先按8%加吧 魔按7%」）。外层乘区（attr.AddAttr isPercent，与局内 tempBuffs
-    /// 同一条乘法链），血/移速等不动；不改 MercRosterDefs.ApplyCombatStats 内部。
+    /// 局外星（outStar）加成：每星 物攻(Attack)/物防(Defense)/魔攻(MagicAttack)/魔防(MagicDefense) +15%、
+    /// 生命(MaxHp) +15%（2026-11-11 主人拍板，物魔统一且血入乘区，覆盖 2026-10-22「攻8%/魔7%、血不动」）。
+    /// 外层乘区（attr.AddAttr isPercent，与局内 tempBuffs 同一条乘法链）；移速不动；
+    /// 不改 MercRosterDefs.ApplyCombatStats 内部。
     /// hireId 未设（Init 时序）或非花名册佣兵 → 跳过且<b>不置位</b>，等 SetHireId 再来；
     /// 0 星佣兵数值与现在完全一致。数值唯一真源 = MercStarDefs。
     /// </summary>
@@ -173,7 +174,12 @@ public partial class Mercenary : UnitBase
         attr.AddAttr(AttrType.Defense,     MercStarDefs.AtkPctPerStar * outStar, true);
         attr.AddAttr(AttrType.MagicAttack, MercStarDefs.MagicPctPerStar * outStar, true);
         attr.AddAttr(AttrType.MagicDefense, MercStarDefs.MagicPctPerStar * outStar, true);
-        Debug.Log($"[Mercenary] 局外星加成生效：{hid} ★{outStar} → 攻/防 +{MercStarDefs.AtkPctPerStar * outStar:0%}，魔攻/魔防 +{MercStarDefs.MagicPctPerStar * outStar:0%}");
+        attr.AddAttr(AttrType.MaxHp, MercStarDefs.HpPctPerStar * outStar, true);
+        // 出生满血口径：currentHp 在 SetupAttributes 里按加成前基底赋满（:81/:141），
+        // 血乘区挂上后这里同步拉满；RecalcAttr（石像赐福重算）外层会按旧血量钳回
+        // （只钳上限不回满，见 RecalcAttr），不受本行影响 —— 全部调用点都是基底刚建好的出生时序。
+        currentHp = attr.GetAttr(AttrType.MaxHp);
+        Debug.Log($"[Mercenary] 局外星加成生效：{hid} ★{outStar} → 攻/防 +{MercStarDefs.AtkPctPerStar * outStar:0%}，魔攻/魔防 +{MercStarDefs.MagicPctPerStar * outStar:0%}，生命 +{MercStarDefs.HpPctPerStar * outStar:0%}");
     }
 
     // ============================================================

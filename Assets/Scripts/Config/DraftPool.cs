@@ -430,12 +430,18 @@ public static class DraftPool
     /// 【2026-10-07 主人拍板】抽奖给的**武器**，攻击再高一档。
     /// 主人原话「抽奖给的武器的攻击要稍微高点，这才能体现出抽奖的重要性」——
     /// 开局那把初始武器打两波，抽出来的武器必须让人一眼看出「更强」，抽奖这件事才有分量。
+    /// 【2026-11-11 主人拍板「攻击高点 属性好点 有可能多一个属性」——抽奖要全面超冠军武器】：
+    /// ① 主攻倍率 ×1.18 → ×1.3（冠军武器已对齐战斗内掉落传奇，无主攻加成）；② 传奇/紫主手武器
+    /// 50% 概率多 roll 1 条词缀（<see cref="WeaponAffixSystem.AppendOneAffix"/>，标准词缀口径）。
     /// 🔴 只作用在<b>抽奖池里的主手武器</b>：防具、副手盾牌不动；倍率只有这一个出口，
     /// 不进 <c>EquipInstance</c>（那是所有掉落共用的生成逻辑，抽奖的加成不该污染它）。
     /// </summary>
-    const float DraftWeaponAttackMul = 1.18f;
+    const float DraftWeaponAttackMul = 1.3f;
 
-    static void BoostDraftWeaponAttack(EquipInstance eq)
+    /// <summary>抽奖传奇/紫主手武器「多一个属性」的触发概率（2026-11-11 主人拍板，可调）。</summary>
+    const float DraftExtraAffixChance = 0.5f;
+
+    static void BoostDraftWeapon(EquipInstance eq)
     {
         // 只认主手武器槽：盾牌（副手）与防具都不算「武器」
         if (eq == null || eq.slotType != EquipSlotType.MainHand) return;
@@ -447,8 +453,12 @@ public static class DraftPool
             var b = list[i];
             if (b == null || b.attrType != atkAttr || b.isPercent) continue;
             b.value *= DraftWeaponAttackMul;
-            return;
+            break;   // 只乘第一条攻击词条（原口径）；改 break 以便继续走多词条分支
         }
+        // ② 传奇/紫主手武器 50% 概率多 1 条词缀（「有可能多一个属性」）
+        if ((eq.rarity == Rarity.Legendary || eq.rarity == Rarity.Epic)
+            && Random.value < DraftExtraAffixChance)
+            WeaponAffixSystem.AppendOneAffix(eq);
     }
 
     // ============================================================
@@ -521,7 +531,7 @@ public static class DraftPool
                 Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
             }
             if (eq == null) break;
-            BoostDraftWeaponAttack(eq);
+            BoostDraftWeapon(eq);
 
             var rar = MapRarity(eq.rarity);
             pool.Add(new WeightedCard

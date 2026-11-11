@@ -141,7 +141,11 @@ public partial class BattleManager
         }
     }
 
-    /// <summary>复活本体：半血原地起立 + 解冻 + 恢复战斗。血量比例走 GameConfig.REVIVE_HP_RATIO。</summary>
+    /// <summary>
+    /// 复活本体：主角 + 本关所有阵亡佣兵一起按 <see cref="GameConfig.REVIVE_HP_RATIO"/> 拉起 + 解冻 + 恢复战斗。
+    /// 【2026-11-11 主人拍板「钻石复活，只要是死了的都拉起来，恢复60%的血」】旧实现只 hero.Revive()，
+    /// 阵亡佣兵仍灰在槽里等下一关/护符，现改为一并归队。
+    /// </summary>
     void DoReviveHero()
     {
         if (hero == null)
@@ -152,9 +156,82 @@ public partial class BattleManager
         }
         if (!hero.Revive(GameConfig.REVIVE_HP_RATIO))
             Debug.LogWarning("[BattleManager] 主角未处于死亡态却收到复活指令（重复点击？），已忽略扣费后状态");
+        ReviveFallenMercsOnHeroRevive();
         UnitsCanAct = true;
         isInBattle = true;
+        BattleUI.Instance?.UpdateCharacterSlots();   // 槽亮回来 + 压暗/护符图标收掉
         BattleUI.Instance?.ForceRefreshLiveBars();
+    }
+
+    /// <summary>
+    /// 【2026-11-11 主人拍板】钻石复活：本关阵亡的佣兵一起拉起来，血量统一 GameConfig.REVIVE_HP_RATIO。
+    /// 阵亡单位死亡动画播完已 Destroy（Mercenary.OnDeathRelease），只能按出战名单重新生成；
+    /// 生成参数与 ReviveFallenMercsForStage / TryReviveMercWithCharm 对齐（星级/技能/名字/hireId/OnDead 订阅）。
+    /// 同时清掉 fallen 标记，否则头像栏仍压暗、下一关 ReviveFallenMercsForStage 会再判一次。
+    /// </summary>
+    void ReviveFallenMercsOnHeroRevive()
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null || !RunLoadout.IsActive) return;
+
+        var onField = mm.GetActiveMercs();
+        var mercs = RunLoadout.Mercs();
+        for (int i = 0; i < mercs.Count; i++)
+        {
+            var e = mercs[i];
+            if (e == null || !e.fallen) continue;
+            string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+
+            // 场上已有同 id 实例就不补（与 ReviveFallenMercsForStage 同口径，防双生成）
+            bool alreadyOnField = false;
+            for (int k = 0; k < onField.Count; k++)
+            {
+                var m = onField[k];
+                if (m == null) continue;
+                string mKey = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+                if (mKey == key) { alreadyOnField = true; break; }
+            }
+            if (alreadyOnField) continue;
+
+            var heroRef = hero != null ? hero : Hero.Instance;
+            int slot = mm.GetActiveMercs().Count;
+            Vector3 pos;
+            if (heroRef != null)
+                pos = new Vector3(UnitCrowd.GetMercDesiredCombatX(heroRef, null, slot), UnitBase.GROUND_Y,
+                    unitRoot != null ? unitRoot.position.z : 0f);
+            else
+                pos = new Vector3(transform.position.x + MERC_FRONT_SPACING * (slot + 1), UnitBase.GROUND_Y, 0f);
+
+            var merc = mm.SpawnMercenary(e.mercId, pos, Mathf.Max(1, e.level));
+            if (merc == null)
+            {
+                Debug.LogError($"[BattleManager] 钻石复活失败：佣兵预制体缺失 mercId={e.mercId}");
+                continue;
+            }
+            merc.mercStar = Mathf.Clamp(e.star, 1, 5);
+            // SpawnMercenary → Init 重置满血，这里统一补砍到复活血量
+            if (merc.attr != null && GameConfig.REVIVE_HP_RATIO < 1f)
+            {
+                float maxHp = merc.attr.GetAttr(AttrType.MaxHp);
+                merc.currentHp = Mathf.Max(1f, maxHp * GameConfig.REVIVE_HP_RATIO);
+            }
+            merc.SetupBattleSkills(e.skillId, e.passiveSkillId);
+            merc.SetPartyIndex(slot);
+            merc.SetDisplayName(e.displayName);
+            if (!string.IsNullOrEmpty(e.hireId))
+                merc.SetHireId(e.hireId);
+            if (!string.IsNullOrEmpty(e.displayName))
+                merc.gameObject.name = "Merc_" + e.displayName;
+            if (!allyUnits.Contains(merc))
+                allyUnits.Add(merc);
+            merc.OnDead += OnMercenaryDead;
+            merc.Face(1);
+
+            e.fallen = false;
+            e.fallenStages = 0;
+            Debug.Log($"[BattleManager] 钻石复活：佣兵 {e.displayName}({e.mercId}) 按 {GameConfig.REVIVE_HP_RATIO * 100f:0.}% 血归队");
+        }
+        RunLoadout.Save();   // fallen 已清，落盘防中途杀进程复活状态回退
     }
 
     /// <summary>
@@ -374,10 +451,12 @@ public partial class BattleManager
         BattleBagSystem.Instance?.ClearRunEquipment();
 
         PersistBattleGold();
-        // 金币保留 → 天赋石照发（死亡与撤离同规则）
-        int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
-        if (talentGain > 0)
-            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
+        // 【2026-11-11 主人拍板】天赋石不再按本局金币换算发放：只从主线/支线精英、Boss 掉落 + 无限裂隙层首通宝箱。
+        // 这条 2026-09-19 就该停的换算链彻底关掉，金币照常保留；旧代码留注释，方便回退。
+        int talentGain = 0;
+        // int talentGain = (int)(Mathf.Max(0, currentGold - _goldAtRunStart) / GameConfig.GOLD_PER_TALENT_POINT);
+        // if (talentGain > 0)
+        //     ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, talentGain, save: false, notify: false);
 
         // 【2026-10-20 主人拍板】撤离补偿（按已通关数每关 +1 天赋石）停发：天赋石改为精英/Boss 击杀概率掉落。
         // if (!isDeath && _runStagesCleared > 0)

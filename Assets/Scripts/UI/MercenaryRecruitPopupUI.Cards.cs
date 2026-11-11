@@ -75,13 +75,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
         if (c.background != null)
         {
-            // 【2026-10-19 主人拍板】Card0/1/2 是三种稀有度卡牌：卡面随佣兵稀有度切到对应档的
-            // 卡牌美术 —— 优先用预制体自己的三张底图（MapCardFrames 归档），取不到再退 LoadRarityFrame
-            Sprite frame = null;
-            if (_cardFrameByRarity.TryGetValue(rarity, out var own) && own != null)
-                frame = own;
-            else
-                frame = MercHireSession.LoadRarityFrame(rarity);
+            // 【2026-11-11 主人拍板「请用路径加载」】Card0/1/2 卡面随佣兵稀有度切三档，
+            // 一律走路径加载：MercHireSession.LoadRarityFrame → Resources/UI/Art/招募/
+            // 酒馆_0000s_0006_传奇（金框）/ 酒馆_0000s_0010_稀有（蓝框）/ 酒馆_0000s_0009_普通（银框），
+            // 带缓存。这三张 png 的 meta guid 是团结 56 字符长串，prefab 引用必断链
+            // （拍板口径：56 字符不修，见 AGENTS.md §2.3），不许再走预制体底图引用。
+            Sprite frame = MercHireSession.LoadRarityFrame(rarity);
             if (frame != null)
             {
                 c.background.sprite = frame;

@@ -112,7 +112,9 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("幽冥墓园：城外的旧墓园，三年前起埋着的东西开始往外爬。"),
+            // 【2026-11-11 背景校对】战前剧情补挂本章背景（图早已在 WarmupChapterAssets 预热，此前只给战后用）：
+            // 挂图后自带地点揭示黑场（大字取 StoryBackgrounds.DisplayName）；战后 N 同 ID → 同景续话不重复黑场。
+            StoryDirector.Narration("幽冥墓园：城外的旧墓园，三年前起埋着的东西开始往外爬。").Bg(StoryBackgrounds.GraveSeven),
             StoryDirector.Solo("艾丽娅", "这片园里埋着以前的冒险者。公会对外说是地脉波动——你信吗？", StoryPortraits.Xiaomei),
             StoryDirector.Solo("你", "第八支小队之前的七支，全都进过裂缝。一块碑都没立回来。", StoryPortraits.Player),
             StoryDirector.Solo("艾丽娅", "所以我们才要走到最里面，看看他们到底碰上了什么。", StoryPortraits.Xiaomei),
@@ -138,7 +140,8 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("晨曦草原：裂隙第二层的风车草原。叶片一圈三年，替谁数着日子。"),
+            // 【2026-11-11 背景校对】同 Pre2：补挂本章背景（预热过但没用上）。
+            StoryDirector.Narration("晨曦草原：裂隙第二层的风车草原。叶片一圈三年，替谁数着日子。").Bg(StoryBackgrounds.Windmill),
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c4_field 两句并入战前
             StoryDirector.Narration("草原的风里混着铁锈味，那是更远处的战火被吹了过来。"),
             StoryDirector.Narration("你在草根下捡到一块木牌，背面刻着一个名字，笔画很新。"),
@@ -152,7 +155,8 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo("艾丽娅", "三条岔路在海岛遗迹汇合。那艘补给船的残骸是新的，最多三个月。", StoryPortraits.Xiaomei),
+            // 【2026-11-11 背景校对】同 Pre2：补挂本章背景（黑场大字「搁浅的补给船」，与首句文案正好衔接）。
+            StoryDirector.Solo("艾丽娅", "三条岔路在海岛遗迹汇合。那艘补给船的残骸是新的，最多三个月。", StoryPortraits.Xiaomei).Bg(StoryBackgrounds.WreckShip),
             StoryDirector.Solo("你", "三个月前……正好是我们转正的月份。", StoryPortraits.Player),
             StoryDirector.Solo("艾丽娅", "怪物越来越像被赶过来的。有什么东西在深处催它们。", StoryPortraits.Xiaomei),
         };
@@ -287,7 +291,7 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。").Bg(StoryBackgrounds.MelissaCamp),
-            StoryDirector.Solo("?", "别动。你踩到我第二道线了。", StoryPortraits.Melissa),
+            StoryDirector.Solo("?", "别动。你踩到我第二道线了。", StoryPortraits.Melissa).Shake(),
             StoryDirector.Narration("一个头发花白的女人从阴影里出来，手里攥着一支笔，不是刀。"),
             StoryDirector.Solo("?", "我等了三天才等到下一个活人走进来。坐下，先别问，我写字慢。", StoryPortraits.Melissa),
             StoryDirector.Solo("你", "……箱子里的纸条，是你塞的。", StoryPortraits.Player),
@@ -316,6 +320,7 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("遗迹深处的藤蔓后面，居然有一处收拾干净的营地。篝火还热着。"),
             StoryDirector.Narration("地上是按年份摞的纸条，最新的一张墨都没干：「别停下。往前走，别回头。」"),
             StoryDirector.Narration("你数了数脚印。至少五个人的，全部朝向更深处。没有一个往回走。"),
+            StoryDirector.Solo("你", "往回走的脚印呢？……连一条都没有。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -366,7 +371,10 @@ public static class ChapterStoryBeats
             StoryDirector.Narration("你把它抖开，底下是一份泡得发白的简报。字迹能认出来："),
             StoryDirector.Narration("「任务目标：将目标小队引导至最深处，确保其与『沉座』接触。」"),
             StoryDirector.Solo("你", "……这不是调查任务。", StoryPortraits.Player),
-            StoryDirector.Narration("你的手抖了一下。你把手按在膝盖上，按了很久才松开。"),
+            // 【2026-11-11 主人拍板「剧情不要光叙事，震惊时可以颤一下镜头」】手抖拆成震屏 + 玩家台词 + 收尾动作。
+            StoryDirector.Narration("你的手抖了一下。").Shake(),
+            StoryDirector.Solo("你", "把一整支小队往最深处引……这也能写成任务？", StoryPortraits.Player),
+            StoryDirector.Narration("你把手按在膝盖上，按了很久才松开。"),
             // 【2026-10-29 主人拍板「选项只加趣味不主导」】会长扣好感照旧无条件结，回响二选一
             new StoryBeat
             {
@@ -403,9 +411,10 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("洞穴正中悬着一枚黑曜结构，有节奏地搏动，像在替什么人喘气。").Bg(StoryBackgrounds.ThroneSeat),
+            // 【2026-11-11 主人拍板「不要出现简化不明白的词」】「黑曜结构/搏动」改直白；首次见沉座本体加震屏。
+            StoryDirector.Narration("洞穴正中悬着一块漆黑的石头，一鼓一缩，像在替什么人喘气。").Bg(StoryBackgrounds.ThroneSeat).Shake(),
             StoryDirector.Narration("周围散落着更旧的战斗痕迹。十四年前的盾。十一年前那批的箭。"),
-            StoryDirector.Solo("你", "沉座。是要有人坐上去的东西。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "简报里写的『沉座』，就是这东西。它是把椅子——等着人坐上去。", StoryPortraits.Player),
             StoryDirector.Narration("你在十一年前的那堆残骸里翻到半张烧过的纸。只剩两行字："),
             StoryDirector.Narration("「若目标小队成功削弱核心，派遣第二梯队收尾。若失败，则封锁入口，不再派遣救援。」"),
             StoryDirector.Solo("你", "他们不是没派人救。他们压根就没打算派。", StoryPortraits.Player),
@@ -447,7 +456,7 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("黑雾从她身上崩散。她软下去，你把她接住。").Bg(StoryBackgrounds.AbyssChoice),
+            StoryDirector.Narration("黑雾从她身上崩散。她软下去，你把她接住。").Bg(StoryBackgrounds.AbyssChoice).Shake(),
             StoryDirector.Solo("艾丽娅", "……你追到这儿来了。真笨。", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "听我说，别浪费时间。它不是想杀我们——", StoryPortraits.Xiaomei),
             StoryDirector.Solo("艾丽娅", "它是想让我坐上去。坐进那个沉座。", StoryPortraits.Xiaomei),
@@ -675,7 +684,7 @@ public static class ChapterStoryBeats
 
     static void BuildHappy(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("黑曜结构在你面前碎成八瓣。第八块空碑上的名字，终于没人刻得上去了。").Bg(StoryBackgrounds.EndHappy));
+        b.Add(StoryDirector.Narration("沉座在你面前碎成八瓣。第八块空碑上的名字，终于没人刻得上去了。").Bg(StoryBackgrounds.EndHappy).Shake());
         b.Add(StoryDirector.Solo("艾丽娅", "结束了。对我们来说，结束了。", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Narration("你们拼命往回跑。跑出口的时候天亮得刺眼。"));
         b.Add(StoryDirector.Solo("艾丽娅", "……三枚铜板。我还没还。", StoryPortraits.Xiaomei));
@@ -700,7 +709,7 @@ public static class ChapterStoryBeats
 
     static void BuildBadGate(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("折返到巨岩深窟的洞窟时，她坐了上去。黑曜合拢的时候，她回头看了你最后一眼。").Bg(StoryBackgrounds.EndBadGate));
+        b.Add(StoryDirector.Narration("折返到巨岩深窟的洞窟时，她坐了上去。黑石合拢成椅背的那一刻，她回头看了你最后一眼。").Bg(StoryBackgrounds.EndBadGate).Shake());
         b.Add(StoryDirector.Narration("裂隙真的止住了。王国今年没有新的裂缝记录。公会照常发任务、照常清点人数、照常涨价。"));
         b.Add(StoryDirector.Solo("会长", "牺牲少数保全多数——这就是结算方式。", StoryPortraits.GuildMaster));
         b.Add(StoryDirector.Solo("你", "她的名字，写进去吗。", StoryPortraits.Player));
@@ -711,7 +720,7 @@ public static class ChapterStoryBeats
 
     static void BuildTrue(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("沉座崩解的最后，你看到一个不属于这里的东西卡在晶格里——一张叠了十一年的纸条。").Bg(StoryBackgrounds.EndTrue));
+        b.Add(StoryDirector.Narration("沉座崩解的最后，你看到一个不属于这里的东西卡在碎裂的晶体里——一张叠了十一年的纸条。").Bg(StoryBackgrounds.EndTrue).Shake());
         b.Add(StoryDirector.Solo("梅莉莎", "那是我塞的。第九支队伍的箱子。", StoryPortraits.Melissa));
         b.Add(StoryDirector.Narration("她从崩落的那头走过来，径直走到裂隙的中心，走得比你还稳。"));
         b.Add(StoryDirector.Solo("梅莉莎", "我装箱装了十一年。今天开始，我不用装了。", StoryPortraits.Melissa));

@@ -684,10 +684,12 @@ public class MercFavorUI : MonoBehaviour
         }
 
         // 立绘 / 头像：取不到保留 prefab 原图（不造图）
+        // 【2026-11-11 主人拍板「所有头像立绘都是该佣兵自己的立绘」】Top1 头像区（Iconmask/Icon，
+        // prefab 摆的就是整幅佣兵立绘 1171×1345、preserveAspect=1）同样用 GetStand 的整幅立绘替换，
+        // 不再用 MercHead 200×200 方头像覆盖——方图与 prefab 原图尺寸不同，preserveAspect 下会改变显示大小。
         var stand = MercPortraitSprites.GetStand(hireId);
         if (stand != null) _standIcon.sprite = stand;
-        var head = MercPortraitSprites.GetHead(hireId);
-        if (head != null) _headIcon.sprite = head;
+        if (stand != null) _headIcon.sprite = stand;
 
         // 【T2 按预制体效果来】Top/bg、Top/mask 的背景与卡框一律用 prefab 摆好的图，
         // 代码不再按稀有度换图（切换佣兵稀有度也不换背景）。要换图请直接在预制体里重拖。

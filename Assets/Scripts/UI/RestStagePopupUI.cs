@@ -156,6 +156,31 @@ public class RestStagePopupUI : MonoBehaviour
         }
     }
 
+    // ── 缩放基准（2026-11-11 主人拍板）────────────────────────────────────────
+    // 面板 / 插画 / 状态图标都先缓存预制体原始 localScale（弹窗只在首次打开时缓存，
+    // 之后复用，避免第二次打开把动画中途的 0.78 当基准），所有写入统一「基准 × 倍率」。
+    Vector3 _panelBaseScale = Vector3.one;
+    Vector3 _illustrationBaseScale = Vector3.one;
+    Vector3 _statusIconBaseScale = Vector3.one;
+    bool _panelBaseCaptured, _illustrationBaseCaptured, _statusIconBaseCaptured;
+
+    static Vector3 CaptureBase(RectTransform rt, ref bool captured, ref Vector3 cache)
+    {
+        if (captured || rt == null) return cache;
+        var s = rt.localScale;
+        if (s.x <= 0.0001f || s.y <= 0.0001f || s.z <= 0.0001f) s = Vector3.one;   // scale=0 兜底
+        cache = s;
+        captured = true;
+        return cache;
+    }
+
+    void CaptureBaseScales()
+    {
+        if (panel != null) CaptureBase(panel.rectTransform, ref _panelBaseCaptured, ref _panelBaseScale);
+        if (illustration != null) CaptureBase(illustration.rectTransform, ref _illustrationBaseCaptured, ref _illustrationBaseScale);
+        if (statusIcon != null) CaptureBase(statusIcon.rectTransform, ref _statusIconBaseCaptured, ref _statusIconBaseScale);
+    }
+
     void Open(Action onContinue)
     {
         BindRefs();
@@ -165,6 +190,10 @@ public class RestStagePopupUI : MonoBehaviour
         EnsureCanvas();
         _prevTimeScale = Time.timeScale;
         Time.timeScale = 0f;
+
+        // 缩放基准（2026-11-11）：先缓存预制体原始 localScale，之后全部写「基准 × 倍率」，
+        // 不再写死 0.78/1.12/1 —— 主人改预制体比例后运行时跟着变。
+        CaptureBaseScales();
 
         float hpBefore = ReadHeroHp(out _hpMax);
         ApplyHeal();
@@ -180,7 +209,7 @@ public class RestStagePopupUI : MonoBehaviour
         _group = root != null ? root.GetComponent<CanvasGroup>() : null;
         if (_group == null && root != null) _group = root.AddComponent<CanvasGroup>();
         if (_group != null) _group.alpha = 0f;
-        if (panel != null) panel.rectTransform.localScale = Vector3.one * 0.78f;
+        if (panel != null) panel.rectTransform.localScale = _panelBaseScale * 0.78f;
 
         if (closeButton != null)
         {
@@ -230,10 +259,10 @@ public class RestStagePopupUI : MonoBehaviour
             float u = Mathf.Clamp01(p);
             float s = 0.78f + 0.34f * Mathf.Sin(u * Mathf.PI * 0.5f);
             if (u > 0.6f) s = Mathf.Lerp(1.12f, 1f, (u - 0.6f) / 0.4f);
-            if (panel != null) panel.rectTransform.localScale = Vector3.one * s;
+            if (panel != null) panel.rectTransform.localScale = _panelBaseScale * s;
             yield return null;
         }
-        if (panel != null) panel.rectTransform.localScale = Vector3.one;
+        if (panel != null) panel.rectTransform.localScale = _panelBaseScale;
 
         StartCoroutine(CoPulse());
     }
@@ -245,9 +274,9 @@ public class RestStagePopupUI : MonoBehaviour
         {
             float k = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * 2.4f);
             if (illustration != null)
-                illustration.rectTransform.localScale = Vector3.one * (1f + k * 0.06f);
+                illustration.rectTransform.localScale = _illustrationBaseScale * (1f + k * 0.06f);
             if (statusIcon != null)
-                statusIcon.rectTransform.localScale = Vector3.one * (0.94f + k * 0.14f);
+                statusIcon.rectTransform.localScale = _statusIconBaseScale * (0.94f + k * 0.14f);
             yield return null;
         }
     }
@@ -350,16 +379,16 @@ public class RestStagePopupUI : MonoBehaviour
             t += Time.unscaledDeltaTime / 0.22f;
             float u = Mathf.Clamp01(t);
             if (_group != null) _group.alpha = 1f - u;
-            if (panel != null) panel.rectTransform.localScale = Vector3.one * (1f + u * 0.10f);
+            if (panel != null) panel.rectTransform.localScale = _panelBaseScale * (1f + u * 0.10f);
             yield return null;
         }
 
         _open = false;
         // 复原现场，免得下次打开带着上次的残影 / 缩放
         if (_group != null) _group.alpha = 1f;
-        if (panel != null) panel.rectTransform.localScale = Vector3.one;
-        if (illustration != null) illustration.rectTransform.localScale = Vector3.one;
-        if (statusIcon != null) statusIcon.rectTransform.localScale = Vector3.one;
+        if (panel != null) panel.rectTransform.localScale = _panelBaseScale;
+        if (illustration != null) illustration.rectTransform.localScale = _illustrationBaseScale;
+        if (statusIcon != null) statusIcon.rectTransform.localScale = _statusIconBaseScale;
 
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
         if (root != null) root.SetActive(false);

@@ -63,6 +63,9 @@ public class BattleStatueEventUI : MonoBehaviour
     public static bool TryShowOnDraft()
     {
         var bm = BattleManager.Instance;
+        // 【2026-11-11 临时禁用】主人指令：战斗中「石像（圣者/祭司）事件」暂不启用。
+        // 整段逻辑保留不删，日后恢复只需删除下面这一行 return。
+        return false;
         // 【2026-10-22 主人拍板】只加主线正式关：引导局 / 金币本 / 无限裂隙一律不出现
         if (bm == null || !bm.IsFormalMainRun) return false;
         var ui = BattleUI.Instance != null ? EnsureOn(BattleUI.Instance.transform) : null;

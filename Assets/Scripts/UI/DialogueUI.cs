@@ -147,6 +147,65 @@ public partial class DialogueUI : MonoBehaviour
         rt.anchoredPosition = _arrowBasePos + new Vector2(0f, y);
     }
 
+    // —— 剧情震屏【2026-11-11 主人拍板「震惊时可以颤一下镜头」】——
+    Coroutine _shakeCo;
+    Vector2 _shakeBasePos;
+    bool _shakeBaseCaptured;
+
+    /// <summary>
+    /// 剧情演出震屏：整窗小幅抖动后精确归位。unscaled 时间驱动（剧情期间 timeScale=0 也照抖）。
+    /// 叠加触发先停旧抖并归位再重抖；藏窗（OnDisable）时协程被引擎停掉，位置同样手动归位，
+    /// 否则下次 Show 会带着抖动中间值错位。
+    /// </summary>
+    public void PlayShake()
+    {
+        if (_shakeCo != null)
+        {
+            StopCoroutine(_shakeCo);
+            _shakeCo = null;
+        }
+        RestoreShakeBase();
+        var rt = transform as RectTransform;
+        if (rt == null) return;
+        _shakeBasePos = rt.anchoredPosition;
+        _shakeBaseCaptured = true;
+        _shakeCo = StartCoroutine(ShakeCo());
+    }
+
+    IEnumerator ShakeCo()
+    {
+        const float Dur = 0.45f;   // 单次时长（秒）
+        const float Amp = 9f;      // 横向幅度（px，设计分辨率 720 宽下肉眼明显但不晕）
+        var rt = transform as RectTransform;
+        float t = 0f;
+        while (t < Dur && rt != null && gameObject.activeInHierarchy)
+        {
+            float k = 1f - t / Dur;   // 线性衰减
+            float dx = Mathf.Sin(t * 63f) * Amp * k;
+            float dy = Mathf.Cos(t * 51f) * Amp * 0.4f * k;
+            rt.anchoredPosition = _shakeBasePos + new Vector2(dx, dy);
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        RestoreShakeBase();
+        _shakeCo = null;
+    }
+
+    void RestoreShakeBase()
+    {
+        if (!_shakeBaseCaptured) return;
+        var rt = transform as RectTransform;
+        if (rt != null) rt.anchoredPosition = _shakeBasePos;
+        _shakeBaseCaptured = false;
+    }
+
+    void OnDisable()
+    {
+        // 协程随 SetActive(false) 被引擎停掉，位置必须手动归位。
+        RestoreShakeBase();
+        _shakeCo = null;
+    }
+
     /// <summary>长段剧情开始前：刷新 Canvas/相机，避免回城后立绘不显示。</summary>
     public void PrepareForStoryBeat()
     {

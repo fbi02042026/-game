@@ -271,6 +271,9 @@ public partial class BattleUI : MonoBehaviour
         // 每帧都要跟：开战/撤离/进入整理阶段都要立刻切换遮罩，不能等 0.1s 节流
         TickBattleMask();
 
+        // 冷却遮罩要每帧顺滑更新（钟表式 Radial360 填充），不能跟 HP 条一起被 0.1s 节流 → 一顿一顿
+        TickCooldownMasks();
+
         // 【2026-10-07 主人拍板】角色卡头像的「技能就绪」金色光环已整条删除（glowBorder / TickSkillReadyPulse）。
         if (playerSkillAvatar != null && playerSkillAvatar.IsReadyPulse)
             playerSkillAvatar.TickReadyPulse();
@@ -326,7 +329,10 @@ public partial class BattleUI : MonoBehaviour
         var mm = MercenaryManager.Instance;
         if (mm == null) return;
         int maxSlots = mm.GetMaxMercSlots();
-        var mercs = mm.GetActiveMercs();
+        // 【2026-11-11】与 UpdateCharacterSlots 同源：按出战名单槽序对齐，阵亡占位不再把活单位挤到错槽。
+        // 血条/名字每帧刷，不对齐会把刚修好的头像栏又覆盖回错位值。
+        BuildMercSlotLists(out var slotMercIds, out var slotMercHireIds, mm);
+        var mercs = AlignActiveMercsToSlots(slotMercIds, slotMercHireIds, mm);
 
         // 未解锁槽不刷数值，保持美术默认
         if (maxSlots > 0 && mercSlot1 != null && mercs != null && mercs.Count > 0 && mercs[0] != null)

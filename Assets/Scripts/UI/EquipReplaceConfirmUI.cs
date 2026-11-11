@@ -380,29 +380,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
     static Sprite LoadIconBg(Rarity r)
     {
-        string name;
-        switch (r)
-        {
-            case Rarity.Legendary:
-                name = "zhuangbeijin"; // 只有传奇 → 橙金
-                break;
-            case Rarity.Epic:
-            case Rarity.Rare:
-            case Rarity.Uncommon:
-                name = "zhuangbeilan"; // 紫 / 蓝 / 绿 → 蓝
-                break;
-            default:
-                name = "zhuangbeibai"; // 普通 → 白
-                break;
-        }
-
-        var path = IconBgDir + name;
-        var sp = Resources.Load<Sprite>(path);
-        if (sp == null)
-        {
-            Debug.LogError($"[EquipReplaceConfirm] 找不到装备格子框 {path}，请确认素材已放进 Resources");
-        }
-        return sp;
+        // 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】三档映射/路径收敛到
+        // EquipRarityFrame.SpriteOf 唯一出口（本类不再私有一份映射；取不到资源出口内 LogError 不兜底）。
+        // 历史口径照旧：白=普通 / 蓝=稀有紫绿 / 橙金=只有传奇；IconBgDir 常量保留作路径参照。
+        return EquipRarityFrame.SpriteOf(r);
     }
 
     /// <summary>

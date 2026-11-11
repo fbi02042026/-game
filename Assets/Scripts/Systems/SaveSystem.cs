@@ -238,8 +238,43 @@ public class SaveSystem : Singleton<SaveSystem>
         if (data.endlessRiftBestStage < data.endlessRiftClearedStage)
             data.endlessRiftBestStage = data.endlessRiftClearedStage;
         ArenaRules.EnsurePeriods(data);     // 竞技场：跨天清次数+机器人漂移，跨周赛季结算发奖（2026-11-03 测试用：赛季改一周一结）
+        ArenaLadderDrift.SettleIfDue(data); // 竞技场离线漂移（2026-11-11）：离线期间的「被机器人挑战」扣分 + 机器人积分只涨不跌
+        // 测试入口：玩家上榜一（2026-11-11 主人拍板：5 分钟赛季周期验证用）。PlayerPrefs 标记一次性消费，进游戏即生效。
+        if (PlayerPrefs.GetInt("ArenaForceTopRank", 0) != 0)
+        {
+            PlayerPrefs.DeleteKey("ArenaForceTopRank");
+            PlayerPrefs.Save();
+            ForceArenaTopRank(data);
+        }
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
+    }
+
+    /// <summary>
+    /// 测试入口：把玩家积分设成"榜首 + 10"（10 倍数）并落到榜一位置（arenaPlayerPos = 0）。
+    /// 仅在 Editor 菜单触发 PlayerPrefs 标记后消费一次（游戏运行中执行）。
+    /// 2026-11-11 主人拍板：5 分钟赛季周期测试用，验证明天 0 点（下一个 5 分钟窗口）结算奖励到账。
+    /// </summary>
+    static void ForceArenaTopRank(SaveData data)
+    {
+        if (data == null || data.arenaBots == null || data.arenaBots.Count == 0)
+        {
+            Debug.LogWarning("[ArenaTest] 无法上榜一：arenaBots 还没初始化（可能是首进竞技场）");
+            return;
+        }
+        int topBotPoints = 0;
+        foreach (var b in data.arenaBots)
+            if (b != null && b.points > topBotPoints) topBotPoints = b.points;
+        int newPoints = topBotPoints + ArenaLadderDrift.PointsQuantize;   // 榜首 + 10（纯 10 倍数）
+        // 向下对齐到 10 倍数（topBotPoints 本身就是 10 倍数，+10 还是 10 倍数，这步其实冗余但防御性保留）
+        newPoints = (newPoints / ArenaLadderDrift.PointsQuantize) * ArenaLadderDrift.PointsQuantize;
+        data.arenaPoints = newPoints;
+        // 让机器人也跟着涨（保持整体节奏），然后按积分重排
+        ArenaRules.RepositionByPoints(data, 0);   // 对齐积分序
+        // 直接确认玩家在榜一（RepositionByPoints(data, 正数) 可能会改，但我们要硬落到 index 0）
+        data.arenaPlayerPos = 0;
+        data.arenaLadderSettleAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 推进漂移基线，防止刚上榜就被离线漂移打掉
+        Debug.Log($"[ArenaTest] 强制上榜一：玩家积分 {ArenaRules.PlayerRank(data)} → 榜一，积分 {newPoints}（榜首机器人 {topBotPoints}）");
     }
 
     public long CalcOfflineGold()

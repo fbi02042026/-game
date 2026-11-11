@@ -14,10 +14,17 @@ using UnityEngine;
 /// 【0.7】渲染缩放只进佣兵 transform.localScale；LogicX / 碰撞 / 射程 / 槽位 x 一律逻辑 px。
 /// 【边界】佣兵只在内存：不写佣兵招募存档字段、不调任何钱包 / 存档 API；
 /// 结算 / HUD / 入口 / 存档交 T5~T7，本分部只暴露 PlayerHp / PlayerDied / EnqueueMerc()。
-/// 立绘走全项目唯一出口 MercPortraitSprites.GetStand（id 由 MercHead 拾取指定，无参入口才轮换），子节点脚底对齐；不兜底。
+/// 立绘已改 SPUM 预制体（2026-11-11 T3）：hireId → 花名册 assetId → Resources/Units/{assetId}，
+/// 由 <see cref="CreateSpumUnit"/> 统一实例化（层 / 排序 / 缩放归一）；不兜底，缺件直接 LogError。
 /// </summary>
 public partial class EndlessRunGame
 {
+    // ---- 攻击 / 子弹表现参数（表内无 key，文件内具名常量；先例 Settle.cs COIN_PICKUP_PX）----
+    const float RUN_ATTACK_ANIM_SEC = 0.30f;    // 攻击动画时长：须 < attack_cd(0.62)，到点切回 MOVE 不停末帧
+    const float RUN_BULLET_Y_OFFSET_PX = 60f;   // 子弹离地高度（逻辑 px）
+    const string SP_RUN_BULLET = "VFX/Shared/Ally/Bow/vfx_ally_bow_fly";   // 现成 prefab，按路径懒加载；取不到 LogError 不发放
+    const int RUN_BULLET_SORT_ORDER = 210;      // 高于怪(4)、低于/接近 SPUM 部件，保证玩法相机 cullingMask 可见
+
     // ============================================================
     // 对外契约（T6 消费；只置位事件，不写结算 UI / 不存盘）
     // ============================================================
@@ -75,21 +82,31 @@ public partial class EndlessRunGame
     class Merc
     {
         public GameObject go;
-        public SpriteRenderer sr;
         public MercAnim anim;
         public float animT;
         public float curX;        // 槽位 x（逻辑 px，弹簧跟随，不含 0.7）
         public float refillFrom;  // 补位起点 x
         public float refillT;     // 补位剩余秒
         public float atkCd;       // 攻击 CD 剩余秒
+        public float atkAnimT;    // 攻击动画剩余秒（归零切回 MOVE，不停 ATTACK 末帧）
         public float dropFromY;   // 天降起点 y
         public string hireId;     // MercHead 拾取同源 id（横条 / 立绘 / 队列一致）
+    }
+
+    /// <summary>一颗在飞子弹：逻辑 px 坐标 + 已飞距离（达到 _qRangedRange 回收，无命中判定）。</summary>
+    class RunBullet
+    {
+        public GameObject go;
+        public float logicX;    // 逻辑 px（只乘 INV_PX2U 落位）
+        public float flown;     // 已飞行逻辑 px
+        public bool alive;      // 池内占用标记（照 World.cs WorldProp.alive）
     }
 
     // ---- 数值（RunTrackTable）----
     int _qPlayerHpMax;
     float _qDropSec, _qReplaceSec, _qRefillSec, _qInvSec, _qNoProtSec;
-    float _qFollowDelay, _qAtkCd, _qMeleeRange, _qRangedRange, _qSlotGap, _qRenderScale;
+    float _qFollowDelay, _qAtkCd, _qMeleeRange, _qRangedRange, _qSlotGap;
+    float _qBulletSpeedPx;                                 // 子弹速度 px/s（复用表内 relative_speed，不新增 key）
     bool _qReady;
     int _qMercSeq;                          // 立绘 id 轮换计数（仅内存，不涉存档）
     static readonly string[] MERC_STAND_IDS = { "H001", "H002", "H003" };
@@ -99,7 +116,10 @@ public partial class EndlessRunGame
     Merc _pending;                          // 满员天降待定佣兵（跳=顶替 / 不跳=放弃）
     bool _qWasAirborne;                     // 本分部自己的跳信号缓存（不读 T3 的）
     float _qPrevMeters;                     // 里程回落检测 → 重开复位队列
-    float _playerInvT, _noProtT, _playerAtkCd;
+    float _playerInvT, _noProtT, _playerAtkCd, _playerAtkAnimT;
+    GameObject _bulletPrefab;                                     // 子弹预制体懒加载缓存（只 Load 一次）
+    readonly List<RunBullet> _bullets = new List<RunBullet>();    // 在飞子弹
+    readonly List<RunBullet> _bulletPool = new List<RunBullet>(); // 子弹池（照 World.cs TakeProp/ReleaseProp 内嵌实例池）
     bool _dead;
     Segment _lastGapSeg;                    // 掉沟去重：同一 Gap 段只结算一次
 
@@ -127,7 +147,7 @@ public partial class EndlessRunGame
         _qMeleeRange   = RunTrackTable.GetFloat("melee_range", 96f);
         _qRangedRange  = RunTrackTable.GetFloat("ranged_range", 288f);
         _qSlotGap      = RunTrackTable.GetFloat("wave_group_gap", 130f);
-        _qRenderScale  = RunTrackTable.GetFloat("render_scale", 0.7f);
+        _qBulletSpeedPx = RunTrackTable.GetFloat("relative_speed", 320f);   // 子弹前飞速度（表内已有 key）
     }
 
     /// <summary>开局 / 重开（里程回落检测触发）：清佣兵、回满血、清全部计时器。</summary>
@@ -138,9 +158,11 @@ public partial class EndlessRunGame
         if (_pending != null) { DestroyMerc(_pending); _pending = null; }
         PlayerHp = _qPlayerHpMax;
         _dead = false;
-        _playerInvT = _noProtT = _playerAtkCd = 0f;
+        _playerInvT = _noProtT = _playerAtkCd = _playerAtkAnimT = 0f;
         _qWasAirborne = false;
         _lastGapSeg = null;
+        for (int i = 0; i < _bullets.Count; i++) ReleaseBullet(_bullets[i]);   // 重开清场：在飞子弹全回收（清池不 Destroy）
+        _bullets.Clear();
         SuppressWaveSpawn = false;
         ResetRunOverlays();   // 重开 / 关闭时清残留的慢动作与二选一窗口 / 横条
     }
@@ -156,29 +178,20 @@ public partial class EndlessRunGame
         go.transform.SetParent(_worldRoot.transform, false);
         go.layer = _worldLayer;
 
-        // 立绘走全项目唯一出口，id 由 MercHead 拾取指定（跑酷内部同源）；取不到直接 LogError，不兜底。
-        string id = hireId;   // 跑酷内部指定（MercHead 拾取传来），不再按创建数轮换
-        Sprite sp = MercPortraitSprites.GetStand(id);
-        if (sp == null)
+        // 【2026-11-11 T3】佣兵形象改 SPUM 预制体：hireId（H001…）→ 花名册 assetId（dunbing101…）
+        // → Resources/Units/{assetId}，替掉 11-10 的单张立绘。
+        // 🔴 只读花名册取形象，绝不写 / 改 / 消耗局外阵容（存档 hiredMercs 一个字不动）。
+        string assetId = MercRosterDefs.ResolveAssetId(hireId);
+        var spum = CreateSpumUnit(assetId, SPUM_SORT_BASE_MERC, "RunMercSpum");
+        if (spum == null)
         {
-            Debug.LogError("[跑酷] 佣兵立绘缺失：MercPortraitSprites.GetStand(" + id + ") 返回 null。");
-            return new Merc { go = go, sr = null, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
+            Debug.LogError("[跑酷] 佣兵 SPUM 预制体缺失：hireId=" + hireId + " → assetId=" + assetId);
+            return new Merc { go = go, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
         }
-        // 按目标逻辑高度算缩放（同 R2/R3 公式），再叠 0.7（_qRenderScale，只进 localScale）。
-        float s = PORTRAIT_TARGET_H / Mathf.Max(1f, sp.rect.height);
-        s *= _qRenderScale;
-        float halfHU = 0.5f * s * sp.rect.height / Mathf.Max(1f, sp.pixelsPerUnit);   // 渲染身高的一半（unit）
-
-        // 子节点承载渲染并上移半个渲染身高做脚底对齐（pivot 默认中心，go 的 y 是地面顶面）。
-        var portrait = new GameObject("MercPortrait");
-        portrait.transform.SetParent(go.transform, false);
-        portrait.layer = _worldLayer;
-        var sr = portrait.AddComponent<SpriteRenderer>();
-        sr.sprite = sp;
-        sr.sortingOrder = 6;
-        portrait.transform.localScale = new Vector3(s, s, 1f);
-        portrait.transform.localPosition = new Vector3(0f, halfHU, 0f);
-        return new Merc { go = go, sr = sr, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
+        // 根原点在脚底（同战斗单位），局部归零即落在跑酷地面顶面。
+        spum.transform.SetParent(go.transform, false);
+        spum.transform.localPosition = Vector3.zero;
+        return new Merc { go = go, hireId = hireId, anim = MercAnim.None, atkCd = 0f, refillT = 0f };
     }
 
     /// <summary>槽位 x：玩家 x − wave_group_gap ×（槽位序号+1），index 0 最前。</summary>
@@ -214,6 +227,7 @@ public partial class EndlessRunGame
             TickGap();              // 掉沟：空中不判（跳过沟）
             TickCollision();        // 碰撞：空中不判
             TickAttack(dt);         // 攻击：空中不出手（函数内再闸一次）
+            TickBullets(dt);        // 子弹前飞 / 到距回收（在 TickAttack 之后；无命中判定）
         }
     }
 
@@ -242,6 +256,11 @@ public partial class EndlessRunGame
         if (_playerInvT > 0f) _playerInvT = Mathf.Max(0f, _playerInvT - dt);
         if (_noProtT > 0f) _noProtT = Mathf.Max(0f, _noProtT - dt);
         if (_playerAtkCd > 0f) _playerAtkCd = Mathf.Max(0f, _playerAtkCd - dt);
+        if (_playerAtkAnimT > 0f)
+        {
+            _playerAtkAnimT = Mathf.Max(0f, _playerAtkAnimT - dt);
+            if (_playerAtkAnimT <= 0f) PlayRunMove(_playerGo);   // 攻击动画到点切回 MOVE，不停末帧
+        }
     }
 
     // ============================================================
@@ -289,6 +308,11 @@ public partial class EndlessRunGame
         {
             var m = _mercs[i];
             if (m.atkCd > 0f) m.atkCd = Mathf.Max(0f, m.atkCd - dt);
+            if (m.atkAnimT > 0f)
+            {
+                m.atkAnimT = Mathf.Max(0f, m.atkAnimT - dt);
+                if (m.atkAnimT <= 0f) PlayRunMove(m.go);         // 攻击动画到点切回 MOVE，不停末帧
+            }
 
             switch (m.anim)
             {
@@ -462,25 +486,35 @@ public partial class EndlessRunGame
     // ============================================================
 
     /// <summary>
-    /// 全队自动出手：玩家 + 各佣兵按各自射程与 attack_cd；只让射程内单位出手；
-    /// 命中调 RunEnemy.TakeDamage（一刀清 Hp，CD 是唯一瓶颈）；空中 / 安全区不出手。
+    /// 全队自动出手：玩家 + 各佣兵按各自射程与 attack_cd；CD 到点无条件出手（没怪也攻击，
+    /// 动作照播、CD 照走）；射程内有怪照旧一刀清；空中 / 安全区不出手（两个闸门保留）。
     /// </summary>
     void TickAttack(float dt)
     {
         if (IsAirborne) return;   // 空中不攻击（闸门）
         if (IsSafeWindow) return; // 双保险（外层已闸）
 
-        if (_playerAtkCd <= 0f && TryAttack(_playerXPx, _qMeleeRange))
+        if (_playerAtkCd <= 0f)
+        {
             _playerAtkCd = _qAtkCd;
+            _playerAtkAnimT = RUN_ATTACK_ANIM_SEC;
+            PlayRunAttack(_playerGo);
+            TryAttack(_playerXPx, _qMeleeRange);   // 有怪照旧一刀清（返回值不再决定是否进 CD）
+            FireBullet(_playerXPx);                // 跑酷玩家：每次出手也发一颗子弹（不管有没有怪）
+        }
 
         for (int i = 0; i < _mercs.Count; i++)
         {
             var m = _mercs[i];
             if (m.anim != MercAnim.None) continue;   // 天降 / 出场中不出手
             if (m.atkCd > 0f) continue;
+            m.atkCd = _qAtkCd;
+            m.atkAnimT = RUN_ATTACK_ANIM_SEC;
+            PlayRunAttack(m.go);
             // 射程按槽位定：前槽（挡刀位）近战 / 后槽远程；佣兵近战远程归属无数据源，见回报存疑项。
             float range = (i == 0) ? _qMeleeRange : _qRangedRange;
-            if (TryAttack(m.curX, range)) m.atkCd = _qAtkCd;
+            TryAttack(m.curX, range);                // 有怪照旧一刀清（返回值不再决定是否进 CD）
+            if (i >= 1) FireBullet(m.curX);          // 后槽远程：每次出手发一颗子弹（不管有没有怪）
         }
     }
 
@@ -499,5 +533,83 @@ public partial class EndlessRunGame
         if (best == null) return false;
         best.TakeDamage(best.Hp);
         return true;
+    }
+
+    // ============================================================
+    // 远程子弹（后槽佣兵每次出手发放；沿 +x 前飞 _qRangedRange 自动回收，无命中判定）
+    // ============================================================
+
+    /// <summary>后槽佣兵出手发弹：从槽位 x 出发，y = _groundTopYPx + RUN_BULLET_Y_OFFSET_PX。</summary>
+    void FireBullet(float fromX)
+    {
+        if (_bulletPrefab == null)
+        {
+            _bulletPrefab = Resources.Load<GameObject>(SP_RUN_BULLET);
+            if (_bulletPrefab == null)
+            {
+                Debug.LogError("[跑酷] 子弹预制体缺失，之后不再发放子弹（不兜底、不造资源）：" + SP_RUN_BULLET);
+                return;
+            }
+        }
+
+        RunBullet b = TakeBullet();
+        b.logicX = fromX;
+        b.flown = 0f;
+        b.alive = true;
+        if (b.go == null)
+        {
+            b.go = Instantiate(_bulletPrefab);
+            b.go.transform.SetParent(_worldRoot.transform, false);
+            // 子 Transform 全进玩法层（相机 cullingMask = 1<<_worldLayer，不进层＝看不见）。
+            var trs = b.go.GetComponentsInChildren<Transform>(true);
+            for (int i = 0; i < trs.Length; i++) trs[i].gameObject.layer = _worldLayer;
+            // 排序抬到 210：高于怪(4)，低于/接近 SPUM 部件，保证在平台/道具之上可见。
+            var srs = b.go.GetComponentsInChildren<SpriteRenderer>(true);
+            for (int i = 0; i < srs.Length; i++) srs[i].sortingOrder = RUN_BULLET_SORT_ORDER;
+        }
+        b.go.SetActive(true);
+        SyncBulletPos(b);
+        _bullets.Add(b);
+    }
+
+    /// <summary>子弹前飞：按 _qBulletSpeedPx 沿 +x；累计飞行达到 _qRangedRange 即回收（不依赖怪是否存在）。</summary>
+    void TickBullets(float dt)
+    {
+        for (int i = _bullets.Count - 1; i >= 0; i--)
+        {
+            var b = _bullets[i];
+            float dx = _qBulletSpeedPx * dt;
+            b.logicX += dx;
+            b.flown += dx;
+            SyncBulletPos(b);
+            if (b.flown >= _qRangedRange)
+            {
+                ReleaseBullet(b);
+                _bullets.RemoveAt(i);
+            }
+        }
+    }
+
+    void SyncBulletPos(RunBullet b)
+    {
+        if (b.go == null) return;
+        // 逻辑像素只乘 INV_PX2U 转 unit；y 固定离地高度（表现参数，表内无 key）。
+        b.go.transform.localPosition = new Vector3(b.logicX * INV_PX2U,
+            (_groundTopYPx + RUN_BULLET_Y_OFFSET_PX) * INV_PX2U, 0f);
+    }
+
+    RunBullet TakeBullet()
+    {
+        for (int i = 0; i < _bulletPool.Count; i++)
+            if (!_bulletPool[i].alive) return _bulletPool[i];
+        var b = new RunBullet();
+        _bulletPool.Add(b);
+        return b;
+    }
+
+    void ReleaseBullet(RunBullet b)
+    {
+        b.alive = false;
+        if (b.go != null) b.go.SetActive(false);   // 回池不 Destroy（照 World.cs ReleaseProp）
     }
 }

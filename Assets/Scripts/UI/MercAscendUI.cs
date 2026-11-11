@@ -562,6 +562,8 @@ public class MercAscendUI : MonoBehaviour
         SetAtkRowVisible(_leftRowRoots, magic);
         SetAtkRowVisible(_rightRowRoots, magic);
 
+        // 【2026-11-11 主人拍板】血也吃升星加成（每星 +15%），与战斗侧 ApplyOutStarBonus 同源 MercStarDefs
+        float hpCur = hp * (1f + MercStarDefs.HpPctPerStar * cur);
         float atkCur = atk * (1f + MercStarDefs.AtkPctPerStar * cur);
         float defCur = defV * (1f + MercStarDefs.AtkPctPerStar * cur);
         float matkCur = (magic ? atk : 0f) * (1f + MercStarDefs.MagicPctPerStar * cur);
@@ -571,6 +573,7 @@ public class MercAscendUI : MonoBehaviour
         float defNext = maxed ? defCur : defCur * (1f + MercStarDefs.AtkPctPerStar);
         float matkNext = maxed ? matkCur : matkCur * (1f + MercStarDefs.MagicPctPerStar);
         float mdefNext = maxed ? mdefCur : mdefCur * (1f + MercStarDefs.MagicPctPerStar);
+        float hpNext = maxed ? hpCur : hpCur * (1f + MercStarDefs.HpPctPerStar);
 
         // 暴击 = 本项目基础值；0.05 这类小数按百分比显示（MercObtainPopupUI 同口径）
         float crit = GameConfig.BASE_CRIT_RATE;
@@ -578,10 +581,10 @@ public class MercAscendUI : MonoBehaviour
         string critStr = crit.ToString("0.#") + "%";
 
         // 行序 = RowValueNames：Hp / Spd / MagicDef / Crit / Def / Atk / MagicAtk
-        // 生命/速度/暴击不吃加成，两侧同值（2026-10-22 主人确认「不加属性的可以一样 只是预览下一星属性」）
+        // 【2026-11-11 拍板】血吃升星加成（每星 +15%）；速度/暴击仍不吃加成，两侧同值
         string[] leftStrs =
         {
-            Mathf.RoundToInt(hp).ToString(),
+            Mathf.RoundToInt(hpCur).ToString(),
             // 【2026-10-24 主人拍板】速度显示 ×100 取整不用小数（0.85 → 85），与获得佣兵弹窗同口径
             Mathf.RoundToInt(move * 100f).ToString(),
             Mathf.RoundToInt(mdefCur).ToString(),
@@ -592,7 +595,7 @@ public class MercAscendUI : MonoBehaviour
         };
         string[] rightStrs =
         {
-            leftStrs[0],
+            Mathf.RoundToInt(hpNext).ToString(),
             leftStrs[1],
             Mathf.RoundToInt(mdefNext).ToString(),
             critStr,

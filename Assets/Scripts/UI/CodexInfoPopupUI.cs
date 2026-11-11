@@ -113,10 +113,10 @@ public class CodexInfoPopupUI : MonoBehaviour
     /// 深色遮罩铺满、点任意处关闭；传 null 则头像不可点。
     /// </summary>
     public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, Sprite zoomSprite,
-        bool? codexKind = null, string topTitleOverride = null, Color? nameColor = null)
+        bool? codexKind = null, string topTitleOverride = null, Color? nameColor = null, bool silhouette = false)
     {
         Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, zoomSprite, codexKind, topTitleOverride,
-            nameColor: nameColor);
+            nameColor: nameColor, silhouette: silhouette);
     }
 
     /// <summary>
@@ -300,7 +300,7 @@ public class CodexInfoPopupUI : MonoBehaviour
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
         string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
         string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false,
-        Color? nameColor = null)
+        Color? nameColor = null, bool silhouette = false)
     {
         BindRefs();
         Wire();
@@ -377,7 +377,10 @@ public class CodexInfoPopupUI : MonoBehaviour
         {
             portrait.sprite = portraitSprite;
             portrait.preserveAspect = true;
-            portrait.color = portraitSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.15f);
+            // 【2026-11-11 主人拍板】没遇到的怪也点得开看预告，形象给黑影剪影
+            // （和图鉴格子上未记录时的黑色 92% 同一套色）。
+            portrait.color = silhouette ? new Color(0f, 0f, 0f, 0.92f)
+                : (portraitSprite != null ? Color.white : new Color(1f, 1f, 1f, 0.15f));
             // 2026-11-01 主人拍板「弹窗不用加图标，排版也不好」：任务/世界类弹窗不传立绘，
             // 头像框整个收起（留着就是一块空框），标题/简介上移填补，弹窗不空一大块。
             var frameTf = portrait.transform.parent;
@@ -912,7 +915,7 @@ public class CodexInfoPopupUI : MonoBehaviour
         AddLabel(panelRt, "Title", "名称", 32, new Vector2(0f, -280f), new Vector2(500f, 44f));
         AddLabel(panelRt, "Meta", "类型 · 地点", 20, new Vector2(0f, -330f), new Vector2(500f, 36f));
         AddLabel(panelRt, "Desc", "描述", 22, new Vector2(0f, -430f), new Vector2(500f, 140f), TextAnchor.UpperLeft);
-        AddLabel(panelRt, "Lore", "趣闻", 20, new Vector2(0f, -560f), new Vector2(500f, 100f), TextAnchor.UpperLeft);
+        AddLabel(panelRt, "Lore", "补充", 20, new Vector2(0f, -560f), new Vector2(500f, 100f), TextAnchor.UpperLeft);
 
         var close = CreateUi(panelRt, "CloseButton", true);
         close.anchorMin = close.anchorMax = new Vector2(0.5f, 0f);

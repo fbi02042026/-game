@@ -102,13 +102,6 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     }
 
     List<MercenaryData> _offers = new List<MercenaryData>();
-    /// <summary>
-    /// 稀有度 → 卡牌底图（【2026-10-19 主人拍板】预制体 Card0/1/2 是普通/稀有/传奇三种稀有度卡牌，
-    /// 三套美术就用预制体自己的三张底图：首刷前按底图名归档缓存，RefreshCard 按佣兵稀有度取用）。
-    /// </summary>
-    readonly Dictionary<MercRosterDefs.MercRarity, Sprite> _cardFrameByRarity =
-        new Dictionary<MercRosterDefs.MercRarity, Sprite>();
-    bool _cardFramesMapped;
     bool _wired;
     string _lastBanterKey;
     float _nextIdleBanterUnscaled;
@@ -227,7 +220,7 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
     void RerollOffers()
     {
         // 【2026-10-19 主人拍板】三名候选全部随机；卡面（普通/稀有/传奇三套卡牌美术）
-        // 由 RefreshCard 按佣兵稀有度实时切换（见 _cardFrameByRarity）。
+        // 由 RefreshCard 按佣兵稀有度实时切换（2026-11-11 起走 LoadRarityFrame 路径加载）。
         _offers = MercenaryOfferGenerator.GenerateOffers();
         PersistOffers(SaveSystem.Instance?.Data);
     }
@@ -261,35 +254,11 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// 首刷前把三张卡的预制体底图按稀有度归档（Card0/1/2 是三种稀有度卡牌，底图名带
-    /// frame_common/rare/legendary 后缀）。必须在任何换框发生前调用，晚了底图已被覆盖。
-    /// 识别不出不打扰：留空走 LoadRarityFrame 兜底。
-    /// </summary>
-    void MapCardFrames()
-    {
-        if (_cardFramesMapped) return;
-        _cardFramesMapped = true;
-        if (cards == null) return;
-        for (int i = 0; i < cards.Length; i++)
-        {
-            var c = cards[i];
-            if (c == null || c.root == null) continue;
-            var img = c.root.GetComponent<Image>();
-            var sp = img != null ? img.sprite : null;
-            if (sp == null) continue;
-            MercRosterDefs.MercRarity? r = null;
-            if (sp.name.Contains("legendary")) r = MercRosterDefs.MercRarity.Legendary;
-            else if (sp.name.Contains("rare")) r = MercRosterDefs.MercRarity.Rare;
-            else if (sp.name.Contains("common")) r = MercRosterDefs.MercRarity.Common;
-            if (r.HasValue && !_cardFrameByRarity.ContainsKey(r.Value))
-                _cardFrameByRarity[r.Value] = sp;
-        }
-    }
-
     void RefreshAll()
     {
-        MapCardFrames();   // 必须先归档三套卡面，再做任何换框
+        // 【2026-11-11 主人拍板「请用路径加载」】卡面一律 RefreshCard 内走 LoadRarityFrame 路径加载，
+        // 原首刷归档 MapCardFrames（依赖预制体底图引用）已删除 —— 三张 frame png 是 56 字符 guid，
+        // prefab 引用断链，归档永远落空（AGENTS.md §2.3：56 字符不修、一律路径加载）。
         int hired = MercHireSession.HiredCount();
         int max = MercenaryManager.Instance != null
             ? Mathf.Max(1, MercenaryManager.Instance.GetMaxMercSlots())

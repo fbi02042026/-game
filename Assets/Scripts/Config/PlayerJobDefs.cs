@@ -484,18 +484,33 @@ public static class PlayerJobDefs
         var jobKind = def.PrimaryWeapon;
 
         // 【2026-10-29 晚主人拍板】竞技场赛季冠军限定武器：仓库里拥有与本职业匹配的 →
-        // 开局直接发传奇品质实例替换初始主手（只有竞技场冠军拿得到，月轮换）。
+        // 开局直接发传奇品质实例替换初始主手（只有竞技场冠军拿得到）。
+        // 【2026-11-11 主人拍板「剑盾可以有剑和盾」】冠军之盾（副手）替换初始副手，主手照常发初始武器；
+        //   同职业同槽拥有多把取最新一把；冠军盾优先于里程钢骨盾（传奇 > 稀有）。
         // 装备失败只报错不回退旧初始武器（照暮火之杖口径：不兜底，出错要看得见）。
-        bool arenaStartReplaced = false;
-        var arenaTpl = ArenaSeasonWeapons.OwnedTemplateForJob(data, job);
-        if (arenaTpl != null)
+        bool arenaStartReplaced = false;   // 主手被冠军武器占用
+        bool arenaOffReplaced = false;     // 副手被冠军之盾占用
+        var arenaMainTpl = ArenaSeasonWeapons.OwnedTemplateForJob(data, job, offHand: false);
+        if (arenaMainTpl != null)
         {
             int arenaLv = Hero.Instance != null ? Hero.Instance.level : 1;
-            var arenaInst = ArenaSeasonWeapons.CreateBattleInstance(arenaTpl, jobKind, arenaLv);
+            var arenaInst = ArenaSeasonWeapons.CreateBattleInstance(arenaMainTpl, jobKind, arenaLv);
             if (arenaInst != null && bag.TryEquipDirect(arenaInst))
                 arenaStartReplaced = true;
             else
                 Debug.LogError("[PlayerJobDefs] 竞技场冠军武器开局装备失败，本局主手为空（不回退初始武器）");
+        }
+        var arenaOffTpl = job == PlayerJobId.SwordShield
+            ? ArenaSeasonWeapons.OwnedTemplateForJob(data, job, offHand: true)
+            : null;
+        if (arenaOffTpl != null)
+        {
+            int arenaOffLv = Hero.Instance != null ? Hero.Instance.level : 1;
+            var arenaOffInst = ArenaSeasonWeapons.CreateBattleInstance(arenaOffTpl, jobKind, arenaOffLv);
+            if (arenaOffInst != null && bag.TryEquipDirect(arenaOffInst))
+                arenaOffReplaced = true;
+            else
+                Debug.LogError("[PlayerJobDefs] 竞技场冠军之盾开局装备失败，本局副手为空（不回退初始副手）");
         }
 
         // 先发主手（会清对应槽）；再发副手。
@@ -538,7 +553,7 @@ public static class PlayerJobDefs
         // 生成与领取共用 AdventureLogMileage.CreateMilestoneInstance 同一出口，属性不分叉；
         // 装备失败只报错不回退初始副手。盾只在剑盾职业生效，其他职业不发）。
         bool mileageShieldReplaced = false;
-        if (job == PlayerJobId.SwordShield && AdventureLogMileage.HasShieldMilestoneOwned())
+        if (job == PlayerJobId.SwordShield && !arenaOffReplaced && AdventureLogMileage.HasShieldMilestoneOwned())   // 冠军盾优先
         {
             int shieldLv = Hero.Instance != null ? Hero.Instance.level : 1;
             var shieldInst = AdventureLogMileage.CreateShieldBattleInstance(shieldLv);
@@ -548,7 +563,7 @@ public static class PlayerJobDefs
                 Debug.LogError("[PlayerJobDefs] 稀有·钢骨盾开局装备失败，本局副手为空（不回退初始副手）");
         }
 
-        if (!mileageShieldReplaced && !string.IsNullOrEmpty(kit.OffTemplateId))
+        if (!mileageShieldReplaced && !arenaOffReplaced && !string.IsNullOrEmpty(kit.OffTemplateId))
         {
             var offTpl = ResolveKitTemplate(kit.OffTemplateId, null);
             if (offTpl != null)

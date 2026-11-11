@@ -8,9 +8,11 @@
 ///   · 升星徽记消耗（该职业徽记，2026-10-23 主人拍板）：
 ///       普通 10/20/30（低级）、稀有 5/10/20（中级）、传奇 2/5/10（高级）——2026-11-10 主人拍板：所有品质 0→1 星都要徽记，只是徽记的职业与档位不同。
 ///   · 重复获得转化数：普通 ×10 / 稀有 ×5 / 传奇 ×1（替代 MercGrowInventory.DUP_FRAG_* 8/20/50）。
-///   · 星级加成（外层乘区，只动攻防四条，血/移速不动）：
-///       每星 物攻(Attack)/物防(Defense) +8%、魔攻(MagicAttack)/魔防(MagicDefense) +7%
-///       （2026-10-22 三次拍板「先按8%加吧 魔按7%」）。
+///   · 星级加成（外层乘区）：
+///       每星 物攻(Attack)/物防(Defense)/魔攻(MagicAttack)/魔防(MagicDefense) +15%
+///       【2026-11-11 主人拍板】物魔两组统一提到 +15%（覆盖 2026-10-22「攻8%/魔7%」旧口径）；
+///       每星 生命(MaxHp) +15%（同日拍板新增，覆盖旧口径「血/移速不动」——移速依旧不动）。
+///       攻/魔两个常量保留两份便于以后分开调。
 ///   · 满星总消耗（自洽校验）：普通 9 次重复 ×10 = 90、稀有 14 ×5 = 70、传奇 10 ×1 = 10。
 ///   · 无城镇等级限制（不挂任何解锁门）。
 /// </summary>
@@ -19,11 +21,14 @@ public static class MercStarDefs
     /// <summary>局外升星上限。2026-10-22 主人拍板「升星上限先 3 星」，以后开新档位改这里。</summary>
     public const int MaxOutStar = 3;
 
-    /// <summary>每星物攻/物防加成（+8%，外层乘区）。</summary>
-    public const float AtkPctPerStar = 0.08f;
+    /// <summary>每星物攻/物防加成（+15%，外层乘区；2026-11-11 拍板从 8% 上调）。</summary>
+    public const float AtkPctPerStar = 0.15f;
 
-    /// <summary>每星魔攻/魔防加成（+7%，外层乘区）。</summary>
-    public const float MagicPctPerStar = 0.07f;
+    /// <summary>每星魔攻/魔防加成（+15%，外层乘区；2026-11-11 拍板与物攻组统一，从 7% 上调）。</summary>
+    public const float MagicPctPerStar = 0.15f;
+
+    /// <summary>每星生命(MaxHp)加成（+15%，外层乘区；2026-11-11 拍板新增，旧口径血不动作废）。</summary>
+    public const float HpPctPerStar = 0.15f;
 
     /// <summary>满星碎片攒够后的招募降权系数（权重 ×0.2，2026-10-22 主人拍板建议值，重掷照旧）。</summary>
     public const float FullStarRecruitDownWeight = 0.2f;

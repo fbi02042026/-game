@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
@@ -41,6 +42,9 @@ public class ArenaPopupUI : MonoBehaviour
 
     // ── 榜单行控件（行号 0=榜首 … 100=末位；玩家行下标=arenaPlayerPos）──
     readonly GameObject[] _rowRoots = new GameObject[RowTotal];
+    // 行条缩放基准（2026-11-11）：克隆时缓存预制体行模板的原始 localScale，
+    // 换位动效/复位全部写「基准 × 倍率」，主人改模板行大小后动效区间跟着整体缩放。
+    readonly Vector3[] _rowBaseScale = new Vector3[RowTotal];
     readonly Text[] _rowRank = new Text[RowTotal];
     readonly Image[] _rowHead = new Image[RowTotal];
     readonly Text[] _rowName = new Text[RowTotal];
@@ -177,8 +181,12 @@ public class ArenaPopupUI : MonoBehaviour
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         ArenaRules.EnsurePeriods(data);   // 跨天清次数+机器人漂移换位；跨周赛季结算（懒触发；2026-11-03 测试用改一周一结）
         ArenaRules.SettlePendingQuitLoss();   // 中途退出判负补账（2026-10-31 主人拍板「直接算输」）：有未落账挑战先补 -10 再刷榜
-        ArenaRules.RefreshBotScoresIfDue(data);   // 游玩中到点刷机器人分（2026-10-30 20:10 主人拍板「一个时间刷一下，不要不变」）
+        ArenaLadderDrift.SettleIfDue(data);   // 离线漂移（2026-11-11）：离线期间被机器人挑战扣分 + 机器人积分只涨不跌（幂等，不足 1 天不结）
+        // 结算冻结期：机器人分不再「游玩中刷新」，榜单保持结算时的最终名次
+        bool frozen = ArenaSeasonClock.IsFrozen();
+        if (!frozen) ArenaRules.RefreshBotScoresIfDue(data);   // 游玩中到点刷机器人分（2026-10-30 20:10 主人拍板「一个时间刷一下，不要不变」）
         string notice = ArenaRules.TakeSeasonNotice(data);
+        if (frozen) notice = $"赛季结算中：排行榜已冻结。{ArenaSeasonClock.RuleLine}";
 
         var canvas = GetComponent<Canvas>();
         if (canvas != null) UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.TownPopup);
@@ -190,6 +198,7 @@ public class ArenaPopupUI : MonoBehaviour
         ResetRowTransient();    // 清换位动效残留（见方法注释，2026-11-01 主人报「滑动看到一条机器人的条显示有问题」）
         GlobalToastUI.Hide();   // 战败「积分 -10」toast 会活着飘进榜单压住一行（2026-11-01 主人截图）：开榜即收，掉分由名次动效表达
         TryPlayShiftAnim();   // 战斗结算名次动效（2026-10-30 主人拍板：胜=放大上移砸落 / 败=隐藏下移出现）
+        TryShowSeasonHint(data);   // 距结算 ≤5 天自动弹一次倒计时信息框（每天最多一次，2026-11-11 主人拍板）
         if (_noticeText != null)
         {
             _noticeText.gameObject.SetActive(!string.IsNullOrEmpty(notice));
@@ -203,8 +212,22 @@ public class ArenaPopupUI : MonoBehaviour
         if (_rewardRoot != null) _rewardRoot.SetActive(false);
         if (_shopRoot != null) _shopRoot.SetActive(false);   // 商店页一并收起（关弹窗不留残页）
         ArenaShopInfoPopupUI.CloseIfOpen();   // 商品信息弹窗是 DDOL 独立实例，主弹窗关了顺带收掉
+        ArenaSeasonHintPopup.CloseIfOpen();   // 赛季倒计时信息框同口径（防 DDOL 残页）
         _pendingRowIdx = -1;
         gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 赛季结算倒计时提示（距结算 ≤CountdownPromptSeconds 时弹，短周期每赛季一次、长周期每天一次）。
+    /// 文案与判定统一走 ArenaSeasonClock；弹完即记账。
+    /// </summary>
+    void TryShowSeasonHint(SaveData data)
+    {
+        if (!ArenaSeasonClock.ShouldPrompt(data)) return;
+        long secsLeft = ArenaSeasonClock.SecondsUntilSettle();
+        ArenaSeasonClock.MarkPrompted(data);
+        string headline = ArenaSeasonClock.CountdownHeadline(secsLeft);
+        ArenaSeasonHintPopup.Show("赛季结算提醒", headline, ArenaSeasonClock.CountdownText(secsLeft));
     }
 
     // ── 顶部一排（2026-10-30 主人拍板「对战次数/对战记录/排行奖励移出弹窗放到顶部一排」）──
@@ -439,6 +462,7 @@ public class ArenaPopupUI : MonoBehaviour
             {
                 // 只写纵向排队 y（必要介入）；锚点/宽高/x 一律跟随预制体模板，不写死（铁律 20）
                 rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -(i * _rowStep + 4f));
+                _rowBaseScale[i] = NormalizeBaseScale(rt.localScale);
             }
             _rowRoots[i] = row;
 
@@ -678,6 +702,11 @@ public class ArenaPopupUI : MonoBehaviour
         // 【2026-10-30 排查日志】主人报「挑战无反应」三次未定位 → 链路每一步都出声（铁律 12：错误要让我看见）
         Debug.Log($"[Arena] 点「对战」row={rowIdx} 我方位次={data?.arenaPlayerPos} 可挑战={(data != null && ArenaRules.IsChallengeable(data, rowIdx))} 剩次数={(data != null ? ArenaRules.TriesLeft(data) : -1)}");
         if (data == null) return;
+        if (ArenaSeasonClock.IsFrozen())
+        {
+            GlobalToastUI.Show($"赛季结算中，排行榜已冻结。{ArenaSeasonClock.RuleLine}", true);
+            return;
+        }
         if (!ArenaRules.IsChallengeable(data, rowIdx)) return;
         if (ArenaRules.TriesLeft(data) <= 0)
         {
@@ -717,6 +746,12 @@ public class ArenaPopupUI : MonoBehaviour
             Debug.LogError($"[Arena] 挑战回调被拦：row={rowIdx} 不可挑战（我方位次 {data.arenaPlayerPos}）——点按钮时明明可挑战，异常，报主人");
             return;
         }
+        // 结算冻结期兜底（选职业期间跨进结算日也不许开打）：冻结按系统时钟实时算，关游戏重进绕不过
+        if (ArenaSeasonClock.IsFrozen())
+        {
+            GlobalToastUI.Show($"赛季结算中，排行榜已冻结。{ArenaSeasonClock.RuleLine}", true);
+            return;
+        }
         if (!ArenaRules.TryConsumeChallenge()) return;   // 次数不足自带 toast，可见
 
         // 【2026-10-30 主人拍板「竞技场真战斗」】不再掷骰直出结果（原 ResolveChallenge/ShowResult 链已删）：
@@ -738,9 +773,13 @@ public class ArenaPopupUI : MonoBehaviour
         if (data == null) return;
         ArenaRules.EnsurePeriods(data);   // 幂等；保证换位链合法（老档迁移也在这里触发）
 
+        // 结算冻结期（每月最后一天）：竞技场冻结榜单 —— 所有行只显示灰杠，不给挑战入口
+        bool frozen = ArenaSeasonClock.IsFrozen();
+
         int pos = Mathf.Clamp(data.arenaPlayerPos, 0, RowTotal - 1);
         int left = ArenaRules.TriesLeft(data);
-        // 2026-10-30 主人拍板：对战次数不要字，只显示剩余数字（「对战次数」已烤在胶囊图上）；看广告 +2 累加、跨天清零回 10（口径不变）
+        // 2026-10-30 主人拍板：对战次数不要字，只显示剩余数字（「对战次数」已烤在胶囊图上）；看广告 +2 累加
+        // （2026-11-11 放开：每天 5 次×+2）、跨天清零回 5 次免费（口径不变）
         string myName = StoryProgress.GetPlayerName();   // 2026-10-30 主人拍板：榜单/领奖台一律用玩家起的名字（StoryProgress.GetPlayerName 唯一出口），不再写死「我」
 
         if (_triesText != null) _triesText.text = left.ToString();   // 只显示剩余次数（2026-10-30 主人拍板）
@@ -826,8 +865,8 @@ public class ArenaPopupUI : MonoBehaviour
                 }
             }
 
-            // 「对战」按钮 vs 「—」互斥（参考图口径：可挑战亮按钮，其余灰杠）
-            bool canFight = !isPlayer && ArenaRules.IsChallengeable(data, i);
+            // 「对战」按钮 vs 「—」互斥（参考图口径：可挑战亮按钮，其余灰杠）；结算冻结期一律灰杠
+            bool canFight = !frozen && !isPlayer && ArenaRules.IsChallengeable(data, i);
             if (_rowFight[i] != null) _rowFight[i].SetActive(canFight);
             if (_rowDash[i] != null) _rowDash[i].SetActive(!canFight);
         }
@@ -859,7 +898,7 @@ public class ArenaPopupUI : MonoBehaviour
     /// 清换位动效残留（幂等，每次 Open 调）：行是 DDOL 常驻对象，换位动效（CoWinShift/CoFailShift）
     /// 若被中途关弹窗打断（SetActive(false) 停协程），半透明 CanvasGroup / 缩放 / 错位 y / 滚动锁
     /// 会原样带到下一次打开——主人 2026-11-01 报「滑动看到一条机器人的条显示有问题」即此。
-    /// 在 TryPlayShiftAnim 前复位：alpha=1、scale=1、归位 y、解锁滚动；动效自己再从旧位起步不受影响。
+    /// 在 TryPlayShiftAnim 前复位：alpha=1、scale=基准、归位 y、解锁滚动；动效自己再从旧位起步不受影响。
     /// </summary>
     void ResetRowTransient()
     {
@@ -869,12 +908,20 @@ public class ArenaPopupUI : MonoBehaviour
             if (row == null) continue;
             var cg = row.GetComponent<CanvasGroup>();
             if (cg != null) cg.alpha = 1f;
-            row.transform.localScale = Vector3.one;
+            row.transform.localScale = RowBaseScale(i);
             var rt = row.GetComponent<RectTransform>();
             if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, -(i * _rowStep + 4f));   // 同 BuildRows/动效 home 公式
         }
         if (_scroll != null) _scroll.enabled = true;
     }
+
+    /// <summary>缩放基准兜底：预制体被误设成 0 时按 1 处理，防整行缩没。</summary>
+    static Vector3 NormalizeBaseScale(Vector3 s)
+        => (s.x <= 0.0001f || s.y <= 0.0001f || s.z <= 0.0001f) ? Vector3.one : s;
+
+    /// <summary>第 i 行的缩放基准（克隆时缓存的预制体模板值）。</summary>
+    Vector3 RowBaseScale(int i)
+        => (i >= 0 && i < _rowBaseScale.Length) ? NormalizeBaseScale(_rowBaseScale[i]) : Vector3.one;
 
     /// <summary>Open 时消费结算标记并启动名次动效（没打过分/名次没动直接跳过——动效是锦上添花，不报错）。</summary>
     void TryPlayShiftAnim()
@@ -896,17 +943,18 @@ public class ArenaPopupUI : MonoBehaviour
         float baseY = -(newPos * _rowStep + 4f);
         float fromY = -((newPos + upRows) * _rowStep + 4f);   // 旧名次位（下方）
         float x = rt.anchoredPosition.x;
+        var bs = RowBaseScale(newPos);                        // 预制体模板原始缩放（2026-11-11）
 
         rt.SetAsLastSibling();
         if (_scroll != null) _scroll.enabled = false;        // 动效期间锁滚动防打架
         rt.anchoredPosition = new Vector2(x, fromY);
 
-        yield return Tween(0.35f, k => rt.localScale = Vector3.one * (1f + (ShiftScaleBig - 1f) * EaseOutCubic(k)));       // 放大 1.5
+        yield return Tween(0.35f, k => rt.localScale = bs * (1f + (ShiftScaleBig - 1f) * EaseOutCubic(k)));       // 放大 1.5
         yield return Tween(1.55f, k => rt.anchoredPosition = new Vector2(x, Mathf.Lerp(fromY, baseY, EaseInOutCubic(k)))); // 上移到新位
-        yield return Tween(0.22f, k => rt.localScale = Vector3.one * Mathf.Lerp(ShiftScaleBig, 1f, EaseInCubic(k)));       // 砸落骤缩
-        yield return Tween(0.12f, k => rt.localScale = new Vector3(1f + 0.06f * (1f - k), 1f - 0.08f * (1f - k), 1f));     // 落地震一下
+        yield return Tween(0.22f, k => rt.localScale = bs * Mathf.Lerp(ShiftScaleBig, 1f, EaseInCubic(k)));       // 砸落骤缩
+        yield return Tween(0.12f, k => rt.localScale = new Vector3(bs.x * (1f + 0.06f * (1f - k)), bs.y * (1f - 0.08f * (1f - k)), bs.z));     // 落地震一下
 
-        rt.localScale = Vector3.one;
+        rt.localScale = bs;
         rt.anchoredPosition = new Vector2(x, baseY);
         EndShift();
     }
@@ -917,6 +965,7 @@ public class ArenaPopupUI : MonoBehaviour
         float baseY = -(newPos * _rowStep + 4f);
         float fromY = -((newPos - downRows) * _rowStep + 4f);   // 旧名次位（上方）
         float x = rt.anchoredPosition.x;
+        var bs = RowBaseScale(newPos);                          // 预制体模板原始缩放（2026-11-11）
         var cg = rt.GetComponent<CanvasGroup>();
         if (cg == null) cg = rt.gameObject.AddComponent<CanvasGroup>();
 
@@ -927,9 +976,9 @@ public class ArenaPopupUI : MonoBehaviour
         yield return Tween(0.45f, k => cg.alpha = 1f - k);                                                                  // 旧位淡出隐藏
         yield return Tween(0.8f, k => rt.anchoredPosition = new Vector2(x, Mathf.Lerp(fromY, baseY, EaseInCubic(k))));      // 隐身下移到新位
         yield return Tween(0.5f, k => cg.alpha = k);                                                                        // 到位后出现
-        yield return Tween(0.35f, k => { float s = 1f + 0.06f * (1f - k); rt.localScale = new Vector3(s, 2f - s, 1f); });   // 落定轻震
+        yield return Tween(0.35f, k => { float s = 1f + 0.06f * (1f - k); rt.localScale = new Vector3(bs.x * s, bs.y * (2f - s), bs.z); });   // 落定轻震
 
-        rt.localScale = Vector3.one;
+        rt.localScale = bs;
         rt.anchoredPosition = new Vector2(x, baseY);
         cg.alpha = 1f;
         EndShift();
@@ -997,10 +1046,6 @@ public class ArenaPopupUI : MonoBehaviour
         }
         _shopRoot = pageT.gameObject;
 
-        // 页根自带 Button（点空白关页，同对战记录面板 Dim 口径）——只在实例上接线，不改预制体
-        var pageBtn = pageT.GetComponent<Button>();
-        if (pageBtn != null) pageBtn.onClick.AddListener(CloseShop);
-
         var boxT = UiFind.Deep(pageT, "RecordsBox");
         if (boxT == null)
         {
@@ -1009,6 +1054,27 @@ public class ArenaPopupUI : MonoBehaviour
             return;
         }
         _shopBox = (RectTransform)boxT;
+
+        // 【2026-11-11 主人报「点弹窗中间那条竖缝就把整个竞技商店关了」】根因：页根那条全屏 Dim
+        //（黑底 Image，raycastTarget=1）上挂了 Button 做「点空白关页」的口子——弹窗内凡是自己没有
+        // 点击处理的装饰/空白（中缝竖条、金框、人物插图、行间空隙）点下去都会沿层级冒泡到它 → 关页。
+        // 改为只认落点：点击点落在弹窗矩形（RecordsBox）内一律不关；只有点矩形外的遮罩才关。
+        // 用 EventTrigger 取得到 PointerEventData.position（Button.onClick 拿不到坐标），组件是
+        // Unity 内置的，不新增脚本；根上原有的 Button 保留但不再接任何 onClick。
+        var pageBtn = pageT.GetComponent<Button>();
+        if (pageBtn != null) pageBtn.onClick.RemoveAllListeners();   // 拆掉旧的「点任意空白即关页」
+        var outsideCloser = pageT.GetComponent<EventTrigger>();
+        if (outsideCloser == null) outsideCloser = pageT.gameObject.AddComponent<EventTrigger>();
+        var clickEntry = new EventTrigger.Entry { eventID = EventTriggerType.PointerClick };
+        clickEntry.callback.AddListener(e =>
+        {
+            var ped = e as PointerEventData;
+            if (ped == null || _shopBox == null) return;
+            // 落点在弹窗矩形内 → 不关（含中缝竖条 / 装饰 / 空白处）
+            if (RectTransformUtility.RectangleContainsScreenPoint(_shopBox, ped.position, ped.pressEventCamera)) return;
+            CloseShop();
+        });
+        outsideCloser.triggers.Add(clickEntry);
 
         // 关闭钮：页内搜索（对战记录面板也有同名 RCloseBtn，不能全树搜）。
         // 2026-10-31 主人报「点关闭无反应」：静态核对（prefab 有 Button interactable=1、无遮挡、Editor.log 无报错）
@@ -1105,10 +1171,28 @@ public class ArenaPopupUI : MonoBehaviour
             // 同款修法：换 LoadTavernCardFrame 酒馆池格三档框（传奇金/稀有蓝/普通银）+ Sliced，
             // 九宫边框厚度不随格子尺寸变形，正好包住 60×60 图标。
             var frameT = UiFind.Deep(row.transform, "商品图框");
+            // 【2026-11-11 主人报「商品图标太小，看不出是什么图」】icon 是「商品图框」的子节点：
+            // 图框为把原生 204×248 的酒馆头像框塞进 70×70，会把自身 localScale 缩到 70/248≈0.282，
+            // 子节点跟着缩 → 60×60 图标只剩 ≈17 逻辑像素。这里记下图框的实际缩放/显示尺寸，
+            // 图标段按「框内镂空」反推尺寸并把父级缩放除回去。
+            float frameScale = 1f;
+            Vector2 frameVisual = frameT is RectTransform frameRtRaw ? frameRtRaw.sizeDelta : new Vector2(70f, 70f);
             var frameImg = frameT != null ? frameT.GetComponent<Image>() : null;
             if (frameImg != null)
             {
-                var frameSp = MercHireSession.LoadTavernCardFrame(good.frameRarity);
+                // 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备类商品（逐风长弓）
+                // 图框换装备框三档图（金/蓝/白，按装备模板稀有度，与替换弹窗/装备快捷槽同套美术）；
+                // 佣兵/金币/徽记等非装备商品仍走酒馆头像框（佣兵稀有度口径），两套框图不混。
+                Sprite frameSp;
+                if (good.kind == ArenaShopGoods.GoodKind.Bow)
+                {
+                    var bowTpl = ArenaShopGoods.BowTemplate();
+                    frameSp = EquipRarityFrame.SpriteOf(bowTpl != null ? bowTpl.baseRarity : Rarity.Rare);
+                }
+                else
+                {
+                    frameSp = MercHireSession.LoadTavernCardFrame(good.frameRarity);
+                }
                 if (frameSp == null)
                     Debug.LogError($"[Arena] 稀有度底框缺失：酒馆头像框（{good.frameRarity}，商品 {good.id}，底框留空可见）");
                 else
@@ -1126,6 +1210,8 @@ public class ArenaPopupUI : MonoBehaviour
                         frameSp.rect.width > 0.5f ? frameBox.x / frameSp.rect.width : 1f,
                         frameSp.rect.height > 0.5f ? frameBox.y / frameSp.rect.height : 1f);
                     frameRt.localScale = new Vector3(fs, fs, 1f);
+                    frameScale = fs;
+                    frameVisual = new Vector2(frameSp.rect.width * fs, frameSp.rect.height * fs);
                 }
             }
             else
@@ -1149,15 +1235,22 @@ public class ArenaPopupUI : MonoBehaviour
                     Debug.LogError($"[Arena] 商品图标缺失：{good.id}（不兜底，格内留灰块可见）");
                 else
                 {
-                    // 【2026-11-01 主人拍板「其他的也是」】与图框同口径：原始大小 + 等比缩放，不写宽高
+                    // 【2026-11-11 主人报「图标太小，看不出来用的是什么图」】取图链路没取错，问题在尺寸：
+                    // icon 是「商品图框」的子节点，图框把自己缩到 ≈0.282 塞进 70×70，子节点跟着缩，
+                    // 60×60 图标实际只有 ≈17 逻辑像素（1080 屏约 25 物理像素）→ 看不出画的是什么。
+                    // 修法：图标目标尺寸按图框**实际显示的内镂空宽度**算（酒馆头像框原生 204×248，
+                    // 左右边框各约 18px，实测内区宽 168/204≈82%），再把父级缩放除回去（icon 是子节点，
+                    // 不除会被继承缩放再压一次）。图框本身宽高/位置一个像素没动 → 商品名、购买钮、
+                    // 行卡几何全部不受影响；只是框里的图从 ≈17 放大到 ≈47 逻辑像素。
                     var iconRt = iconImg.rectTransform;
-                    Vector2 iconBox = iconRt.sizeDelta;
                     iconImg.sprite = sp;
                     iconImg.preserveAspect = false;
                     iconImg.SetNativeSize();
+                    float iconSide = Mathf.Min(frameVisual.x, frameVisual.y) * 0.82f;
                     float isc = Mathf.Min(
-                        sp.rect.width > 0.5f ? iconBox.x / sp.rect.width : 1f,
-                        sp.rect.height > 0.5f ? iconBox.y / sp.rect.height : 1f);
+                        sp.rect.width > 0.5f ? iconSide / sp.rect.width : 1f,
+                        sp.rect.height > 0.5f ? iconSide / sp.rect.height : 1f);
+                    if (frameScale > 0.0001f) isc /= frameScale;   // 抵掉「商品图框」继承下来的缩放
                     iconRt.localScale = new Vector3(isc, isc, 1f);
                 }
             }
@@ -1175,9 +1268,12 @@ public class ArenaPopupUI : MonoBehaviour
                 if (buyBtn == null) buyBtn = buyT.gameObject.AddComponent<Button>();
                 var captured = good;
                 buyBtn.onClick.AddListener(() => OnShopUnitClicked(captured));
-                // 【2026-11-10 主人报「按钮太大了」】撤销 11-01 的 ×1.2 放大，回到预制体原始尺寸。
-                // 统一口径：所有界面的购买按钮都不额外放大，不逐个报。
-                buyT.localScale = Vector3.one;
+                // 【2026-11-11 主人报「购买钮还是太大」】尺寸真源在预制体：「购买」节点自带
+                // m_LocalScale = 0.3（sizeDelta 308×99 → 实际 ≈ 92×30，行卡横条 350 宽，右侧留白）。
+                // 11-01 的「放大 20%」写成 Vector3.one*1.2、11-10 又写成 Vector3.one，两次都把预制体
+                // 的 0.3 覆盖掉 → 实际按 308×99 渲染（≈3.3 倍），所以再怎么改预制体都不生效。
+                // 正确口径：只乘在预制体自身比例上（0.3 → 0.36 ≈ 111×36），尺寸真源仍是预制体。
+                buyT.localScale = buyT.localScale * 1.2f;
             }
             else
                 Debug.LogError("[Arena] 商品单元缺节点：购买（购买钮不显示）");
@@ -1559,7 +1655,8 @@ public class ArenaPopupUI : MonoBehaviour
             var badge = UiFind.Deep(row, "Badge")?.GetComponent<Image>();
             if (badge != null) badge.color = rec.won ? _recWin : _recLose;
             var badgeText = badge != null ? badge.GetComponentInChildren<Text>(true) : null;
-            if (badgeText != null) badgeText.text = rec.won ? "胜" : "败";
+            // 防守记录章「守」（守住）/「破」（被攻破），与主动挑战的「胜/败」区分（2026-11-11 防守有输有赢拍板）
+            if (badgeText != null) badgeText.text = rec.isDefense ? (rec.won ? "守" : "破") : (rec.won ? "胜" : "败");
 
             var score = UiFind.Deep(row, "Pts")?.GetComponent<Text>();
             if (score != null)

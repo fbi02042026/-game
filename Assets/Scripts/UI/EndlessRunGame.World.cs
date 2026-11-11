@@ -81,6 +81,14 @@ public partial class EndlessRunGame : MonoBehaviour
     const float PROP_TARGET_H_PORTAL = 160f;
     const float PROP_TARGET_H_MERCHEAD = 84f;
 
+    /// <summary>
+    /// 【2026-11-11 T7 主人拍板「放大怪物形象、大小对齐战斗」】怪的渲染目标高度（world unit）。
+    /// 来源：战斗里普通怪 = 32px 图 × (MONSTER_SCALE_MIN~MAX = 2.625~3.15) ≈ 0.84~1.0 unit，
+    /// 而战斗相机 orthographicSize=5.4、跑酷 6.4 → 跑酷里要再 ×1.185 ≈ 1.0~1.2 unit，取中值 1.1。
+    /// 只作用 viewGo.localScale；LogicX / 槽位 / 射程 / 碰撞判定一律不乘。
+    /// </summary>
+    const float ENEMY_VIEW_H_U = 1.1f;
+
     // MercHead 资源（全部现成图，按路径加载，不复制 / 不造图）
     const string SP_MERCHEAD_ROOT = "UI/Icons/MercHead/";
     const string SP_MERCHEAD_FRAME = "UI/Art/Main/头像/头像框";
@@ -692,14 +700,23 @@ public partial class EndlessRunGame : MonoBehaviour
     {
         RunEnemy e = TakeEnemy();
         e.LogicX = x;
-        e.logicY = y;
+        // logicY 在下面按视觉高度重算（脚底对齐），这里不直接沿用地面 y。
         e.Hp = hp;
         e.IsElite = elite;
         e.IsAlive = true;
-        // 判定盒半宽：图逻辑宽度的一半再缩 15%；不含 0.7（渲染缩放只进 localScale）。
-        e.ColliderHalfW = (sp.rect.width / Mathf.Max(1f, sp.pixelsPerUnit)) / INV_PX2U * 0.5f * 0.85f;
+
+        // 【2026-11-11 T7】按目标世界高度算渲染缩放（见 ENEMY_VIEW_H_U），替掉原来固定的 0.7。
+        // 缩放只进 viewGo.localScale；LogicX / 槽位 x / 射程仍全在逻辑 px。
+        float spHU = sp.rect.height / Mathf.Max(1f, sp.pixelsPerUnit);
+        float viewScale = ENEMY_VIEW_H_U / Mathf.Max(0.0001f, spHU);
+        // 脚底对齐：sprite pivot 在中心，放大约 3.4 倍后若不抬半身高，下半只会沉进地面（0.7 时代太小看不出来）。
+        e.logicY = y + (spHU * viewScale * 0.5f) / INV_PX2U;   // 单位：逻辑 px
+
+        // 判定盒半宽：视觉宽的一半再缩 15%。视觉放大后同步放大，保证「看到的宽度 = 判定宽度」。
+        e.ColliderHalfW = (sp.rect.width / Mathf.Max(1f, sp.pixelsPerUnit)) / INV_PX2U * 0.5f * 0.85f * viewScale;
 
         EnsureEnemyView(e);
+        e.viewGo.transform.localScale = new Vector3(viewScale, viewScale, 1f);
         e.viewSr.sprite = sp;          // 真图，绝不纯色
         e.viewGo.SetActive(true);
         SyncEnemyPos(e);
@@ -814,8 +831,7 @@ public partial class EndlessRunGame : MonoBehaviour
         go.layer = _worldLayer;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sortingOrder = 4;
-        // 0.7 唯一落点（渲染）：判定 / 世界坐标一个都不乘 0.7。
-        go.transform.localScale = new Vector3(_wRenderScale, _wRenderScale, 1f);
+        // 缩放由 SpawnMonster 按当前 sprite 的像素高逐次重算（池复用会换图），这里不写死 0.7。
         e.viewGo = go;
         e.viewSr = sr;
     }

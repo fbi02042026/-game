@@ -106,7 +106,7 @@ public static class AttackRangeTable
             case WeaponCombatTable.WeaponKind.Polearm:
                 return GetPx("weapon_polearm", 180f);
             case WeaponCombatTable.WeaponKind.Staff:
-                return GetPx("weapon_staff", 120f);
+                return GetPx("weapon_staff", 156f);
             case WeaponCombatTable.WeaponKind.Bow:
                 return GetPx("weapon_bow", 300f);
             case WeaponCombatTable.WeaponKind.Shield:

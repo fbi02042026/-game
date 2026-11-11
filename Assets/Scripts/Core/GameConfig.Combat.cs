@@ -13,7 +13,7 @@ public static partial class GameConfig
     // 别让兜底和表各说一套（同 MONSTER_RANGED_RANGE_MUL 的口径）。
     public const float RANGE_PX_GREATSWORD = 120f; // 大剑/双手斧/双手锤
     public const float RANGE_PX_POLEARM = 180f;   // 长柄
-    public const float RANGE_PX_STAFF = 120f;     // 单手杖
+    public const float RANGE_PX_STAFF = 156f;     // 单手杖
     public const float RANGE_PX_BOW = 300f;       // 弓箭
     public const float RANGE_PX_SHIELD = 64f;     // 盾
 
@@ -55,6 +55,12 @@ public static partial class GameConfig
         public const int TownConfirm = 910;
         public const int BattleStageMap = 880;
         public const int BattlePopup = 920;
+        /// <summary>
+        /// 【2026-11-11 主人拍板「一进战斗的半透剧情提示」】战斗开场氛围横幅（BattleAmbienceBanner）：
+        /// 半透遮罩 + 本章铺垫句，须盖住战斗 HUD(950) 与抽奖面板(965)，仍低于剧情窗(13000)——
+        /// 横幅播完才弹战前剧情窗，两层不重叠出现。取 928：弹窗段之内、EquipReplaceConfirm(925) 之上。
+        /// </summary>
+        public const int BattleAmbience = 928;
         /// <summary>
         /// 【2026-10-20 主人报「技能槽怎么又跑到前面来了」】恢复关「生命恢复」弹窗。
         /// 技槽嵌套 Canvas 固定抬在 BattlePopup 之上（=921），弹窗用 920 会被技槽穿到前面；

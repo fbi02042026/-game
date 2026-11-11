@@ -489,6 +489,11 @@ public partial class BattleManager
         // 预制体展开态（4 个黑金按钮），剧情一播就被盖住、点击全被吃 → 全场定格（第 2 章事故根因）。
         BattleEntryDraftPanel.Hide();
         // 剧情播放定义在别处，任何异常都不能把战斗卡在“无首波”状态：捕住异常并直接放行。
+        // 【2026-11-11 主人拍板「一进战斗就出现的半透剧情」】会播战前剧情的关，进战斗先闪半透氛围横幅
+        // （本章铺垫/吐槽一句，不暂停、免点击、约 3.6s 自动淡出，不挡操作），播完再弹正式战前剧情窗——
+        // 让玩家知道这关不一样。支线岛/羁绊副本有自己的开场仪式，不叠横幅；重打关（剧情看过）不播。
+        if (ShouldPlayPreBattleStory())
+            yield return BattleAmbienceBanner.PlayRoutine(CurrentChapter);
         try
         {
             if (IsBondDungeon)
@@ -1268,8 +1273,8 @@ public partial class BattleManager
     // 裂隙与引导局保持旧面板流程，不进这里（TryLiveDraw 守卫拦截）。
     // ============================================================
 
-    /// <summary>实时抽 CD 秒数（主人 2026-10-29 定 5 秒防连点 → 2026-10-31 拍板改 3 秒；要调只改这一个数）。</summary>
-    public const float LIVE_DRAW_CD_SEC = 3f;
+    /// <summary>实时抽 CD 秒数（主人 2026-10-29 定 5 秒防连点 → 2026-10-31 拍板改 3 秒 → 2026-11-11 主人拍板改 1 秒；要调只改这一个数）。</summary>
+    public const float LIVE_DRAW_CD_SEC = 1f;
 
     /// <summary>实时抽 CD 剩余秒数（面板遮罩每帧读；0 = 可抽）。</summary>
     public float LiveDrawCdRemaining => Mathf.Max(0f, _liveDrawCdUntil - Time.unscaledTime);

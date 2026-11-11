@@ -19,15 +19,19 @@ public class ParallaxBackground : MonoBehaviour
 
     // 【2026-10-27 主人拍板「改」】战斗背景改路径加载新图（56字符guid拖不进prefab/registry，按10-23口径全走Resources.Load）。
     // 路径相对任意 Resources/ 目录，不带扩展名；下标=章节号（0空占位）。
-    // 目前新图只有 1森林/2墓园/4草原 三张；3/5-8 缺图 → LogError 可见，不兜底不静默。
+    // 8 章背景已齐（1森林/2墓园/3雨林/4草原/5海岸/6洞穴/7熔岩/8冰川）；缺图仍 LogError 可见，不兜底不静默。
     static readonly string[] ChapterBackgroundPaths = new string[]
     {
         "",                                                    // 0 占位
         "UI/Art/background/新战斗背景/1森林",                   // 第1章
         "UI/Art/background/新战斗背景/2墓园",                   // 第2章
-        "",                                                    // 第3章 暂无新图
+        "UI/Art/background/新战斗背景/3雨林",                   // 第3章
         "UI/Art/background/新战斗背景/4草原",                   // 第4章
-        "", "", "", "", "",                                    // 第5-8章 暂无新图
+        "UI/Art/background/新战斗背景/5海岸",                   // 第5章
+        "UI/Art/background/新战斗背景/6洞穴",                   // 第6章
+        "UI/Art/background/新战斗背景/7熔岩",                   // 第7章
+        "UI/Art/background/新战斗背景/8冰川",                   // 第8章
+        "",                                                    // 9 占位（无第9章）
     };
 
     // 【2026-11-08】竞技场战斗专属背景：只换图；敌人/怪池仍按竞技场自身规则，跟章节背景无关。

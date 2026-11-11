@@ -50,8 +50,10 @@ public class EquipQuickSlotUI
         }
         // 2026-10-06 主人拍板：装备槽下面的「头 / 脚」底字一律去掉，只隐藏文字节点
         if (slotLabel != null) slotLabel.gameObject.SetActive(false);
-        // 【2026-10-06 主人拍板】稀有度**只画槽外沿那圈描边**，绝不加到装备图片上（图标恒为原样）。
-        EquipRarityRim.Apply(root != null ? root.transform : null, has ? (Rarity?)item.rarity : null);
+        // 【2026-10-06 主人拍板 → 2026-11-11 升级「以后装备必走稀有度框体 统一下」】
+        // 槽位稀有度从细描边升级为装备框三档图（金/蓝/白，与替换弹窗 Iconbg 同套美术）：
+        // 框图垫在图标之下（框中心实心，压图标之上会盖图）、空槽不上框；图标恒为原样不变。
+        ApplyRarityFrame(root != null ? root.transform : null, has ? (Rarity?)item.rarity : null);
         // 【2026-10-06 主人拍板】「新」角标：判据只有 NewLootMarks.Has 一处（点「继续」后统一清）。
         SetNewBadge(has && NewLootMarks.Has(NewLootMarks.KindEquip, item.templateId));
     }
@@ -137,5 +139,61 @@ public class EquipQuickSlotUI
         var f = GameFonts.GetChinese();
         if (f != null) t.font = f;
         return t;
+    }
+
+    // ── 装备稀有度框体（2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」）──────────
+    // 运行时按需建、幂等复用（照 EquipRarityRim 同款纪律）：不落预制体、不动 .prefab/.meta。
+    // 框图垫在 iconImage 之下（SetAsFirstSibling，父 Image 槽底图之上），空槽收框还原占位图。
+    const string RarityFrameNode = "EquipRarityFrame";
+
+    /// <summary> rarity=null（空槽）收框并顺带收掉旧 RarityRim 描边，两套稀有度表达不并存。</summary>
+    static void ApplyRarityFrame(Transform host, Rarity? rarity)
+    {
+        if (host == null) return;
+        EquipRarityRim.Apply(host, null);   // 旧描边幂等收起（历史会话里建过就藏掉）
+
+        var frame = FindFrame(host);
+        if (rarity == null)
+        {
+            if (frame != null) frame.gameObject.SetActive(false);
+            return;
+        }
+        if (frame == null)
+        {
+            frame = BuildFrame(host);
+            if (frame == null) return;
+        }
+        var sp = EquipRarityFrame.SpriteOf(rarity.Value);
+        if (sp == null) { frame.gameObject.SetActive(false); return; }   // 缺图出口内已 LogError
+        frame.gameObject.SetActive(true);
+        var img = frame.GetComponent<Image>();
+        img.sprite = sp;
+        img.type = Image.Type.Simple;      // 150×150 无九宫格 border，禁 Sliced
+        img.preserveAspect = true;         // 铺满槽位 rect 内等比居中，不变形
+    }
+
+    static Transform FindFrame(Transform host)
+    {
+        for (int i = 0; i < host.childCount; i++)
+        {
+            var c = host.GetChild(i);
+            if (c != null && c.name == RarityFrameNode) return c;
+        }
+        return null;
+    }
+
+    static Transform BuildFrame(Transform host)
+    {
+        var go = new GameObject(RarityFrameNode, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(host, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+        var img = go.GetComponent<Image>();
+        img.raycastTarget = false;         // 绝不吃点击（槽位的透明点击层/拖拽都在上层）
+        go.transform.SetAsFirstSibling();  // 只在建时垫底一次：图标/角标/点击层全部在其上
+        return go.transform;
     }
 }

@@ -558,6 +558,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         float life = 10f;
         while (life > 0f)
         {
+            if (projectile == null) yield break;   // 中途被销毁（场景切走/战斗结束）→ 直接出协程，防 MissingReferenceException
             life -= Time.deltaTime;
             Vector3 pos = projectile.transform.position;
             Vector3 aim = target != null && !target.isDead ? target.GetHitPosition() : lastAim;
@@ -640,6 +641,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         float traveled = 0f;
         while (traveled < distance)
         {
+            if (projectile == null) yield break;   // 中途被销毁（场景切走/战斗结束）→ 直接出协程，防 MissingReferenceException
             float step = speed * Time.deltaTime;
             traveled += step;
             float t = Mathf.Clamp01(traveled / distance);

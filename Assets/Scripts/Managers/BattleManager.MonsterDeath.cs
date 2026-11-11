@@ -42,13 +42,15 @@ public partial class BattleManager
         }
         // 【2026-10-20 主人拍板】天赋石不再每关首通发放，改精英/Boss 击杀概率掉落：
         // 精英 30%×1、Boss 60%×2（Boss 优先、不与精英叠加，与佣兵币同口径）。
-        // 引导中的宿敌精英也带精英标记，走同一条判定；掉了走 ResourceWallet 弹「获得天赋石」提示。
-        if (m.IsBossUnit)
+        // 【2026-11-11 主人拍板】天赋石只从主线正式关 / 支线岛的精英、Boss 击杀掉落，
+        // 活动副本 / 羁绊 / 竞技场 / 终章 / 裂隙 / 引导一律不掉（无限裂隙层首通宝箱另走 SettleEndlessStageClear）。
+        bool talentDropAllowed = IsFormalMainRun || IsSideIsland;
+        if (talentDropAllowed && m.IsBossUnit)
         {
             if (Random.value < GameConfig.BOSS_TALENT_DROP_CHANCE)
                 ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.BOSS_TALENT_DROP_AMOUNT, save: false, notify: true);
         }
-        else if (m.IsEliteWave && Random.value < GameConfig.ELITE_TALENT_DROP_CHANCE)
+        else if (talentDropAllowed && m.IsEliteWave && Random.value < GameConfig.ELITE_TALENT_DROP_CHANCE)
         {
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, GameConfig.ELITE_TALENT_DROP_AMOUNT, save: false, notify: true);
         }

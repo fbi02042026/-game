@@ -474,13 +474,59 @@ public partial class BattleUI : MonoBehaviour
             if (caster == null) continue;
 
             slot.SetEnergyFill(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(i) : 0f);
-            if (slot.cooldownMask == null) continue;
-            // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
-            float cd = caster.CooldownRemain;
-            float total = caster.CooldownTotal;
-            slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
-            // 【2026-10-17 主人拍板】数字倒计时去掉（原 2026-10-07「佣兵技能也给数字倒计时」口径作废）：
-            // 手机端角色卡右上角只留技能图标 + 转圈冷却遮罩，不再显示数字。
+            // 冷却遮罩 → TickCooldownMasks（每帧顺滑更新，不在这里节流）
+        }
+    }
+
+    // —— 冷却遮罩单独每帧更新 ——
+    // TickRunSkillSlots / TickMercSkillSlots 被 LiveBarInterval=0.1s 节流（10 帧/秒），
+    // 用这个频率更新 Radial360 冷却遮罩会一顿一顿的（主人 2026-11-11 反馈）。
+    // 所以把遮罩填充率 + 数字倒计时拆出来，每帧 Update 里调。
+
+    /// <summary>每帧顺滑更新所有技能槽的冷却遮罩填充率 + 数字倒计时。</summary>
+    void TickCooldownMasks()
+    {
+        // 玩家 4 个被动技槽
+        if (runSkillSlots != null && runSkillSlots.Count > 0)
+        {
+            var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
+            var sys = SkillSystem.Instance;
+            for (int i = 0; i < runSkillSlots.Count; i++)
+            {
+                var slot = runSkillSlots[i];
+                if (slot == null) continue;
+                bool has = ids != null && i < ids.Count;
+                if (!has)
+                {
+                    slot.SetCooldownRatio(0f);
+                    continue;
+                }
+                float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
+                float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;
+                slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+                // 数字倒计时（整秒跳变，每帧设也没事，值不变 fillAmount 不会刷 UI）
+                slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
+            }
+        }
+
+        // 佣兵自带技能槽（角色卡上那个）
+        if (mercSkillSlots != null && mercSkillSlots.Count > 0)
+        {
+            var mm = MercenaryManager.Instance;
+            var mercs = mm != null ? mm.GetActiveMercs() : null;
+            for (int i = 0; i < mercSkillSlots.Count; i++)
+            {
+                var slot = mercSkillSlots[i];
+                if (slot == null || slot.root == null || !slot.root.activeSelf) continue;
+                var m = (mercs != null && i < mercs.Count) ? mercs[i] : null;
+                if (!MercIsInParty(m)) continue;
+                var caster = m != null ? m.SkillCaster : null;
+                if (caster == null || slot.cooldownMask == null) continue;
+
+                float cd = caster.CooldownRemain;
+                float total = caster.CooldownTotal;
+                slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
+            }
         }
     }
 
@@ -533,8 +579,7 @@ public partial class BattleUI : MonoBehaviour
                 slot.SetEnergyFill(has && bm != null ? bm.GetPlayerSkillEnergy(i) : 0f);
             if (!has)
             {
-                // 缺陷3：空槽（技能已卸下）清掉上一次残留的冷却遮罩
-                slot.SetCooldownRatio(0f);
+                // 缺陷3：空槽（技能已卸下）清掉上一次残留的状态
                 slot.SetMpShortage(false);
                 continue;
             }
@@ -542,13 +587,7 @@ public partial class BattleUI : MonoBehaviour
             // 无蓝技能（耗蓝 0）永远不压暗 —— 它们是地板节奏，照常按 CD 放。
             float mpNeed = PlayerSkillDefs.MpCostOf(ids[i]);
             slot.SetMpShortage(bm != null && mpNeed > 0f && !bm.CanAffordPlayerMp(mpNeed));
-            // 冷却改为黑色半透遮罩 + Radial360 收缩（钟表式）：剩余/总时长。
-            float cd = sys != null ? sys.GetPlayerSkillCooldownRemaining(i) : 0f;
-            float total = sys != null ? sys.GetPlayerSkillCooldownTotal(i) : 0f;
-            slot.SetCooldownRatio(total > 0f ? cd / total : 0f);
-            // 【2026-10-07 主人拍板】转圈之外再给一个**数字倒计时**（主人原话「技能的 CD 写个数字倒计时」）：
-            // 只剩 0.05s 以上才显示，向上取整（剩 2.3s 显示 3），归零立刻清空，不留一个「0」闪一下。
-            slot.SetCooldownText(cd > 0.05f ? Mathf.CeilToInt(cd).ToString() : "");
+            // 冷却遮罩 / 数字倒计时 → TickCooldownMasks（每帧顺滑更新，不在这里节流）
         }
     }
 

@@ -286,13 +286,8 @@ public partial class Monster
         // 【2026-10-23 主人拍板「引导的不要动」】引导局 Boss 也不吃本批倍率，保持原数值。
         float bossHpMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_HP_MUL : 1f;
         float bossAtkMul = bossUnit && !isTutorialRun ? GameConfig.BOSS_ATTACK_MUL : 1f;
-        // 【2026-11-10 主人拍板「活动副本里的精英和boss血量*3」+「羁绊本要*3」】
-        // 活动副本（金币/徽记/卷轴/礼物/羁绊，真源 IsActivityDungeon）精英/Boss MaxHp ×3，
-        // 只动血量不动攻击；主线 / 引导 / 裂隙 / 竞技场不受影响。
-        // （11-09 口径原为 ×2 且不含羁绊本，此处按 11-10 改为 ×3 并纳入羁绊本）
-        float activityEliteBossHpMul = BattleManager.Instance != null && BattleManager.Instance.IsActivityDungeon
-            && (eliteWave || bossUnit) ? 3f : 1f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * activityEliteBossHpMul);
+        // 【2026-11-11】MaxHp 的写入下移到法系/物理判定之后（见下方 _isMagicType 赋值之后），
+        // 因为精英/Boss 血量倍数要按 isMagicType 分档，且判定只能掷一次骰、不能重算。
         // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
         // 这里原本是流程测试开关 `GameConfig.TEST_BOSS_HP`（Boss 压成 1 滴血，一击通关好验证流程）。
         // 它和 stage_spawn.csv 的「TEST 每关 1 只怪 1 波」是同一批 2026-09-23 测试数据，
@@ -316,6 +311,37 @@ public partial class Monster
                 monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
             : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
+
+        // 【2026-11-11 主人拍板】精英 / Boss 血量 = 本章第 1 只小怪 baseHp × 类型/角色倍数：
+        //   精英 法系 ×10 / 物理 ×15；Boss 法系 ×12 / 物理 ×18（11-11 主人拍板：8 章物理/法系 Boss 统一降 40%）。
+        //   章基准 = monster_stats 该章 spriteIndex=1 的普通怪（ch1 26.7 / ch2 30.0 / ch3 35.3 …），
+        //   按当前素材章 monsterChapter 取；法系/物理 = 上面 isMagicType 同一次掷骰的结果，不重掷。
+        //   作用域：活动副本 + 主线正式关 + 支线岛；无限裂隙 / 竞技场 / 终章 / 引导沿用旧链路。
+        //   主人拍板「继续叠现有倍率链」→ 基准×倍数后仍乘 hpScale / waveMul / hpGlobalMul / bossHpMul，
+        //   并补回 bossStatMul（章末大 Boss 独立档）。11-10 的「活动副本 ×3」由本口径取代，不再叠加。
+        bool chapterFirstHpRule = (eliteWave || bossUnit)
+            && BattleManager.Instance != null
+            && (BattleManager.Instance.IsActivityDungeon || BattleManager.Instance.IsFormalMainRun || BattleManager.Instance.IsSideIsland);
+        if (chapterFirstHpRule)
+        {
+            var firstMob = MonsterStatsTable.Get(monsterChapter, 1);
+            if (firstMob == null || firstMob.isBoss)
+            {
+                Debug.LogError($"[Monster] 第 {monsterChapter} 章取不到 spriteIndex=1 的普通怪血量基准，精英/Boss 血量沿用旧链路（不套新倍数）");
+            }
+            else
+            {
+                const float EliteMagicHpMul = 10f;
+                const float ElitePhysicalHpMul = 15f;
+                const float BossMagicHpMul = 12f;
+                const float BossPhysicalHpMul = 18f;
+                float roleMul = bossUnit
+                    ? (isMagicType ? BossMagicHpMul : BossPhysicalHpMul)
+                    : (isMagicType ? EliteMagicHpMul : ElitePhysicalHpMul);
+                baseHp = firstMob.baseHp * roleMul * bossStatMul;
+            }
+        }
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
         // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；

@@ -697,8 +697,8 @@ public class GuildHallUI : MonoBehaviour
         // 运行时克隆每日登录按钮落到右列列尾，发奖走 ResourceAdRewards.TryClaimDiamond 唯一出口。
         // 必须放在 AdMercEventEntryUI 之后 —— 列尾位置按「折叠后」的可见按钮最低点算。
         DiamondAdEntryUI.EnsureInGuildHall(dailyLoginButton);
-        // 跑酷入口（T7，独立新入口，不动 MiniGameEntryUI.EntryEnabled）：放在领钻入口之后成为新的列尾。
-        RunEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 跑酷入口（T7）已下线（2026-11-11 主人拍板：小游戏合集入口里已有跑酷，主界面不再单挂）。
+        // RunEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 小游戏合集入口：运行时克隆每日登录按钮落到右列列尾，点击打开合集弹窗。
         MiniGameHubEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物

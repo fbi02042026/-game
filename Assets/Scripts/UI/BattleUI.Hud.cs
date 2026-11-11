@@ -169,6 +169,8 @@ public partial class BattleUI : MonoBehaviour
         if (BattleManager.Instance != null
             && (BattleManager.Instance.IsResourceDungeon || BattleManager.Instance.IsBondDungeon))
             HideTopBarEntryByLabel(draftCoinText);
+        else
+            ShowTopBarEntryByLabel(draftCoinText);   // 【11-11】只藏不亮补齐：主线/裂隙/竞技场恢复（刚打过资源本后条不亮）
     }
 
     /// <summary>按资源数字文本隐藏其所在资源条（见 <see cref="ApplyTopBarResourceVisibility"/>）。</summary>
@@ -220,6 +222,11 @@ public partial class BattleUI : MonoBehaviour
     Coroutine _goldPulseCo;
     Color _goldBaseColor;
     bool _goldBaseColorCached;
+    // 金币文本缩放基准（2026-11-11）：首次脉冲前缓存预制体原始 localScale，
+    // 之后按「基准 × 倍率」写，主人改预制体里金币数字大小后跳动区间整体跟着变。
+    Vector3 _goldBaseScale = Vector3.one;
+    bool _goldBaseScaleCached;
+    Transform _goldBaseScaleSrc;   // 绑定的 Text 若被运行时重绑，基准要跟着重新抓
 
     public void UpdateGold(long gold)
     {
@@ -229,6 +236,13 @@ public partial class BattleUI : MonoBehaviour
         _lastGoldShown = gold;
         goldText.text = gold.ToString();
         if (!_goldBaseColorCached) { _goldBaseColor = goldText.color; _goldBaseColorCached = true; }
+        if (!_goldBaseScaleCached || _goldBaseScaleSrc != goldText.transform)
+        {
+            var s = goldText.transform.localScale;
+            _goldBaseScale = (s.x <= 0.0001f || s.y <= 0.0001f || s.z <= 0.0001f) ? Vector3.one : s;
+            _goldBaseScaleSrc = goldText.transform;
+            _goldBaseScaleCached = true;
+        }
         if (_goldPulseCo != null) StopCoroutine(_goldPulseCo);
         _goldPulseCo = StartCoroutine(CoGoldPulse());
     }
@@ -244,10 +258,10 @@ public partial class BattleUI : MonoBehaviour
         {
             t += Time.unscaledDeltaTime;
             float k = Mathf.Clamp01(t / 0.18f);
-            goldText.transform.localScale = Vector3.one * (1f + 0.18f * Mathf.Sin(k * Mathf.PI));
+            goldText.transform.localScale = _goldBaseScale * (1f + 0.18f * Mathf.Sin(k * Mathf.PI));
             yield return null;
         }
-        goldText.transform.localScale = Vector3.one;
+        goldText.transform.localScale = _goldBaseScale;
         goldText.color = baseCol;
         _goldPulseCo = null;
     }

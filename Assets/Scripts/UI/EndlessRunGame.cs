@@ -31,7 +31,8 @@ public partial class EndlessRunGame : MonoBehaviour
     const float CAM_ORTHO_SIZE = 640f * INV_PX2U;        // 6.4 unit（半高 640 逻辑 px）
     const float CAM_BASE_DEPTH = 90f;
     const float COVER_H_U = 1280f * INV_PX2U;            // 12.8 unit，背景 cover 目标全高
-    const float PORTRAIT_TARGET_H = 108f;                // 玩家/佣兵立绘目标逻辑高度（96~120 区间，真机可调）
+    // 玩家 / 佣兵已改 SPUM 预制体（2026-11-11，T3），原 PORTRAIT_TARGET_H（单张立绘目标高度）
+    // 随之废弃；SPUM 的显示高度见 EndlessRunGame.Spum.cs 的 SPUM_UNIT_SCALE。
 
     // ---- 资源路径（三张图，按路径加载，不兜底）----
     const string SP_BG_1 = "UI/Art/小游戏/跑酷/1";
@@ -256,27 +257,17 @@ public partial class EndlessRunGame : MonoBehaviour
         _playerGo.transform.SetParent(_worldRoot.transform, false);
         _playerGo.layer = _worldLayer;
 
-        // 立绘走全项目唯一出口（带缓存 + 缺图上报）；取不到 LogError 后保持空，不兜底。
-        Sprite sp = MercPortraitSprites.GetStand("player");
-        if (sp == null)
+        // 【2026-11-11 T3】玩家形象改用 SPUM 预制体（Units/wanjia），替掉 11-10 的单张立绘。
+        // 空间分工：_playerGo 只做位置驱动（x 固定 / y 随跳跃，见 ApplyPlayerPos），
+        // SPUM 作为子节点局部归零 —— SPUM 根原点在脚底，正好落在 _playerGo 的地面顶面高度。
+        var spum = CreateSpumUnit(SPUM_PLAYER_ID, SPUM_SORT_BASE_PLAYER, "PlayerSpum");
+        if (spum == null)
         {
-            Debug.LogError("[跑酷] 玩家立绘缺失：MercPortraitSprites.GetStand(player) 返回 null。");
+            Debug.LogError("[跑酷] 玩家 SPUM 未建成（Units/" + SPUM_PLAYER_ID + "），跑酷中看不到玩家形象。");
             return;
         }
-        // 按目标逻辑高度算缩放（同 ComputeFgGeometry：s = 目标高度 / 原始像素高，再叠 _renderScale）。
-        float s = PORTRAIT_TARGET_H / Mathf.Max(1f, sp.rect.height);
-        s *= _renderScale;
-        float halfHU = 0.5f * s * sp.rect.height / Mathf.Max(1f, sp.pixelsPerUnit);   // 渲染身高的一半（unit）
-
-        // 立绘 pivot 默认中心，而 _playerGo 的 y 是地面顶面 → 子节点上移半个渲染身高做脚底对齐。
-        var portrait = new GameObject("PlayerPortrait");
-        portrait.transform.SetParent(_playerGo.transform, false);
-        portrait.layer = _worldLayer;
-        var sr = portrait.AddComponent<SpriteRenderer>();
-        sr.sprite = sp;
-        sr.sortingOrder = 5;
-        portrait.transform.localScale = new Vector3(s, s, 1f);
-        portrait.transform.localPosition = new Vector3(0f, halfHU, 0f);
+        spum.transform.SetParent(_playerGo.transform, false);
+        spum.transform.localPosition = Vector3.zero;
     }
 
     void BuildPool()

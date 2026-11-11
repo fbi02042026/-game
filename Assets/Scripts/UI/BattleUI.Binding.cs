@@ -134,6 +134,18 @@ public partial class BattleUI : MonoBehaviour
             if (realGold != null) goldText = realGold;
         }
 
+        // 【2026-11-11 主人拍板「所有资源条数字统一」照 10-31 DraftCoinText 先例口径（绑定态修，不动预制体文件）：
+        // ① 拉伸 = GoldText 的 RectTransform localScale 是 (1,1.3,1)——父级 GoldDisplay 已整体等比缩放，
+        //    子节点自己又纵向叠 1.3 → 字被单向拉长。归一成 (1,1,1) 只去拉伸，父级整体缩放原样保留，与 DraftCoinText 同构。
+        //    放在误绑纠正块后：prefab 里 goldText 已拖 Inspector 引用，放绑定 if 内会被跳过。
+        // ② 字大 = 字号 25 → 20（同 10-31 口径，字号属「字体可改」白名单）。
+        //    脉冲特效（CoGoldPulse）按归一后的 localScale 缓存基准，形态全程稳定。
+        if (goldText != null)
+        {
+            goldText.rectTransform.localScale = Vector3.one;
+            goldText.fontSize = 20;
+        }
+
         if (settingsButton == null)
         {
             Transform t = FindDeepChildIgnoreCase(transform, "SettingsButton");
@@ -227,6 +239,8 @@ public partial class BattleUI : MonoBehaviour
         EnsureDraftDisplayBindings();
         // 【2026-10-22 主人拍板】石像事件（圣者/祭司）：绑现成 buff 节点（恢复/诅咒子节点），
         // 平时 buff 整体隐藏；FindDeepChildIgnoreCase 模式同源（BattleStatueEventUI 内自带深搜，含未激活节点）
+        // 【2026-11-11 临时禁用】石像事件触发已禁用（见 BattleStatueEventUI.TryShowOnDraft），
+        // 此处保留 EnsureOn 仅为了继续隐藏 prefab 里的 buff 节点（防御残留显示），不触发任何石像逻辑。
         BattleStatueEventUI.EnsureOn(transform);
         // 2026-10-24 主人拍板：战斗内网格背包改名「作战背包」，与角色页「随身仓库」区分，避免两个背包混为一谈。
         // 真源 = 预制体 BackpackPanel 下的 Text 节点 BackpackTitle / BackpackTitle (1)；运行时覆盖文案，不改预制体文件。
