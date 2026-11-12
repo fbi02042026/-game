@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5e45e20b550a45f29394cd9a328ce266, type: 3}
+  m_Name: equip_shield_legend_04
+  m_EditorClassIdentifier: 
+  templateId: equip_shield_legend_04
+  equipName: "远古守望盾"
+  icon: {fileID: 0}
+  iconFileName: New_Shield_03
+  gridWidth: 2
+  gridHeight: 2
+  tags: []
+  baseRarity: 5
+  minLevel: 1
+  baseAttr:  - attrType: 4
+    value: 15.8
+    isPercent: 0
+  - attrType: 10
+    value: 69
+    isPercent: 0
+  - attrType: 23
+    value: 7.6
+    isPercent: 0
+  globalBonus:
+    attrType: 0
+    value: 0
+    isPercent: 0
+  skillPassives: []
+  isLegendary: 1
+  slotType: 6
+  weaponType: 3
+  weaponAttackType: 0
+  attackRange: 96
+  armorPrefix: 0
+  spumName: New_Shield_03

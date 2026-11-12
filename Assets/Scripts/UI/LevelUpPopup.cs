@@ -23,6 +23,9 @@ using UnityEngine.UI;
 /// 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】结算时刻只挂起（QueueForTown），
 /// Town 场景就绪后由 TownSceneBootstrap 调 FlushPending 弹出；中途退游戏挂起即丢（等级已落盘，只丢演出）。
 /// 2026-11-12 起改为一级一窗队列，连升不再合并
+/// 【2026-11-12 主人拍板「一登录就升级」】日常任务 / 回城补发的升级走 DeferUntilBattle 延后账：
+/// 登录瞬间 DailyTaskSystem.Settle 会发每日登录等经验，直接入队就会被进镇那次 FlushPending 弹出来；
+/// 改成先攒着，等 AddStageClearExp 打完一关才搬进待弹队列 —— 经验照发、等级照涨，只把演出推迟。
 /// 点 Dim（黑幕）随时关闭；一次性演出用完即毁（先例 BattleResultScreen）。
 /// 预制体 / 关键节点缺失 LogError 不兜底（AGENTS.md §4）。
 /// </summary>
@@ -36,6 +39,13 @@ public static class LevelUpPopup
     // 结算时刻战斗里不弹，只记账；Town 就绪（TownSceneBootstrap 收尾）统一吐出。
     // 【2026-11-12 主人拍板】一级一窗、逐个弹：每次升级按级拆成一条挂起，绝不合并成「4→7」一段。
     static readonly Queue<KeyValuePair<int, int>> _pending = new Queue<KeyValuePair<int, int>>();
+
+    // —— 延后账（【2026-11-12 主人拍板】「一登录就升级」的修法）——
+    // 日常任务 / 回城补发的升级**不进 _pending**：那些经验是登录瞬间结算的，
+    // 直接入队会被 TownSceneBootstrap 进镇那次 FlushPending 当场弹出来。
+    // 这里先单独攒着，等玩家真打完一关（AddStageClearExp）才搬进 _pending，
+    // 跟着那一关的结算一起弹 —— 经验照发、等级照涨，只是演出等到打完关。
+    static readonly Queue<KeyValuePair<int, int>> _deferred = new Queue<KeyValuePair<int, int>>();
 
     // —— 第二行职业轮换（2026-10-25 主人拍板「不要按所选 轮流来 每个职业都要有」）——
     // 不绑 GetSelected：每弹一次按开放职业顺序（PlayerJobDefs.Playable，当前 剑盾卫士→法师→游侠）
@@ -51,6 +61,29 @@ public static class LevelUpPopup
         if (afterLevel <= beforeLevel) return;
         for (int lv = beforeLevel; lv < afterLevel; lv++)
             _pending.Enqueue(new KeyValuePair<int, int>(lv, lv + 1));
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板】日常任务 / 回城补发的升级：只记账，**不**进待弹队列。
+    /// 这些经验的结算发生在登录瞬间（QuestBarBinder 轮询 → DailyTaskSystem.Settle），
+    /// 入 _pending 就会被进镇那次 FlushPending 当场弹成「一登录就升级」。
+    /// 攒在这里，等 AddStageClearExp 调用 <see cref="FlushDeferredIntoQueue"/> 搬进正式队列。
+    /// </summary>
+    public static void DeferUntilBattle(int beforeLevel, int afterLevel)
+    {
+        if (afterLevel <= beforeLevel) return;
+        for (int lv = beforeLevel; lv < afterLevel; lv++)
+            _deferred.Enqueue(new KeyValuePair<int, int>(lv, lv + 1));
+    }
+
+    /// <summary>
+    /// 打完一关（LevelSystem.AddStageClearExp）时调用：把攒着的日常升级搬进待弹队列，
+    /// 顺序 = 先攒的先弹，再弹本关新升的那几级。无攒项 no-op。
+    /// </summary>
+    public static void FlushDeferredIntoQueue()
+    {
+        while (_deferred.Count > 0)
+            _pending.Enqueue(_deferred.Dequeue());
     }
 
     /// <summary>
@@ -154,6 +187,7 @@ public static class LevelUpPopup
     public static void ResetForNewGame()
     {
         _pending.Clear();
+        _deferred.Clear();
         Close();
     }
 

@@ -426,7 +426,9 @@ public class Hero : UnitBase
             {
                 if (rallyDir.sqrMagnitude > 0.0001f)
                 {
-                    _manualDir = rallyDir;
+                    // 【2026-11-12 修滑步】TryGetMoveDir 给的是 sign(±1,±1) 的轴向分离值，
+                    // 斜向合速 √2 倍 → 统一归一化成单位向量，各方向速度一致。
+                    _manualDir = rallyDir.normalized;
                     _manualHeld = true;
                 }
                 else
@@ -439,7 +441,16 @@ public class Hero : UnitBase
                 }
             }
             float spd = GetCombatMoveSpeed();
-            float vx = _manualDir.x * spd * GameConfig.HERO_MANUAL_MOVE_X_MUL;
+            // 【2026-11-12 修滑步 · 根因】HERO_MANUAL_MOVE_X_MUL(1.8) 是「摇杆左右手感」专用倍率，
+            // 集结借道手动通道时误吃了这个倍率：位移 1.8 倍，而 MOVE 动画播放速率是固定常量
+            // （UnitAnimation.MOVE_ANIM_SPEED_SCALE，按基础移速 0.96 标定，全工程无第二处按速度联动）
+            // → 脚频只有位移的 1/1.8，看起来就是滑步。
+            // 【2026-11-12 主人拍板「摇杆先注释，不要删」】摇杆自 2026-10-05 起整条链路停用
+            // （BattleUI.Backpack.EnsureBattleControls 里 BattleJoystick.EnsureOn 已注释，Instance 恒 null），
+            // 这条 manual 通道现在只剩「集结」一个使用者，1.8 倍已无任何合法入口 → 原式注释留档、不删：
+            // float vx = _manualDir.x * spd * GameConfig.HERO_MANUAL_MOVE_X_MUL;
+            // 恢复摇杆那天：放开上面那行、删掉下面这行，本文件其它不用动。
+            float vx = _manualDir.x * spd;
 
             if (Mathf.Abs(_manualDir.x) > 0.05f)
             {

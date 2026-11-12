@@ -19,7 +19,12 @@ public static partial class GameConfig
     // 真源 = 「BattleUI ▸ map ▸ walk」这个 UI 节点的矩形，由 BattleLaneBounds 把它投影到世界、
     // 减去站立线得到上下偏移。要调范围请在团结里挪 / 缩 walk 框，代码里没有第二个入口。
     public const float BATTLE_LANE_MOVE_SPEED = 1.35f;
-    /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。</summary>
+    /// <summary>摇杆左右移速倍率（相对 GetCombatMoveSpeed）。
+    /// 【2026-11-12 主人拍板「摇杆先注释，不要删」】摇杆自 2026-10-05 起整条链路停用
+    /// （BattleJoystick.EnsureOn 已注释，Instance 恒 null），本常量现<b>零引用</b> ——
+    /// Hero.cs 里唯一那行 `_manualDir.x * spd * HERO_MANUAL_MOVE_X_MUL` 已注释留档，没删。
+    /// ⚠ 恢复摇杆时放开 Hero.cs 那行即可；<b>集结等非摇杆路径不得再乘本倍率</b>：
+    /// 位移会被放大到 1.8 倍，而 MOVE 动画速率是固定常量 → 脚频追不上 = 滑步。</summary>
     public const float HERO_MANUAL_MOVE_X_MUL = 1.8f;
     /// <summary>松摇杆后短暂停自动追怪，避免与手动抢方向。</summary>
     public const float HERO_MANUAL_RELEASE_HOLD = 0.25f;

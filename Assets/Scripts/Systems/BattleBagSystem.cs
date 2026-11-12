@@ -795,7 +795,15 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     /// 2026-09-15 需求：装备永不进背包，12 个格子留给道具；被替换下来的旧件自动分解。
     /// 复用 EquipItem 的穿戴逻辑（含武器实际槽位解析与 SPUM 时装刷新），这里只包一层。
     /// </summary>
-    public bool TryEquipDirect(EquipInstance equip)
+    /// <param name="countsAsObtain">
+    /// 【2026-11-12 主人报「战斗开局又自动 +20 金币」→ 修·主人拍板方案 A】是否计入「获得装备」统计
+    /// （AchievementSystem 的 equip_collect_* 与冒险日志 A007）。
+    /// 职业起步武器每局开局都会重发一套（PlayerJobDefs.ApplyForBattle），那是「重置」不是「获得」，
+    /// 计入会凭空推进成就：累计到 10 件时发 equip_collect_10 奖励 = 金币 ×20 → 一进战斗就弹
+    /// 「获得 金币 +20」的 toast。所以开局发装的调用点必须传 false。
+    /// 真获得（抽奖 / 掉落 / 通关宝箱 / 日志里程 / 商店 / 裂隙记录点）保持默认 true，行为不变。
+    /// </param>
+    public bool TryEquipDirect(EquipInstance equip, bool countsAsObtain = true)
     {
         if (equip == null) return false;
 
@@ -821,8 +829,12 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         if (!EquipItem(tmp)) return false;
 
         // 与入包穿戴同一套统计：拿到装备就算数（不进背包也要记）
-        AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
-        AdventureLogAchievements.OnEquipPicked();
+        // 【2026-11-12 修「开局自动 +20 金币」】开局重发的起步武器不算「获得」，见 countsAsObtain 参数说明。
+        if (countsAsObtain)
+        {
+            AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
+            AdventureLogAchievements.OnEquipPicked();
+        }
 
         if (old != null && old != equip)
             ScrapEquip(old);

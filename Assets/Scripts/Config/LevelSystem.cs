@@ -194,6 +194,10 @@ public static class LevelSystem
         }
         int exp = baseExp + Mathf.Max(0, chapter - 1) * perChapter;
 
+        // 【2026-11-12 主人拍板】真打完一关 = 攒着的日常升级可以展示了：
+        // 把 LevelUpPopup 的延后账搬进待弹队列，回城（Town 就绪 / 结算奖励播完）一起弹。
+        LevelUpPopup.FlushDeferredIntoQueue();
+
         data.playerExp += exp;
         bool leveled = false;
         int guard = 0;
@@ -226,6 +230,8 @@ public static class LevelSystem
         // 反馈：英雄脚下 Level Up 特效（结算时刻英雄还在场）。恭喜升级弹窗不在这里弹——
         // 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】只挂起，Town 就绪后由
         // TownSceneBootstrap 调 LevelUpPopup.FlushPending 弹出（见 LevelUpPopup.QueueForTown）。
+        // 【2026-11-12】关卡升级直接进待弹队列；日常任务那些走 DeferUntilBattle 攒着，
+        // 靠本函数开头 FlushDeferredIntoQueue 一起搬进来 —— 打完一关是唯一放出攒项的时机。
         var hero = Hero.Instance;
         if (hero != null) BattleVFXSystem.Instance?.PlayLevelUp(hero.transform.position);
         LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
@@ -235,7 +241,11 @@ public static class LevelSystem
     /// <summary>
     /// 直接加经验（2026-10-29 新增：每日任务奖励经验出口，主人拍板「有些奖励可以给些经验」）。
     /// 与 AddStageClearExp 同一本账（存档 playerExp/playerLevel），但不走关卡白名单、不放英雄 VFX；
-    /// 调用时机都在城镇内（DailyTaskSystem.Settle 由任务栏轮询驱动），升级弹窗立即 Flush，不挂到回城。
+    /// 调用时机都在城镇内（DailyTaskSystem.Settle 由任务栏轮询驱动）。
+    /// 【2026-11-12 主人拍板】日常任务 / 回城补发的升级**不弹窗**：登录瞬间结算会白给经验，
+    /// 一进游戏就弹「恭喜升级」很突兀；改走 LevelUpPopup.DeferUntilBattle 先攒着，
+    /// 等玩家真打完一关（AddStageClearExp → FlushDeferredIntoQueue）再跟着结算一起弹。
+    /// 经验照发、等级照涨，只把演出推迟。
     /// 可选参数 capLevel = 升级到的绝对等级上限：回城补发每日通关任务传本次通关额度，其它日常任务传 playerLevel + 1（单个最多升 1 级）；0 = 不限制。
     /// </summary>
     public static void AddDirectExp(int exp, int capLevel = 0)
@@ -280,8 +290,10 @@ public static class LevelSystem
 
         // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
         TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
-        LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
-        LevelUpPopup.FlushPending();   // 城镇已就绪（任务栏轮询只在城镇跑），立即弹，不挂起到下次回城
+        // 【2026-11-12 主人拍板】只记账不弹：日常任务经验是登录/城镇瞬间结算的，
+        // 入待弹队列会被进镇那次 FlushPending 弹成「一登录就升级」；
+        // 攒到打完一关（AddStageClearExp → FlushDeferredIntoQueue）再弹。
+        LevelUpPopup.DeferUntilBattle(before, Mathf.Max(1, data.playerLevel));
         return;
     }
 
@@ -319,7 +331,8 @@ public static class LevelSystem
         SaveSystem.Instance?.Save();
         if (leveled)
         {
-            LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+            // 【2026-11-12 主人拍板】同样只记账不弹（见 AddDirectExp 注释）
+            LevelUpPopup.DeferUntilBattle(before, Mathf.Max(1, data.playerLevel));
             // 【2026-11-05 主人拍板】升级联动天赋：右列门槛（=人物等级）刚跨过 → toast + 红点 + 天赋页开通演出
             TalentSystem.NotifyLevelUp(before, Mathf.Max(1, data.playerLevel));
         }

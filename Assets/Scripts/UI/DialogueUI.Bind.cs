@@ -8,6 +8,12 @@ using UnityEngine.UI;
 // 职责：绑定与建树（AutoBindFromHierarchy、编辑器 BuildHierarchyForPrefab、Find/Create 小件）
 public partial class DialogueUI
 {
+    /// <summary>
+    /// 无场景背景时铺满全屏的底（有背景图时 Reveal.SetSceneBackground 会把它 SetActive(false)）。
+    /// 2026-11-12 主人拍板：纯黑 70%（不透明度 0.7），取代原深棕 (0.18,0.1,0.08,1)。
+    /// 唯一出口：prefab DialogueUI.prefab 的 Dim 用同值，改这里必须同步改 prefab，不许出现第三个值。
+    /// </summary>
+    internal static readonly Color DefaultDimColor = new Color(0f, 0f, 0f, 0.7f);
 
     public void AutoBindFromHierarchy()
     {
@@ -197,7 +203,7 @@ public partial class DialogueUI
         for (int i = transform.childCount - 1; i >= 0; i--)
             DestroyImmediate(transform.GetChild(i).gameObject);
 
-        var dim = CreateImage(transform, "Dim", new Color(0.18f, 0.1f, 0.08f, 1f));
+        var dim = CreateImage(transform, "Dim", DefaultDimColor);
         Stretch(dim.rectTransform);
 
         var skip = CreateImage(transform, "SkipButton", new Color(0.35f, 0.22f, 0.15f, 0.9f));

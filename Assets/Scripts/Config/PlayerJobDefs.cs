@@ -495,7 +495,7 @@ public static class PlayerJobDefs
         {
             int arenaLv = Hero.Instance != null ? Hero.Instance.level : 1;
             var arenaInst = ArenaSeasonWeapons.CreateBattleInstance(arenaMainTpl, jobKind, arenaLv);
-            if (arenaInst != null && bag.TryEquipDirect(arenaInst))
+            if (arenaInst != null && bag.TryEquipDirect(arenaInst, countsAsObtain: false))
                 arenaStartReplaced = true;
             else
                 Debug.LogError("[PlayerJobDefs] 竞技场冠军武器开局装备失败，本局主手为空（不回退初始武器）");
@@ -507,7 +507,7 @@ public static class PlayerJobDefs
         {
             int arenaOffLv = Hero.Instance != null ? Hero.Instance.level : 1;
             var arenaOffInst = ArenaSeasonWeapons.CreateBattleInstance(arenaOffTpl, jobKind, arenaOffLv);
-            if (arenaOffInst != null && bag.TryEquipDirect(arenaOffInst))
+            if (arenaOffInst != null && bag.TryEquipDirect(arenaOffInst, countsAsObtain: false))
                 arenaOffReplaced = true;
             else
                 Debug.LogError("[PlayerJobDefs] 竞技场冠军之盾开局装备失败，本局副手为空（不回退初始副手）");
@@ -521,7 +521,7 @@ public static class PlayerJobDefs
         if (twilightStartReplaced)
         {
             int lv = Hero.Instance != null ? Hero.Instance.level : 1;
-            if (bag.TryEquipDirect(SpecialWeapons.CreateTwilightStaff(lv)))
+            if (bag.TryEquipDirect(SpecialWeapons.CreateTwilightStaff(lv), countsAsObtain: false))
                 granted = true;
             else
                 Debug.LogError("[PlayerJobDefs] 稀有·暮火之杖开局装备失败，本局主手为空（不回退旧初始武器）");
@@ -534,7 +534,7 @@ public static class PlayerJobDefs
             int bowLv = Hero.Instance != null ? Hero.Instance.level : 1;
             var bowTpl = ArenaShopGoods.BowTemplate();
             var bowInst = bowTpl != null ? ArenaShopGoods.CreateBowBattleInstance(bowTpl, jobKind, bowLv) : null;
-            if (bowInst != null && bag.TryEquipDirect(bowInst))
+            if (bowInst != null && bag.TryEquipDirect(bowInst, countsAsObtain: false))
                 granted = true;
             else
                 Debug.LogError("[PlayerJobDefs] 逐风长弓开局装备失败，本局主手为空（不回退初始武器）");
@@ -557,7 +557,7 @@ public static class PlayerJobDefs
         {
             int shieldLv = Hero.Instance != null ? Hero.Instance.level : 1;
             var shieldInst = AdventureLogMileage.CreateShieldBattleInstance(shieldLv);
-            if (shieldInst != null && bag.TryEquipDirect(shieldInst))
+            if (shieldInst != null && bag.TryEquipDirect(shieldInst, countsAsObtain: false))
                 mileageShieldReplaced = true;
             else
                 Debug.LogError("[PlayerJobDefs] 稀有·钢骨盾开局装备失败，本局副手为空（不回退初始副手）");
@@ -690,7 +690,9 @@ public static class PlayerJobDefs
             inst.gridWidth = GameConfig.BACKPACK_WIDTH;
 
         // 2026-09-15：职业起步装备直接穿上，不占背包格子（背包只留给道具）
-        if (!bag.TryEquipDirect(inst))
+        // 【2026-11-12 修「开局自动 +20 金币」】起步武器每局重发，属于重置不是「获得」→ 不计装备收集统计；
+        // 计入会让 equip_collect_10（金币 ×20）被开局刷满，一进战斗就弹「获得 金币 +20」。
+        if (!bag.TryEquipDirect(inst, countsAsObtain: false))
         {
             Debug.LogWarning($"[PlayerJobDefs] 装备失败: {inst.equipName} ({tpl.templateId})");
             UIManager.Instance?.ShowToast("无法装备职业武器");

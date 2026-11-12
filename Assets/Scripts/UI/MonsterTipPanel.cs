@@ -33,6 +33,7 @@ public static class MonsterTipPanel
     const float FrameBorderScale = 1f;
 
     static GameObject _root;
+    static GameObject _catcher;   // 全屏透明点击拦截层：面板之外点击关闭弹窗（仅战斗内词条提示开启）
     static Text _title;
     static Text _body;
     static Action _onClose;
@@ -56,6 +57,7 @@ public static class MonsterTipPanel
         {
             UnityEngine.Object.Destroy(_root);   // 场景/宿主变了：老树下不结果，迁址重建
             _root = null;
+            if (_catcher != null) { UnityEngine.Object.Destroy(_catcher); _catcher = null; }
         }
         if (_root != null) return _root;
         if (host == null) return null;
@@ -117,6 +119,26 @@ public static class MonsterTipPanel
 
         GameFonts.ApplyToHierarchy(go.transform);
         _root = go;
+
+        // —— 全屏透明点击拦截层（面板之外点击关闭弹窗；默认关闭，仅战斗内词条提示开启）——
+        // 置于宿主最底层（SetAsFirstSibling），面板自身仍优先命中，二者都走同一 OnClicked 关闭。
+        var catcherGo = new GameObject("MonsterTipCatcher", typeof(RectTransform), typeof(Image), typeof(Button));
+        catcherGo.transform.SetParent(host, false);
+        var crt = catcherGo.GetComponent<RectTransform>();
+        crt.anchorMin = Vector2.zero;
+        crt.anchorMax = Vector2.one;
+        crt.offsetMin = Vector2.zero;
+        crt.offsetMax = Vector2.zero;
+        crt.SetAsFirstSibling();
+        var cimg = catcherGo.GetComponent<Image>();
+        cimg.color = new Color(0f, 0f, 0f, 0f);   // 完全透明，仅作点击拦截（raycastTarget 默认 true）
+        cimg.raycastTarget = true;
+        var cbtn = catcherGo.GetComponent<Button>();
+        cbtn.targetGraphic = cimg;
+        cbtn.onClick.AddListener(OnClicked);
+        _catcher = catcherGo;
+        _catcher.SetActive(false);
+
         go.SetActive(false);
         return _root;
     }
@@ -134,7 +156,7 @@ public static class MonsterTipPanel
     /// 宽度固定 <see cref="Width"/>，**高度按正文实际行数自动算**——
     /// 调用方不再传尺寸，内容多（词条 2 条 + 弱点说明）也不会溢出窗体、内容少也不会留一大块空底。
     /// </summary>
-    public static void Show(Transform host, string title, string body, Action onClose = null)
+    public static void Show(Transform host, string title, string body, Action onClose = null, bool closeOnOutsideTap = false)
     {
         var root = Ensure(host);
         if (root == null) return;
@@ -143,6 +165,7 @@ public static class MonsterTipPanel
         if (_title != null) _title.text = title ?? "";
         if (_body != null) _body.text = body ?? "";
         _onClose = onClose;
+        if (_catcher != null) _catcher.SetActive(closeOnOutsideTap);   // 面板之外点击关闭：仅战斗内词条提示开启
         root.SetActive(true);                            // 先显示再量（Text 量高不依赖激活态，但顺序更稳）
         if (_body != null)
         {
@@ -154,6 +177,7 @@ public static class MonsterTipPanel
     public static void Hide()
     {
         if (_root != null) _root.SetActive(false);
+        if (_catcher != null) _catcher.SetActive(false);
         _onClose = null;
     }
 

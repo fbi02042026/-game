@@ -200,9 +200,6 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             return;
         }
 
-        Transform flipRoot = attacker != null ? attacker.GetFlipRoot() : null;
-        bool attachedToFlipRoot = flipRoot != null;
-
         GameObject go = AcquireVfxInstance(prefab, position);
         if (go == null) return;
 
@@ -210,21 +207,19 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, sharedKitScale);
         if (faction == VfxFaction.Ally) mul *= 1.3f;
-        // 挂到翻转父级时，localScale.x 保持正值，只让父级镜像一次；
-        // proc/flipX 没有可挂节点时才保留 facingDir 符号翻转。
-        float scaleX = Mathf.Abs(baseScale.x) * mul;
-        if (!attachedToFlipRoot && facingDir < 0) scaleX = -scaleX;
-        go.transform.localScale = new Vector3(scaleX, baseScale.y * mul, baseScale.z * mul);
+        // 【2026-11-12 主人报「玩家朝左攻击没有特效」→ 回退 10-10「刀光挂父级」改造，恢复此前稳定版】
+        // 根因：10-10 起把刀光 SetParent 到攻击者的翻转父级，并补 SortingGroup(sortAtRoot)。
+        // 朝左时攻击者 scale.x 为正，刀光本身又是负 scale.x，累计 scale.x 为负（朝右是负负得正），
+        // SortingGroup 在负缩放下的包围盒被算反 → 整条粒子被视锥剔除 → 朝左看不见。
+        // 受击刀光（PlayVictimHit 不传 attacker，走非挂载）一直左右都正常，可反证负 scale 不是问题、挂载才是。
+        // 现在刀光不挂角色、不加 SortingGroup，只把根节点按 facingDir 整体 x 取反做镜像（10-10 前原版）。
+        float signedX = Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f);
+        go.transform.localScale = new Vector3(signedX, baseScale.y * mul, baseScale.z * mul);
         // 复位成预制体自身旋转（池化实例会带走上一次的旋转，旧代码这里写死过 Z=180）
         go.transform.rotation = prefab.transform.rotation;
 
-        if (attachedToFlipRoot)
-            // 视觉朝向优先读攻击者自己（父级刚被 FaceTowardOnAttack 翻过），取不到才退回调用方给的 facingDir
-            AttachSlashToFlipRoot(go, flipRoot, attacker != null ? attacker.GetVfxFacingDir() : facingDir);
-
         PrepareSlashParticles(go);
         ApplySlashLocalFacing(go);
-        ConfigureSlashSorting(go, attachedToFlipRoot);
         // 2026-10-10 主人拍板：刀光用材质默认颜色，不做运行时改色，此处请勿再加着色/换材质逻辑。
 
         StretchSlashLifetime(go, 0.5f);
@@ -232,50 +227,6 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         ApplyFactionLook(go, faction);
         PlayAllParticles(go);
         ScheduleRelease(go, defaultDuration);
-    }
-
-    /// <summary>
-    /// 把刀光挂到翻转父级下，并保证 <b>世界</b> scale.x 的符号 = 视觉朝向（+1 朝右 / −1 朝左）。
-    ///
-    /// 🔴 <b>2026-10-12 修「刀光还是反的」</b>（主人数次反馈，这次抓到真因）：
-    /// `Hero.cs:41` / `Mercenary.cs:56` / `Monster.cs:57` 的 <c>spriteDefaultFacesRight</c> 全是
-    /// <b>false</b>（SPUM 预制体默认朝<b>左</b>），所以 <c>ApplyFacing</c> 写出的父级 scale.x 与视觉朝向
-    /// <b>反相</b> —— 视觉朝右时父级是 −X、朝左时反而是 +X。
-    /// 旧公式 <c>Abs(worldScale.x) / Abs(parentScale.x)</c> 让 localScale.x <b>恒为正</b>，
-    /// 于是 worldScale.x 只能跟着父级反相 → <b>刀光永远朝反方向</b>。
-    /// 现在改成按「worldScale.x 符号 = 视觉朝向」反算 localScale.x，父级是不是反相都不怕。
-    /// 验算（spriteDefaultFacesRight=false）：朝右 vfxDir=+1、父级 −1 → local −W → world +W 朝右 ✓；
-    /// 朝左 vfxDir=−1、父级 +1 → local −W → world −W 朝左 ✓。
-    /// </summary>
-    static void AttachSlashToFlipRoot(GameObject go, Transform flipRoot, int vfxFacingDir)
-    {
-        if (go == null || flipRoot == null) return;
-
-        Vector3 worldScale = go.transform.lossyScale;
-        float ySign = go.transform.localScale.y < 0f ? -1f : 1f;
-        float zSign = go.transform.localScale.z < 0f ? -1f : 1f;
-        go.transform.SetParent(flipRoot, true);
-
-        Vector3 parentScale = flipRoot.lossyScale;
-        float px = parentScale.x;
-        if (Mathf.Abs(px) < 0.0001f) px = 1f;   // 父级 X 为 0 会让下面的除法炸掉，退回 1
-        float wantWorldX = (vfxFacingDir >= 0 ? 1f : -1f) * Mathf.Abs(worldScale.x);
-        go.transform.localScale = new Vector3(
-            wantWorldX / px,
-            ySign * Mathf.Abs(worldScale.y) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.y)),
-            zSign * Mathf.Abs(worldScale.z) / Mathf.Max(0.0001f, Mathf.Abs(parentScale.z)));
-    }
-
-    static void ConfigureSlashSorting(GameObject go, bool nestedUnderUnit)
-    {
-        if (go == null) return;
-        var group = go.GetComponent<UnityEngine.Rendering.SortingGroup>();
-        if (group == null)
-            group = go.AddComponent<UnityEngine.Rendering.SortingGroup>();
-        group.enabled = true;
-        group.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-        group.sortingOrder = GameConfig.SORT_VFX + 5;
-        group.sortAtRoot = nestedUnderUnit;
     }
 
     /// <summary>从池取出实例并摆到世界坐标，不提前 Play（刀光须先改缩放/材质）。</summary>

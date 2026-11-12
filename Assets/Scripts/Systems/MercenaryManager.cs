@@ -518,7 +518,11 @@ public class MercenaryManager : Singleton<MercenaryManager>
         Debug.LogWarning($"[MercenaryManager] ClearAllMercs：清掉 {GetActiveMercs().Count} 个在场佣兵");
         foreach (var m in _activeMercs)
         {
-            if (m != null) Destroy(m.gameObject);
+            if (m == null) continue;
+            // 【2026-11-12 修「点下一关后旧佣兵人名没清」】名牌是 unitRoot/UnitLabels 的子节点、
+            // 不在佣兵 GameObject 下，Destroy 单位不会带走它 → 必须先走佣兵自己的回收出口。
+            m.HideNameLabel();
+            Destroy(m.gameObject);
         }
         _activeMercs.Clear();
     }
@@ -538,6 +542,8 @@ public class MercenaryManager : Singleton<MercenaryManager>
         _activeMercs.Remove(merc);
         var bm = BattleManager.Instance;
         if (bm != null) bm.allyUnits.Remove(merc);
+        // 名牌不在佣兵节点下（挂 unitRoot/UnitLabels），销毁单位前先走佣兵的回收出口，同 ClearAllMercs。
+        merc.HideNameLabel();
         if (Application.isPlaying) Destroy(merc.gameObject);
         else DestroyImmediate(merc.gameObject);
     }

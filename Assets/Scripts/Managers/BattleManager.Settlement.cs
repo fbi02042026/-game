@@ -3124,6 +3124,11 @@ public partial class BattleManager
         runAllyDamageTakenMul = 1f;
         ApplyChapter1RunModifiersFromSave();
         RunDraftDirector.Ensure(this).OnRunStart();
+        // 【2026-11-12 修「点下一关后战斗力显示 0」】上面 EnsureStarterWeapon → EquipItem → NotifyCostumeChanged
+        // 会顺手触发 PlayerPowerHud.RefreshPower，而那一刻 RunLoadout 已被 EndRunLoadout 清空（_data=null）
+        // → TotalPower() 返回 0 并把「0」写进战力数字位。OnRunStart 里 BeginNew 已把新局建好，
+        // 这里补一次刷新把真实战力补上（同一出口 NotifyPowerChanged，不另开一条绘制路径）。
+        PlayerPowerHud.NotifyPowerChanged();
 
         // ── ⑤ 黑底字幕过场（复用 CoChapterGateLoading）→ SelectStage 内部调 LoadStage 直进下一关 ──
         StartCoroutine(CoChapterGateLoading(cm.currentChapter, () => cm.SelectStage(next)));

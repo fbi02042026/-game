@@ -195,8 +195,19 @@ public partial class Mercenary : UnitBase
         {
             if (rallyDir.sqrMagnitude > 0.0001f)
             {
-                facingDir = rallyDir.x > 0f ? 1 : -1;
-                ApplyFacing(facingDir);
+                // 【2026-11-12 主人拍板「要」· 与玩家同口径修斜向滑步】TryGetMoveDir 给的是
+                // sign(±1,±1) 的轴向分离值（未归一化）→ 斜向合速 √2 倍，而 MOVE 动画速率是固定常量
+                // （UnitAnimation.MOVE_ANIM_SPEED_SCALE，按基础移速标定）→ 斜着走就滑步。
+                // 归一化成单位向量后各方向速度一致。只改方向，速度倍率 / 动画一字未动。
+                rallyDir = rallyDir.normalized;
+                // 【2026-11-12 主人拍板「要」· 纯纵向倒退走】旧实现无条件 `rallyDir.x > 0f ? 1 : -1`，
+                // 点正上方 / 正下方时 x=0 恒判 -1 → 全体佣兵朝左、侧着走/倒退着走。
+                // 与玩家侧同口径（Hero.cs 的 Abs(_manualDir.x) > 0.05f）：横向分量不够就不翻朝向，保持原朝向走纵向。
+                if (Mathf.Abs(rallyDir.x) > 0.05f)
+                {
+                    facingDir = rallyDir.x > 0f ? 1 : -1;
+                    ApplyFacing(facingDir);
+                }
                 if (rb != null)
                     rb.velocity = new Vector2(rallyDir.x * GetCombatMoveSpeed(), rb.velocity.y);
                 if (Mathf.Abs(rallyDir.y) > 0.01f)

@@ -677,6 +677,29 @@ public static class RiftEquipGenerator
                 if (t.weaponType != WeaponType.None) continue;           // 副手武器（非盾）一律排除
                 if (!PlayerJobDefs.IsShieldTemplate(t)) continue;        // 防具一律排除，只留盾
                 if (!PlayerJobDefs.TemplateMatchesJob(t, job)) continue; // 盾仅剑盾（原有判定不变）
+                // 【2026-11-12 主人拍板「每个稀有度的盾都补几个」】盾按模板 baseRarity 与掉落品质对齐。
+                // 起因：盾没有攻击值，套不了 652 行那套 ATK 分档（TryGetTemplateAttack 对盾恒 false）→
+                //   旧行为下普通 / 稀有 / 传奇三档共用同一批盾外观；且盾模板 baseRarity 只配到 Epic(4)、
+                //   传奇档 0 件 → 传奇品质掉盾时静默走 693 行兜底，拿一件普通盾当传奇外观。
+                // 现口径（模板 baseRarity 是真源，Rarity 枚举：Common=1 / Uncommon=2 / Rare=3 / Epic=4 / Legendary=5）：
+                //   普通 → 只出 Common；稀有 → 只出 Uncommon~Epic；传奇 → 上方 642 行已按 isLegendary 分进传奇桶。
+                // 越档模板进 tierMismatch，复用 693 行兜底（本档真的一件都没有时仍能出外观，但绝不跨到传奇模板）。
+                // 引导确定性化不分档（fixedForTutorial），固定序列不能变。
+                if (!fixedForTutorial && !wantLegendary && !string.IsNullOrEmpty(rarityId))
+                {
+                    int tplRar = (int)t.baseRarity;
+                    bool tierMismatchByRarity =
+                        rarityId == "NORMAL" ? (tplRar != (int)Rarity.Common)
+                        : rarityId == "RARE" ? (tplRar < (int)Rarity.Uncommon || tplRar > (int)Rarity.Epic)
+                        : false;
+                    if (tierMismatchByRarity)
+                    {
+                        // t 此时必在 pool（非传奇模板 + 非传奇品质），防重复 Add 与 MainHand 分支同款
+                        if (!tierMismatch.Contains(t)) tierMismatch.Add(t);
+                        pool.Remove(t);
+                        continue;
+                    }
+                }
                 bucket.Add(t);
             }
             else
@@ -691,7 +714,36 @@ public static class RiftEquipGenerator
             }
         }
         if (pool.Count == 0 && tierMismatch.Count > 0)
-            pool = tierMismatch;   // 兜底：同档一件模板都没有 → 退回不限档（宁外观重复，不可没外观）
+        {
+            // 【2026-11-12 主人拍板】非传奇品质绝不套传奇模板：
+            // 兜底池先把传奇档模板（IsLegendaryTemplate）整批剔掉，再退到不限档。
+            // 根因：弓（1-2 面板攻击+54）/ 枪 没有稀有档模板 → 同档池恒空 → 旧的
+            // 「pool = tierMismatch」把 42 攻的风暴长弓当稀有发出去
+            //（54 = 模板42 × roll1.1 × 章0.88 × 关1.03 × 抽奖1.3）。
+            // 现在宁可退到低档外观，也不给非传奇品质塞传奇模板；真的一件都没有就报错不掉，
+            // 不静默造外观（不兜底，出错要看得见）。
+            pool = new List<EquipTemplate>();
+            bool magicJobForBand = PlayerJobBaseStats.IsMagicJob(job);
+            // 品质档攻击上限：普通 15 / 稀有 25 / 传奇不限（与上方 652 行的分档阈值同源）。
+            float bandMax = wantLegendary
+                ? float.MaxValue
+                : (rarityId == "RARE" ? TemplateTierRareMax : TemplateTierNormalMax);
+            for (int i = 0; i < tierMismatch.Count; i++)
+            {
+                var t = tierMismatch[i];
+                if (t == null) continue;
+                if (!wantLegendary && IsLegendaryTemplate(t)) continue;
+                // 双保险：即便将来出现「高攻但没写 globalBonus/被动」的模板，也不许越过本档上限。
+                if (!wantLegendary && TryGetTemplateAttack(t, magicJobForBand, out float tAtk) && tAtk > bandMax)
+                    continue;
+                pool.Add(t);
+            }
+            if (pool.Count == 0)
+            {
+                Debug.LogError($"[RiftEquipGenerator] 槽位 {slot} / 职业 {job} 无可用{(wantLegendary ? "传奇" : "非传奇")}武器模板，本次不掉落 —— 请补 equip 模板");
+                return null;
+            }
+        }
         // 2026-09-26 主人拍板：武器按职业伤害类型分池——魔法职业(法师/牧师)只掉魔法武器，物理职业只掉物理武器。
         // 判定走表（player_job_base_stats.伤害类型），不写死职业。
         // 【2026-10-20 主人拍板「物理不掉法术、法术不掉物理」】优先改**强制**：伤害类型不符的武器

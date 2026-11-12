@@ -442,6 +442,9 @@ public partial class BattleManager
     /// </summary>
     void TriggerLegacyFlow(bool isDeath)
     {
+        // 【2026-11-12 主人拍板】失败/撤离局标记：回城 DailyTaskSystem.Settle 据此把「每日通关任务经验」
+        // 压到约 1/3（成功局不进本方法，照发全额）。引导局重进战斗 / 竞技场判负走各自分支不进本方法，不受影响。
+        DailyTaskSystem.LastRunFailed = true;
         // 【2026-10-18 彩蛋批次】连败安慰计数：非引导局死亡 +1 / 主动撤离清零；
         // 连败≥3 回城后由前台小姐姐说句安慰（TownHubController.CoDefeatComfort 消费）
         if (isDeath) TavernEggState.RegisterDeath();

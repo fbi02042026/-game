@@ -669,6 +669,10 @@ public partial class BattleUI : MonoBehaviour
         else
             mercSlot2?.SetLocked(false);
 
+        // 2026-11-12 主人拍板：单人/引导局锁定佣兵槽不显示星级（未招佣兵不该有星）
+        RefreshMercSlotStars(mercSlot1, null);
+        RefreshMercSlotStars(mercSlot2, null);
+
         SetAvatarRootActive(merc1SkillAvatar, showTutorialMerc || !(GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle));
         SetAvatarRootActive(merc2SkillAvatar, !(GameConfig.SOLO_PLAYER_BATTLE || TutorialDirector.IsTutorialBattle));
     }

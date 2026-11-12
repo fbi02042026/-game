@@ -19,9 +19,14 @@ using System.Collections.Generic;
 /// 奖励 = quest.csv 的 reward_stones（日常=天赋石、周常=钻石）+ reward_exp（经验，
 /// 走 LevelSystem.AddDirectExp，末列；改表即调）。
 /// </summary>
-public static class DailyTaskSystem
-{
-    /// <summary>结算一遍所有达标未发的任务奖励（幂等，可随时多调）。驱动方：任务栏 0.5s 轮询。</summary>
+    public static class DailyTaskSystem
+    {
+        /// <summary>失败局（阵亡/撤离）标记：BattleManager.TriggerLegacyFlow 在失败回城时置 true，
+        /// 本 Settle 据此把「每日通关任务经验」(dailyClearExpPending) 压到约 1/3；成功局不置位照发全额。
+        /// Settle 消费后清掉，避免污染后续成功局（即便本局 pending 为 0 也要清）。</summary>
+        public static bool LastRunFailed { get; set; }
+
+        /// <summary>结算一遍所有达标未发的任务奖励（幂等，可随时多调）。驱动方：任务栏 0.5s 轮询。</summary>
     public static void Settle()
     {
         var saveSys = SaveSystem.Instance;
@@ -33,16 +38,24 @@ public static class DailyTaskSystem
 
         // 【2026-11-12 主人拍板】每日通关任务经验回城再算，不与关卡经验连算：
         // 通关时只累加 dailyClearExpPending，本 Settle 在城镇轮询时补发；
-        // 其它日常任务经验同受额度约束，升级弹窗走 LevelUpPopup 队列逐个弹
+        // 其它日常任务经验同受额度约束，升级弹窗走 LevelUpPopup.DeferUntilBattle 攒着，
+        // 等玩家真打完一关再跟着结算一起弹（【2026-11-12】不再一登录就弹「恭喜升级」）。
+        // 【2026-11-12 主人拍板】失败局（LastRunFailed）通关任务经验只发约 1/3，与成功局区分。
         if (data.dailyClearExpPending > 0)
         {
             int pending = data.dailyClearExpPending;
             data.dailyClearExpPending = 0;
+            if (LastRunFailed)
+                pending = Mathf.RoundToInt(pending / 3f);
             saveSys.Save();                       // 先落盘「已消费」，避免 AddDirectExp 内部 Save 前进程被杀导致重复发
-            // 本关战斗里已升过级时，这笔只入账不升级，经验留到下一关（受 data.stageLevelUpCapLevel 额度约束）
-            LevelSystem.AddDirectExp(pending, data.stageLevelUpCapLevel);
-            Debug.Log("[DailyTask] settle: daily_clear 回城补发经验 +" + pending);
+            // 本关战斗里已升过级时，这笔只入账不升级，经验留到下一关（受 data.stageLevelUpCapLevel 额度约束）。
+            // 【2026-11-12 主人拍板】额度只在「通关→回城」同一会话有效，载入存档时已清 0（SaveSystem.FinalizeLoadedData）；
+            // 0 = 跨会话登录补发 → 按「这笔最多升 1 级」重算，否则额度过期会把该升的经验吞在账上。
+            int cap = data.stageLevelUpCapLevel > 0 ? data.stageLevelUpCapLevel : data.playerLevel + 1;
+            LevelSystem.AddDirectExp(pending, cap);
+            Debug.Log("[DailyTask] settle: daily_clear " + (LastRunFailed ? "失败局1/3 " : "") + "回城补发经验 +" + pending);
         }
+        LastRunFailed = false;   // 无论本局有无 pending，失败标记都要清，防止漏清污染下一局成功补发
 
         SettleRows(data, "日常", int.Parse(DayKeyUtil.TodayKey()), daily: true);
         SettleRows(data, "周常", SaveData.WeekMondayKey(), daily: false);

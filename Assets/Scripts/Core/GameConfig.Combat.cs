@@ -437,6 +437,8 @@ public static partial class GameConfig
     /// 只作用于 Hero（在 UnitBase.GetCombatMoveSpeed 里乘），佣兵与怪物不受影响，
     /// 避免把整场推进节奏一起带快。再要调只改这一个数。
     /// 注意：摇杆手动移动是在这个值之上再乘 HERO_MANUAL_MOVE_X_MUL，所以手动/自动会同步变快。
+    /// 【2026-11-12 更正】摇杆已停用（零活引用），上面这句只剩历史意义；集结走的是 manual 通道
+    /// 但现在<b>不乘</b> HERO_MANUAL_MOVE_X_MUL（乘了会滑步，见 Hero.cs 441 行注释）。
     /// </summary>
     public const float PLAYER_MOVE_SPEED_MUL = 1.1f;
     /// <summary>英雄基础攻击（BaseAtk）全局偏移。负值=整体削弱。-10 即各职业基础攻击 -10，用于手感/平衡微调。</summary>

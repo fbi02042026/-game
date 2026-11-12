@@ -181,7 +181,15 @@ public partial class Mercenary : UnitBase
         RefreshNameLabelLayout();
     }
 
-    void HideNameLabel()
+    /// <summary>
+    /// 收掉头顶名牌 —— <b>唯一的回收出口</b>。
+    /// 【2026-11-12 修「点下一关后旧佣兵人名没清」】名牌挂在 <c>BattleManager.unitRoot/UnitLabels</c>
+    /// （共享根）而不是佣兵自己的子节点，所以 <c>Destroy(佣兵)</c> 不会连带销毁它：
+    /// <see cref="MercenaryManager.ClearAllMercs"/> / <see cref="MercenaryManager.DespawnMercenary"/>
+    /// 必须先调本方法再销毁单位，否则同一场景内直进下一关时旧名字会留在草地上
+    /// （回城路径看不出来，因为整场景被卸载了）。
+    /// </summary>
+    public void HideNameLabel()
     {
         if (_nameLabelRoot != null)
             Destroy(_nameLabelRoot.gameObject);

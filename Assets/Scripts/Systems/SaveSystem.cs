@@ -248,6 +248,10 @@ public class SaveSystem : Singleton<SaveSystem>
         }
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
+        // 【2026-11-12 主人拍板】关卡升级额度只在「通关 → 回城」同一会话内有效，载入时清 0：
+        // 留着旧值会让跨会话登录补发的日常经验被过期额度卡住（只入账不升级）；
+        // 清 0 后 DailyTaskSystem.Settle 按「这笔最多升 1 级」重算（见该处注释）。
+        data.stageLevelUpCapLevel = 0;
     }
 
     /// <summary>

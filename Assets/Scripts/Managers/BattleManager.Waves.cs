@@ -553,14 +553,6 @@ public partial class BattleManager
         }
         SetPartyWalkAnim(true);
 
-        // 排查用，定位后即删：走进场起点 / 镜头 / 屏半宽 / 免罪 / 可行动
-        {
-            float dbgHx = UnitBase.GetCombatX(hero);
-            float dbgHalfW = Camera.main != null ? Camera.main.orthographicSize * Camera.main.aspect : -1f;
-            float dbgCamX = Camera.main != null ? Camera.main.transform.position.x : 0f;
-            Debug.Log($"[BattleManager] 走进场排查 heroX={dbgHx:F2} camX={dbgCamX:F2} halfW={dbgHalfW:F2} PartyIntroWalking={PartyIntroWalking} UnitsCanAct={UnitsCanAct}");
-        }
-
         while (elapsed < timeout)
         {
             elapsed += Time.unscaledDeltaTime;
@@ -683,6 +675,15 @@ public partial class BattleManager
         float halfW = 4f;
         if (cam != null && cam.orthographic)
             halfW = cam.orthographicSize * cam.aspect;
+        // 【2026-11-12 主人报「玩家一开始就在屏幕里，没有从外面走进来的过程」】
+        // 摆屏外发生在 LoadStage（Awake 早期），此刻 BattleViewportFit 还没把瘦屏 orthoSize
+        // 撑大：实测摆位时 halfW=2.39（5.4×瘦屏比例）、揭幕后变 3.04（锁定值 5.4×720/1280），
+        // 差 0.65 → 队伍只摆到屏外 0.5，揭幕第一帧玩家半个身子已在屏内。
+        // 战斗横向半宽被适配锁定为「设计比例 × CAMERA_ORTHO_SIZE」，取两者较大值兜住此时序差；
+        // 宽屏 halfW 更大仍读相机，行为不变。
+        float lockedHalfW = GameConfig.CAMERA_ORTHO_SIZE * GameConfig.DESIGN_WIDTH / GameConfig.DESIGN_HEIGHT;
+        if (halfW < lockedHalfW)
+            halfW = lockedHalfW;
         float camX = battleStartX + GameConfig.CAMERA_FOLLOW_OFFSET_X;
         return camX - halfW - PARTY_ENTER_FROM;
     }
@@ -1350,6 +1351,11 @@ public partial class BattleManager
     void ClampHeroInCamera()
     {
         if (hero == null) return;
+        // 【2026-11-12 主人报「一进来就在屏幕边走」实锤根因】走进场期间队伍是**故意**摆在左屏外的，
+        // 这里每帧把英雄钳回屏内，会把 -6.03 拖到左屏缘 -5.38（= camX - halfW + margin），
+        // 揭幕第一帧就贴在屏边、只能看见最后 2.7 单位走位。免罪窗与 ClampToScreen 同口径：
+        // 整段入场（摆屏外 → 走到开战位）不钳。
+        if (PartyIntroWalking) return;
         Camera cam = Camera.main;
         if (cam == null || !cam.orthographic) return;
         float halfW = cam.orthographicSize * Mathf.Max(0.2f, cam.aspect);

@@ -14,6 +14,9 @@ using UnityEngine.UI;
 /// - 【2026-11-12 主人拍板】已读粒度从「怪物 id」改为「词条种类」(MonsterAffixId，共 7 种)：
 ///   某种词条的弹窗看过一次后，所有带该词条的怪都不再弹图标；同场景去重也按词条种类。
 ///   图标外观与 MonsterTipPanel 弹窗全部保持原样，只改触发与已读判定。
+/// - 【2026-11-12 补丁】同场景再叠一道「同一只怪(cfg.id)只提示一次」的图标去重(_shownMonsterIds)：
+///   防止分裂子怪/重复刷出等路径绕过词条去重后，同一张怪物头像在左缘出现两张一模一样的槽；
+///   与「每词条各一个」不冲突（不同怪仍各弹一个）。
 /// Canvas 走统一出口 UICanvasSetup.ApplyPopup（铁律 4.6：Screen Space - Camera + 自动适配）；
 /// 怪物头像复用 AdventureUI.LoadMonsterSprite（唯一出口，不另抄路径表）。
 /// </summary>
@@ -31,6 +34,9 @@ public static class AffixMonsterNoticeUI
     static readonly List<Entry> _entries = new List<Entry>();
     // 【2026-11-12 主人拍板】已读粒度从「怪物 id」改为「词条种类」：_shownThisScene 现按词条种类去重（存 MonsterAffixId 枚举名字符串），不再是怪物 id。
     static readonly HashSet<string> _shownThisScene = new HashSet<string>();
+    // 【2026-11-12 补丁】同场景「同一只怪（cfg.id）」只提示一次：图标去重，防止分裂子怪/重复刷出等路径
+    // 绕过词条去重后，同一张怪物头像在左缘出现两张一模一样的槽。与「每词条各一个」不冲突（不同怪仍各弹）。
+    static readonly HashSet<string> _shownMonsterIds = new HashSet<string>();
 
     /// <summary>战斗内怪物信息弹窗 Canvas 排序：压过战斗内全部常驻 UI 层（BattleSideHud 955 / MercJoinBanner 995 等），低于 Toast 11000。</summary>
     const int SortOrder = 1000;
@@ -71,10 +77,12 @@ public static class AffixMonsterNoticeUI
             if (_shownThisScene.Add(id.ToString())) anyNewKind = true;   // 同场景同词条只提示一次
         }
         if (!anyNewKind) return;   // 词条全看过、或本场景都已提示过 -> 静默
+        if (_shownMonsterIds.Contains(cfg.id)) return;   // 同场景同一只怪只提示一次（图标去重，防重复刷出）
 
         EnsureCanvas();
         if (_stack == null) return;
         BuildSlot(cfg, affixes);
+        _shownMonsterIds.Add(cfg.id);
     }
 
     // ---------------------------------------------------------------- canvas
@@ -86,6 +94,7 @@ public static class AffixMonsterNoticeUI
         // 场景切换后旧 Canvas 已随场景销毁（Unity 伪空），把残留引用清干净再重建
         _entries.Clear();
         _shownThisScene.Clear();
+        _shownMonsterIds.Clear();
 
         // 战斗场景若无 EventSystem（理论上战斗 UI 已带），补一个保证点击可用
         if (Object.FindObjectOfType<EventSystem>() == null)
@@ -182,7 +191,8 @@ public static class AffixMonsterNoticeUI
         MonsterTipPanel.Show(_canvas.transform,
             MonsterTipContent.Title(cfg),
             MonsterTipContent.BuildBody(cfg, chapter),
-            () => OnViewed(entry));
+            () => OnViewed(entry),
+            true);   // 战斗中点击面板之外（四周空白处）也关闭弹窗
     }
 
     static void OnViewed(Entry entry)

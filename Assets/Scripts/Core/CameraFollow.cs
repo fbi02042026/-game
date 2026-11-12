@@ -67,7 +67,13 @@ public class CameraFollow : MonoBehaviour
         }
 
         // 初始位置直接对齐目标（无平滑）
-        if (target != null)
+        // 【2026-11-12 主人报「一进来就在屏幕边走」实锤根因】入场序列在 Awake 里已把镜头对准
+        // 开战位（SnapCameraToBattleView）并把队伍摆到屏外；这里再按 hero 吸附，会被 minX
+        // (=spawn-0.5) 钳到 -2.69，把镜头抢走 → 随后的 ClampHeroInCamera 把队伍钳在屏缘。
+        // 入场期间不抢镜头。
+        var bm = BattleManager.Instance;
+        bool introRunning = bm != null && bm.PartyIntroWalking;
+        if (target != null && !introRunning)
         {
             float startX = Mathf.Clamp(target.position.x + offset.x, minX, maxX);
             transform.position = new Vector3(startX, _camY, _camZ);
