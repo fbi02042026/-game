@@ -2477,9 +2477,13 @@ public partial class BattleManager
             //（停 Play/杀进程）构筑档就留盘 → 下次启动 AutoGameInitializer 自动开战（不经过冒险页，
             // 「继续上一局/重新开始」询问弹窗没机会弹）→ StartNewRunInternal parked 判定同章同难度
             // 静默续局 → 上局佣兵/构筑带进新局（Editor.log [RunLoadout] 继续上一局 chapter=1 mercs=1 实锤）。
+            // ↑ 这条链路同日稍后已被主人「不要续局这个功能，中途退出一律按失败」口径彻底修掉：
+            //   BattleManager.StartNewRun 开战前统一清档、RunDraftDirector 非裂隙一律 BeginNew；
+            //   本处 Clear 保留作「通关瞬间」的第一道闸，两道闸幂等、互为兜底。
             // 通关 = 局结束，快照不该活过通关时刻。只清主线 Normal（本分支即主线专属；支线岛/活动副本
-            // 进本 Pending* 标志天然作废 parked 局）；中断恢复机制（10-22/11-11 拍板）只服务「没打完
-            // 中途退出」——没通关不走这里，不受影响。NoteStageProgress（StageClearRewardDirector:1002）
+            // 进本 Pending* 标志天然作废 parked 局）；没通关不走这里，不受影响。
+            // 【2026-11-12 晚】中断「续局恢复」已整体下线（一律按撤离失败静默结算），不再有续局档接回。
+            // NoteStageProgress（StageClearRewardDirector:1002）
             // 有 IsActive 守卫 → 清档后自动 no-op 不重新落盘；EndRunAndReturnToTown /
             // ContinueToNextStageInPlace 的 Clear 幂等，零冲突。中断快照一并清（金币已 Persist 入账，
             // 留快照会被崩溃恢复重复入账，同 ContinueToNextStageInPlace ① 段口径）。

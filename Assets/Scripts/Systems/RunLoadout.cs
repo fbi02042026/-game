@@ -236,9 +236,12 @@ public static class RunLoadout
         return saved != null && saved.active ? saved : null;
     }
 
-    // —— 中断局标记（2026-10-22 主人原话：中途意外退出没打完 → 进本前让玩家选「继续上一局 / 重新开始」）——
-    // 状态只有一个出口：进战斗置位；打完收局整档作废（Clear），标记随档消失；确认继续走 ConfirmResumeInterruptedRun。
-    // 读侧只许走 HasInterruptedRun / PeekResumable。
+    // —— 中断局标记（2026-10-22 建立；2026-11-12 主人拍板「不要续局这个功能」后仅存兼容）——
+    // 状态只有一个出口：进战斗置位；打完收局整档作废（Clear），标记随档消失。
+    // ⛔ 原「确认继续走 ConfirmResumeInterruptedRun 接回关号/金币池」「HasInterruptedRun 给弹窗让路」
+    //    两条路径已整体下线：中断档由 BattleStateSaver.SettleInterruptedRun 静默按撤离失败结算并 Clear，
+    //    BattleManager.StartNewRun 开战前再兜底清一次。下面 MarkBattleBegun / HasInterruptedRun /
+    //    ConfirmResumeInterruptedRun 三个成员保留不删（便于回退），但运行时已无「续局」调用点。
 
     /// <summary>进战斗时打标记：从这一刻起到收局前，中途退出都算「意外中断」。</summary>
     public static void MarkBattleBegun()

@@ -30,6 +30,20 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
 
     public void StartNewRun()
     {
+        // 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败；战斗一律全新开局」】
+        // 开战唯一入口先把「上一局」在盘上和内存里的东西全作废：
+        // · 先补跑一次中断结算（城镇启动时 TownSceneBootstrap 已跑过则无档、幂等空转）——
+        //   直接 Play 战斗场景/冷启动自动开战也能按「撤离失败」静默结算，不会把上局金币接回来；
+        // · 清掉可续构筑档（技能/佣兵/势能/抽数 drawCount）与中断快照，保证 OnRunStart 必然 BeginNew、
+        //   下面 parked 判定读不到 savedRun（不跳关）；
+        // · 清掉 DDOL 单例里还活着的佣兵对象（同一进程回城再进本时可能没走过收尾）。
+        // ⚠ 无限裂隙「每 10 层记录点」是独立玩法：它的快照由 StartNewRunInternal 里
+        //   EndlessRiftCheckpoint.RestoreToPrefs 在本调用之后重新写盘，不受这里影响。
+        BattleStateSaver.SettleInterruptedRun();
+        RunLoadout.EndMemoryMode();   // 引导/竞技场内存模式先退出，否则 Clear 只退模式不删盘上档
+        RunLoadout.Clear();
+        BattleStateSaver.ClearInterruptedSave();
+        MercenaryManager.Instance?.ClearAllMercs();
         StartNewRunInternal();
     }
 
@@ -195,6 +209,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 【2026-10-22 主人拍板「打一关回一次」】parked 局续/弃判定（必须在清 Pending* 标志之前）：
         // · 同章再进 → 续局：起始关 = RunLoadout.stageIndex（最后通关的小关）+ 1（见下方 BuildChapter 后跳关）
         // · 换章 / 进无限裂隙 / 进金币本 → parked 局作废（裂隙与金币本是独立进本，现状口径的延伸）
+        // ⛔【2026-11-12 主人拍板「不要续局这个功能」】StartNewRun 入口已把盘上可续档清空，
+        //   正常路径下 savedRun 恒 null、resumeRun 恒 false —— 下面两块保留不删（最小增量、便于回退），
+        //   但不再有任何续局来源；裂隙的记录点快照由 232-236 行重新写盘，不走这里。
         // 🔴【2026-10-30 修竞技场「技能槽已满」根因】本块必须放在下方 OnRunStart 之前：
         // 原顺序 OnRunStart 先跑（ResumeOrBegin→BeginNew→Save 落盘），这里 PeekResumable 读到的
         // 永远是刚落盘的活跃局 → 独立进本（竞技场/金币本/徽记本…）分支必然 Clear →
@@ -316,8 +333,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         // 建关交给模式自己：核心不需要知道一共有几种玩法。
         Mode.BuildChapter(ChapterManager.Instance, targetChapter);
 
-        // 【2026-10-24 主人拍板「只要打完就清」】续局跳关现在只剩一种来源：中断局弹窗点了「继续」
-        // （被打断那关的关号由弹窗确认时从中断快照接回 stageIndex，见 RunLoadout.ConfirmResumeInterruptedRun）。
+        // 【2026-10-24 主人拍板「只要打完就清」】续局跳关原只剩「中断局弹窗点了继续」一种来源。
+        // 【2026-11-12 主人拍板「不要续局」】弹窗与中断恢复已下线，本块恒不进入（死代码保留便于回退）。
         // 普通关打完整局清档，不再存在 parked 局。
         if (resumeRun && savedRun != null
             && ChapterManager.Instance.stageMap != null && ChapterManager.Instance.stageMap.Count > 0)

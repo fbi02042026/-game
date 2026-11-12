@@ -9,6 +9,10 @@ using UnityEngine.UI;
 /// · 「确定」= 继续上一局（清掉中断标记，之后进本照旧静默续局）；
 /// · 「取消」= 重新开始（丢弃上一局，下次进本发启动金、从本章第 1 关打起）。
 /// 触发条件与调用点在 AdventureUI.ShowPage → TryPromptInterruptedRun。
+///
+/// ⛔【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】整个弹窗已下线：
+/// 冒险页不再调用 TryPromptInterruptedRun，中断档由 BattleStateSaver.SettleInterruptedRun
+/// 静默按撤离失败结算。本类保留不删、不改动，便于日后回退。
 /// </summary>
 public static class RunResumeChoiceUI
 {

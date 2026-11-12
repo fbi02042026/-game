@@ -458,42 +458,30 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
             // 放 warmupOnly 块内：进镇预热点亮那遍不触发、不写标记（同 SideIslandGuide 口径）。
             TryShowArenaUnlockToast();
 
-            // 【2026-11-11 主人拍板「切了后台不要中断战斗」】恢复中断局询问（10-22 原话「上一局意外退出是否继续」）：
-            // 切后台被系统杀掉 App 不算放弃 —— 构筑档还在就先弹「继续上一局 / 重新开始」，快照留给
-            // ConfirmResumeInterruptedRun 接回被打断那关的关号与局内金币池；SettleInterruptedRun 已让位不再静默结算。
-            TryPromptInterruptedRun();
+            // 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】中断局询问弹窗下线：
+            // 不再弹「继续上一局 / 重新开始」，中断档由城镇启动时 BattleStateSaver.SettleInterruptedRun
+            // 直接按撤离失败静默结算并清空；进战斗一律全新开局（BattleManager.StartNewRun）。
+            // TryPromptInterruptedRun();
 
             // 【2026-10-28 主人拍板】会长支线岛情报指引：不在主界面主动弹（相关剧情以后一律不主动出来），
-            // 只在玩家进冒险界面时播（每岛每次洗牌轮一次，播过记档）。有待续局的局让路给续局询问，
-            // 本次不播、标记不写，下次进冒险页再播。
-            if (!RunLoadout.HasInterruptedRun())
-            {
-                SideIslandGuide.TryShowForCurrent(SaveSystem.Instance?.Data);
-            }
+            // 只在玩家进冒险界面时播（每岛每次洗牌轮一次，播过记档）。
+            // 【2026-11-12 主人拍板「不要续局」】原「有续局让路」守卫 if (!RunLoadout.HasInterruptedRun()) 已删除：
+            // 中断档在进镇/开战时即被静默结算清空，守卫只剩副作用 —— 同一进程战斗中直接切城镇、
+            // 或存档未就绪跳过结算时，残留的 midBattle 标记会把这条指引无声吞掉。
+            SideIslandGuide.TryShowForCurrent(SaveSystem.Instance?.Data);
         }
     }
 
     /// <summary>
-    /// 【2026-11-11 主人拍板「切了后台不要中断战斗」】恢复 10-22 的中断局询问弹窗（11-07 曾停用）：
-    /// 主线局中途退出（切后台被杀 / 强退）→ 构筑档 midBattle 还在 → 弹「继续上一局 / 重新开始」。
-    /// 确定 = ConfirmResumeInterruptedRun（接回被打断那关重打 + 局内金币池）；
-    /// 取消 = 构筑整档作废 + 清中断快照，下次进本照旧发启动金从第一个未通关开打。
+    /// ⛔【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】已下线，不再被调用。
+    /// 原实现（10-22 建立、11-07 停用、11-11 恢复）：中断档还在就弹「继续上一局 / 重新开始」，
+    /// 确定走 RunLoadout.ConfirmResumeInterruptedRun 接回关号和金币池，取消清档。
+    /// 现在统一由 BattleStateSaver.SettleInterruptedRun 静默按撤离失败结算，
+    /// BattleManager.StartNewRun 再兜底清一次；RunResumeChoiceUI 类保留不删，便于回退。
     /// </summary>
     void TryPromptInterruptedRun()
     {
-        if (!RunLoadout.HasInterruptedRun()) return;
-        var snapshot = BattleStateSaver.PeekInterrupted();
-        var saved = RunLoadout.PeekResumable();
-        int chapter = snapshot != null && snapshot.chapterId >= 1
-            ? snapshot.chapterId
-            : (saved != null ? saved.chapter : 1);
-        RunResumeChoiceUI.Show(chapter,
-            onConfirm: () => RunLoadout.ConfirmResumeInterruptedRun(snapshot),
-            onCancel: () =>
-            {
-                RunLoadout.Clear();
-                BattleStateSaver.ClearInterruptedSave();
-            });
+        // 已下线：不弹窗、不清档（清档归上面两个出口）。
     }
 
     /// <summary>
@@ -510,8 +498,8 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
         GlobalToastUI.Show("试炼场已开启，快去看看吧！", true);
     }
 
-    // 「继续上一局 / 重新开始」询问：2026-11-07 曾停用（中断一律静默判撤离失败结算）。
-    // 【2026-11-11 主人拍板「切了后台不要中断战斗」】已恢复 —— 实现见上方 TryPromptInterruptedRun。
+    // 「继续上一局 / 重新开始」询问：2026-11-07 曾停用，11-11 曾恢复，
+    // 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】彻底下线 —— 见上方 TryPromptInterruptedRun。
 
 
     /// <summary>

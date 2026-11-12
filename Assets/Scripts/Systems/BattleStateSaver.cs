@@ -213,8 +213,9 @@ public class BattleStateSaver : MonoBehaviour
     /// <summary>
     /// 启动检查：有残留档 = 上次被强杀 → 按「撤离失败」结算（经济/清档规则同在线撤离失败）。
     /// 2026-09-22 起**不弹结算面板**；2026-11-10 起连轻提示也去掉，纯静默结算。
-    /// 【2026-11-11 主人拍板「切了后台不要中断战斗」】主线局构筑档还在（midBattle）时让位给
-    /// 冒险页「继续上一局 / 重新开始」弹窗（RunResumeChoiceUI），不再静默结算（覆盖 11-07 口径）。
+    /// 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】11-11 的「让位冒险页
+    /// 继续上一局弹窗」整段下线：不管构筑档在不在，一律走下面的静默撤离失败结算
+    ///（金币按差额写回、构筑/雇佣全清、体力不退、不弹任何面板），绝不留档给下次开战接回。
     /// 返回 true 表示弹了面板（调用方应跳过本轮其它弹窗）；本流程恒返回 false。
     /// </summary>
     public static bool SettleInterruptedRun()
@@ -222,12 +223,9 @@ public class BattleStateSaver : MonoBehaviour
         var d = PeekInterrupted();
         if (d == null) return false;
 
-        // 【2026-11-11 主人拍板「切了后台不要中断战斗」】恢复 2026-10-24 的续打让位：
-        // 切后台被系统杀掉 App 属正常中断、不算放弃 —— 构筑档（midBattle 标记）还在时，
-        // 不在这里静默按撤离失败结算，让位给冒险页的「继续上一局 / 重新开始」弹窗
-        //（RunResumeChoiceUI，调用点 = AdventureUI.TryPromptInterruptedRun）。
-        // 快照不清 —— ConfirmResumeInterruptedRun 要用它接回被打断那关的关号与局内金币池；
-        // 玩家点「重新开始」时才由弹窗取消回调整档作废 + ClearInterruptedSave。
+        // 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】
+        // 原 11-11「让位冒险页继续上一局弹窗」分支已删除：中断档不再保留、不再接回关号与金币池，
+        // 直接走下面的静默撤离失败结算并清档。进战斗一律全新开局（BattleManager.StartNewRun）。
 
         var data = SaveSystem.Instance?.Data;
         if (data == null)
@@ -244,13 +242,7 @@ public class BattleStateSaver : MonoBehaviour
             return false;
         }
 
-        // 主线局被中断（切后台被杀 / 强退）且构筑档还在 → 让位续打弹窗（11-11 拍板，覆盖 11-07「一律静默结算」口径）
-        if (RunLoadout.HasInterruptedRun())
-        {
-            Debug.Log("[BattleStateSaver] 检测到可续打的中断局 → 让位冒险页「继续上一局」弹窗，不静默结算");
-            return false;
-        }
-
+        // 11-11 的「HasInterruptedRun → 让位弹窗」闸门已整体删除（见方法头注释）。
         ClearSaveStatic();
 
         int chapter = d.chapterId < 1 ? 1 : d.chapterId;

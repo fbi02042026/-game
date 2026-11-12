@@ -73,7 +73,19 @@ public class RunDraftDirector : MonoBehaviour
             // 主线进本前先退干净 —— 否则 MemoryMode 会让 ResumeOrBegin 开出的主线局全程不落盘
             //（中断局/构筑全丢）。非内存态时本调用是无害空转。
             RunLoadout.EndMemoryMode();
-            resumed = RunLoadout.ResumeOrBegin(job);
+            // 【2026-11-12 主人拍板「不要续局这个功能，一律全新开局」】非裂隙一律 BeginNew，
+            // 不再读盘续「上一局」：技能/佣兵/装备/抽数/局内金币池全部从零起，
+            // 下方 !resumed 分支会把启动金、免费抽额度、保底计数一并重置。
+            // 裂隙例外：它的「每 10 层记录点」快照由 EndlessRiftCheckpoint.WriteSnapshotToPrefs
+            // 顶到盘上，必须靠 ResumeOrBegin 读回（不是中断续局，是玩法本身的存档点）。
+            var bm = BattleManager.Instance;
+            if (bm != null && bm.IsEndlessRift)
+                resumed = RunLoadout.ResumeOrBegin(job);
+            else
+            {
+                RunLoadout.BeginNew(job);
+                resumed = false;
+            }
         }
 
         // 开局启动金：**每局只补一次**（2026-10-05 主人拍板「开始金币是每局的，不是每关的」）。
@@ -113,9 +125,10 @@ public class RunDraftDirector : MonoBehaviour
         // 【2026-10-25 主人拍板】局内等级复活：每次进战斗都从存档永久账本回填等级/经验
         // （新档 playerLevel=1、引导局自然 =1，均无操作）。
         RestoreHeroProgress();
-        // 【2026-10-24 主人拍板「只要打完就清」】resumed 现在只剩一种来源：中断局弹窗点了「继续」。
-        // 局内金币池从中断快照接回（确认时 ConfirmResumeInterruptedRun 写进 runGold），
-        // 启动金不重发（防杀进程反复刷启动金），靠这里把池子接回来；开新局走上面 !resumed 分支照发。
+        // 【2026-11-12 主人拍板「不要续局」】resumed 现在只剩一种来源：无限裂隙「每 10 层记录点」快照
+        //（EndlessRiftCheckpoint.RestoreToPrefs 写盘 → ResumeOrBegin 读回）。中断局弹窗已下线，
+        // 不再有 ConfirmResumeInterruptedRun 接回金币池的路径；快照里 runGold 被强制归 0，
+        // 启动金由 BattleManager 在 _endlessCheckpointRestored 分支单独补发（防杀进程刷启动金）。
         if (resumed) RestoreRunGoldPool();
 
         RebuildPlayerSkills();
@@ -128,26 +141,18 @@ public class RunDraftDirector : MonoBehaviour
 
         if (tutorial) return;
 
-        // 【2026-10-22 主人原话「中途意外退出没打完 → 让玩家选继续/重新开始」】
-        // 从这一刻起本局标记为「战斗中」：现在退出游戏 = 中断，下次进本会弹「继续上一局 / 重新开始」。
-        // 干净收尾（打一关回一次回城 / 局结束清档）会把标记清掉或连局一起丢，见 RunLoadout 三个出口。
-        // 【2026-10-30 收口】只有主线 Normal 局才打中断标记：竞技场/金币本等独立进本是单场局，
-        // 打了标记会在杀进程后被「继续上一局」弹窗接回主线章（快照 chapter/stage 接回 = 构筑串局）。
-        // 修「技能槽已满」（parked 判定块上移）之前，这些独立本的局在 OnRunStart 后就被 Clear 抹掉、
-        // 天然不留档；现在局活着落盘了，必须在这里维持原「独立本不留中断档」的行为。
+        // 【2026-11-12 主人拍板「不要续局这个功能，中途退出一律按失败」】中断标记照打，但用途已变：
+        // 它只是「这局没打完」的兼容旁证，下次启动由 BattleStateSaver.SettleInterruptedRun 静默按撤离
+        // 失败结算并清档，**不再有「继续上一局 / 重新开始」弹窗，也不会接回关号与金币池**。
+        // （BattleStateSaver 的中断快照走自己的心跳写盘，全程不读 RunLoadout.midBattle。）
+        // 【2026-10-30 收口】只有主线 Normal 局才打标记：竞技场/金币本等独立进本是单场局，
+        // 打了标记会在杀进程后被接回主线章（快照 chapter/stage 接回 = 构筑串局）。
         var markBm = BattleManager.Instance;
         if (markBm == null || markBm.Mode == null || markBm.Mode.Id == BattleModeId.Normal)
             RunLoadout.MarkBattleBegun();
 
-        // 【2026-11-02 修正】裂隙「记录点快照」也是按续局接回来的，但它不是"继续上一局"——
-        // 章号对裂隙无意义（层号才是进度），弹出来是误导。裂隙不弹这条。
-        if (resumed && RunLoadout.Data != null
-            && !(markBm != null && markBm.IsEndlessRift))
-        {
-            // 续关：只说「续到哪了」，不再罗列 Lv/技能数/佣兵数（2026-10-11 主人拍板：
-            // 主人原话「不要每次上来都写本次构筑什么什么的」—— 那些数字玩家看一眼就忘，还挡视线）。
-            GlobalToastUI.Show($"继续上一局 · 第{RunLoadout.Data.chapter}章");
-        }
+        // ⛔【2026-11-12 下线】原「继续上一局 · 第X章」toast 整块已删除：续局弹窗与中断恢复都没了，
+        // 非裂隙 resumed 恒 false；裂隙记录点本来就被排除（章号对裂隙无意义）。现已无任何触发路径。
         // 新局：不再弹「本局构筑已生成：XX · 技能N」（同上，主人拍板去掉）。
         // 开场氛围交给进战斗那张章节卡（ChapterSplashOverlay：章节标题 + 开场正文 + 引言），
         // 已经有开场白了，别在这里再抄一份数据。
@@ -171,9 +176,11 @@ public class RunDraftDirector : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-24 主人拍板「只要打完就清」】续局（= 中断局弹窗点了继续）还原局内金币池。
-    /// 池子在中断局弹窗确认时从中断快照接回（RunLoadout.ConfirmResumeInterruptedRun 写进 runGold），
-    /// 这里还原进 BattleManager。
+    /// 【2026-10-24 建立，2026-11-12 收窄】还原局内金币池：现在**只**服务无限裂隙记录点续局。
+    /// 【2026-11-12 主人拍板「不要续局」】中断局弹窗路径已下线，不再有
+    /// ConfirmResumeInterruptedRun 从中断快照接回 runGold 的调用；记录点快照的 runGold 在
+    /// EndlessRiftCheckpoint.RestoreToPrefs 里被强制归 0（局内金币不跨局，防刷钱），
+    /// 所以这里实际是归零复位，启动金由 BattleManager 的 _endlessCheckpointRestored 分支补发。
     /// </summary>
     void RestoreRunGoldPool()
     {

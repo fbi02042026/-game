@@ -25,12 +25,10 @@ public static class BattleRally
     /// <summary>点击落点向屏内收的边距（与 GetBattleVisibleX 同口径）：X 越界时钳到这里，不推镜头。</summary>
     const float TAP_PAD = 0.35f;
 
-    // 【2026-11-09 主人摆的「集结」节点动效】旗子从上落下 + 圈由大缩小到当前大小，
-    // 两者同一进度同时完成；【2026-11-12 主人拍板】整组 0.3 秒即隐藏（落下 0.18s + 停留 0.12s），不再停留 2 秒。
-    const float MARKER_SHOW_SEC = 0.3f;   // 【2026-11-12 主人拍板「点一下旗子落下后就消失，不要时间太长」】0.18s 落下/缩圈 + 0.12s 停留即隐藏；只管旗子动效，集结驻留 HOLD_SEC=2 不受影响
-    const float MARKER_ANIM_SEC = 0.18f;      // 出来快：0.18 秒内播完
-    const float MARKER_FLAG_DROP = 120f;      // 旗子起始高出落点多少（UI 单位）
-    const float MARKER_RING_FROM_MUL = 2.4f;  // 圈起始放大倍数，缩到预制体里现在的大小
+    // 【2026-11-12 主人拍板】旗子落下 / 圈缩放一律播主人在「集结」节点上做的 Animator 动画，
+    // 代码不再逐帧改旗子位置 / 圈缩放，只负责：摆到落点 → 激活 → 从头播动画 → 播完隐藏。
+    const float MARKER_SHOW_SEC = 0.3f;   // 取不到动画长度时的默认显示时长（主人 11-12「点一下就消失，不要时间太长」）
+    const string MARKER_STATE = "jijie";  // 主人 Animator 里的状态名（Resources/Effect/Ani/集结/jijie.controller）
     /// <summary>集结动效排序层：高于技能栏 955 / 招募横幅 995，保证永远压在战斗 UI 之上。</summary>
     const int MARKER_SORTING_ORDER = 998;
 
@@ -44,19 +42,17 @@ public static class BattleRally
 
     static GameObject _markerRoot;
     static RectTransform _markerRootRt;
-    static RectTransform _markerFlagRt;
-    static RectTransform _markerRingRt;
+    static Animator _markerAnim;          // 主人挂在「集结」上的 Animator，落下 / 缩圈由它驱动
     // 【2026-11-11 第五版 · 点击范围真源】战场 = 顶栏底边 ~ 底部面板顶边之间的整块屏幕区域，
     // 边界从 TopBar / BackpackPanel 的实时 UI 矩形投影读（不写死像素、不按节点名猜图）；
     // 面板收起 / 展开、竖屏适配、map 动画全部自动跟随。
     static RectTransform _topBarRt;
     static RectTransform _bottomPanelRt;
     static readonly Vector3[] _panelCorners = new Vector3[4];
-    static Vector2 _flagIdlePos;
-    static Vector3 _ringIdleScale;
     static bool _markerSearched;
     static bool _markerVisible;
     static float _markerAge;
+    static float _markerShowSec = MARKER_SHOW_SEC;   // 本轮显示时长：跟主人动画 clip 的实际长度走
 
     public static bool Active => _active;
     public static Vector3 Point => _point;
@@ -74,7 +70,7 @@ public static class BattleRally
         // 【2026-11-11 第五版 · 旗子不出现的根因之一】旧版在这里 HideMarker()，与 Tick 里
         // 「落点动效独立推进：集结提前结束也要能按时消失」自相矛盾。战斗中 AnyAllyArrived
         // （只比 X）+ EnemyNearPoint 会在点击同帧触发 Reset，旗子刚 SetActive(true) 就被关掉，
-        // 肉眼完全看不到。动效生命周期只由 TickMarker 的 2 秒独立管理，Reset 一律不碰。
+        // 肉眼完全看不到。动效生命周期只由 TickMarker 按动画长度独立管理，Reset 一律不碰。
         Debug.Log($"[BattleRally] Reset wasActive={wasActive} markerAge={_markerAge:F2} markerVisible={_markerVisible}");
     }
 
@@ -288,9 +284,9 @@ public static class BattleRally
 
     // ============================================================
     // 落点动效：主人 2026-11-09 在 BattleUI 下摆的「集结」节点（旗子 + 圈）。
-    // 只按名字绑定并驱动，不动预制体排版；找不到节点直接 LogError，不兜底。
-    // 口径（主人 11-09 更正）：圈由大变小、缩到预制体里现在的大小；旗子从上落到地点，
-    // 两者用同一个进度 k 同时完成（0.18s），整组 2 秒后隐藏。
+    // 【2026-11-12 主人拍板】落下 / 缩圈一律播主人自己做的 Animator 动画，代码里逐帧改
+    // 旗子位置 / 圈缩放的那一套已全部删掉；代码只做「摆到落点 → 激活 → 从 0 播 jijie → 播完隐藏」。
+    // 不动预制体排版；找不到节点 / Animator / 状态直接 LogError，不兜底、不造资源。
     // ============================================================
     static Transform FindDeep(Transform parent, string want)
     {
@@ -362,18 +358,15 @@ public static class BattleRally
         if (_markerRootRt == null)
             Debug.LogError("[BattleRally] 集结动效：「集结」不是 RectTransform → 无法定位到落点");
 
-        Transform flag = FindDeep(root, "旗子");
-        Transform ring = FindDeep(root, "圈");
-        _markerFlagRt = flag as RectTransform;
-        _markerRingRt = ring as RectTransform;
-        if (_markerFlagRt == null)
-            Debug.LogError("[BattleRally] 集结动效：「集结」下没找到「旗子」→ 落下动效不播");
-        if (_markerRingRt == null)
-            Debug.LogError("[BattleRally] 集结动效：「集结」下没找到「圈」→ 缩放动效不播");
-
-        // 记下主人摆好的初始帧，动效只在这上面叠加，结束还原
-        _flagIdlePos = _markerFlagRt != null ? _markerFlagRt.anchoredPosition : Vector2.zero;
-        _ringIdleScale = _markerRingRt != null ? _markerRingRt.localScale : Vector3.one;
+        // 【2026-11-12】动画由主人在「集结」上挂的 Animator 播，代码不驱动旗子 / 圈的 transform。
+        // 找不到或不完整只报错，不兜底补组件 / 不加载 controller（出错要让主人看见）。
+        _markerAnim = root.GetComponent<Animator>();
+        if (_markerAnim == null)
+            Debug.LogError("[BattleRally] 集结动效：「集结」上没挂 Animator → 主人的落下动画播不了");
+        else if (_markerAnim.runtimeAnimatorController == null)
+            Debug.LogError("[BattleRally] 集结动效：「集结」的 Animator 没绑 controller → 主人的落下动画播不了");
+        else if (!_markerAnim.HasState(0, Animator.StringToHash(MARKER_STATE)))
+            Debug.LogError($"[BattleRally] 集结动效：Animator 里没有状态「{MARKER_STATE}」→ 请确认动画状态名，代码不改状态名");
 
         // 预制体里两个 Image 默认 raycastTarget=1，显示时会吃掉战场点击 → 运行时关掉（不改预制体）
         var imgs = _markerRoot.GetComponentsInChildren<Image>(true);
@@ -395,7 +388,7 @@ public static class BattleRally
         return true;
     }
 
-    /// <summary>点击落点：整组挪到落点，旗子从上方落下、圈由大缩小，同一进度同时到位。</summary>
+    /// <summary>点击落点：整组挪到落点，激活并从头播主人做的落下动画（代码不碰旗子 / 圈）。</summary>
     static void PlayMarker(Vector2 screenPos)
     {
         if (!EnsureMarkerNodes())
@@ -409,7 +402,10 @@ public static class BattleRally
         _markerRoot.SetActive(true);
         _markerVisible = true;
         _markerAge = 0f;
-        ApplyMarkerFrame(0f);
+        _markerShowSec = ResolveMarkerShowSec();
+        // 【2026-11-12】从头播主人做的动画；旗子落下 / 圈缩放都是 clip 里的内容，代码不再插手。
+        if (_markerAnim != null)
+            _markerAnim.Play(MARKER_STATE, 0, 0f);
 
         // 判别性探针（验收通过后删）：一次点击就能分清「绑定 / 坐标 / 遮挡 / 立刻被 Reset」四层
         var parent = _markerRootRt.parent as RectTransform;
@@ -427,7 +423,7 @@ public static class BattleRally
             if (sib.Length > 0) sib.Append(',');
             sib.Append(parent.GetChild(i).name);
         }
-        Debug.Log($"[BattleRally] 动效 绑定OK root={_markerRoot.name} flag={_markerFlagRt != null} ring={_markerRingRt != null} "
+        Debug.Log($"[BattleRally] 动效 绑定OK root={_markerRoot.name} anim={_markerAnim != null} state={MARKER_STATE} showSec={_markerShowSec:F2} "
                   + $"mode={(rootCanvas != null ? rootCanvas.renderMode.ToString() : "?")} cam={(cam != null ? cam.name : "null")} "
                   + $"sort={(mcv != null ? mcv.sortingOrder : -999)} alphaChain={alphaChain:F2} "
                   + $"screen=({screenPos.x:F0},{screenPos.y:F0}) local=({local.x:F1},{local.y:F1}) "
@@ -488,36 +484,33 @@ public static class BattleRally
     {
         if (!_markerVisible) return;
         _markerAge += Time.unscaledDeltaTime;
-        float k = Mathf.Clamp01(_markerAge / MARKER_ANIM_SEC);
-        float eased = 1f - (1f - k) * (1f - k);   // easeOut：出来快、末尾收住
-        ApplyMarkerFrame(eased);
-        if (_markerAge >= MARKER_SHOW_SEC) HideMarker();
+        // 只管生命周期：动画本身由 Animator 推进，代码不再算进度 / 改 transform。
+        if (_markerAge >= _markerShowSec) HideMarker();
     }
 
-    static void ApplyMarkerFrame(float k)
+    /// <summary>显示时长跟主人动画 clip 的实际长度走；取不到 clip 时沿用 0.3 秒，不凭空猜时长。</summary>
+    static float ResolveMarkerShowSec()
     {
-        // 旗子与圈共用同一个 k → 旗子落到地点与圈缩到当前大小严格同时完成
-        if (_markerFlagRt != null)
+        if (_markerAnim == null) return MARKER_SHOW_SEC;
+        var ctrl = _markerAnim.runtimeAnimatorController;
+        if (ctrl == null) return MARKER_SHOW_SEC;
+        var clips = ctrl.animationClips;
+        if (clips == null) return MARKER_SHOW_SEC;
+        float firstLen = 0f;
+        for (int i = 0; i < clips.Length; i++)
         {
-            var p = _flagIdlePos;
-            p.y += MARKER_FLAG_DROP * (1f - k);
-            _markerFlagRt.anchoredPosition = p;
+            var clip = clips[i];
+            if (clip == null || clip.length <= 0f) continue;
+            if (string.Equals(clip.name, MARKER_STATE, StringComparison.OrdinalIgnoreCase))
+                return clip.length;               // 优先按 jijie 这条 clip 的长度走
+            if (firstLen <= 0f) firstLen = clip.length;
         }
-        if (_markerRingRt != null)
-        {
-            float s = Mathf.Lerp(MARKER_RING_FROM_MUL, 1f, k);
-            _markerRingRt.localScale = _ringIdleScale * s;
-        }
+        return firstLen > 0f ? firstLen : MARKER_SHOW_SEC;
     }
 
     static void HideMarker()
     {
-        if (_markerRoot != null)
-        {
-            if (_markerFlagRt != null) _markerFlagRt.anchoredPosition = _flagIdlePos;
-            if (_markerRingRt != null) _markerRingRt.localScale = _ringIdleScale;
-            _markerRoot.SetActive(false);
-        }
+        if (_markerRoot != null) _markerRoot.SetActive(false);
         _markerVisible = false;
         _markerHasPoint = false;
         _markerAge = 0f;
