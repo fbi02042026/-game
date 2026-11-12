@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_501
   m_EditorClassIdentifier: 
   id: sea_501
-  monsterName: "潮汐虾兵"
+  monsterName: "赤钳挖掘者"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

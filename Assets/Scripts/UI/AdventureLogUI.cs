@@ -67,6 +67,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     Text _ongoingHeader;
     Transform _listContent;
     GameObject _claim;
+    // 【2026-11-12 主人拍板】主线/支线行内「可领取」按钮不再代码画色块，
+    // 统一克隆成就页手做的 ClaimAch 按钮（同一张图/同一套字），Bind 时挂一份不显示的模板。
+    GameObject _claimButtonTemplate;
     // 领取按钮置灰（2026-10-20 主人要求）：无可领成就时按钮变灰不可点。
     // 缓存「领取」文字原色，禁用时乘灰、恢复时原样还原；红点子节点不在此列（只处理 Text）。
     readonly Dictionary<int, Color> _claimTextBaseColors = new Dictionary<int, Color>();
@@ -247,6 +250,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         {
             if (legacy != null)
                 legacy.gameObject.SetActive(false);
+            // 在挪父 / 挂红点之前先克隆一份当模板，供每行 Progress 下复用同一颗手做按钮
+            _claimButtonTemplate = Instantiate(hand.gameObject, transform, false);
+            _claimButtonTemplate.name = "ClaimButtonTemplate";
+            _claimButtonTemplate.SetActive(false);
             // 挂到 Paper 下，成就页关掉 Paper1 时按钮仍在；布局保持手做 Rect
             if (hand.parent != paper)
                 hand.SetParent(paper, false);
@@ -656,14 +663,15 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             claim.onClick.RemoveAllListeners();
             claim.onClick.AddListener(() =>
             {
-                int n = AdventureLogAchievements.ClaimAll(out string got);
-                if (n > 0)
-                    // 2026-10-31 主人报「只说了领取了4个成就奖励，没说是什么」：改成汇报领到了什么
-                    UIManager.Instance?.ShowToast(string.IsNullOrEmpty(got) ? $"领取 {n} 个成就奖励" : got);
-                else if (AdventureLogMileage.HasUnclaimedLevel())
-                    UIManager.Instance?.ShowToast("成就已领完，日志里程奖励请在世界/成就页查看");
-                else
-                    UIManager.Instance?.ShowToast("暂无可领成就奖励");
+                // 【2026-11-12】领到的东西统一由 ClaimAll 弹「获得奖励」窗，这里只在没领到时给提示
+                int n = AdventureLogAchievements.ClaimAll(out _);
+                if (n <= 0)
+                {
+                    if (AdventureLogMileage.HasUnclaimedLevel())
+                        UIManager.Instance?.ShowToast("成就已领完，日志里程奖励请在世界/成就页查看");
+                    else
+                        UIManager.Instance?.ShowToast("暂无可领成就奖励");
+                }
                 RefreshBody();
                 RedDot.RefreshCommon();
             });
@@ -757,6 +765,17 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         }
 
         _tab = tab;
+        if (tab == LogTab.World)
+        {
+            // 2026-11-12 主人拍板「世界页点开后红点就灭」：记已看并即时刷新灭点。
+            var sd = SaveSystem.Instance?.Data;
+            if (sd != null && !sd.worldTabSeen)
+            {
+                sd.worldTabSeen = true;
+                SaveSystem.Instance.Save();
+            }
+            RedDot.RefreshCommon();
+        }
         for (int i = 0; i < _tabSelectGems.Count; i++)
         {
             if (_tabSelectGems[i] != null)
@@ -838,7 +857,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         chapters.Sort();
 
         int doneCount = 0, totalCount = 0;
-        var doneRows = new List<LogRow>();
+        var doneRows = new List<LogRow>();        // 已领取 → 沉底
+        var claimableRows = new List<LogRow>();   // 已完成未领取 → 置顶
         for (int c = 0; c < chapters.Count; c++)
         {
             int ch = chapters[c];
@@ -858,7 +878,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     : !reachable ? "未开启"
                     : v.need > 1 ? v.progress + "/" + v.need
                     : "进行中";
-                AddRow(claimed ? doneRows : rows, name, status,
+                // 【2026-11-12 主人拍板】三档：已完成未领取置顶、未完成居中、已领取沉底。
+                // 只改归属列表，行内容与状态词不变。
+                AddRow(claimable ? claimableRows : (claimed ? doneRows : rows), name, status,
                     "第" + ch + "章 · " + how,
                     !reachable,
                     v.done ? "已完成：" + how : how,
@@ -866,7 +888,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     claimed: claimed, claimable: claimable);
             }
         }
-        rows.AddRange(doneRows);
+        rows.InsertRange(0, claimableRows);   // 已完成未领取置顶
+        rows.AddRange(doneRows);              // 已领取沉底
 
         title = current != null
             ? (string.IsNullOrEmpty(current.def.title) ? MainQuestDefs.AutoDesc(current.def) : current.def.title)
@@ -887,7 +910,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var currentSide = QuestBarData.CurrentSideIsland();
         int total = SideIslandDefs.Count;
         int clearedCount = 0;
-        var doneRows = new List<LogRow>();
+        var doneRows = new List<LogRow>();        // 已领取 → 沉底
+        var claimableRows = new List<LogRow>();   // 已通关未领取 → 置顶
         for (int id = 1; id <= total; id++)
         {
             var isl = SideIslandDefs.Get(id);
@@ -906,14 +930,16 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 : cleared ? "已通关"
                 : current ? "可挑战"
                 : "未开启";
-            AddRow(claimed ? doneRows : rows, isl.name, status,
+            // 【2026-11-12 同主线页口径】三档：已通关未领取置顶、未通关居中、已领取沉底。
+            AddRow(claimable ? claimableRows : (claimed ? doneRows : rows), isl.name, status,
                 "奖励 金币\u00d7" + isl.goldReward + "＋天赋石\u00d7" + isl.talentReward,
                 !cleared && !current,
                 cleared ? "已通关「" + isl.name + "」" : "通关「" + isl.name + "」",
                 questId: id.ToString(), questMain: false,
                 claimed: claimed, claimable: claimable);
         }
-        rows.AddRange(doneRows);
+        rows.InsertRange(0, claimableRows);   // 已通关未领取置顶
+        rows.AddRange(doneRows);              // 已领取沉底
 
         title = currentSide != null ? currentSide.Value.name : "支线岛";
         // 2026-11-01 主人拍板：副标题一行短话，别写「暂无待打支线」这类绕口文案
@@ -1366,9 +1392,25 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 if (def.chapter > MainQuestSystem.CurrentChapter()) lines.Add("先完成当前章节的任务");
                 lore = string.Join("\n", lines);
             }
+            // 【2026-11-12 主人拍板】任务详情补「前往」：只给当前该做的那一条显示，
+            // 否则 BumpCount 只扫当前章（MainQuestSystem:432），点别章任务会播完对话却不推进。
+            var cur = MainQuestSystem.CurrentView();
+            bool canGo = !done && cur != null && cur.def.id == questId;
+            Action onGo = null;
+            if (canGo)
+            {
+                MainQuestDef goDef = def;
+                onGo = () =>
+                {
+                    CodexInfoPopupUI.HideActive();
+                    if (!QuestJumpRouter.GoMain(goDef))
+                        GlobalToastUI.Show("暂时无法前往，稍后再试");
+                };
+            }
             CodexInfoPopupUI.Show(name, "", detail, lore, null,
                 codexKind: null, topTitleOverride: "主线任务", topIconPath: "",
-                rewards: BuildRewardChips(def.rewardGold, def.rewardStones), taskLayout: true);
+                rewards: BuildRewardChips(def.rewardGold, def.rewardStones), taskLayout: true,
+                goText: canGo ? "前往" : null, onGo: onGo);
         }
         else
         {
@@ -1400,9 +1442,23 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             }
             // 【2026-11-03 主人「详情太短不好看」】支线详情加长：补上所属篇章，再补一句完成方式
             string sideDesc = "通关第" + isl.act + "篇的支线岛「" + isl.name + "」\n进入岛内打通即可完成";
+            // 【2026-11-12】支线「前往」复用任务栏支线行口径（QuestBarBinder.OnClickSide → GoChapter(0)）；
+            // 未通关且已派定为当前支线岛才给按钮，未开启的岛没有槽位可跳。
+            bool canGoSide = !cleared && current;
+            Action onGoSide = null;
+            if (canGoSide)
+            {
+                onGoSide = () =>
+                {
+                    CodexInfoPopupUI.HideActive();
+                    if (!QuestJumpRouter.GoChapter(0))
+                        GlobalToastUI.Show("暂时无法前往，稍后再试");
+                };
+            }
             CodexInfoPopupUI.Show(isl.name, "", sideDesc, lore, null,
                 codexKind: null, topTitleOverride: "支线任务", topIconPath: "",
-                rewards: BuildRewardChips(isl.goldReward, isl.talentReward), taskLayout: true);
+                rewards: BuildRewardChips(isl.goldReward, isl.talentReward), taskLayout: true,
+                goText: canGoSide ? "前往" : null, onGo: onGoSide);
         }
     }
 
@@ -1415,7 +1471,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_activeProg != null) _activeProg.text = progress ?? "";
     }
 
-    static void ApplyRow(Transform row, LogRow data)
+    void ApplyRow(Transform row, LogRow data)
     {
         var header = row.Find("di");
         // 2026-10-31 校对：Paper/bg/OngoingHeader 顶部木牌修好绑定后会正确显示页签名，
@@ -1436,7 +1492,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     /// 红点图走 RedDot.Sprite 唯一出口；压暗用 CanvasGroup（同 AdMercEventUI 口径，不改预制体底图 / 文字色）。
     /// 行是复用的（RebuildRows 行数一致时只刷数据），所以每次都按当前数据重设，切页 / 领取后不残留。
     /// </summary>
-    static void ApplyRowState(Transform row, LogRow data)
+    void ApplyRowState(Transform row, LogRow data)
     {
         // 主线/支线任务行：可领取时右侧「可领取」按钮铺满 Progress 节点，状态字让位；
         // 成就行红点逻辑保持原样，仅处理成就行。
@@ -1447,37 +1503,29 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (showClaim && prog != null)
         {
             var claimBtn = prog.Find("ClaimButton");
-            if (claimBtn == null)
+            if (claimBtn == null && _claimButtonTemplate != null)
             {
-                var go = new GameObject("ClaimButton", typeof(RectTransform), typeof(Image), typeof(Button));
-                go.transform.SetParent(prog, false);
-                var brt = (RectTransform)go.transform;
-                brt.anchorMin = Vector2.zero;
-                brt.anchorMax = Vector2.one;
-                brt.offsetMin = Vector2.zero;
-                brt.offsetMax = Vector2.zero;
+                // 【2026-11-12 主人拍板】复用成就页那颗手做按钮：底图/字体/粗体全来自预制体，
+                // 不再用代码画半透明色块；只把行内状态字换成「可领取」。
+                var go = Instantiate(_claimButtonTemplate, prog, false);
+                go.name = "ClaimButton";
+                go.SetActive(true);
                 var bimg = go.GetComponent<Image>();
-                bimg.color = new Color(1f, 0.84f, 0.3f, 0.5f);
-                bimg.raycastTarget = true;
+                if (bimg != null) { bimg.raycastTarget = true; bimg.preserveAspect = true; }
                 var bbtn = go.GetComponent<Button>();
-                bbtn.transition = Selectable.Transition.None;
-
-                var label = new GameObject("Text", typeof(RectTransform), typeof(Text));
-                label.transform.SetParent(go.transform, false);
-                var lrt = (RectTransform)label.transform;
-                lrt.anchorMin = Vector2.zero;
-                lrt.anchorMax = Vector2.one;
-                lrt.offsetMin = Vector2.zero;
-                lrt.offsetMax = Vector2.zero;
-                var lt = label.GetComponent<Text>();
-                lt.font = GameFonts.GetChinese();
-                lt.text = "可领取";
-                lt.fontSize = 20;
-                lt.alignment = TextAnchor.MiddleCenter;
-                lt.raycastTarget = false;
+                if (bbtn != null) bbtn.transition = Selectable.Transition.None;
+                var lt = go.GetComponentInChildren<Text>(true);
+                if (lt != null) lt.text = "可领取";
                 claimBtn = go.transform;
             }
-            claimBtn.gameObject.SetActive(true);
+            if (claimBtn == null)
+                Debug.LogError("[AdventureLogUI] 缺 Paper1/ClaimAch 按钮模板，主线/支线可领取按钮建不出来");
+            else
+            {
+                // 【2026-11-12 补】行复用 / 按压反馈 Restore 都会改 scale，每次显示都强制刷一遍，同页不再一大一小。
+                ApplyClaimButtonLayout(claimBtn);
+                claimBtn.gameObject.SetActive(true);
+            }
             if (progText != null)
             {
                 progText.enabled = false;
@@ -1521,6 +1569,23 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var cg = row.GetComponent<CanvasGroup>();
         if (cg == null) cg = row.gameObject.AddComponent<CanvasGroup>();
         cg.alpha = data.Claimed ? 0.55f : 1f;
+    }
+
+    /// <summary>
+    /// 【2026-11-12】行内「可领取」按钮统一布局：整体缩小 30%、靠右、垂直居中。
+    /// 新建与复用都走这里；同步按压反馈基准 scale，否则 OnEnable/OnPointerUp 的 Restore 会把 0.7 冲回原值（领取后部分按钮变大）。
+    /// </summary>
+    static void ApplyClaimButtonLayout(Transform btn)
+    {
+        var brt = (RectTransform)btn;
+        brt.anchorMin = Vector2.zero;
+        brt.anchorMax = Vector2.one;
+        brt.pivot = new Vector2(1f, 0.5f);
+        brt.offsetMin = new Vector2(0f, 10f);   // 抵消 Progress 自身 -10 的下沉，按钮落在行的垂直中线上
+        brt.offsetMax = new Vector2(0f, 10f);
+        brt.localScale = Vector3.one * 0.7f;
+        var press = btn.GetComponent<UiButtonPressFeedback>();
+        if (press != null) press.SyncBaseScale(Vector3.one * 0.7f);
     }
 
     Transform FindTransform(string name)

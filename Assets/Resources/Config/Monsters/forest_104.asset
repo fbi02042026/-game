@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_104
   m_EditorClassIdentifier: 
   id: forest_104
-  monsterName: "暮影森主"
+  monsterName: "淤泥怪"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

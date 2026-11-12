@@ -289,13 +289,20 @@ public partial class EndlessRunGame
         }
     }
 
-    /// <summary>跟跳 y：与 T2 UpdateJump 同款 sin 解析式，按 0.10s × 序号延迟复现玩家轨迹。</summary>
+    /// <summary>
+    /// 跟跳 y：从主类 _jumpHistory 环形缓冲取 delay 秒前的玩家 y（与当前物理模型完全一致，无需同步解析式）。
+    /// delay = 0 → 玩家当前 y；delay = 0.10 × 序号 → 全队错开起跳。
+    /// </summary>
     float FollowY(float delay)
     {
-        float t = _jumpT - delay;
-        if (t >= 0f && t <= _jumpAirSec)
-            return _groundTopYPx + _jumpHeightPx * Mathf.Sin(Mathf.PI * t / Mathf.Max(0.0001f, _jumpAirSec));
-        return _groundTopYPx;
+        // 取 delay 秒前的帧索引：从 _jumpHistoryIdx（下一写入位）往回数 delay/dt 帧
+        float dt = Time.deltaTime;
+        if (dt < 0.0001f) return _groundTopYPx;
+        int framesAgo = Mathf.RoundToInt(delay / dt);
+        if (framesAgo < 0) framesAgo = 0;
+        if (framesAgo >= JUMP_HISTORY_LEN) framesAgo = JUMP_HISTORY_LEN - 1;
+        int idx = (_jumpHistoryIdx - 1 - framesAgo + JUMP_HISTORY_LEN) % JUMP_HISTORY_LEN;
+        return _jumpHistory[idx];
     }
 
     // ============================================================

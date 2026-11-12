@@ -506,6 +506,8 @@ public class MercenaryManager : Singleton<MercenaryManager>
             mercs[i].gameObject.SetActive(true);
             mercs[i].ResetForReuse();
             mercs[i].Face(1);
+            // 【2026-11-12 主人拍板】每关重新算：佣兵开场 5 秒 CD 不沿用上一关剩余值（第二关起同样先走 5 秒）。
+            if (mercs[i].SkillCaster != null) mercs[i].SkillCaster.ResetOpeningCooldown();
         }
     }
 

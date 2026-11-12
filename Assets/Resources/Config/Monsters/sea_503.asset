@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_503
   m_EditorClassIdentifier: 
   id: sea_503
-  monsterName: "遗迹海卫"
+  monsterName: "硬壳护卫蟹"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

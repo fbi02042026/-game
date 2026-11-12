@@ -96,6 +96,12 @@ public static partial class GameConfig
     /// </summary>
     public const int FORMAL_STAGE_ROUND_COUNT = 3;
     /// <summary>
+    /// 【2026-11-12 主人拍板】一关波数上限（含 Boss 波）：第 1-2 章前期最多 2 波、第 3 章起后期最多 3 波。
+    /// 唯一消费方 WavePlanner（正式关回合表 / 非 formal 波数钳制 / Boss 关小怪波 / 资源副本）。
+    /// 副本与无限裂隙同按 CurrentChapter 判前后期。
+    /// </summary>
+    public static int StageWaveCap(int chapter) => chapter <= 2 ? 2 : 3;
+    /// <summary>
     /// 【2026-11-05 主人拍板】主线正式关每关削减的波数（从最后一回合扣，每回合保底 1 波）。
     /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts；引导局 / 活动副本 / 无限裂隙不走定表，不受影响。
     /// 2 = ch1 6→4、ch2 9→6（Boss 关 7 波）、ch3+ 9→7（Ch3+ 双段爆发补 1 波 → 8，净减 3 波）。

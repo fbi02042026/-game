@@ -789,7 +789,7 @@ public partial class Monster
     string SkillNotifyName()
     {
         // 【2026-11-09 主人拍板】金币/徽记本按槽位显专属名（宝箱怪/金宝箱/宝箱王等），
-        // 修「金币副本宝箱怪放技能显示走路菇」（原逻辑直读章节模板 config.monsterName）。
+        // 修「金币副本宝箱怪放技能显示森野蘑菇」（原逻辑直读章节模板 config.monsterName）。
         string dungeonName = HudDisplayName();
         if (!string.IsNullOrEmpty(dungeonName)) return dungeonName;
         if (config != null)
@@ -812,6 +812,13 @@ public partial class Monster
         {
             string dn = ActivityDungeonDefs.DisplayName(bm.IsGoldDungeon, bm.IsBadgeDungeon, _isBossUnit, _eliteWave);
             if (!string.IsNullOrEmpty(dn)) return dn;
+            // 【2026-11-12 主人拍板「都用正式名」】引导局精英贴图固定 Forest-07，模板却是随机抽的普通怪，
+            // 血条/技能通知会显示成小怪名。这里按贴图编号回查表的正式名，不硬编码、不换数值与攻击风格。
+            if (bm.IsTutorialRun && _eliteWave)
+            {
+                var rival = MonsterStatsTable.Get(1, GameConfig.TUTORIAL_ELITE_SPRITE_ID);
+                if (rival != null && !string.IsNullOrEmpty(rival.monsterName)) return rival.monsterName;
+            }
         }
         return config != null && !string.IsNullOrEmpty(config.monsterName) ? config.monsterName : null;
     }

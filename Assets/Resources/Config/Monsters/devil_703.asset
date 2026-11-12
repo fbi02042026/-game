@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: devil_703
   m_EditorClassIdentifier: 
   id: devil_703
-  monsterName: "赤焰卫士"
+  monsterName: "异种拘束者"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

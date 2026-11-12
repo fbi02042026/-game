@@ -26,6 +26,7 @@ public class MercPassiveRunner : MonoBehaviour
     float _shieldAmount;                       // 团队护盾层（来自 SK008/holy_barrier 等）
     float _shieldTimer;
     float _shieldMax;                          // 护盾上限（2026-09-26 主人拍板补上，勿丢）
+    float _shieldAbsorb = 1f;
     readonly Dictionary<UnitBase, float> _fearTimers = new Dictionary<UnitBase, float>(); // SK018 恐惧减益
 
     /// <summary>本佣兵单元（供模块访问 _merc）。</summary>
@@ -49,6 +50,7 @@ public class MercPassiveRunner : MonoBehaviour
         _shieldAmount = 0f;
         _shieldMax = 0f;
         _shieldTimer = 0f;
+        _shieldAbsorb = 1f;
         _fearTimers.Clear();
     }
 
@@ -86,10 +88,11 @@ public class MercPassiveRunner : MonoBehaviour
         // 【2026-10-23 主人拍板】团队护盾层是主动技（SK008）落到本佣兵上的效果，
         // 不吃 _passiveId 判空 —— 无被动的佣兵（如 H003 塔克）也要能被自己的护盾吸伤。
         if (_module != null) _module.ModifyIncomingDamage(ref dmg); // SK006 格挡 / SK009 铁意
-        // 共享：团队护盾层 1:1 抵扣，必须在被动减伤之后（顺序与旧版一致）
+        // 共享：团队护盾层按 _shieldAbsorb 比例抵扣（玩家技 75% / 塔克 SK008 100%），必须在被动减伤之后（顺序与旧版一致）
         if (_shieldAmount > 0f && _shieldTimer > 0f)
         {
-            float absorbed = Mathf.Min(_shieldAmount, dmg);
+            float want = dmg * Mathf.Clamp01(_shieldAbsorb);
+            float absorbed = Mathf.Min(_shieldAmount, want);
             _shieldAmount -= absorbed;
             dmg -= absorbed;
         }
@@ -107,12 +110,13 @@ public class MercPassiveRunner : MonoBehaviour
     }
 
     // === 共享：团队护盾层（来自主动技 SK008 / holy_barrier，数值由 MercSkillExecutor.TeamShieldParams 传入）===
-    public void ApplyTeamShieldFromActive(float ratio, float duration)
+    public void ApplyTeamShieldFromActive(float ratio, float duration, float absorbRatio)
     {
         if (_merc == null || _merc.attr == null) return;
         _shieldAmount = _merc.attr.GetAttr(AttrType.MaxHp) * ratio;
         _shieldMax = _shieldAmount;
         _shieldTimer = duration;
+        _shieldAbsorb = Mathf.Clamp01(absorbRatio);
     }
 
     /// <summary>佣兵护盾当前值（到期读成 0）。只给盾条读，不改战斗数值。</summary>

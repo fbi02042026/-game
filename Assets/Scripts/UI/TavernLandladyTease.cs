@@ -256,6 +256,11 @@ public class TavernLandladyTease : MonoBehaviour,
         if (_suppressClick) { _suppressClick = false; return; }   // 长按触发后吞掉松手的 click
         if (_kicking) return;
         if (IsBanned) { ShowBannedToast(); return; }
+        // 【2026-11-12 主人拍板「点立绘优先走任务」】主线正好轮到「找 NPC 聊聊」时，
+        // 点立绘直接播任务对话并记完成；这一下不进彩蛋计数、不摸头、不涨怒气、不触发踢出，
+        // 播完任务推进后自动恢复原彩蛋。放在冷却/摸头判定之前，保证任务点击不被 5 秒锁吞掉。
+        var talkQuest = MainQuestSystem.PendingTalkQuest();
+        if (talkQuest.HasValue && QuestJumpRouter.PlayTalkQuest(talkQuest.Value)) return;
         // 【2026-10-22 主人拍板】点击冷却：点太快触发 5 秒锁定，期间点击全不算
         // （怒气/台词/摸头好感都不结算）；锁完从正常节奏继续
         if (Time.unscaledTime < _burstUntil) return;

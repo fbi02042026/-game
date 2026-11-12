@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_401
   m_EditorClassIdentifier: 
   id: field_401
-  monsterName: "原野匪徒"
+  monsterName: "长老史莱姆"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

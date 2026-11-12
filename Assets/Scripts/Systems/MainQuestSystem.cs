@@ -312,6 +312,19 @@ public static class MainQuestSystem
         return null;
     }
 
+    /// <summary>
+    /// 【2026-11-12 主人拍板】当前该做的、且是「找 NPC 聊聊」的任务；没有返回 null。
+    /// 给酒馆点 NPC 立绘这类「不经过任务栏前往」的入口用，供它们复用同一段任务对话。
+    /// 只认当前这一条：主线是线性链，后面章节/后面顺位的对话任务不该被提前点掉。
+    /// </summary>
+    public static MainQuestDef? PendingTalkQuest()
+    {
+        var cur = CurrentView();
+        if (cur == null || cur.done) return null;
+        if (cur.def.type != MainQuestType.TalkNpc) return null;
+        return cur.def;
+    }
+
     public static bool IsDone(MainQuestDef def)
     {
         EnsureMigrated();
@@ -451,7 +464,7 @@ public static class MainQuestSystem
         if (IsDoneId(def.id)) return;
 
         MarkDone(def.id);
-        QuestDoneToast.Show(def.title);
+        QuestDoneToast.Show();
 
         Debug.Log("[MainQuest] done: " + def.id);
         // 埋点在领取时上报，完成时不再上报

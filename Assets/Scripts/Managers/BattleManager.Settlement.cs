@@ -1246,8 +1246,10 @@ public partial class BattleManager
             //   引导局 / 跳层补偿自动抽 / 定向抽沿用既有排除口径，不参与。
         }
 
-        // 退出循环 = 要开战了：收起 BackpackPanel、隐藏抽奖按钮与「继续」，引导提示也关掉
-        BattleEntryDraftPanel.Hide();
+        // 退出循环 = 要开战了。【2026-11-12 主人拍板「全部常显」】不再 Hide 收掉抽奖面板，
+        // 改为就地切 LiveMode 常显：抽奖按钮战斗中继续可点（走 TryLiveDraw，免费额度同源）；
+        // onFight 传 null = 已开打，BeginLive 会自动藏掉「继续/开始战斗」按钮。引导局不走本协程。
+        BattleEntryDraftPanel.EnterLiveStart(null);
         TutorialHintUI.Instance?.Hide();
     }
 
@@ -1310,9 +1312,11 @@ public partial class BattleManager
     public bool TryLiveDraw(DraftCategory? picked)
     {
         // —— 守卫（每个都报原因，不静默，铁律 12）——
-        if (IsTutorialRun || IsEndlessRift || IsBondDungeon)
+        // 【2026-11-12 主人拍板「全部常显」】裂隙也进 LiveMode 常显，从守卫里放开；
+        // 引导局 / 羁绊副本仍全程无抽奖，照旧拦截。
+        if (IsTutorialRun || IsBondDungeon)
         {
-            Debug.LogError($"[BattleManager] 实时抽在引导局/裂隙/羁绊副本不应出现（按钮应隐藏），已拦截 picked={picked}");
+            Debug.LogError($"[BattleManager] 实时抽在引导局/羁绊副本不应出现（按钮应隐藏），已拦截 picked={picked}");
             return false;
         }
         if (_runClosed || _stageCleared || _rewardSequenceStarted)
@@ -1452,9 +1456,10 @@ public partial class BattleManager
     void DoStartFight()
     {
         _preBattleStoryPlaying = false;
-        // 【2026-11-10 主人拍板「只有抽奖面板收回，整个面板下移」】竞技场开战后收面板，
-        // 正式关 / 金币本 / 资源副本保持常显实时抽（10-29 口径不变）。
-        if (IsArena) BattleEntryDraftPanel.CollapseLive();
+        // 【2026-11-12 主人拍板「关卡不管难度都是一样的·全部常显」】所有玩法开打后抽奖面板一律不收：
+        // 原 11-10 竞技场专属「面板整体下移回收起态」下线（CollapseLive 方法保留不删，便于回退）；
+        // 主线三档难度 / 竞技场 / 支线岛 / 终章走 LiveMode 常显，四本资源副本与裂隙由 CoStageEntryDraft 收尾切常显。
+        // if (IsArena) BattleEntryDraftPanel.CollapseLive();
         ScheduleFirstWaveSpawn();
         // 【2026-10-29 实时抽改版】与旧流程同序（先刷首波再出发，见 BattleStartSequenceCoroutine 分流注释）
         if (_liveStartAdvancePending)
@@ -2458,7 +2463,39 @@ public partial class BattleManager
             BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this), true, SettleArenaVictoryCells());
         }
         else if (Mode.UsesBattleResultScreen)
-            BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this));
+        {
+            // 【2026-11-12 主人拍板「战斗结果界面加下一关」】主线 Normal 同章有下一关 → 并排【下一关】钮：
+            // · 守卫 TrySpendStaminaForNextStage：点下一关先扣体力（一关一扣，与冒险页进本同价同扣点）；
+            //   不足弹 StaminaConfirmPopup（购买走顶条同链 ResourceAdRewards.TryClaimStamina，阶梯
+            //   「每日 2 免费 → 2 广告 → 50 钻 → 100 钻 → 封顶」已含广告档 —— 主人拍板「以后接了广告
+            //   先看广告」天然满足）；拦下时结果界面不销毁，买完再点。
+            // · 放行后 ContinueToNextStageInPlace：不回城，黑底字幕过场直进下一关（全新一局、职业继承）。
+            // · 章末（整篇打完）/ 其它模式不传 → 只有【确定】= 原回城链零改动；失败路径不受影响（只有返回）。
+            // · onRewardsShown：主人拍板「奖励展示完再弹」升级窗（LevelUpPopup.FlushPending，996 盖 985）。
+            // 【2026-11-12 主人报「怎么一上来还有上局的佣兵」→ 拍板「通关即清」】通关瞬间作废本局可续档
+            // （10-24「打完就清」的补完）：清账原在回城链/直进链（点按钮才跑），玩家停在结果界面直接退出
+            //（停 Play/杀进程）构筑档就留盘 → 下次启动 AutoGameInitializer 自动开战（不经过冒险页，
+            // 「继续上一局/重新开始」询问弹窗没机会弹）→ StartNewRunInternal parked 判定同章同难度
+            // 静默续局 → 上局佣兵/构筑带进新局（Editor.log [RunLoadout] 继续上一局 chapter=1 mercs=1 实锤）。
+            // 通关 = 局结束，快照不该活过通关时刻。只清主线 Normal（本分支即主线专属；支线岛/活动副本
+            // 进本 Pending* 标志天然作废 parked 局）；中断恢复机制（10-22/11-11 拍板）只服务「没打完
+            // 中途退出」——没通关不走这里，不受影响。NoteStageProgress（StageClearRewardDirector:1002）
+            // 有 IsActive 守卫 → 清档后自动 no-op 不重新落盘；EndRunAndReturnToTown /
+            // ContinueToNextStageInPlace 的 Clear 幂等，零冲突。中断快照一并清（金币已 Persist 入账，
+            // 留快照会被崩溃恢复重复入账，同 ContinueToNextStageInPlace ① 段口径）。
+            RunLoadout.Clear();
+            BattleStateSaver.Instance?.ClearBattleState();
+            bool canNext = Mode.Id == BattleModeId.Normal && HasChapterNextStageForSettlement();
+            if (canNext)
+                BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this),
+                    true, null, false,
+                    ContinueToNextStageInPlace,
+                    TrySpendStaminaForNextStage,
+                    () => LevelUpPopup.FlushPending());
+            else
+                BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this),
+                    true, null, false, null, null, () => LevelUpPopup.FlushPending());
+        }
         else
             Mode.SettleStageClear(this);
     }
@@ -2894,6 +2931,198 @@ public partial class BattleManager
         }
         RunLoadout.Clear();
         RunSkillBarUI.Refresh();
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板「战斗结果界面加下一关」】本关通关后同章还有没有下一关可直进：
+    /// · 章末（整篇打完）→ false（主人拍板「章末打完回城」，判定口径 = <see cref="SettleNormalStageClear"/>
+    ///   的 chapterDone：困难/噩梦判该难度自己的真通关，与 2515-2518 同款）；
+    /// · ChapterManager 候选空 → false（不兜底，按钮不显示）。
+    /// </summary>
+    bool HasChapterNextStageForSettlement()
+    {
+        var data = SaveSystem.Instance?.Data;
+        bool chapterDone = data != null
+            && (BattleDifficulty > 0
+                ? data.HasTrulyClearedChapterAtDiff(CurrentChapter, BattleDifficulty)
+                : data.HasTrulyClearedChapter(CurrentChapter));
+        if (chapterDone) return false;
+        var cm = ChapterManager.Instance;
+        return cm != null && cm.availableNextStages != null && cm.availableNextStages.Count > 0;
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板「体力一关一关扣；不足提示是否钻石购买，以后接了广告先看广告」】
+    /// 【下一关】点击守卫（BattleResultScreen 在本界面存活期调用）：体力够 → TrySpendForAdventure 扣
+    /// （与冒险页进本同价同扣点 = StaminaSystem.ADVENTURE_COST）返回 true；不足 → 弹 StaminaConfirmPopup
+    /// （口径照 AdventureUI.Interaction.ShowStaminaLackPopup：当前体力/持有钻石/档位现算，确认键 =
+    /// ResourceAdRewards.TryClaimStamina 顶条同链 —— 阶梯「每日 2 免费 → 2 广告 → 50 钻 → 100 钻 → 封顶」
+    /// 已含广告档，接广告后自然先看广告）返回 false 拦下（结果界面不销毁，领取成功后玩家再点一次下一关）。
+    /// </summary>
+    bool TrySpendStaminaForNextStage()
+    {
+        if (StaminaSystem.TrySpendForAdventure()) return true;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            GlobalToastUI.Show("体力不足");
+            return false;
+        }
+        ResourceAdRewards.EnsureDay(data);
+        var kind = ResourceAdRewards.ResolveClaimKind(
+            data.adStaminaClaimCount, ResourceAdRewards.StaminaFreePerDay, out int price);
+        string tier;
+        if (kind == ResourceAdRewards.ClaimKind.Free)
+            tier = "本次免费领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else if (kind == ResourceAdRewards.ClaimKind.Ad)
+            tier = AdKillSwitch.AdsOff
+                ? "广告维护中，请稍后再试"
+                : "看广告领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else if (kind == ResourceAdRewards.ClaimKind.Diamond)
+            tier = "花 " + price + " 钻领 " + ResourceAdRewards.StaminaPerAd + " 体力";
+        else
+            tier = "今日补给已达上限（可等体力自然回复）";
+
+        string body = "进本需 " + StaminaSystem.ADVENTURE_COST + " 体力，当前 " + StaminaSystem.Current
+                    + "/" + StaminaSystem.Max
+                    + "\n持有钻石 " + ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond)
+                    + "\n体力补给：" + tier;
+        StaminaConfirmPopup.Show("体力不足", body, "购买体力", () => ResourceAdRewards.TryClaimStamina());
+        return false;
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板「点了下一关后直接从黑底字幕开始 不用回城再进」】战斗结果界面【下一关】出口：
+    /// 战斗场景内完成「整局清账 → 全新一局重置（职业继承）→ 黑底字幕过场 → LoadStage 下一关」，
+    /// 全程不回城不切场景。
+    ///
+    /// · 清账段 = <see cref="EndRunAndReturnToTown"/> 前半段（装备/佣兵/构筑/中断快照全清，不调 ReturnToTown）；
+    /// · 金币池 resetPool:true = 局末清账口径（本关通关时 PersistBattleGold(resetPool:false) 只结转不清，
+    ///   这里补一刀防抽奖币池跨关结转刷钱，见 PersistBattleGold 注释）；
+    /// · 重置段照抄 <see cref="StartNewRunInternal"/>（BattleManager.cs 92-153 / 176-191）可重入片段 ——
+    ///   不整条调它：那条路会 BuildChapter 重建章图 + FirstUnclearedStageIndex0 重定位 + 读 AdventureUI
+    ///   Pending 标志，正是 2026-10-24 停用 GoChapterGate 的反面坑；⚠ 改 StartNewRunInternal 的重置清单
+    ///   时必须同步本方法（注释锚定）；
+    /// · 职业继承 = 存档 selectedPlayerJobId（PlayerJobDefs.ApplyForBattle / RunLoadout.BeginNew(GetSelected)），
+    ///   清账链不碰它 —— 「重新打不继承上一关数据，但选的职业继承」天然成立；
+    /// · 体力已在守卫 TrySpendStaminaForNextStage 扣过（点击瞬间），这里不再扣；
+    /// · 守卫失败（非主线/无候选）一律 LogError + 走回城收尾，不静默不兜底（AGENTS §4）。
+    /// </summary>
+    public void ContinueToNextStageInPlace()
+    {
+        if (Mode == null || Mode.Id != BattleModeId.Normal)
+        {
+            Debug.LogError("[BattleManager] 下一关直进：非主线模式误入（只服务主线 Normal），回城收尾");
+            EndRunAndReturnToTown();
+            return;
+        }
+        var cm = ChapterManager.Instance;
+        StageData next = cm != null && cm.availableNextStages != null && cm.availableNextStages.Count > 0
+            ? cm.availableNextStages[0]
+            : null;
+        if (next == null)
+        {
+            Debug.LogError("[BattleManager] 下一关直进：无下一关候选（章末不应显示按钮），回城收尾");
+            TownHubController.PendingOpenAdventure = true;
+            AdventureUI.PendingOpenAdventureDifficulty = BattleDifficulty;
+            EndRunAndReturnToTown();
+            return;
+        }
+
+        // ── ① 局末清账（EndRunAndReturnToTown 前半段，不回城）──
+        _runClosed = true;
+        BattleBagSystem.Instance?.ClearRunEquipment();
+        MercenaryManager.Instance?.ClearAllMercs();
+        MercHireSession.ClearHired();
+        EndRunLoadout();
+        // 中断快照一并清（同 EndRunAndReturnToTown 2915-2917：金币已 Persist 落盘一次，快照不清
+        // 会被崩溃恢复重复入账）
+        BattleStateSaver.Instance?.ClearBattleState();
+
+        // ── ② 局末金币清账：写回本局获得 + 抽奖币池重置回基线（resetPool:true，防跨关结转刷钱）──
+        PersistBattleGold(resetPool: true);
+
+        // ── ③ 新一局重置（照抄 StartNewRunInternal 92-153：去掉 Mode 重建 / parked 判定 / BuildChapter）──
+        StopBattleSpawnCoroutines();
+        StageModeTable.ResetRun();
+        Planner?.ResetPressure();
+        currentGold = 0;
+        _goldAtRunStart = 0;
+        _runStageGoldPending = 0;
+        _runStagesCleared = 0;
+        _earnedPaidGold = 0;
+        var runData = SaveSystem.Instance?.Data;
+        _enchantAtRunStart = runData != null ? runData.enchantStones : 0;
+        _matsAtRunStart = runData != null ? runData.decomposeMats : 0;
+        _stageQuestGoldGranted = false;
+        _defeatedMonsterKills = 0;
+        RunStats.Reset();
+        BattleSideHud.Instance?.ResetKillTotal();
+        RunStats.Chapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+        {
+            var save = SaveSystem.Instance?.Data;
+            string pn = save != null && !string.IsNullOrEmpty(save.playerDisplayName)
+                ? save.playerDisplayName : "冒险者";
+            RunStats.EnsureAlly(BattleRunStats.PlayerMvpKey, pn);
+        }
+        tempBuffs.Clear();
+        _stageCleared = false;
+        _portalActive = false;
+        _rewardSequenceStarted = false;
+        ResetPortalGateState();
+        UnitsCanAct = false;
+        AllowMonsterMapEnter = false;
+        isAutoBattle = false;
+        MonsterAttackStyleTable.Reload();
+        ResetPlayerSkillGcd();
+        PrimePlayerSkillOpeningCooldowns();
+        Hero.Instance?.attr?.ClearTimedBuffs();
+        ResetMpForNewStage();
+        MercenaryManager.Instance?.ClearAllMercs();
+        allyUnits.RemoveAll(u => u == null || u is Mercenary);
+        HidePortal();
+        EnsureRewardDirector();
+        StageClearRewardDirector.Instance?.CacheSceneRefs();
+        StageClearRewardDirector.Instance?.HideClearProps();
+        EnsurePortalAnimatorReady(endPoint);
+        if (hero == null)
+            hero = Hero.Instance != null ? Hero.Instance : FindObjectOfType<Hero>();
+        if (hero == null)
+        {
+            Debug.LogError("[BattleManager] 下一关直进失败：找不到 Hero，回城收尾");
+            EndRunAndReturnToTown();
+            return;
+        }
+        if (!allyUnits.Contains(hero))
+            allyUnits.Add(hero);
+        try
+        {
+            hero.InitNewRun();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[BattleManager] 下一关直进 hero.InitNewRun 异常（继续开战）: {e}");
+        }
+
+        // ── ④ 职业武器（存档职业=继承）+ 倍率归位 + 全新构筑/启动金（EndRunLoadout 已清 → BeginNew）──
+        if (BattleBagSystem.Instance != null)
+        {
+            PlayerJobDefs.ApplyForBattle();
+            if (!Rules.SkipStarterWeaponFallback
+                && BattleBagSystem.Instance.GetEquippedInLogicalSlot(EquipSlotType.MainHand) == null)
+            {
+                if (BattleBagSystem.Instance.EnsureStarterWeapon())
+                    hero.RecalcAttr();
+            }
+        }
+        runGoldGainMul = 1f;
+        runMonsterAtkSpeedMul = 1f;
+        runAllyDamageTakenMul = 1f;
+        ApplyChapter1RunModifiersFromSave();
+        RunDraftDirector.Ensure(this).OnRunStart();
+
+        // ── ⑤ 黑底字幕过场（复用 CoChapterGateLoading）→ SelectStage 内部调 LoadStage 直进下一关 ──
+        StartCoroutine(CoChapterGateLoading(cm.currentChapter, () => cm.SelectStage(next)));
     }
 
     /// <summary>

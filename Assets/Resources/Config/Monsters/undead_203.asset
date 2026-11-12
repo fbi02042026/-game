@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_203
   m_EditorClassIdentifier: 
   id: undead_203
-  monsterName: "怨灵祭司"
+  monsterName: "骷髅巨人"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

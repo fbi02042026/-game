@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_803
   m_EditorClassIdentifier: 
   id: ice_803
-  monsterName: "永霜卫兵"
+  monsterName: "凛冬雪精"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

@@ -34,7 +34,8 @@ public partial class Monster
     public void RefreshAffixHeadLabel()
     {
         var affix = MonsterAffix.Get(this);
-        bool show = affix != null && affix.VisualTinted && affix.Count > 0;
+        // 2026-11-12 主人拍板：头顶词条字只在该怪还有没看过的词条种类时显示；玩家看过弹窗后全场不再带字。
+        bool show = affix != null && affix.VisualTinted && affix.Count > 0 && affix.HasUnseenAffixKind();
         if (!show)
         {
             HideAffixHeadLabel();

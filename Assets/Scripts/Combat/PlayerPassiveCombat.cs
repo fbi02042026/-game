@@ -4,12 +4,13 @@ using UnityEngine;
 /// 玩家职业常驻被动战斗逻辑——【调度器】。
 /// 2026-09-26 主人拍板：按 PS0xx 拆到 Assets/Scripts/Combat/Passives/* 各模块类
 /// （PS001_Aura / PS004_Stun / PS005_Berserk / PS008_Ranger / PS009_Mage / PS012_Priest），
-/// 本类只做分发 + 持有「团队护盾层」（来自佣兵主动技 SK008/holy_barrier，与玩家被动无关，留在调度器）。
+/// 本类只做分发 + 持有两层抵扣盾：玩家自身盾（holy_barrier，仅自己/抵 75%）与团队盾（佣兵 SK008，全队/100%），互不覆盖。
 ///
 /// ⚠️ 对外 public 成员签名与行为不变（防连带 bug 关键）：
 /// Instance / EnsureOn / BindForBattle / OnHeroCritHit / GetAllyIncomingDamageMul /
-/// ApplyTeamShieldFromActive / TeamShieldAmount / TeamShieldMax / AbsorbTeamShield / GetAttackSpeedMul。
-/// 外部调用方（UnitBase.cs / BattleUI.CharacterBar.cs / PlayerJobDefs.cs / SkillCastService.cs）无需改动。
+/// ApplyTeamShieldFromActive / TeamShieldAmount / TeamShieldMax / AbsorbTeamShield / GetAttackSpeedMul /
+/// ApplySelfShieldFromSkill / SelfShieldAmount / SelfShieldMax / AbsorbSelfShield。
+/// 外部调用方（UnitBase.cs / BattleUI.CharacterBar.cs / PlayerJobDefs.cs / SkillCastService.cs）按各盾层入口调用。
 /// </summary>
 public class PlayerPassiveCombat : MonoBehaviour
 {
@@ -22,7 +23,14 @@ public class PlayerPassiveCombat : MonoBehaviour
     // 团队护盾层（佣兵主动技给玩家那一层；数值来自 merc_skills 表，不在此写死）
     float _teamShieldAmount;
     float _teamShieldUntil;
+    float _teamShieldAbsorb = 1f;
     float _teamShieldMax; // 护盾上限（2026-09-26 主人拍板补上，勿丢）
+    // 【2026-11-12 主人拍板】玩家圣盾壁垒自身盾层：只给自己、每次受伤抵扣 75%，
+    // 与上面团队盾层完全独立（塔克 SK008 后放不会顶掉玩家这层，反之亦然）。
+    float _selfShieldAmount;
+    float _selfShieldUntil;
+    float _selfShieldAbsorb;
+    float _selfShieldMax;
 
     void Awake()
     {
@@ -60,6 +68,11 @@ public class PlayerPassiveCombat : MonoBehaviour
         _teamShieldAmount = 0f;
         _teamShieldMax = 0f;
         _teamShieldUntil = 0f;
+        _teamShieldAbsorb = 1f;
+        _selfShieldAmount = 0f;
+        _selfShieldMax = 0f;
+        _selfShieldUntil = 0f;
+        _selfShieldAbsorb = 0f;
     }
 
     void Update()
@@ -88,7 +101,7 @@ public class PlayerPassiveCombat : MonoBehaviour
     /// 团队护盾（佣兵主动技）落到玩家身上：按比例吸收、到期作废，后放的覆盖先放的（不叠加）。
     /// ratio/duration 由 MercSkillExecutor.TeamShieldParams 从 merc_skills 表解析，此处不发明数值。
     /// </summary>
-    public void ApplyTeamShieldFromActive(float ratio, float duration)
+    public void ApplyTeamShieldFromActive(float ratio, float duration, float absorbRatio)
     {
         var hero = Hero.Instance;
         if (hero == null || hero.attr == null || duration <= 0f) return;
@@ -97,6 +110,44 @@ public class PlayerPassiveCombat : MonoBehaviour
         _teamShieldAmount = amount;
         _teamShieldMax = amount;
         _teamShieldUntil = Time.time + duration;
+        _teamShieldAbsorb = Mathf.Clamp01(absorbRatio);
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板】玩家技能「圣盾壁垒」专属盾层：只给玩家自己，不给任何佣兵。
+    /// 与 ApplyTeamShieldFromActive（佣兵 SK008 全队盾）分开存放，避免后放的覆盖先放的。
+    /// </summary>
+    public void ApplySelfShieldFromSkill(float ratio, float duration, float absorbRatio)
+    {
+        var hero = Hero.Instance;
+        if (hero == null || hero.attr == null || duration <= 0f) return;
+        float amount = hero.attr.GetAttr(AttrType.MaxHp) * Mathf.Max(0f, ratio);
+        if (amount <= 0f) return;
+        _selfShieldAmount = amount;
+        _selfShieldMax = amount;
+        _selfShieldUntil = Time.time + duration;
+        _selfShieldAbsorb = Mathf.Clamp01(absorbRatio);
+    }
+
+    /// <summary>玩家自身盾当前值（过期一律读成 0）。只给盾条读，不改战斗数值。</summary>
+    public float SelfShieldAmount
+        => (_selfShieldAmount > 0f && Time.time < _selfShieldUntil) ? _selfShieldAmount : 0f;
+
+    /// <summary>玩家自身盾上限。没盾时 0，盾条据此隐藏。</summary>
+    public float SelfShieldMax => SelfShieldAmount > 0f ? Mathf.Max(1f, _selfShieldMax) : 0f;
+
+    /// <summary>用玩家自身盾吸收伤害，返回吸收后的剩余伤害（盾耗尽/过期则原样返回）。</summary>
+    public float AbsorbSelfShield(float damage)
+    {
+        if (_selfShieldAmount <= 0f || Time.time >= _selfShieldUntil)
+        {
+            _selfShieldAmount = 0f;
+            return damage;
+        }
+        float want = damage * Mathf.Clamp01(_selfShieldAbsorb);
+        float absorbed = Mathf.Min(_selfShieldAmount, want);
+        _selfShieldAmount -= absorbed;
+        return damage - absorbed;
     }
 
     /// <summary>玩家身上团队护盾的当前值（过期一律读成 0）。只给盾条读，不改战斗数值。</summary>
@@ -114,7 +165,8 @@ public class PlayerPassiveCombat : MonoBehaviour
             _teamShieldAmount = 0f;
             return damage;
         }
-        float absorbed = Mathf.Min(_teamShieldAmount, damage);
+        float want = damage * Mathf.Clamp01(_teamShieldAbsorb);
+        float absorbed = Mathf.Min(_teamShieldAmount, want);
         _teamShieldAmount -= absorbed;
         return damage - absorbed;
     }

@@ -3,8 +3,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 「XXX任务已完成」左侧滑入横幅（2026-11-04 主人需求：任务完成提示仿新邮件模式，
-/// 从屏幕左外滑入到左侧停靠位，停留后向左滑出）。多个任务连续完成时排队逐条播，
+/// 「任务完成」左侧滑入横幅（2026-11-04 主人需求：任务完成提示仿新邮件模式，
+/// 从屏幕左外滑入到左侧停靠位，停留后向左滑出）。【2026-11-12 主人拍板】横幅只写
+/// 「任务完成」，不展示具体任务名。多个任务连续完成时排队逐条播，
 /// 同时最多显示一条。纯代码插值（无 DOTween），用 Time.unscaledDeltaTime，不受暂停/时间缩放影响。
 ///
 /// ⚠ Canvas 初始化刻意不走 UICanvasSetup.ApplyPopup（原因同 NewMailToast.cs 类注释：
@@ -44,12 +45,12 @@ public class QuestDoneToast : MonoBehaviour
     float _xOff;     // 屏外左侧（pivot 左缘对齐：-自身放大后宽 = 完全出屏左）
     float _yFinal;
 
-    /// <summary>弹一条「<paramref name="questTitle"/>任务已完成」；正在显示时排队（上限 4，超出丢弃）。</summary>
-    public static void Show(string questTitle)
+    /// <summary>弹一条「任务完成」；正在显示时排队（上限 4，超出丢弃）。
+    /// 【2026-11-12 主人拍板】不写具体任务名，所有任务共用同一句。</summary>
+    public static void Show()
     {
-        if (string.IsNullOrEmpty(questTitle)) return;
         if (Queue.Count >= MaxQueue) return;   // 刷屏保护：直接丢弃
-        Queue.Enqueue(questTitle + "任务已完成");
+        Queue.Enqueue("任务完成");
         if (_inst == null) EnsureInstance();
         if (_inst == null) return;             // 相机未就绪等场景下静默跳过，不崩（队列留待下次）
         if (_inst._phase == Phase.Done) _inst.PlayNext();

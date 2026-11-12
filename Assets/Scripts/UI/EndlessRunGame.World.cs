@@ -64,8 +64,8 @@ public partial class EndlessRunGame : MonoBehaviour
     };
 
     const string SP_MONSTER_ROOT = "Config/MonsterSpriteRegistry/1 Forest/";
-    // 普通 3 种：forest_101 走路菇 / forest_105 硬壳甲虫 / forest_103 树精守卫；
-    // 精英固定 forest_104 暮影森主，单独成波（不许用蘑菇当精英）。
+    // 普通 3 种：forest_101 森野蘑菇 / forest_105 树根怪 / forest_103 硬壳甲虫；
+    // 精英固定 forest_104 淤泥怪，单独成波（不许用蘑菇当精英）。
     static readonly string[] NORMAL_MONSTER_IDS = { "forest_101", "forest_105", "forest_103" };
     const string ELITE_MONSTER_ID = "forest_104";
 

@@ -182,7 +182,9 @@ public static class RedDot
         // （主人报：成就领完了成就标签红点还亮着，其实是里程等级能领）。
         Set(Activity, achReward || worldReward);
         Set(Achievement, achReward);
-        Set(LogWorld, worldReward);
+        // 2026-11-12 主人拍板「世界页点开后红点就灭」：加「已看」闸门，打开即记 worldTabSeen，之后不再亮。
+        bool worldSeen = SaveSystem.Instance?.Data?.worldTabSeen ?? false;
+        Set(LogWorld, worldReward && !worldSeen);
         // 天赋入口红点：登录 / 回城就刷，不用等玩家打开天赋页。
         // 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】只对门槛等级高于「已看等级」的新批次亮，
         // 判定唯一口径 = TalentDefs.EntryDotShouldLight（打开天赋页即记已看，见 TalentUI.Show）。

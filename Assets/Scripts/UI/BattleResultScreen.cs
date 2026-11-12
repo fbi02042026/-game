@@ -80,9 +80,14 @@ public static class BattleResultScreen
     /// 【2026-10-31 主人报「失败我没点自己就消失回城了」】holdUntilTap = 失败界面不自动收，
     /// 停 1.2s 后改为等玩家点击任意处（点一下才淡出走 onDone）——竞技场失败专用
     /// （普通关失败停留自动收的老口径不变，调用方不传 = 零改动）。
+    /// 【2026-11-12 主人拍板「战斗结果界面加下一关」】onNextStage = 界面销毁后直进下一关回调；
+    /// onNextStageGuard = 点【下一关】时的守卫（false = 拦下不收窗，守卫侧弹体力不足购买弹窗）；
+    /// onRewardsShown = 奖励 Panel 淡入完成后回调（主人拍板「奖励展示完再弹升级窗」）。
+    /// 三参全默认 null，原调用方零改动；只有主线 Normal 同章有下一关才传（章末/其它模式不传）。
     /// </summary>
     public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true,
-        List<SettlementRewardCell> extraCells = null, bool holdUntilTap = false)
+        List<SettlementRewardCell> extraCells = null, bool holdUntilTap = false,
+        Action onNextStage = null, Func<bool> onNextStageGuard = null, Action onRewardsShown = null)
     {
         if (!Application.isPlaying || (battleSceneOnly && !GameSceneGate.IsBattle))
         {
@@ -102,7 +107,7 @@ public static class BattleResultScreen
         // 显式限定 UnityEngine.Object；本类非 MonoBehaviour，不能裸调 Instantiate。
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
-        ui.Play(victory, stats, onDone, extraCells, holdUntilTap);
+        ui.Play(victory, stats, onDone, extraCells, holdUntilTap, onNextStage, onNextStageGuard, onRewardsShown);
     }
 
     /// <summary>
@@ -253,6 +258,18 @@ public class BattleResultScreenUI : MonoBehaviour
     CanvasGroup _rewardCg;
     bool _confirmed;
 
+    // —— 【下一关】（2026-11-12 主人拍板「战斗结果界面加下一关」）专用状态 ——
+    /// <summary>true = 玩家点了【下一关】（守卫放行 → 段四放行 → 段五淡出 → _onNextStage 直进下一关）。</summary>
+    bool _nextStageChosen;
+    /// <summary>本次胜利界面是否显示【下一关】钮（onNextStage 非 null 才 true；复用「分享按钮」节点）。</summary>
+    bool _nextStageActive;
+    /// <summary>点击守卫（体力够=扣体力 true；不足=弹 StaminaConfirmPopup false 拦下留在本界面）。null = 不设守卫。</summary>
+    Func<bool> _onNextStageGuard;
+    /// <summary>界面销毁后的直进回调（BattleManager.ContinueToNextStageInPlace：黑底字幕直进下一关，不回城）。</summary>
+    Action _onNextStage;
+    /// <summary>奖励 Panel 淡入完成回调（LevelUpPopup.FlushPending，主人拍板「奖励展示完再弹升级窗」）。</summary>
+    Action _onRewardsShown;
+
     // —— 分享钮 v4（2026-10-29 主人拍板，预制体手摆版）专用状态 ——
     /// <summary>
     /// 【2026-11-02 主人拍板「去掉分享的按钮和功能」】分享入口总开关。
@@ -288,10 +305,17 @@ public class BattleResultScreenUI : MonoBehaviour
     /// 【2026-10-30 竞技场】extraCells = 调用方组装好的追加奖励格（默认 null，原调用方零改动），透传给奖励区。
     /// 【2026-10-31】holdUntilTap = 失败界面停留后不自动收，等点击（见 <see cref="BattleResultScreen.Show"/>）。</summary>
     public void Play(bool victory, BattleRunStats stats, Action onDone, List<SettlementRewardCell> extraCells = null,
-        bool holdUntilTap = false)
+        bool holdUntilTap = false, Action onNextStage = null, Func<bool> onNextStageGuard = null,
+        Action onRewardsShown = null)
     {
         _onDone = onDone;
         _holdUntilTap = holdUntilTap;
+        // 【2026-11-12 主人拍板「下一关」】guard 在点击瞬间（本界面存活期）先跑；onNextStage 在淡出销毁后
+        // 跑（ContinueToNextStageInPlace）；onRewardsShown 在奖励淡入完成点跑（见 CoPlayVictory 段三末尾）。
+        _onNextStage = onNextStage;
+        _onNextStageGuard = onNextStageGuard;
+        _onRewardsShown = onRewardsShown;
+        _nextStageActive = onNextStage != null;
 
         // 统一适配入口（2026-10-24 主人拍板「接下自适应」）：一次修预制体三处硬伤 ——
         // ① worldCamera 为空（不绑相机整块不显示）；② 根节点 localScale=(0,0,0)（EnsureRootStretch 归一）；
@@ -423,6 +447,27 @@ public class BattleResultScreenUI : MonoBehaviour
         _confirmRt = confirmT as RectTransform;
         _confirmBaseX = _confirmRt != null ? _confirmRt.anchoredPosition.x : 0f;   // 读预制体值不写死
         BindShareNodes(victoryNode, rewardPanel);
+        // 【2026-11-12 主人拍板「新增下一关按钮 复用项目里的按钮 大小和其他按钮一致」】主线 Normal
+        // 同章有下一关时，把主人手摆的「分享按钮」节点复用为【下一关】钮（分享 2026-11-02 已下线，
+        // 节点闲置且本就与确定钮并排同尺寸 —— 零预制体改动、大小天然一致；图/摆位一律按预制体，铁律 9/32）：
+        // 子 Text 改「下一关」、Button 接 OnNextStageClicked；确定钮回 _confirmBaseX 双钮并排基线
+        //（RefreshShareLayout 的 _nextStageActive 前置分支负责显隐）。分享功能回归时删掉本段即可。
+        if (_nextStageActive && _shareBtnT != null)
+        {
+            var nextBtn = _shareBtnT.GetComponent<Button>();
+            if (nextBtn == null)
+                Debug.LogError("[BattleResultScreen] 复用「分享按钮」作下一关钮：节点上没有 Button（预制体结构被改过？），下一关钮不可点");
+            else
+            {
+                nextBtn.onClick.RemoveAllListeners();
+                nextBtn.onClick.AddListener(OnNextStageClicked);
+            }
+            var nextLbl = _shareBtnT.GetComponentInChildren<Text>(true);
+            if (nextLbl == null)
+                Debug.LogError("[BattleResultScreen] 复用「分享按钮」作下一关钮：节点下缺 Text（预制体结构被改过？），文案不显示");
+            else
+                nextLbl.text = "下一关";
+        }
         // 【2026-10-31 主人拍板】确定/分享钮放大 30%（BindShareNodes 之后才拿得到分享钮节点）
         // 【2026-10-31 二次拍板】胜利这两颗再缩小 30%（×1.3×0.7=0.91）；失败钮先不动
         EnlargeResultButton(confirmT, VictoryBtnScaleMul);
@@ -557,6 +602,18 @@ public class BattleResultScreenUI : MonoBehaviour
     /// </summary>
     void RefreshShareLayout(bool isTutorial)
     {
+        // 【2026-11-12 主人拍板「下一关」】下一关态前置分支：「分享按钮」节点已复用为【下一关】钮 →
+        // 强制显示它、确定钮回双钮并排基线（_confirmBaseX）；分享说明/钻石行照旧隐藏。
+        // 原 shareable 逻辑零改动（分享回归时删掉本分支即可）。
+        if (_nextStageActive)
+        {
+            if (_shareBtnT != null) _shareBtnT.gameObject.SetActive(true);
+            if (_shareTipT != null) _shareTipT.gameObject.SetActive(false);
+            if (_shareRewardRow != null) _shareRewardRow.gameObject.SetActive(false);
+            if (_confirmRt != null)
+                _confirmRt.anchoredPosition = new Vector2(_confirmBaseX, _confirmRt.anchoredPosition.y);
+            return;
+        }
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         bool shareable = ShareFeatureEnabled && !isTutorial && !ShareService.IsRewardClaimedToday(data);
 
@@ -675,6 +732,18 @@ public class BattleResultScreenUI : MonoBehaviour
         _confirmed = true;
     }
 
+    /// <summary>【2026-11-12 主人拍板「下一关」】点击守卫先行：onNextStageGuard 返回 false = 拦下（界面不收，
+    /// 守卫侧已弹「体力不足 / 购买体力」弹窗，玩家处理后可再点本钮）。守卫必须在本界面存活期执行 ——
+    /// 不能等到淡出销毁后的 onNextStage（那时本界面已毁，弹窗没挂靠、玩家会卡在空场景）。
+    /// 放行 → _nextStageChosen + 复用段四放行 → 段五淡出 → _onNextStage（直进下一关）。</summary>
+    void OnNextStageClicked()
+    {
+        if (_finished) return;
+        if (_onNextStageGuard != null && !_onNextStageGuard()) return;
+        _nextStageChosen = true;
+        _confirmed = true;
+    }
+
     /// <summary>
     /// 【2026-10-25 主人拍板】胜利新时间轴：弹出胜利节点（中部）→ 上移到预制体拍板位（≈250，
     /// 读预制体值不写死）→ 奖励 Panel 淡入（0→1）→ 等点【确定】或点任意处跳过 → 淡出 → onDone
@@ -739,6 +808,12 @@ public class BattleResultScreenUI : MonoBehaviour
             _rewardCg.alpha = 1f;
         }
 
+        // 【2026-11-12 主人拍板「奖励展示完再弹升级窗」】奖励 Panel 淡入完成后回调
+        //（FinishStageAfterPortalReached 传 LevelUpPopup.FlushPending）：升级窗(996)盖在本界面(985)上，
+        // 点黑幕逐级看完才露出本界面继续点确定/下一关；跳过（_skipped）不触发 → 升级窗回城照旧弹。
+        if (!_skipped)
+            _onRewardsShown?.Invoke();
+
         // 段四：等【确定】或点击任意处跳过（不自动收 —— 奖励要看清）
         while (!_confirmed && !_skipped)
             yield return null;
@@ -759,7 +834,10 @@ public class BattleResultScreenUI : MonoBehaviour
         _cg.alpha = 0f;
         _finished = true;
         Destroy(gameObject);
-        _onDone?.Invoke();
+        // 【2026-11-12 主人拍板「下一关」】点了【下一关】走 _onNextStage（ContinueToNextStageInPlace：
+        // 不回城，黑底字幕直进）；确定/跳过照旧 _onDone（回城链）。失败/选择/竞技场模式不设 _onNextStage。
+        if (_nextStageChosen) _onNextStage?.Invoke();
+        else _onDone?.Invoke();
     }
 
     /// <summary>

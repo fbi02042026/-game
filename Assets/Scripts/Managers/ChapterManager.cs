@@ -518,10 +518,11 @@ public class ChapterManager : Singleton<ChapterManager>
 
             // 【2026-11-05 主人明确要求】**难度局照常给每日通关任务经验**，不要加 runDiff 守卫：
             // 难度定位 = 怪更强 + 奖励更多，每日通关任务经验不区分难度（后来人勿当 bug 去堵）。
+            // 【2026-11-12 主人拍板】每日经验现在只累加进 dailyClearExpPending（只记待发），回城由 DailyTaskSystem.Settle 发放，不与关卡经验在同一结算连算。
             int dailyExp = milestoneData.TryDailyClearTaskExp();
             if (dailyExp > 0)
             {
-                LevelSystem.AddExpForTown(dailyExp);   // 2026-10-30 主人拍板：每日通关任务改发经验（原 5 天赋石停发，天赋石只随关卡出）
+                milestoneData.dailyClearExpPending += dailyExp;   // 2026-10-30 主人拍板：每日通关任务改发经验（原 5 天赋石停发，天赋石只随关卡出）
                 // C.3 每日通关任务 +5 钻：与天赋石同处发放，判重逻辑（dailyClearTaskClaimDayKey）不改
                 // ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, 5, save: true, notify: true);
             }

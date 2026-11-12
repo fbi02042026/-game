@@ -106,6 +106,10 @@ public partial class BattleManager
         PrimePlayerSkillOpeningCooldowns();
         // 上一局/上一关残留的攻击/防御/暴击增益（定时增益层）必须清掉，否则会跨关带着走
         Hero.Instance?.attr?.ClearTimedBuffs();
+        // 🔴【2026-11-12 主人拍板「必须是单关的」】上一关 Boss 三选一的战意在开场撤销：
+        // run 三件套回第一章存档基线、tempBuffs 只按引用摘掉本关那一条（石像赐福等整局 buff 不动）。
+        // 必须放在下面读取 heroMaxHp 之前，否则进关回血还会按上一关加过属性的上限算。
+        RevertBossStageBlessing();
         ResetMpForNewStage();
         HeroThunderUltimate.Instance?.ResetForBattle();
 
@@ -404,6 +408,10 @@ public partial class BattleManager
             follow.offset = new Vector2(GameConfig.CAMERA_FOLLOW_OFFSET_X, 0f);
 
         // 黑屏期间：镜头对准开战位，队伍在左屏外待命（揭幕后再走进来）
+        // 【2026-11-12 主人报「黑幕结束玩家已站在地图上，卡一下才往前走一段」】
+        // 走进场免罪窗提前到摆屏外之前：覆盖「摆屏外→走进场→FinishBattleIntro」整段，
+        // 防 ClampToScreen 在 UnitsCanAct 短暂为 true 的窗口把队伍钳回屏内。
+        PartyIntroWalking = true;
         PlacePartyAt(enterX, z);
         SnapCameraToBattleView(startX);
         if (follow != null) follow.PauseFollowX();
@@ -543,17 +551,24 @@ public partial class BattleManager
             var follow = Camera.main.GetComponent<CameraFollow>();
             if (follow != null) follow.PauseFollowX();
         }
-        PartyIntroWalking = true;
         SetPartyWalkAnim(true);
+
+        // 排查用，定位后即删：走进场起点 / 镜头 / 屏半宽 / 免罪 / 可行动
+        {
+            float dbgHx = UnitBase.GetCombatX(hero);
+            float dbgHalfW = Camera.main != null ? Camera.main.orthographicSize * Camera.main.aspect : -1f;
+            float dbgCamX = Camera.main != null ? Camera.main.transform.position.x : 0f;
+            Debug.Log($"[BattleManager] 走进场排查 heroX={dbgHx:F2} camX={dbgCamX:F2} halfW={dbgHalfW:F2} PartyIntroWalking={PartyIntroWalking} UnitsCanAct={UnitsCanAct}");
+        }
 
         while (elapsed < timeout)
         {
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             float hx = UnitBase.GetCombatX(hero);
             if (hx >= targetHeroX - 0.06f)
                 break;
 
-            float nx = Mathf.Min(targetHeroX, hx + speed * Time.deltaTime);
+            float nx = Mathf.Min(targetHeroX, hx + speed * Time.unscaledDeltaTime);
             PlacePartyAt(nx, z);
             SnapCameraToBattleView(targetHeroX);
             yield return null;
@@ -774,12 +789,13 @@ public partial class BattleManager
     void SpawnNextPendingWave() => Planner.SpawnNextPendingWave();
 
 
-    /// <summary>清完当前波后播放「下一波来袭」再出兵</summary>
+    /// <summary>清完当前波后紧接着出下一波：普通波直接出兵，Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」再出兵（2026-11-12 新口径）</summary>
     void BeginNextWaveCountdown()
     {
         if (Rules.SkipWaveAnnounce) return;
         if (_allWavesSpawned || _portalActive || _stageCleared) return;
-        if (FindNextUnspawnedWaveIndex() < 0)
+        int nextIdx = FindNextUnspawnedWaveIndex();
+        if (nextIdx < 0)
         {
             _allWavesSpawned = true;
             StopWaveCountdown();
@@ -800,14 +816,19 @@ public partial class BattleManager
 
         // 【2026-10-21 主人拍板】顶部进度条改按当前关波次推进：已清波数 = 下一个未刷波索引
         //（FindNextUnspawnedWaveIndex 返回第一个未刷波的下标 = 已刷完的波数，见 WavePlanner.Advance.cs:216）
-        BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, FindNextUnspawnedWaveIndex()), _waves != null ? _waves.Count : 0);
+        BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, nextIdx), _waves != null ? _waves.Count : 0);
 
-        GamePerf.Log("[BattleManager] 下一波来袭 Banner");
         // 【2026-11-01 主人拍板】抽奖只在每层开始（CoStageEntryDraft），波清一律不弹抽奖窗：
-        // 无限裂隙与正式关/金币本同款 —— 倒计时（不冻结）→「下一波来袭」预告出兵。
+        // 无限裂隙与正式关/金币本同款 —— 旧口径：5 秒倒计时（不冻结）→「下一波来袭」预告出兵（2026-11-12 起停用）。
         // 旧「裂隙每波清完弹连抽窗」（2026-10-21/26 口径）作废。整段在 _waveAnnounceCo 里，
         // :671 `if (_waveAnnounceCo != null) return;` 的防重入语义不变。
-        _waveAnnounceCo = StartCoroutine(CoWaveIntermissionDraftThenNextWave());
+        // 【2026-11-12 主人拍板】一波打完紧接着出下一波：普通波取消「下一波来袭」中央大图与侧栏 5 秒倒计时，
+        // 直接 SpawnNextPendingWave() 出兵；Boss 波的「首领来袭」大图、羁绊本 Boss 前剧情保留（也不再倒计时）。
+        // 旧 5 秒倒计时 + 下一波来袭预告整段停用，函数保留不删（下线≠删除）；
+        // Boss 波仍走 CoAnnounceThenSpawnNextWave 播首领来袭。
+        bool boss = _waves != null && nextIdx < _waves.Count && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
+        if (!boss) { SpawnNextPendingWave(); return; }
+        _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
     }
 
     /// <summary>

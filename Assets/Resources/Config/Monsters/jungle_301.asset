@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_301
   m_EditorClassIdentifier: 
   id: jungle_301
-  monsterName: "藤蔓狼崽"
+  monsterName: "雨林疾行者"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

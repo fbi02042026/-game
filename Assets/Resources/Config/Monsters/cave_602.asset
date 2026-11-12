@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_602
   m_EditorClassIdentifier: 
   id: cave_602
-  monsterName: "深窟矿奴"
+  monsterName: "短角幼魔"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

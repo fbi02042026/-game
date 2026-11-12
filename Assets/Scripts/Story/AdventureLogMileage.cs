@@ -108,7 +108,8 @@ public static class AdventureLogMileage
         return 0;
     }
 
-    public static bool ClaimLevel(int level)
+    // notify=false：批量领取时不弹窗，由 ClaimAllAvailable 汇总弹一次（2026-11-12 主人拍板统一领奖弹窗）
+    public static bool ClaimLevel(int level, bool notify = true)
     {
         if (!CanClaimLevel(level)) return false;
         var data = SaveSystem.Instance?.Data;
@@ -154,7 +155,7 @@ public static class AdventureLogMileage
         // 旧实现在 UIManager.ShowTwilightStaffConfirm 里手搓（自建嵌套 Canvas 没补 GraphicRaycaster
         // → EventSystem 射线收不到这个 Canvas 下的图形，点确认毫无反应；外观也是自己画的圆角块）。
         // 已整段删除，改走全项目默认弹窗皮（EvacuateConfirmPopup 预制体）+ 单按钮告知模式。
-        if (level == 2)
+        if (level == 2 && notify)
         {
             string trait = string.IsNullOrEmpty(SpecialWeapons.LastGrantedTraitText)
                 ? "见装备详情"
@@ -176,7 +177,19 @@ public static class AdventureLogMileage
                 "恭喜！获得法师限定初始武器",
                 noticeBody,
                 "确认",
-                () => UIManager.Instance?.ShowToast($"法师初始武器已替换：{SpecialWeapons.InstanceName}"));
+                () =>
+                {
+                    UIManager.Instance?.ShowToast($"法师初始武器已替换：{SpecialWeapons.InstanceName}");
+                    // 告知窗关掉后再弹通用「获得奖励」窗，两个模态不叠加（2026-11-12 主人拍板）
+                    RewardPopupUI.ShowClaimRewards(reward.Gold, 0, reward.TalentPoint, reward.Diamond,
+                        new string[] { SpecialWeapons.InstanceName });
+                });
+        }
+        else if (notify)
+        {
+            // Lv3+：直接弹「获得奖励」窗；称号这类非资源奖励单列一格
+            RewardPopupUI.ShowClaimRewards(reward.Gold, 0, reward.TalentPoint, reward.Diamond,
+                string.IsNullOrEmpty(reward.TitleId) ? null : new string[] { reward.Label });
         }
 
         SaveSystem.Instance.Save();
@@ -187,10 +200,21 @@ public static class AdventureLogMileage
     public static int ClaimAllAvailable()
     {
         int n = 0;
+        long gold = 0, talent = 0, diamond = 0;
+        var extras = new List<string>();
         for (int lv = 2; lv <= MaxLevel; lv++)
         {
-            if (ClaimLevel(lv)) n++;
+            // 逐条静默入账，最后汇总弹一次「获得奖励」窗（不连弹 N 个）
+            if (!ClaimLevel(lv, notify: false)) continue;
+            n++;
+            var r = LevelRewards[lv - 1];
+            gold += r.Gold;
+            talent += r.TalentPoint;
+            diamond += r.Diamond;
+            if (lv == 2) extras.Add(SpecialWeapons.InstanceName);
+            else if (!string.IsNullOrEmpty(r.TitleId)) extras.Add(r.Label);
         }
+        if (n > 0) RewardPopupUI.ShowClaimRewards(gold, 0, talent, diamond, extras.ToArray());
         return n;
     }
 
@@ -322,6 +346,9 @@ public static class AdventureLogMileage
         data.logMileageGrantedKeys ??= new HashSet<string>();
         data.logMileageGrantedKeys.Add(m.GrantKey);
         grantedName = inst.equipName;
+        // 【2026-11-12】装备领奖走「获得奖励」窗，名字上稀有度色 + 框体走唯一出口
+        var tpl = ConfigManager.Instance != null ? ConfigManager.Instance.GetEquipTemplate(m.TemplateId) : null;
+        RewardPopupUI.ShowClaimEquip(grantedName, tpl != null ? tpl.icon : null, Rarity.Rare);
         SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         return true;

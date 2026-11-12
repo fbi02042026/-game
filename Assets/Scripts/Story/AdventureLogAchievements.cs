@@ -271,7 +271,14 @@ public static class AdventureLogAchievements
         SaveSystem.Instance.Save();
         RefreshRedDots();
         if (notify)
-            UIManager.Instance?.ShowToast($"领取成就奖励：{r.Label}");
+        {
+            // 【2026-11-12 主人拍板】领奖统一弹「获得奖励」窗：资源按数值入格，
+            // 称号/头像框/皮肤这类非资源奖励才把名字单列一格，避免重复。
+            bool hasResource = r.Gold > 0 || r.Mats > 0 || r.Talent > 0;
+            string extra = hasResource || r.Label == NoRewardLabel ? null : r.Label;
+            RewardPopupUI.ShowClaimRewards(r.Gold, r.Mats, r.Talent, 0,
+                string.IsNullOrEmpty(extra) ? null : new string[] { extra });
+        }
         return true;
     }
 
@@ -333,6 +340,8 @@ public static class AdventureLogAchievements
         else if (none > 0)
             sb.Append("、另 ").Append(none).Append(" 项暂无奖励");
         summary = sb.ToString();
+        // 【2026-11-12】一键全领只弹一次汇总「获得奖励」窗（单条 Claim 已按 notify:false 静默）
+        RewardPopupUI.ShowClaimRewards(gold, mats, talent, 0, special.ToArray());
         return n;
     }
 

@@ -22,6 +22,7 @@ using UnityEngine.UI;
 /// 触发 = LevelSystem 通关结算升级（经验唯一入口 = 完成关卡，主线/支线才给），见 LevelSystem.AddStageClearExp。
 /// 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】结算时刻只挂起（QueueForTown），
 /// Town 场景就绪后由 TownSceneBootstrap 调 FlushPending 弹出；中途退游戏挂起即丢（等级已落盘，只丢演出）。
+/// 2026-11-12 起改为一级一窗队列，连升不再合并
 /// 点 Dim（黑幕）随时关闭；一次性演出用完即毁（先例 BattleResultScreen）。
 /// 预制体 / 关键节点缺失 LogError 不兜底（AGENTS.md §4）。
 /// </summary>
@@ -33,9 +34,8 @@ public static class LevelUpPopup
 
     // —— 挂起账（2026-10-25 主人拍板「战斗结束回到冒险界面才触发」）——
     // 结算时刻战斗里不弹，只记账；Town 就绪（TownSceneBootstrap 收尾）统一吐出。
-    static bool _hasPending;
-    static int _pendingBefore;
-    static int _pendingAfter;
+    // 【2026-11-12 主人拍板】一级一窗、逐个弹：每次升级按级拆成一条挂起，绝不合并成「4→7」一段。
+    static readonly Queue<KeyValuePair<int, int>> _pending = new Queue<KeyValuePair<int, int>>();
 
     // —— 第二行职业轮换（2026-10-25 主人拍板「不要按所选 轮流来 每个职业都要有」）——
     // 不绑 GetSelected：每弹一次按开放职业顺序（PlayerJobDefs.Playable，当前 剑盾卫士→法师→游侠）
@@ -43,39 +43,36 @@ public static class LevelUpPopup
     static int _jobCursor;
 
     /// <summary>
-    /// 结算时刻挂起（不弹）。同一局连着多关都升级时合并成一段：before 取最早、after 取最新，只弹一次。
-    /// 中途退游戏挂起即丢（升级已立刻落盘，丢的只是演出）。
+    /// 每级一条挂起，Town 就绪后逐个弹，玩家点黑幕关闭才弹下一条；
+    /// 中途退游戏挂起即丢（等级已落盘，只丢演出）
     /// </summary>
     public static void QueueForTown(int beforeLevel, int afterLevel)
     {
-        if (_hasPending)
-        {
-            _pendingAfter = afterLevel;   // 连升合并：区间一头一尾
-            return;
-        }
-        _hasPending = true;
-        _pendingBefore = beforeLevel;
-        _pendingAfter = afterLevel;
+        if (afterLevel <= beforeLevel) return;
+        for (int lv = beforeLevel; lv < afterLevel; lv++)
+            _pending.Enqueue(new KeyValuePair<int, int>(lv, lv + 1));
     }
 
     /// <summary>
-    /// Town 场景就绪时调用（TownSceneBootstrap.BootstrapRoutine 收尾，每次回主界面必经）。
-    /// 有挂起才弹，弹完清账；无挂起（登录直接进镇 / 本局没升级 / 失败局）为 no-op。
+    /// Town 就绪 / 城镇结算时调用；
+    /// 有窗在显示则不动，队列剩余由关闭回调逐个续弹
     /// </summary>
     public static void FlushPending()
     {
-        if (!_hasPending) return;
-        _hasPending = false;
-        Show(_pendingBefore, _pendingAfter);
+        if (_host != null) return;   // 已有窗在显示：等玩家点黑幕，由 OnDimClicked 续弹，绝不覆盖
+        if (_pending.Count == 0) return;
+        var e = _pending.Dequeue();
+        Show(e.Key, e.Value);
     }
 
-    /// <summary>弹恭喜升级（升级前 beforeLevel → 升级后 afterLevel）。一关连升多级也只弹一次、区间一步到位。</summary>
+    /// <summary>弹恭喜升级（升级前 beforeLevel → 升级后 afterLevel）。一次只弹一级；连升由队列逐条弹。</summary>
     public static void Show(int beforeLevel, int afterLevel)
     {
         var prefab = Resources.Load<GameObject>(PrefabPath);
         if (prefab == null)
         {
             Debug.LogError("[LevelUpPopup] 找不到预制体 Resources/" + PrefabPath + "，升级弹窗不弹（不兜底）");
+            _pending.Clear();
             return;
         }
 
@@ -89,6 +86,7 @@ public static class LevelUpPopup
         {
             Debug.LogError("[LevelUpPopup] 恭喜升级预制体根上没有 Canvas，弹窗不弹（不兜底）");
             Close();
+            _pending.Clear();
             return;
         }
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.LevelUpPopup, UICanvasSetup.ResolveUiCamera());
@@ -125,10 +123,11 @@ public static class LevelUpPopup
         if (dimBtn == null)
         {
             Debug.LogError("[LevelUpPopup] 恭喜升级预制体缺 Dim 节点或 Dim 上没有 Button，弹窗关不掉（不兜底）");
+            _pending.Clear();   // no Dim -> no continuation; avoid deadlocking later upgrade popups
             return;
         }
         dimBtn.onClick.RemoveAllListeners();
-        dimBtn.onClick.AddListener(Close);
+        dimBtn.onClick.AddListener(OnDimClicked);
 
         // 弹出动效（2026-10-25 主人口述时序，见类注释）
         var motion = _host.GetComponent<LevelUpPopupMotion>();
@@ -142,6 +141,20 @@ public static class LevelUpPopup
         if (_host == null) return;
         Object.Destroy(_host);
         _host = null;
+    }
+
+    /// <summary>玩家点黑幕：关掉当前这一级，队列还有就弹下一条（一级一窗，不合并、不覆盖）。</summary>
+    static void OnDimClicked()
+    {
+        Close();
+        FlushPending();
+    }
+
+    /// <summary>【2026-11-02 清档硬规则】进程级 static 状态复位：清挂起队列 + 收窗。由 NewGameReset.ApplyAll 调用。</summary>
+    public static void ResetForNewGame()
+    {
+        _pending.Clear();
+        Close();
     }
 
     static void SetText(Transform scope, string nodeName, string value)

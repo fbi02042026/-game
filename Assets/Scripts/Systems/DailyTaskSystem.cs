@@ -30,6 +30,20 @@ public static class DailyTaskSystem
         if (!QuestTable.HasData) return;
 
         data.EnsureDailyTaskKeys();
+
+        // 【2026-11-12 主人拍板】每日通关任务经验回城再算，不与关卡经验连算：
+        // 通关时只累加 dailyClearExpPending，本 Settle 在城镇轮询时补发；
+        // 其它日常任务经验同受额度约束，升级弹窗走 LevelUpPopup 队列逐个弹
+        if (data.dailyClearExpPending > 0)
+        {
+            int pending = data.dailyClearExpPending;
+            data.dailyClearExpPending = 0;
+            saveSys.Save();                       // 先落盘「已消费」，避免 AddDirectExp 内部 Save 前进程被杀导致重复发
+            // 本关战斗里已升过级时，这笔只入账不升级，经验留到下一关（受 data.stageLevelUpCapLevel 额度约束）
+            LevelSystem.AddDirectExp(pending, data.stageLevelUpCapLevel);
+            Debug.Log("[DailyTask] settle: daily_clear 回城补发经验 +" + pending);
+        }
+
         SettleRows(data, "日常", int.Parse(DayKeyUtil.TodayKey()), daily: true);
         SettleRows(data, "周常", SaveData.WeekMondayKey(), daily: false);
     }
@@ -63,15 +77,18 @@ public static class DailyTaskSystem
                 if (result.overflow > 0)
                     lines.Add(ResourceWallet.DisplayName(type) + "已满，溢出进邮箱");
             }
+            // 2026-11-12 主人拍板：其它日常任务按当前等级重算额度（单个任务最多升 1 级），
+            // 多个任务累计可升好几级、弹窗逐个显示；不能用固定的关卡额度，否则主线通关后卡在满级之前。
             if (row.rewardExp > 0)
             {
-                LevelSystem.AddDirectExp(row.rewardExp);
+                LevelSystem.AddDirectExp(row.rewardExp, data.playerLevel + 1);
                 lines.Insert(0, "获得 经验 +" + row.rewardExp);   // 经验置顶：汇总「经验 → 天赋石/钻石」
             }
 
             // 【2026-11-04 主人拍板】任务完成提示统一左侧滑入横幅（仿新邮件模式）：
-            // 文案只说「XXX任务已完成」，奖励明细不再写（原 GlobalToastUI 的「获得 …」移除）。
-            QuestDoneToast.Show(row.title);
+            // 【2026-11-12 主人拍板】文案只写「任务完成」，不写具体任务名；
+            // 奖励明细也不再写（原 GlobalToastUI 的「获得 …」移除）。
+            QuestDoneToast.Show();
             if (lines.Count > 0)
                 GlobalToastUI.ShowQueued(string.Join("\n", lines));
 

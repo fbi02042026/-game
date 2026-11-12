@@ -173,6 +173,7 @@ public static class LevelSystem
         }
 
         int before = Mathf.Max(1, data.playerLevel);
+        data.stageLevelUpCapLevel = before + 1;   // 本次通关的等级额度：回城补发每日经验也要受它约束
         // 本局难度：0 普通 / 1 困难 / 2 噩梦（与 ChapterManager 难度隔离同一真源）
         int diff = BattleManager.Instance != null ? BattleManager.Instance.BattleDifficulty : 0;
         int baseExp, perChapter;
@@ -196,7 +197,9 @@ public static class LevelSystem
         data.playerExp += exp;
         bool leveled = false;
         int guard = 0;
-        while (data.playerLevel < MaxLevel && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        // 【2026-11-12 主人拍板】前期每关最多升 1 级；超出门槛的经验留 playerExp 结转下一关，不吞不折金币；
+        // 后期升级门槛远高于单笔关卡经验（最高 554，噩梦第 8 章），此封顶自然不触发。
+        while (data.playerLevel < MaxLevel && data.playerLevel < before + 1 && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
         {
             data.playerExp -= GetExpForLevel(data.playerLevel);   // 本级门槛扣掉，余量结转下一级
             data.playerLevel++;
@@ -233,8 +236,9 @@ public static class LevelSystem
     /// 直接加经验（2026-10-29 新增：每日任务奖励经验出口，主人拍板「有些奖励可以给些经验」）。
     /// 与 AddStageClearExp 同一本账（存档 playerExp/playerLevel），但不走关卡白名单、不放英雄 VFX；
     /// 调用时机都在城镇内（DailyTaskSystem.Settle 由任务栏轮询驱动），升级弹窗立即 Flush，不挂到回城。
+    /// 可选参数 capLevel = 升级到的绝对等级上限：回城补发每日通关任务传本次通关额度，其它日常任务传 playerLevel + 1（单个最多升 1 级）；0 = 不限制。
     /// </summary>
-    public static void AddDirectExp(int exp)
+    public static void AddDirectExp(int exp, int capLevel = 0)
     {
         if (exp <= 0) return;
 
@@ -249,7 +253,7 @@ public static class LevelSystem
         data.playerExp += exp;
         bool leveled = false;
         int guard = 0;
-        while (data.playerLevel < MaxLevel && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
+        while (data.playerLevel < MaxLevel && (capLevel <= 0 || data.playerLevel < capLevel) && data.playerExp >= GetExpForLevel(data.playerLevel) && guard++ < 64)
         {
             data.playerExp -= GetExpForLevel(data.playerLevel);   // 本级门槛扣掉，余量结转下一级
             data.playerLevel++;
@@ -265,7 +269,11 @@ public static class LevelSystem
             SaveSystem.Instance?.Save();   // 溢出金币要落盘（即便未升级）
         }
 
-        if (!leveled) return;
+        if (!leveled)
+        {
+            if (capLevel > 0) SaveSystem.Instance?.Save();   // 被每关升级额度截留的经验也要落盘，别只留内存
+            return;
+        }
 
         // 立刻落盘：升级是关键进度，不靠下一笔存档兜
         SaveSystem.Instance?.Save();
@@ -280,6 +288,7 @@ public static class LevelSystem
     /// <summary>
     /// 在战斗/结算上下文加经验（2026-10-30 新增）：不立即弹升级窗，挂起到回城由 Town 触发，
     /// 避免结算期误弹。满级溢出同样转金币。供 ChapterManager 发「每日通关任务」经验等结算期调用。
+    /// 2026-11-12 起无调用方（每日通关任务经验改走 DailyTaskSystem.Settle → AddDirectExp），保留备用。
     /// </summary>
     public static void AddExpForTown(int exp)
     {

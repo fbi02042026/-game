@@ -134,7 +134,7 @@ public class AchievementMilestoneUI : MonoBehaviour
     void OnClaimAll()
     {
         int n = AdventureLogMileage.ClaimAllAvailable();
-        UIManager.Instance?.ShowToast(n > 0 ? $"领取 {n} 个日志里程奖励" : "暂无可领里程");
+        if (n <= 0) UIManager.Instance?.ShowToast("暂无可领里程");   // 2026-11-12：领到的统一弹「获得奖励」窗
         RefreshBody();
         RedDot.RefreshCommon();
         if (n == 0 || !AdventureLogMileage.HasUnclaimedLevel())

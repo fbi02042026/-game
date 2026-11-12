@@ -26,8 +26,8 @@ public static class BattleRally
     const float TAP_PAD = 0.35f;
 
     // 【2026-11-09 主人摆的「集结」节点动效】旗子从上落下 + 圈由大缩小到当前大小，
-    // 两者同一进度同时完成；整组出现 2 秒后隐藏。
-    const float MARKER_SHOW_SEC = 2f;
+    // 两者同一进度同时完成；【2026-11-12 主人拍板】整组 0.3 秒即隐藏（落下 0.18s + 停留 0.12s），不再停留 2 秒。
+    const float MARKER_SHOW_SEC = 0.3f;   // 【2026-11-12 主人拍板「点一下旗子落下后就消失，不要时间太长」】0.18s 落下/缩圈 + 0.12s 停留即隐藏；只管旗子动效，集结驻留 HOLD_SEC=2 不受影响
     const float MARKER_ANIM_SEC = 0.18f;      // 出来快：0.18 秒内播完
     const float MARKER_FLAG_DROP = 120f;      // 旗子起始高出落点多少（UI 单位）
     const float MARKER_RING_FROM_MUL = 2.4f;  // 圈起始放大倍数，缩到预制体里现在的大小
@@ -35,6 +35,9 @@ public static class BattleRally
     const int MARKER_SORTING_ORDER = 998;
 
     static Vector3 _point;
+    static Vector3 _markerWorldPoint;
+    static bool _markerHasPoint;
+    static bool _renderSubscribed;
     static bool _active;
     static float _firstArriveAt = -1f;
     static float _resumeAt;
@@ -235,6 +238,8 @@ public static class BattleRally
         float lane = BattleLaneBounds.ClampLaneOffset(rawLane);
 
         _point = new Vector3(pointX, UnitBase.GROUND_Y + lane, planeZ);
+        _markerWorldPoint = _point;
+        _markerHasPoint = true;
         _active = true;
         _firstArriveAt = -1f;
         _resumeAt = 0f;
@@ -331,6 +336,7 @@ public static class BattleRally
 
     static bool EnsureMarkerNodes()
     {
+        if (!_renderSubscribed) { Canvas.willRenderCanvases += OnWillRenderCanvases; _renderSubscribed = true; }
         // 【2026-11-11 第五版】旧版只看 _markerSearched：跨局后静态字段不清、旧节点已销毁，
         // EnsureMarkerNodes 静默返回 false → PlayMarker 直接 return，旗子再也不出现且无任何日志。
         // 现在以「引用还活着」为准（Unity 对已销毁对象判假 null），跨局自动重绑。
@@ -398,32 +404,7 @@ public static class BattleRally
             return;
         }
         if (_markerRootRt == null) return;
-        var parent = _markerRootRt.parent as RectTransform;
-        // 与 BattleViewportFit 同源：战斗 UI 由根 Canvas.worldCamera 渲染（= Camera.main），Overlay 时传 null
-        var rootCanvas = parent != null ? parent.GetComponentInParent<Canvas>()?.rootCanvas : null;
-        var cam = rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay
-            ? rootCanvas.worldCamera
-            : null;
-        if (parent == null || (cam == null && rootCanvas != null
-                && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay))
-        {
-            Debug.LogError("[BattleRally] 集结动效：父容器 / 根 Canvas 相机取不到，无法把「集结」摆到落点");
-            return;
-        }
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPos, cam, out Vector2 local))
-        {
-            Debug.LogError("[BattleRally] 集结动效：屏幕点转 UI 本地坐标失败");
-            return;
-        }
-        // 【2026-11-11 修复没动画】集结锚点=(0.5,0.5)、父(BattleUI 根) pivot=(0,0)：
-        // ScreenPointToLocalPointInRectangle 返回的是相对父 pivot（左下角）的坐标，
-        // 直接赋 anchoredPosition 会再叠加半屏偏移（+360,+640），动效整组被摆出屏幕右上角外。
-        // 这里按点锚换算：anchoredPosition = local - 锚点参考点在父本地坐标中的位置。
-        Vector2 a = _markerRootRt.anchorMin;
-        Vector2 anchorRef = new Vector2(
-            parent.rect.width * (a.x - parent.pivot.x),
-            parent.rect.height * (a.y - parent.pivot.y));
-        _markerRootRt.anchoredPosition = local - anchorRef;
+        if (!TryPlaceMarkerAtScreen(screenPos, true)) return;
         _markerRootRt.SetAsLastSibling();   // 兄弟顺序也提到最后：后插入的运行时节点不会再压住它
         _markerRoot.SetActive(true);
         _markerVisible = true;
@@ -431,6 +412,10 @@ public static class BattleRally
         ApplyMarkerFrame(0f);
 
         // 判别性探针（验收通过后删）：一次点击就能分清「绑定 / 坐标 / 遮挡 / 立刻被 Reset」四层
+        var parent = _markerRootRt.parent as RectTransform;
+        var rootCanvas = parent != null ? parent.GetComponentInParent<Canvas>()?.rootCanvas : null;
+        var cam = rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? rootCanvas.worldCamera : null;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPos, cam, out Vector2 local);
         var mcv = _markerRoot.GetComponent<Canvas>();
         var groups = _markerRoot.GetComponentsInParent<CanvasGroup>(true);
         float alphaChain = 1f;
@@ -449,6 +434,54 @@ public static class BattleRally
                   + $"pos=({_markerRootRt.anchoredPosition.x:F1},{_markerRootRt.anchoredPosition.y:F1}) "
                   + $"world={_markerRootRt.position} parentRect={parent.rect.width:F0}x{parent.rect.height:F0} "
                   + $"sibling={myIdx}/{parent.childCount} 后序=[{sib}] active={_markerRoot.activeSelf}");
+    }
+
+    static bool TryPlaceMarkerAtScreen(Vector2 screenPos, bool logErrors)
+    {
+        if (_markerRootRt == null) return false;
+        var parent = _markerRootRt.parent as RectTransform;
+        // 与 BattleViewportFit 同源：战斗 UI 由根 Canvas.worldCamera 渲染（= Camera.main），Overlay 时传 null
+        var rootCanvas = parent != null ? parent.GetComponentInParent<Canvas>()?.rootCanvas : null;
+        var cam = rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? rootCanvas.worldCamera
+            : null;
+        if (parent == null || (cam == null && rootCanvas != null
+                && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay))
+        {
+            if (logErrors)
+                Debug.LogError("[BattleRally] 集结动效：父容器 / 根 Canvas 相机取不到，无法把「集结」摆到落点");
+            return false;
+        }
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screenPos, cam, out Vector2 local))
+        {
+            if (logErrors)
+                Debug.LogError("[BattleRally] 集结动效：屏幕点转 UI 本地坐标失败");
+            return false;
+        }
+        // 【2026-11-11 修复没动画】集结锚点=(0.5,0.5)、父(BattleUI 根) pivot=(0,0)：
+        // ScreenPointToLocalPointInRectangle 返回的是相对父 pivot（左下角）的坐标，
+        // 直接赋 anchoredPosition 会再叠加半屏偏移（+360,+640），动效整组被摆出屏幕右上角外。
+        // 这里按点锚换算：anchoredPosition = local - 锚点参考点在父本地坐标中的位置。
+        Vector2 a = _markerRootRt.anchorMin;
+        Vector2 anchorRef = new Vector2(
+            parent.rect.width * (a.x - parent.pivot.x),
+            parent.rect.height * (a.y - parent.pivot.y));
+        _markerRootRt.anchoredPosition = local - anchorRef;
+        return true;
+    }
+
+    static void OnWillRenderCanvases()
+    {
+        if (_markerVisible && _markerHasPoint)
+        {
+            var mainCam = Camera.main;
+            if (mainCam != null && mainCam.orthographic)
+            {
+                Vector3 sp = mainCam.WorldToScreenPoint(_markerWorldPoint);
+                if (sp.z > 0f)
+                    TryPlaceMarkerAtScreen(new Vector2(sp.x, sp.y), false);
+            }
+        }
     }
 
     static void TickMarker()
@@ -486,6 +519,7 @@ public static class BattleRally
             _markerRoot.SetActive(false);
         }
         _markerVisible = false;
+        _markerHasPoint = false;
         _markerAge = 0f;
     }
 

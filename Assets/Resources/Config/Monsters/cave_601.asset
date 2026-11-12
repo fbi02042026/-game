@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_601
   m_EditorClassIdentifier: 
   id: cave_601
-  monsterName: "岩穴蝙蝠"
+  monsterName: "剧毒魔爪"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_204
   m_EditorClassIdentifier: 
   id: undead_204
-  monsterName: "墓王残骸"
+  monsterName: "装甲骷髅巨人"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

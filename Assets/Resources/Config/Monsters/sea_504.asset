@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_504
   m_EditorClassIdentifier: 
   id: sea_504
-  monsterName: "深蓝海魔"
+  monsterName: "海洋猎手"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

@@ -45,6 +45,12 @@ public partial class WavePlanner
             int cut = Mathf.Clamp(GameConfig.FormalRoundWaveCut(chapter), 0, Mathf.Max(0, counts[counts.Length - 1] - 1));
             counts[counts.Length - 1] -= cut;
         }
+        // 【2026-11-12 主人拍板】原按章定表（Ch1 4 / Ch2 6 / Ch3+ 7~8 波）压到上限：前期 2 波、后期 3 波。
+        // 回合数 FORMAL_STAGE_ROUND_COUNT 仍为 3、数组长度不变，用「前 cap 个回合各 1 波、其余 0 波」表达；
+        // FormalRoundEndFlags 遇到 0 波回合不会越界（acc 已 >= 1）。上方定表/削减保留不删（下线≠删除）。
+        int cap = GameConfig.StageWaveCap(chapter);
+        for (int r = 0; r < counts.Length; r++)
+            counts[r] = r < cap ? 1 : 0;
         return counts;
     }
 
@@ -143,6 +149,7 @@ public partial class WavePlanner
             waveCount = formalMain
                 ? formalTotalWaves
                 : StageModeTable.RollWaveCount(mode, ComputeWaveBonus(mode), hardMax);
+            if (!formalMain) waveCount = Mathf.Min(waveCount, GameConfig.StageWaveCap(CurrentChapter));
 
             // 逐波摇原型（受 maxRun 软约束），同一个模式也摇不出一模一样的序列
             archIds = new List<string>(waveCount);
@@ -180,6 +187,7 @@ public partial class WavePlanner
             // v4.0 原注释：不走 DistributeMonstersToWaves：它有「每波下限 2」的钳制，会把 10-15 抬到 ≥18 = 私自改总量。
             if (formalMain)
                 waveCount = formalTotalWaves;
+            if (!formalMain) waveCount = Mathf.Min(waveCount, GameConfig.StageWaveCap(CurrentChapter));
             // 【2026-10-22 主人拍板 v4.1】DistributeMonstersKeepTotal（v4.0 均摊口径）对正式关停用、函数保留不删：
             // 正式关每波怪数改为「每波独立摇 10-15」，见下方统一覆盖段。
             if (formalMain)
@@ -281,7 +289,8 @@ public partial class WavePlanner
         if (formalMain && stageIdx >= GameConfig.CLIMAX_MIN_STAGE)
         {
             int tier = GameConfig.GetChapterSpiceTier(CurrentChapter);
-            if (tier >= GameConfig.SPICE_LUCK && _waves.Count > GameConfig.CLIMAX_WAVE_INDEX)
+            // 2026-11-12 波数压到上限后本段不再触发，Ch3+ 改走下面签名怪分支；代码保留不删
+            if (tier >= GameConfig.SPICE_LUCK && _waves.Count > GameConfig.CLIMAX_WAVE_INDEX && _waves.Count < GameConfig.StageWaveCap(CurrentChapter))
             {
                 // Ch3+「靠运气」：第3波后插一段紧接加重波，签名怪挂在这段上 = 本关那只特殊怪
                 var w3 = _waves[GameConfig.CLIMAX_WAVE_INDEX];
@@ -422,13 +431,15 @@ public partial class WavePlanner
         // 【2026-11-09 主人拍板「每波8-10只 固定1 2 3波」】每波只数 8~10 随机（含端点），
         // 波数仍固定 3；精英/Boss 占波内名额，下方向下钳制精英数防超波内总数
         //（高级难度 8~9 精英 + Boss 遇上 8 只的波会爆名额）。
+        // 【2026-11-12 主人拍板】波数改按上限：前期 2 波 / 后期 3 波，每波 8~10 只不变（含端点）。
         const int perWaveMin = 8;
         const int perWaveMax = 10;
         int diff = bm != null ? bm.BattleDifficulty : 0;
+        int waveCount = GameConfig.StageWaveCap(CurrentChapter);
         int[] baseElite = { 0, 1, 2 };
-        int[] elitePerWave = new int[3];
-        int[] bossPerWave = { 0, 0, 0 };
-        int[] perWave = new int[3];
+        int[] elitePerWave = new int[waveCount];
+        int[] bossPerWave = new int[waveCount];
+        int[] perWave = new int[waveCount];
         for (int i = 0; i < elitePerWave.Length; i++)
         {
             perWave[i] = UnityEngine.Random.Range(perWaveMin, perWaveMax + 1);
@@ -436,7 +447,7 @@ public partial class WavePlanner
             {
                 // 80~90% 精英：10 × (0.8~0.9) → 每波 8~9 只；最后 2 波各再带 1 Boss
                 elitePerWave[i] = UnityEngine.Random.Range(8, 10);
-                if (i >= 1) bossPerWave[i] = 1;
+                if (i >= waveCount - 2) bossPerWave[i] = 1;
             }
             else if (diff == 1)
             {
@@ -732,6 +743,8 @@ public partial class WavePlanner
         // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss
         int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
+        // 【2026-11-12 主人拍板】Boss 波占 1 波，小怪波 = cap - 1；含 Boss 波在内前期 2 波 / 后期 3 波。
+        minionWaves = Mathf.Min(minionWaves, Mathf.Max(1, GameConfig.StageWaveCap(CurrentChapter) - 1));
         int[] perWave;
         // 【2026-10-25 主人拍板】正式关 Boss 关 = 3 回合小怪波（每回合按章定表：ch1=6…ch3+ =9 波，削减后 7 波）
         // + 末位 1 Boss 波；v4.2「按章区间随机摇」口径作废；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」更早作废（常量保留退役）。
@@ -744,7 +757,8 @@ public partial class WavePlanner
         {
             var formalRoundWaves = RollFormalRoundWaveCounts(CurrentChapter);
             formalBossRoundEnd = FormalRoundEndFlags(formalRoundWaves);
-            minionWaves = formalBossRoundEnd.Length;
+            // 【2026-11-12 主人拍板】正式关 Boss 关小怪波改按 cap - 1；含 Boss 波在内前期 2 波 / 后期 3 波。
+            minionWaves = Mathf.Max(1, GameConfig.StageWaveCap(CurrentChapter) - 1);
             perWave = new int[minionWaves];
             for (int i = 0; i < minionWaves; i++)
                 perWave[i] = UnityEngine.Random.Range(GameConfig.FORMAL_WAVE_MONSTERS_MIN, GameConfig.FORMAL_WAVE_MONSTERS_MAX + 1);

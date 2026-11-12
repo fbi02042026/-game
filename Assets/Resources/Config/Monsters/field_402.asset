@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_402
   m_EditorClassIdentifier: 
   id: field_402
-  monsterName: "晨曦游隼"
+  monsterName: "吐泡水母"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

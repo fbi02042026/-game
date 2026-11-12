@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_404
   m_EditorClassIdentifier: 
   id: field_404
-  monsterName: "原野巨兽"
+  monsterName: "贪食宝箱"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

@@ -59,9 +59,13 @@ public partial class UnitBase
             if (BattleManager.Instance != null)
                 finalDamage *= BattleManager.Instance.runAllyDamageTakenMul;
         }
-        // 佣兵「圣光庇护」类团队护盾落在玩家身上的那层：先吸收再扣血（数值取自 merc_skills 表）
+        // 【2026-11-12 主人拍板】玩家身上两层抵扣盾互不覆盖，先自身盾再团队盾，都先吸收再扣血：
+        // ① 圣盾壁垒（玩家技能，仅自己，每次受伤抵 75%）；② 圣光庇护（佣兵 SK008，全队，100%）。
         if (this is Hero && PlayerPassiveCombat.Instance != null)
+        {
+            finalDamage = PlayerPassiveCombat.Instance.AbsorbSelfShield(finalDamage);
             finalDamage = PlayerPassiveCombat.Instance.AbsorbTeamShield(finalDamage);
+        }
 
         // 火/冰附加伤害（装备词缀 FireDamage / IceDamage）：2026-09-26 改百分比 = 最终伤害 × 词缀值 × PER_POINT，
         // 加在扣防之后的最终伤害上，保证穿了就能在飘字上看见（详见 ResolveElementalBonus 注释）。

@@ -127,25 +127,26 @@ public static class QuestRewardClaim
         data.claimedMainQuestIds ??= new HashSet<string>();
         if (!data.claimedMainQuestIds.Add(questId)) return false;
 
-        var lines = new List<string>();
+        long gotGold = 0, gotStone = 0;
+        var overflow = new List<string>();
         if (def.rewardGold > 0)
         {
             var gold = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, def.rewardGold, save: true, notify: false);
-            if (gold.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + " +" + gold.added);
+            if (gold.added > 0) gotGold += gold.added;
             if (gold.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + "已满，溢出进邮箱");
+                overflow.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + "已满，溢出进邮箱");
         }
         if (def.rewardStones > 0)
         {
             var stone = ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, def.rewardStones, save: true, notify: false);
-            if (stone.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + " +" + stone.added);
+            if (stone.added > 0) gotStone += stone.added;
             if (stone.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
+                overflow.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
         }
-        if (lines.Count > 0)
-            GlobalToastUI.ShowQueued(string.Join("\n", lines));
+        // 【2026-11-12 主人拍板】领奖统一弹「获得奖励」窗；溢出提示仍走 Toast（不是奖励本体）
+        RewardPopupUI.ShowClaimRewards(gotGold, 0, gotStone, 0);
+        if (overflow.Count > 0)
+            GlobalToastUI.ShowQueued(string.Join("\n", overflow));
 
         Analytics.QuestComplete(questId); // 埋点：主线任务奖励领取（原在 Complete 完成瞬间）
         SaveSystem.Instance.Save();
@@ -172,25 +173,26 @@ public static class QuestRewardClaim
         data.claimedSideIslandIds ??= new HashSet<int>();
         if (!data.claimedSideIslandIds.Add(islandId)) return false;
 
-        var lines = new List<string>();
+        long gotGold = 0, gotStone = 0;
+        var overflow = new List<string>();
         if (island.goldReward > 0)
         {
             var gold = ResourceWallet.Add(ResourceWallet.ResourceType.Gold, island.goldReward, save: true, notify: false);
-            if (gold.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + " +" + gold.added);
+            if (gold.added > 0) gotGold += gold.added;
             if (gold.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + "已满，溢出进邮箱");
+                overflow.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.Gold) + "已满，溢出进邮箱");
         }
         if (island.talentReward > 0)
         {
             var stone = ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, island.talentReward, save: true, notify: false);
-            if (stone.added > 0)
-                lines.Add("获得 " + ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + " +" + stone.added);
+            if (stone.added > 0) gotStone += stone.added;
             if (stone.overflow > 0)
-                lines.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
+                overflow.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
         }
-        if (lines.Count > 0)
-            GlobalToastUI.ShowQueued(string.Join("\n", lines));
+        // 【2026-11-12 主人拍板】领奖统一弹「获得奖励」窗；溢出提示仍走 Toast（不是奖励本体）
+        RewardPopupUI.ShowClaimRewards(gotGold, 0, gotStone, 0);
+        if (overflow.Count > 0)
+            GlobalToastUI.ShowQueued(string.Join("\n", overflow));
 
         SaveSystem.Instance.Save();
         return true;

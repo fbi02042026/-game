@@ -89,7 +89,8 @@ public sealed class SkillCastService
         if (!bm.TrySpendPlayerMp(mpCost)) return false;
 
         // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
-        // 走团队护盾路径（玩家 + 佣兵同享一层，与旧团队防御 buff 同范围）。
+        // 【2026-11-12 主人拍板】只给玩家自己上盾（每次受伤抵 75%），与佣兵 SK008 全队盾分成两层、互不覆盖；
+        // 不再走 ApplyTeamShieldBuff（那条路会给全队挂盾，且和塔克共用同一层被后放覆盖）。
         // 2026-10-10：ratio/duration 改读 player_skills 表（buffValue / duration），不再写死 GameConfig 常量
         // ——写死时改 CSV 不生效，而且它是 6 个技能里唯一升星只减 CD、护盾量与时长纹丝不动的。
         // 口径与其它增益技一致：优先用本局构筑算好的 skill.buffValue / skill.duration
@@ -106,7 +107,8 @@ public sealed class SkillCastService
             float shieldDuration = skill.duration > 0f
                 ? skill.duration
                 : (barrierDef != null ? barrierDef.duration : GameConfig.HOLY_BARRIER_SHIELD_DURATION);
-            ApplyTeamShieldBuff(shieldRatio, shieldDuration);
+            ApplyPlayerSelfShield(shieldRatio, shieldDuration, GameConfig.HOLY_BARRIER_SHIELD_ABSORB);
+            PlayShieldVfxForSelf(skill.skillId);
         }
         else if (isHeal)
         {
@@ -132,7 +134,7 @@ public sealed class SkillCastService
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
         // VFX 仍走别名：SkillRegistry 是按 SO 装配的 ally_* id 索引特效的，换成真 id 会丢特效。
         // 移动判定 AOE（MoveAoe）：VFX 由 MoveAoeExecutor 挂在移动锚点上随行，不在这里钉在施法者身上
-        if (skill.skillType != SkillSystem.SkillType.MoveAoe)
+        if (realId != "holy_barrier" && skill.skillType != SkillSystem.SkillType.MoveAoe)
             SkillRegistry.Instance?.PlaySkillVfx(skill.skillId, vfxPos, true, hero.GetVfxFacingDir(), vfxAttach);
 
         // #region agent log
@@ -179,6 +181,7 @@ public sealed class SkillCastService
         if (skill == null) return false;
 
         UnitBase healTarget = null;
+        bool skipTailVfx = false;
         var kind = MercSkillExecutor.Resolve(skillId);
         if (kind == MercSkillExecutor.Kind.HealSingle || kind == MercSkillExecutor.Kind.HealTeam)
         {
@@ -195,7 +198,11 @@ public sealed class SkillCastService
             var cfg = SkillRegistry.Instance?.Get(skillId);
             float mul = MercSkillExecutor.HealAtkMul(cfg);
             if (kind == MercSkillExecutor.Kind.HealTeam)
+            {
                 ApplyHealToTeam(atk * mul, merc, enemyCaster);
+                PlayHealVfxForTeam(skillId, merc, enemyCaster);
+                skipTailVfx = true;
+            }
             else
                 ApplyHealToUnit(healTarget ?? merc, atk * mul, merc);
             if (merc.PassiveRunner != null)
@@ -205,13 +212,18 @@ public sealed class SkillCastService
         {
             if (merc.PassiveRunner != null)
                 merc.PassiveRunner.ApplySelfDefBuff(MercSkillExecutor.SelfDefDuration(skillId));
+            SkillRegistry.Instance?.PlaySkillVfx(skillId, merc.GetHitPosition(), true, merc.GetVfxFacingDir(), merc.transform);
+            skipTailVfx = true;
         }
         else if (kind == MercSkillExecutor.Kind.TeamShield)
         {
             // 【2026-10-30 竞技场】护盾目标 = 玩家方全体，敌方佣兵不放（直接返回 false 不扣蓝不进冷却）
+            // 【2026-11-12】塔克 SK008 仍是全队盾（10%/6s/100%），与玩家圣盾壁垒（仅自己/35%/5s/75%）两层独立。
             if (!merc.isAlly) return false;
             MercSkillExecutor.TeamShieldParams(skillId, out float ratio, out float duration);
-            ApplyTeamShieldBuff(ratio, duration);
+            ApplyTeamShieldBuff(ratio, duration, GameConfig.MERC_TEAM_SHIELD_ABSORB);
+            PlayShieldVfxForTeam(skillId);
+            skipTailVfx = true;
         }
         else if (kind == MercSkillExecutor.Kind.TeamHealAtk)
         {
@@ -250,6 +262,7 @@ public sealed class SkillCastService
                     }
                 }
             }
+            skipTailVfx = true;
         }
         else if (kind == MercSkillExecutor.Kind.FearThenFallback)
         {
@@ -287,7 +300,7 @@ public sealed class SkillCastService
             if (Mathf.Abs(dx) > 0.05f) face = dx > 0f ? 1 : -1;
         }
         // 移动判定 AOE（MoveAoe）：VFX 随 MoveAoeExecutor 锚点走，不钉在命中点
-        if (skill.skillType != SkillSystem.SkillType.MoveAoe)
+        if (skill.skillType != SkillSystem.SkillType.MoveAoe && !skipTailVfx)
             SkillRegistry.Instance?.PlaySkillVfx(
                 skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
 
@@ -308,17 +321,96 @@ public sealed class SkillCastService
     }
 
 
-    void ApplyTeamShieldBuff(float ratio, float duration)
+    /// <summary>
+    /// 【2026-11-12 主人拍板】圣盾壁垒只给玩家自己挂盾，不给任何佣兵；
+    /// 与 ApplyTeamShieldBuff（塔克 SK008 全队盾）分开，两层在 PlayerPassiveCombat 里独立存放、互不覆盖。
+    /// </summary>
+    void ApplyPlayerSelfShield(float ratio, float duration, float absorbRatio)
+    {
+        PlayerPassiveCombat.Instance?.ApplySelfShieldFromSkill(ratio, duration, absorbRatio);
+        BattleUI.Instance?.RefreshShieldBars();
+    }
+
+    /// <summary>圣盾壁垒特效只播玩家一份（塔克 SK008 仍走 PlayShieldVfxForTeam 逐人播）。</summary>
+    void PlayShieldVfxForSelf(string skillId)
+    {
+        var vfx = SkillRegistry.Instance;
+        if (vfx == null)
+        {
+            Debug.LogError("[SkillCast] SkillRegistry.Instance is null, self shield VFX skipped");
+            return;
+        }
+        if (Hero.Instance != null && !Hero.Instance.isDead)
+            vfx.PlaySkillVfx(skillId, Hero.Instance.GetHitPosition(), true, 1, Hero.Instance.transform);
+    }
+
+    /// <summary>佣兵团队护盾（SK008 等）：玩家 + 全部出战佣兵各挂一层。玩家技能 holy_barrier 不走这里。</summary>
+    void ApplyTeamShieldBuff(float ratio, float duration, float absorbRatio)
     {
         // 玩家（英雄）也要吃到这层护盾：以前只遍历佣兵，玩家开了技能一点减伤都没有。
-        PlayerPassiveCombat.Instance?.ApplyTeamShieldFromActive(ratio, duration);
+        PlayerPassiveCombat.Instance?.ApplyTeamShieldFromActive(ratio, duration, absorbRatio);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
         if (mercs != null)
         {
             for (int i = 0; i < mercs.Count; i++)
             {
                 if (mercs[i]?.PassiveRunner != null)
-                    mercs[i].PassiveRunner.ApplyTeamShieldFromActive(ratio, duration);
+                    mercs[i].PassiveRunner.ApplyTeamShieldFromActive(ratio, duration, absorbRatio);
+            }
+        }
+        BattleUI.Instance?.RefreshShieldBars();
+    }
+
+    void PlayShieldVfxForTeam(string skillId)
+    {
+        var vfx = SkillRegistry.Instance;
+        if (vfx == null)
+        {
+            Debug.LogError("[SkillCast] SkillRegistry.Instance is null, team shield VFX skipped");
+            return;
+        }
+        if (Hero.Instance != null && !Hero.Instance.isDead)
+            vfx.PlaySkillVfx(skillId, Hero.Instance.GetHitPosition(), true, 1, Hero.Instance.transform);
+        var mercs = MercenaryManager.Instance?.GetActiveMercs();
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+            {
+                var m = mercs[i];
+                if (m == null || m.isDead) continue;
+                vfx.PlaySkillVfx(skillId, m.GetHitPosition(), true, 1, m.transform);
+            }
+        }
+    }
+
+    void PlayHealVfxForTeam(string skillId, UnitBase healer, bool enemyTeam)
+    {
+        var vfx = SkillRegistry.Instance;
+        if (vfx == null)
+        {
+            Debug.LogError("[SkillCast] SkillRegistry.Instance is null, team heal VFX skipped");
+            return;
+        }
+        if (enemyTeam)
+        {
+            for (int i = 0; i < monsters.Count; i++)
+            {
+                var m = monsters[i] as Mercenary;
+                if (m == null || m.isDead || m.isAlly) continue;
+                vfx.PlaySkillVfx(skillId, m.GetHitPosition(), true, 1, m.transform);
+            }
+            return;
+        }
+        if (Hero.Instance != null && !Hero.Instance.isDead)
+            vfx.PlaySkillVfx(skillId, Hero.Instance.GetHitPosition(), true, 1, Hero.Instance.transform);
+        var mercs = MercenaryManager.Instance?.GetActiveMercs();
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+            {
+                var m = mercs[i];
+                if (m == null || m.isDead) continue;
+                vfx.PlaySkillVfx(skillId, m.GetHitPosition(), true, 1, m.transform);
             }
         }
     }

@@ -36,7 +36,7 @@ public partial class BattleUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 刷新三张角色卡的蓝色盾条（抵扣型护盾：佣兵 SK008 圣光庇护那一层）。
+    /// 刷新三张角色卡的蓝色盾条（抵扣型护盾：玩家自身盾 + 佣兵 SK008 全队盾，两层并存）。
     /// 与血条分开刷：护盾掉值 / 到期时血量数字不一定变，不能挂进 RefreshLiveBars 的
     /// 「血量有变化才刷」判定里，否则盾条会卡在旧值不消失。
     /// </summary>
@@ -44,8 +44,11 @@ public partial class BattleUI : MonoBehaviour
     {
         var passive = PlayerPassiveCombat.Instance;
         if (playerSlot != null)
-            playerSlot.SetShield(passive != null ? passive.TeamShieldAmount : 0f,
-                                 passive != null ? passive.TeamShieldMax : 0f);
+        {
+            // 玩家槽两层盾合并成一条显示（自身盾 + 团队盾互不影响，条只表达当前/上限比例）
+            playerSlot.SetShield(passive != null ? passive.SelfShieldAmount + passive.TeamShieldAmount : 0f,
+                                 passive != null ? passive.SelfShieldMax + passive.TeamShieldMax : 0f);
+        }
 
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
         RefreshMercShield(mercSlot1, mercs, 0);
@@ -235,6 +238,13 @@ public partial class BattleUI : MonoBehaviour
 
     void RefreshTutorialMercSlot(MercenaryManager mm)
     {
+        // 星级真源 = MercStarSystem.OutStarOf（局外星），不用局内 star；引导局也刷，否则预制体默认 3 颗常亮
+        var starMercs = mm != null ? mm.GetActiveMercs() : null;
+        string tutHire = (starMercs != null && starMercs.Count > 0 && starMercs[0] != null)
+            ? (!string.IsNullOrEmpty(starMercs[0].hireId) ? starMercs[0].hireId : StoryProgress.TutorialMercHireId)
+            : null;
+        RefreshMercSlotStars(mercSlot1, tutHire);
+        RefreshMercSlotStars(mercSlot2, null);
         if (mercSlot1 == null || mm == null) return;
         var mercs = mm.GetActiveMercs();
         if (mercs == null || mercs.Count == 0 || mercs[0] == null) return;
@@ -333,6 +343,30 @@ public partial class BattleUI : MonoBehaviour
         return MercRosterDefs.MercRarity.Common;
     }
 
+    // 星级真源 = MercStarSystem.OutStarOf（局外星 0~3），不用局内 star；空槽 / null 全灭防槽位复用残留
+    static bool _mercStarNodeMissingLogged;
+    static void RefreshMercSlotStars(CharacterSlotUI slot, string hireId)
+    {
+        if (slot == null || slot.root == null) return;
+        var stars = FindDeepChildIgnoreCase(slot.root.transform, "star");
+        if (stars == null)
+        {
+            if (!_mercStarNodeMissingLogged) { _mercStarNodeMissingLogged = true; Debug.LogError("[BattleUI] 佣兵槽找不到 star 容器节点，星级不刷新"); }
+            return;
+        }
+        int lit = hireId == null ? 0 : Mathf.Clamp(MercStarSystem.OutStarOf(hireId), 0, 3);
+        for (int i = 0; i < 3; i++)
+        {
+            Transform n = stars.Find((i + 1).ToString());
+            if (n == null)
+            {
+                if (!_mercStarNodeMissingLogged) { _mercStarNodeMissingLogged = true; Debug.LogError("[BattleUI] star 下找不到子节点 " + (i + 1) + "，跳过"); }
+                continue;
+            }
+            n.gameObject.SetActive(i < lit);
+        }
+    }
+
     void SetupMercSlot(CharacterSlotUI slot, int index,
         List<string> mercIds, List<string> mercHireIds, List<Mercenary> activeMercs, int maxSlots, MercenaryManager mm)
     {
@@ -345,6 +379,7 @@ public partial class BattleUI : MonoBehaviour
             slot.SetJobIcon(null);
             slot.ShowUnavailable(MercLockedHint);
             slot.SetBondBadge(null);   // 【2026-11-09】未解锁槽清掉复用残留的羁绊角标
+            RefreshMercSlotStars(slot, null);
             return;
         }
         if (index < mercIds.Count)
@@ -394,6 +429,7 @@ public partial class BattleUI : MonoBehaviour
             slot.SetSkillBadge(null);
             // 【2026-11-09】左上角「羁绊」角标：与佣兵队列列表卡同款（共用 BondBadge 出口）
             slot.SetBondBadge(hireId);
+            RefreshMercSlotStars(slot, hireId);
 
             if (index < activeMercs.Count && activeMercs[index] != null)
             {
@@ -415,6 +451,7 @@ public partial class BattleUI : MonoBehaviour
             // 已解锁但无佣兵：空槽占位
             slot.SetJobIcon(null);
             slot.ShowEmpty();
+            RefreshMercSlotStars(slot, null);
         }
     }
 

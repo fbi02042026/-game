@@ -237,6 +237,47 @@ public class RewardPopupUI : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-11-12 主人拍板】领奖统一出口：任务 / 成就 / 里程领奖一律弹「获得奖励」窗，
+    /// 不再各自 Toast。图标沿用邮件领取 / 每日登录同款 Common 图标（缺图由 CommonIconSprites 报错）。
+    /// extras 放称号、装备名这类没有资源图标的奖励，每条一格；清单为空时不弹窗。
+    /// </summary>
+    public static void ShowClaimRewards(long gold, long mats, long talent, long diamond, string[] extras = null)
+    {
+        var items = new List<Entry>();
+        if (gold > 0) items.Add(new Entry(CommonIconSprites.Load("icon_gold"), "金币 ×" + gold));
+        if (diamond > 0) items.Add(new Entry(CommonIconSprites.Load("icon_diamond_blue"), "钻石 ×" + diamond));
+        if (mats > 0) items.Add(new Entry(CommonIconSprites.Load("icon_decompose_mat"), "分解材料 ×" + mats));
+        if (talent > 0) items.Add(new Entry(CommonIconSprites.Load("icon_talent_stone"), "天赋石 ×" + talent));
+        if (extras != null)
+        {
+            for (int i = 0; i < extras.Length; i++)
+                if (!string.IsNullOrEmpty(extras[i])) items.Add(new Entry(null, extras[i]));
+        }
+        Show(items);
+    }
+
+    /// <summary>装备类领奖条目：名字上稀有度色 + 框体走 EquipRarityFrame 唯一出口（2026-11-11 主人拍板）。</summary>
+    public static void ShowClaimEquip(string label, Sprite icon, Rarity rarity)
+    {
+        var e = new Entry(icon, label);
+        e.nameColor = RarityPalette.Get(rarity);
+        e.frameSprite = EquipRarityFrame.SpriteOf(rarity);
+        Show(new List<Entry> { e });
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板】商店购买成功也走「获得奖励」窗：单件商品 = 图标 + 名称×数量。
+    /// 装备类商品由调用方传 nameColor / frameSprite（框体唯一出口 EquipRarityFrame）。
+    /// </summary>
+    public static void ShowClaimGoods(Sprite icon, string label, Color? nameColor = null, Sprite frameSprite = null)
+    {
+        var e = new Entry(icon, label);
+        e.nameColor = nameColor;
+        e.frameSprite = frameSprite;
+        Show(new List<Entry> { e });
+    }
+
+    /// <summary>
     /// 【2026-11-02 主人拍板「弹完获得窗再弹出生点已保存」】带**关窗回调**的版本：
     /// 玩家点「确定」/ 点任意处关掉本窗后触发一次（幂等，只触发一次）。
     /// 用于「宝箱获得 → 出生点已保存 → 继续下一层」这种必须按顺序弹的链。
@@ -346,15 +387,15 @@ public class RewardPopupUI : MonoBehaviour
     ///   ① 画在弹窗画布(905)之下 → 被全屏 Mask(66%黑)/Panel 压暗，粒子飘出面板边缘才看得见 → 观感时有时无；
     ///   ② 结算/剧情链把 timeScale 压 0 时弹的窗（BattleManager.Settlement），粒子动画冻在静帧。
     /// 修法（只改运行时组件参数，绝不碰 .prefab）：
-    ///   ① Renderer.sortingOrder = RewardPopup+1 → 与画布同走 ScreenSpaceCamera 的 sorting：
-    ///      弹窗画布被渲染时特效必然一起被渲染，且画在面板上方清晰显示；绑到哪台相机都不再「玄学」；
+        ///   ① Renderer.sortingOrder = RewardPopup-1 → 与画布同走 ScreenSpaceCamera 的 sorting，且画在面板下方：
+        ///      特效不再盖住标题/奖励格/文字/按钮；代价是被半透明 Panel 压暗，主要在面板边缘/透明区可见；
     ///   ② main.useUnscaledTime = true → timeScale=0 时也正常闪烁（正常时间下速度不变，零观感差异）。
     /// 注意：order 在「画布之下/之上」只有两档，没有中间档（画布内部元素排序不与粒子逐个比较）；
-    ///       若嫌特效压住奖励格子，一句话即可改回画布之下（= RewardPopup-1），再往下就得拆画布。
+    ///       当前默认画布之下(-1)；若想特效清晰浮在界面上盖住内容，再改回 +1（RewardPopup+1），但会遮挡文字/按钮。
     /// </summary>
     void SetupFxLayering()
     {
-        int fxOrder = GameConfig.UiSort.RewardPopup + 1;
+        int fxOrder = GameConfig.UiSort.RewardPopup - 1;
         var renderers = GetComponentsInChildren<ParticleSystemRenderer>(true);
         if (renderers == null || renderers.Length == 0)
             Debug.LogError("[RewardPopup] 找不到特效粒子 Renderer（ItemSparkleYellow/effect），特效 sorting 挂接失效");

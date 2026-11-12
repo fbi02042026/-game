@@ -308,6 +308,19 @@ public partial class Monster
         // 从远处走来的怪停在 2.7 永远够不着 2.42，只能干站着（引导大波最后两只远程即此）。
         // 代价：玩家微移时远程会跟着小幅挪步 —— 主人拍板「会去找着打」优先于「防滑步」。
         bool inHoldRange = IsInBasicAttackRange(target);
+        var affix = MonsterAffix.Get(this);
+
+        // 【2026-11-12 主人拍板】迅捷表定词缀怪：打一下拉开距离，再走回来打（打带跑）。
+        // 保持面向目标倒退，不转身；窗口结束由下方常规追击自然接管，不新增一套位移系统。
+        if (affix != null && affix.IsKiting)
+        {
+            float away = GetCombatX(target) >= GetCombatX(this) ? -1f : 1f;
+            float kiteSpd = attr.GetAttr(AttrType.MoveSpeed) * 1.5f;
+            if (rb != null) rb.velocity = new Vector2(away * kiteSpd, rb.velocity.y);
+            if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            ApplyLaneY(Time.deltaTime);
+            return;
+        }
 
         if (melee)
         {
@@ -330,6 +343,7 @@ public partial class Monster
             {
                 Attack(target);
                 attackCd = GetAttackCooldown();
+                if (affix != null) affix.NotifyAttackForKite();
             }
         }
         else if (melee && distance <= attackRange)

@@ -124,6 +124,9 @@ public partial class BattleEntryDraftPanel
         if (_animCo != null) { StopCoroutine(_animCo); _animCo = null; }
         if (_settleCo != null) { StopCoroutine(_settleCo); _settleCo = null; }
         SetDraftVisible(true);
+        // 【2026-11-12 主人拍板「全部常显」】onFight == null = 已经开打（CoStageEntryDraft 收尾切常显），
+        // 此时不该再留一个点了没反应的「继续/开始战斗」按钮；进关阶段传回调的调用方零影响。
+        if (onFight == null && _continueBtn != null) _continueBtn.gameObject.SetActive(false);
         _expanded = true;
         // 【2026-10-31】面板 UI 一步落位不变（主人拍板「不会出现抽奖时那个界面动画了」）。
         // 【2026-11-09 主人拍板】0.25s 滑动整套去掉：map / 世界层从第一帧起就恒在终态，

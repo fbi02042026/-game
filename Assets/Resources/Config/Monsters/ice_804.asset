@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_804
   m_EditorClassIdentifier: 
   id: ice_804
-  monsterName: "雪境冰龙"
+  monsterName: "悬空雪卵"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

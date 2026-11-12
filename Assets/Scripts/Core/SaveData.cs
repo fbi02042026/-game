@@ -114,6 +114,7 @@ public class SaveData
     /// 新开通批次点亮（人物升级跨过新门槛才重新亮）；判定唯一口径 = TalentDefs.EntryDotShouldLight。
     /// </summary>
     public int talentNewSeenLevel = 0;
+    public bool worldTabSeen = false; // 2026-11-12 世界页红点：打开即记已看，红点灭
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石
     public int decomposeMats = 0;   // 分解材料
@@ -544,6 +545,24 @@ public class SaveData
         seenAffixMonsterEntries.Add(new StringIdEntry { id = monsterId });
     }
 
+    // === 词条种类首次登场提示已读（2026-11-12 主人拍板：已读粒度从怪物 id 改为词条种类；旧字段保留不删、旧存档已读记录不迁移）===
+    /// <summary>该词条种类的左缘提示弹窗是否已看过（看过 -> 所有带该词条的怪都不再提示）。</summary>
+    public bool HasSeenAffixKind(MonsterAffixId id)
+    {
+        seenAffixKinds ??= new HashSet<string>();
+        return seenAffixKinds.Contains(id.ToString());
+    }
+
+    /// <summary>标记该词条种类提示已读（幂等；落盘由调用方随后 SaveSystem.Instance.Save() 负责）。</summary>
+    public void MarkAffixKindSeen(MonsterAffixId id)
+    {
+        string key = id.ToString();
+        seenAffixKinds ??= new HashSet<string>();
+        if (!seenAffixKinds.Add(key)) return;
+        seenAffixKindEntries ??= new List<StringIdEntry>();
+        seenAffixKindEntries.Add(new StringIdEntry { id = key });
+    }
+
     /// <summary>章节通关次数列表（用于渐进式怪物解锁）。
     /// ⚠️【2026-11-05】B2 起语义是「大关通关次数」（每通一座大关 Boss +1），**不等于整篇通关**，
     /// 任何解锁 / 进度判定禁止再读本字段（误标来源已彻底删除）。</summary>
@@ -732,6 +751,12 @@ public class SaveData
     // 没看过则每次进战斗该怪第一次出现时再提示（不强制观看）。
     [NonSerialized] public HashSet<string> seenAffixMonsterIds = new HashSet<string>();
     public List<StringIdEntry> seenAffixMonsterEntries = new List<StringIdEntry>();
+    // === 词条种类首次登场提示已读记录（2026-11-12 主人拍板：已读粒度从怪物 id 改为词条种类）===
+    // key = MonsterAffixId 枚举名字符串（如 "Bulwark"），与上面的怪物 id 集合完全隔离、互不影响。
+    // 某种词条的弹窗看过一次后，所有带该词条的怪都不再弹图标（共 7 种词条）。
+    // 旧字段 seenAffixMonsterIds / seenAffixMonsterEntries 保留不删、旧存档已读记录不迁移。
+    [NonSerialized] public HashSet<string> seenAffixKinds = new HashSet<string>();
+    public List<StringIdEntry> seenAffixKindEntries = new List<StringIdEntry>();
 
     // === 主线任务进度（2026-09-20 迁移：从 PlayerPrefs mq_v1_* 迁入云存档）===
     // 已完成集合：id = questId（如 C1_Q2）
@@ -770,6 +795,10 @@ public class SaveData
     public int dailyStageClearCount = 0;
     /// <summary>已领取「通关 3 关」5 石奖励的日期键（跨天后可再领）。</summary>
     public string dailyClearTaskClaimDayKey = "";
+    // 2026-11-12 主人拍板：每日通关任务经验通关时只记待发、回城由 DailyTaskSystem.Settle 发放，避免与关卡经验在同一结算连算
+    public int dailyClearExpPending = 0;
+    // 2026-11-12 主人拍板：前期每关最多升 1 级；本次通关允许的最高等级 = 通关前等级+1，回城补发每日经验也要受它约束，下一关自动重设
+    public int stageLevelUpCapLevel = 0;
     /// <summary>每日任务阈值：当日通关 3 关。</summary>
     public const int DAILY_CLEAR_TASK_NEED = 3;
     /// <summary>每日任务奖励：5 天赋石。</summary>
@@ -1107,6 +1136,7 @@ public class SaveData
         clearedStages = ToIdSet(clearedStageEntries);
         chestClaimedStages = ToIdSet(chestClaimedStageEntries);
         seenAffixMonsterIds = ToIdSet(seenAffixMonsterEntries);
+        seenAffixKinds = ToIdSet(seenAffixKindEntries);   // 【2026-11-12】词条种类已读：反序列化后重建（ToIdSet 自带 null 兼容，旧档 Entries=null -> 空集）
         clearedChapterDiffKeys = ToIdSet(clearedChapterDiffEntries);
         clearedStageDiffKeys = ToIdSet(clearedStageDiffEntries);   // 【2026-11-05 难度隔离】困难/噩梦关卡真源
 
@@ -2351,6 +2381,7 @@ public class SaveData
         mercDrawPool ??= new List<string>();
         clearedChapterIds ??= new HashSet<int>();
         seenAffixMonsterIds ??= new HashSet<string>();
+        seenAffixKinds ??= new HashSet<string>();
         claimedCodexRewardIds ??= new HashSet<string>();
         defeatedMonsterIds ??= new HashSet<string>();
         claimedLogMileageLevels ??= new HashSet<int>();
@@ -2415,6 +2446,7 @@ public class SaveData
         seenMonsterEntries = FromIdSet(seenMonsterIds);
         viewedMonsterEntries = FromIdSet(viewedMonsterIds);
         seenAffixMonsterEntries = FromIdSet(seenAffixMonsterIds);   // 【2026-11-03】词条怪提示已读镜像
+        seenAffixKindEntries = FromIdSet(seenAffixKinds);   // 【2026-11-12】词条种类提示已读镜像
         seenMercEntries = FromIdSet(seenMercIds);
         viewedMercEntries = FromIdSet(viewedMercIds);
         unlockedMercEntries = FromIdSet(unlockedMercIds);

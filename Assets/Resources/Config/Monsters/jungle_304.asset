@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_304
   m_EditorClassIdentifier: 
   id: jungle_304
-  monsterName: 孢子蝠
+  monsterName: 部落斥候
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

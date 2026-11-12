@@ -583,7 +583,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         if (_renwu != null) _renwu.SetActive(false);
     }
 
-    void RefreshPanel()
+    void RefreshPanel(bool resetScroll = true)
     {
         EnsureUi();
         if (_panel == null) return;
@@ -606,8 +606,9 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         // 2026-10-20 主人拍板：每次打开都强制全不透明 + 弹窗根提到日志内容之上
         ForcePanelOpaque();
         (_panel.transform.parent as RectTransform)?.SetAsLastSibling();
-        // 2026-10-21 行池化：每次打开都从第一行看起（买完/合成完刷新也滚回顶部）
-        if (_rowScroll != null) _rowScroll.verticalNormalizedPosition = 1f;
+        // 2026-10-21 行池化：打开时从第一行看起；【2026-11-12】购买后刷新不回顶，
+        // 否则刚兑完的商品沉到列表最下面却被滚回顶部盖住，看起来像「被隐藏」。
+        if (resetScroll && _rowScroll != null) _rowScroll.verticalNormalizedPosition = 1f;
 
         if (_mode == Mode.Craft)
         {
@@ -662,14 +663,15 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 int earned = AdventureLogMileage.TotalEarned;   // 累计获得 = 等级进度（2026-10-20 主人拍板：消费不掉级）
                 int lv = AdventureLogMileage.GetLevel();
                 string titleName = AdventureLogMileage.LevelRewards[lv - 1].Label;
+                // 【2026-11-12 主人拍板】等级称号前补 Lv 数字，玩家一眼知道当前是第几级
                 string levelLine = lv >= AdventureLogMileage.MaxLevel
-                    ? $"日志里程等级：{titleName} <color=#{gold}>{earned}点（满级）</color>"
-                    : $"日志里程等级：{titleName} <color=#{gold}>{earned}/{AdventureLogMileage.NextThreshold()}</color>";
+                    ? $"日志里程等级：<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}点（满级）</color>"
+                    : $"日志里程等级：<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}/{AdventureLogMileage.NextThreshold()}</color>";
                 int scrollCommon = SaveSystem.Instance?.Data?.mercScrollCommon ?? 0;
                 int scrollLegendary = SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0;
                 // 2026-10-21 遗忘药水库存行（洗天赋消耗道具，里程商店 500 点/周限 1）
                 int potionHave = SaveSystem.Instance?.Data?.TownBagCount("item_forget_potion") ?? 0;
-                _body.text = $"日志里程点数：<color=#{gold}>{pts}</color>"
+                _body.text = $"日志里程点数：<size=36><b><color=#{gold}>{pts}</color></b></size>"
                              + $"\n{levelLine}"
                              + $"\n卷轴库存 普通<color=#{gold}>{scrollCommon}</color>"
                              + $"/高级<color=#{gold}>{scrollLegendary}</color>"
@@ -705,6 +707,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             EnsureRowCount(shopRows);
             int row = 0;
             foreach (var e in normal) { FillShopRow(row, e); row++; }
+            // 【2026-11-12 主人拍板】已兑完 / 已领取的条目一律沉到最下面，照样 FillShopRow
+            // 显示「已兑完 / 已领取」并置灰，绝不 SetActive(false)，也不移出列表。
             foreach (var e in sunk) { FillShopRow(row, e); row++; }
             UpdateContentHeight(row);
         }
@@ -837,7 +841,7 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                             UIManager.Instance?.ShowToast("暂不可领取");
                         return;
                     }
-                    UIManager.Instance?.ShowToast($"已领取 Lv2 里程奖励");
+                    // 2026-11-12：统一由 ClaimLevel 弹「获得奖励」窗，不再 Toast
                     RefreshPanel();
                     _host?.RefreshAfterPhase3();
                 });
@@ -882,13 +886,13 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 {
                     // ClaimWeaponMilestone 内部：先发货（直接穿上）→ 成功才记账入存档；
                     // 发放失败内部已 Toast 并可重试，这里只在「真的不可领」时补「暂不可领取」
-                    if (!AdventureLogMileage.ClaimWeaponMilestone(weaponIdx, out string granted))
+                    if (!AdventureLogMileage.ClaimWeaponMilestone(weaponIdx, out _))
                     {
                         if (!AdventureLogMileage.CanClaimWeaponMilestone(AdventureLogMileage.WeaponMilestones[weaponIdx]))
                             UIManager.Instance?.ShowToast("暂不可领取");
                         return;
                     }
-                    UIManager.Instance?.ShowToast($"已领取里程奖励：{granted}");
+                    // 2026-11-12：统一由 ClaimWeaponMilestone 弹「获得奖励」窗，不再 Toast
                     RefreshPanel();
                     _host?.RefreshAfterPhase3();
                 });
@@ -926,11 +930,16 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
                 _exchangeBtns[rowIdx].onClick.AddListener(() =>
                 {
-                    if (AdventureLogMileageShop.TryBuyDailyLegendaryGift(out string msg))
-                        UIManager.Instance?.ShowToast(msg);
-                    else
+                    if (!AdventureLogMileageShop.TryBuyDailyLegendaryGift(out string msg))
+                    {
                         UIManager.Instance?.ShowToast(msg ?? "无法兑换");
-                    RefreshPanel();
+                        return;
+                    }
+                    // 【2026-11-12】购买也走「获得奖励」窗；图标取本行已填好的那张
+                    var icon = _icons[rowIdx] != null ? _icons[rowIdx].sprite : null;
+                    RewardPopupUI.ShowClaimGoods(icon, (gift != null ? gift.Name : "传奇礼物") + " ×1");
+                    RefreshPanel(false);
+                    _host?.RefreshAfterPhase3();   // 补上宿主刷新：里程点数 / 红点跟着变
                 });
             }
             return;
@@ -965,11 +974,16 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             _exchangeBtns[rowIdx].onClick.RemoveAllListeners();
             _exchangeBtns[rowIdx].onClick.AddListener(() =>
             {
-                if (AdventureLogMileageShop.TryBuy(idx, out string msg))
-                    UIManager.Instance?.ShowToast(msg);
-                else
+                if (!AdventureLogMileageShop.TryBuy(idx, out string msg))
+                {
                     UIManager.Instance?.ShowToast(msg ?? "无法兑换");
-                RefreshPanel();
+                    return;
+                }
+                // 【2026-11-12】购买也走「获得奖励」窗；图标取本行已填好的那张
+                var icon = _icons[rowIdx] != null ? _icons[rowIdx].sprite : null;
+                RewardPopupUI.ShowClaimGoods(icon, item.Name + " ×" + item.Amount);
+                RefreshPanel(false);
+                _host?.RefreshAfterPhase3();   // 补上宿主刷新：里程点数 / 红点跟着变
             });
         }
     }

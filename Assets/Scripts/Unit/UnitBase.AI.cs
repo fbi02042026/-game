@@ -294,6 +294,9 @@ public partial class UnitBase
     protected void ClampToScreen()
     {
         if (!(this is Hero)) return;
+        // 【2026-11-12 主人报「黑幕结束玩家已站在地图上，卡一下才往前走」走进场免罪：
+        // 黑幕底下摆屏外→走进开战位期间若开钳制，UnitsCanAct 短暂为 true 的窗口会把整队扣回屏内，直接跳过。
+        if (BattleManager.Instance != null && BattleManager.Instance.PartyIntroWalking) return;
         Camera cam = Camera.main;
         if (cam == null) return;
         float halfH = cam.orthographicSize;

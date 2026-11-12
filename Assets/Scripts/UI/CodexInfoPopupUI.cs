@@ -10,6 +10,8 @@ using UnityEngine.UI;
 public class CodexInfoPopupUI : MonoBehaviour
 {
     public const string PrefabPath = "Prefabs/Town/CodexInfoPopup";
+    /// <summary>【2026-11-12 主人拍板】任务详情「前往」按钮复用游戏里现成的偏蓝色通用按钮（无字，100×33）。</summary>
+    const string GoButtonSpritePath = "UI/Art/Common/复活按钮";
 
     public static CodexInfoPopupUI Instance { get; private set; }
 
@@ -102,10 +104,14 @@ public class CodexInfoPopupUI : MonoBehaviour
     public bool IsOpen => root != null && root.activeSelf;
 
     public static void Show(string title, string meta, string desc, string lore, Sprite portraitSprite, bool? codexKind = null,
-        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false)
+        string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false,
+        string goText = null, Action onGo = null)
     {
-        Ensure().Open(title, meta, desc, lore, portraitSprite, null, null, codexKind: codexKind,
-            topTitleOverride: topTitleOverride, topIconPath: topIconPath, rewards: rewards, taskLayout: taskLayout);
+        // 【2026-11-12】goText/onGo 非空时在弹窗底部显示「前往」：底图换成游戏里的蓝色通用按钮，
+        // 文案与回调由调用方给，不动预制体与弹窗排版（底部留白 bottomPad 已按按钮显隐自适应）。
+        Ensure().Open(title, meta, desc, lore, portraitSprite, goText, onGo, codexKind: codexKind,
+            topTitleOverride: topTitleOverride, topIconPath: topIconPath, rewards: rewards, taskLayout: taskLayout,
+            goStyle: onGo != null);
     }
 
     /// <summary>
@@ -300,7 +306,7 @@ public class CodexInfoPopupUI : MonoBehaviour
     void Open(string title, string meta, string desc, string lore, Sprite portraitSprite,
         string unlockText, Action onUnlock, Sprite zoomSprite = null, bool? codexKind = null,
         string topTitleOverride = null, string topIconPath = null, RewardChip[] rewards = null, bool taskLayout = false,
-        Color? nameColor = null, bool silhouette = false)
+        Color? nameColor = null, bool silhouette = false, bool goStyle = false)
     {
         BindRefs();
         Wire();
@@ -321,6 +327,21 @@ public class CodexInfoPopupUI : MonoBehaviour
                 ub.onClick.RemoveAllListeners();
                 ub.onClick.AddListener(OnClickUnlock);
                 if (unlockButtonLabel != null) unlockButtonLabel.text = unlockText;
+                // 【2026-11-12 主人拍板】「前往」用游戏里现成的偏蓝色通用按钮底图，
+                // 白字「前往」由 unlockButtonLabel 写；「解锁」仍走冒险日志「字底」原样。
+                // 每次 Show 都重设，避免同一弹窗实例在两种按钮间切换时残留上一张图。
+                // 取不到蓝色图直接 LogError，不兜底。
+                var ubImg = ub.GetComponent<Image>();
+                if (ubImg != null)
+                {
+                    if (!goStyle) UiKeyedBackgrounds.ApplyLogFrame(ubImg, "字底", false);
+                    else
+                    {
+                        var sp = Resources.Load<Sprite>(GoButtonSpritePath);
+                        if (sp == null) Debug.LogError("[CodexInfoPopup] 缺「前往」按钮底图：" + GoButtonSpritePath);
+                        else { ubImg.sprite = sp; ubImg.color = Color.white; }
+                    }
+                }
             }
         }
         // 【2026-11-07 主人拍板】图鉴详情：头部 top/Name 固定放名字，大字 Title 放出现地点（怪物）/职业（佣兵）。

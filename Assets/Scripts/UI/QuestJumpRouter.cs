@@ -32,8 +32,7 @@ public static class QuestJumpRouter
             case MainQuestType.TalkNpc:
                 // 找老板娘：人就在酒馆，切过去再开口
                 if (!GoTavern()) return false;
-                Play(MainQuestDialogues.NpcTalk(def.param, def.chapter),
-                    () => MainQuestSystem.NotifyTalk(def.param));
+                PlayTalkQuest(def);
                 return true;
 
             // WatchStory（回顾剧情）已整条删除（2026-11-01 主人拍板「不要回顾剧情这个模式，
@@ -58,6 +57,16 @@ public static class QuestJumpRouter
                 return GoTalent();
         }
         return false;
+    }
+
+    /// <summary>
+    /// 【2026-11-12 主人拍板「点立绘优先走任务」】播「找 NPC 聊聊」任务的对话，播完标记完成。
+    /// 任务栏/任务详情「前往」与玩家自己进酒馆点 NPC 立绘共用这一出口，不复制一份剧情/回调逻辑。
+    /// </summary>
+    public static bool PlayTalkQuest(MainQuestDef def)
+    {
+        return Play(MainQuestDialogues.NpcTalk(def.param, def.chapter),
+            () => MainQuestSystem.NotifyTalk(def.param));
     }
 
     /// <summary>每日任务 → 对应功能界面（2026-10-26 主人拍板「按任务类型前往」：战斗→冒险、升级天赋→角色界面、升一级→冒险）。</summary>

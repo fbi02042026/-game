@@ -313,7 +313,7 @@ public partial class WavePlanner
             totalNormal += w.monsterCount;
         }
         if (spawnable.Count == 0) return;
-        quota = Mathf.Clamp(quota, 0, Mathf.Max(0, totalNormal / 3));   // 封顶总怪数 1/3，防比例失衡
+        quota = Mathf.Clamp(quota, 0, Mathf.Max(0, Mathf.FloorToInt(totalNormal * GameConfig.AFFIX_QUOTA_RATIO)));   // 2026-11-12 主人拍板：封顶 = 本关正常波总怪数 × 5%，取代旧 totalNormal/3；波数压缩后自动跟着降
 
         // 按怪数占比加权摊到波（大数随机法），再修整差额
         var perWaveQuota = new Dictionary<int, int>();

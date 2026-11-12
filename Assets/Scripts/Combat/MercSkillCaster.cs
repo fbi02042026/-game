@@ -26,7 +26,10 @@ public class MercSkillCaster : MonoBehaviour
 
     public string ActiveSkillId => _activeSkillId;
     public float CooldownRemain => _cooldownRemain;
+    /// <summary>当前这一轮冷却的总时长（HUD 遮罩分母）。开场那轮是 MERC_SKILL_OPENING_CD，之后是技能固有 CD。</summary>
     public float CooldownTotal { get; private set; } = 8f;
+    /// <summary>技能固有 CD（表值 × MERC_SKILL_COOLDOWN_MUL）。首发之后每轮都按它重置。</summary>
+    float _normalCooldown = 8f;
     public bool HasActiveSkill => !string.IsNullOrEmpty(_activeSkillId);
     /// <summary>蓝条定位：UI 用它决定「这个槽要不要显示蓝条」。</summary>
     public MpArchetype MpType => _mpType;
@@ -40,10 +43,11 @@ public class MercSkillCaster : MonoBehaviour
         var cfg = SkillRegistry.Instance != null ? SkillRegistry.Instance.Get(activeSkillId) : null;
         // 佣兵 CD = 表值 × MERC_SKILL_COOLDOWN_MUL（维持历史 ×4，不跟随玩家侧回退到 1f）。
         // 佣兵 CD 来自 SkillRegistry（asset 或 merc_skills 表），只有这里一个出口，统一在这乘。
-        CooldownTotal = (cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f) * GameConfig.MERC_SKILL_COOLDOWN_MUL;
-        // 开局按满冷却进场：先普攻，冷却走完才轮到第一发主动技（原为 0，进战瞬间就甩技能）
-        _cooldownRemain = CooldownTotal;
-        _retryTimer = 0f;
+        _normalCooldown = (cfg != null && cfg.cooldown > 0f ? cfg.cooldown : 8f) * GameConfig.MERC_SKILL_COOLDOWN_MUL;
+        // 2026-11-12 主人拍板：佣兵开场先走固定 5 秒冷却（原来直接灌满固有 CD，要等 24~160 秒）。
+        // 首发那一轮的 HUD 分母也跟着用开场值，避免 5/(表值×4) 被显示成一条细缝。
+        // 倒数仍吃 UnitsCanAct 闸（10-31 口径）→ 5 秒从点「开始战斗」解冻那刻算，不从进场算。
+        ResetOpeningCooldown();
 
         // 2026-10-06：定位与耗蓝只在绑定时取一次，运行时不再查表
         _mpType = MpProfile.OfMercSkill(activeSkillId);
@@ -68,13 +72,25 @@ public class MercSkillCaster : MonoBehaviour
                 _mpCost = cost;
             }
         }
-        Debug.Log($"[MercSkillCaster] 绑定 {activeSkillId} 定位={_mpType} 单次耗蓝={_mpCost:0.#} 有效CD={CooldownTotal:0.#}s");
+        Debug.Log($"[MercSkillCaster] 绑定 {activeSkillId} 定位={_mpType} 单次耗蓝={_mpCost:0.#} 有效CD={_normalCooldown:0.#}s 开场CD={CooldownTotal:0.#}s");
+    }
+
+    /// <summary>
+    /// 重新挂开场 CD（2026-11-12 主人拍板「第二关重新算，每关都先走 5 秒」）。
+    /// Bind 与 MercenaryManager.ResetMercenaries 共用此出口；不重算 _normalCooldown（技能固有 CD 不随关卡变）。
+    /// 只重置计时，不动 _mpType / _mpCost / _mpBlocked（绑定期常量）。
+    /// </summary>
+    public void ResetOpeningCooldown()
+    {
+        CooldownTotal = GameConfig.MERC_SKILL_OPENING_CD;
+        _cooldownRemain = CooldownTotal;
+        _retryTimer = 0f;
     }
 
     void Update()
     {
         // 【2026-10-31 主人拍板「佣兵进队别先走CD，开打后再走」】冷却倒数也吃 UnitsCanAct 闸：
-        // 进场走位/剧情冻场/中途抽奖冻结期间 CD 不倒数（Bind 的「开局满 CD」原样保留），
+        // 进场走位/剧情冻场/中途抽奖冻结期间 CD 不倒数（挂上的开场 CD 原样保留），
         // 解冻（开打）那一刻才开始走 —— 与普攻/施放的 UnitsCanAct 口径一致。
         // 战斗管理器不在场时同样不倒数（反正 TryCast 也放不出）。
         if (BattleManager.Instance == null || !BattleManager.Instance.UnitsCanAct) return;
@@ -110,7 +126,11 @@ public class MercSkillCaster : MonoBehaviour
         if (_mpType != MpArchetype.None && !BattleManager.Instance.TrySpendMercMp(_merc, _mpCost)) return false;
         bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual: false);
         if (ok)
+        {
+            // 首发之后回到技能固有 CD（开场那 5 秒只走一轮）。
+            CooldownTotal = _normalCooldown;
             _cooldownRemain = CooldownTotal;
+        }
         return ok;
     }
 

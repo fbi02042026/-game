@@ -1370,9 +1370,25 @@ public class ArenaPopupUI : MonoBehaviour
                 GlobalToastUI.Show("积分不足", true);
                 return;
             }
-            ArenaShopGoods.TryBuy(good.id, out string msg);   // 满星拦截在 TryBuy 内（toast 已有，不扣分）
+            bool bought = ArenaShopGoods.TryBuy(good.id, out string msg);   // 满星拦截在 TryBuy 内（不扣分）
             Debug.Log($"[Arena] 确认购买 {good.id}：TryBuy={(!string.IsNullOrEmpty(msg) ? msg : "成功")}");
-            if (!string.IsNullOrEmpty(msg)) GlobalToastUI.Show(msg, true);
+            if (!bought)
+            {
+                if (!string.IsNullOrEmpty(msg)) GlobalToastUI.Show(msg, true);
+            }
+            else
+            {
+                // 【2026-11-12 主人拍板】商店购买统一走「获得奖励」窗，图标与商品信息弹窗同源
+                Sprite frame = null;
+                Color? nameColor = null;
+                if (good.kind == ArenaShopGoods.GoodKind.Bow)
+                {
+                    // 逐风长弓是装备：框体走稀有度框唯一出口（2026-11-11 主人拍板）
+                    nameColor = RarityPalette.Get(Rarity.Rare);
+                    frame = EquipRarityFrame.SpriteOf(Rarity.Rare);
+                }
+                RewardPopupUI.ShowClaimGoods(ShopIconFor(good), good.DisplayName + " ×1", nameColor, frame);
+            }
             RefreshShop();
         });
     }

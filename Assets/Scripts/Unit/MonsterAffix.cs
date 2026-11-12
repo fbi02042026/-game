@@ -12,6 +12,9 @@ public class MonsterAffix : MonoBehaviour
     readonly List<MonsterAffixId> _ids = new List<MonsterAffixId>();
     Monster _owner;
     bool _splitDone;
+    // 【2026-11-12 主人拍板：迅捷表定词缀怪打一下拉开距离再回来打；只表定怪生效，精英/Boss 掷到 Swift 不触发】
+    float _kiteUntil;
+    const float KITE_SECONDS = 0.6f;
 
     /// <summary>受到伤害的乘子（&lt;1 = 减伤）。Monster.TakeDamage 会读它。</summary>
     public float DamageTakenMul { get; private set; } = 1f;
@@ -85,6 +88,7 @@ public class MonsterAffix : MonoBehaviour
         CritChance = 0f;
         CritDamageMul = 1f;
         _splitDone = false;
+        _kiteUntil = 0f;   // 池化复用：清掉上一只的打带跑状态
         VisualTinted = false;
         if (hadTint && _owner != null)
             _owner.ClearAffixTint();
@@ -114,6 +118,36 @@ public class MonsterAffix : MonoBehaviour
             m.attr.SetAttr(AttrType.AttackSpeed, m.attr.GetAttr(AttrType.AttackSpeed) * atkSpeed);
         if (!Mathf.Approximately(moveSpeed, 1f))
             m.attr.SetAttr(AttrType.MoveSpeed, m.attr.GetAttr(AttrType.MoveSpeed) * moveSpeed);
+
+        // 【2026-11-12 主人拍板】只表定词缀怪（VisualTinted）按词条加基础属性：
+        // 每个词条只加自己那一项，多个词条累乘；精英/Boss 掷骰词缀属性一律不动。
+        if (VisualTinted)
+        {
+            float hpMul = 1f, atkMul = 1f, defMul = 1f;
+            for (int i = 0; i < ids.Count; i++)
+            {
+                var d = MonsterAffixDefs.Get(ids[i]);
+                if (d.HpMul > 0f) hpMul *= d.HpMul;
+                if (d.AtkMul > 0f) atkMul *= d.AtkMul;
+                if (d.DefMul > 0f) defMul *= d.DefMul;
+            }
+            if (!Mathf.Approximately(hpMul, 1f))
+            {
+                m.attr.SetAttr(AttrType.MaxHp, m.attr.GetAttr(AttrType.MaxHp) * hpMul);
+                // Monster.Init.cs:441 在挂词缀（:481）之前就把 currentHp 锁死了，不同步会出现血条满但实际血没涨。
+                m.currentHp = m.attr.GetAttr(AttrType.MaxHp);
+            }
+            if (!Mathf.Approximately(atkMul, 1f))
+            {
+                m.attr.SetAttr(AttrType.Attack, m.attr.GetAttr(AttrType.Attack) * atkMul);
+                m.attr.SetAttr(AttrType.MagicAttack, m.attr.GetAttr(AttrType.MagicAttack) * atkMul);
+            }
+            if (!Mathf.Approximately(defMul, 1f))
+            {
+                m.attr.SetAttr(AttrType.Defense, m.attr.GetAttr(AttrType.Defense) * defMul);
+                m.attr.SetAttr(AttrType.MagicDefense, m.attr.GetAttr(AttrType.MagicDefense) * defMul);
+            }
+        }
     }
 
     /// <summary>血条后缀，如「·狂暴·铁壁」；无词缀返回空串。</summary>
@@ -212,5 +246,25 @@ public class MonsterAffix : MonoBehaviour
     {
         if (!VisualTinted || _owner == null || _ids.Count == 0) return;
         _owner.ApplyAffixTint(MonsterAffixDefs.Get(_ids[0]).Tint);
+    }
+
+    /// <summary>打带跑状态：仅迅捷表定词缀怪攻击后 KITE_SECONDS 秒内为 true（子模型 3 消费）。</summary>
+    public bool IsKiting => VisualTinted && Has(MonsterAffixId.Swift) && Time.time < _kiteUntil;
+
+    public void NotifyAttackForKite()
+    {
+        if (VisualTinted && Has(MonsterAffixId.Swift)) _kiteUntil = Time.time + KITE_SECONDS;
+    }
+
+    /// <summary>头顶词条标签用：还有没看过的词条种类就显示；SaveData 为 null 按未看过处理，空 ids 返回 false。</summary>
+    public bool HasUnseenAffixKind()
+    {
+        if (_ids.Count == 0) return false;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        for (int i = 0; i < _ids.Count; i++)
+        {
+            if (data == null || !data.HasSeenAffixKind(_ids[i])) return true;
+        }
+        return false;
     }
 }

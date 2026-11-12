@@ -277,7 +277,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId, casterBasicKit);
 
         GameObject prefab = GetSkillVfxPrefab(skillId);
-        // 【2026-11-01】技能护盾特效：玩家 holy_barrier(ally_shield) 与佣兵 SK008 同一处理——
+        // 【2026-11-01】技能护盾特效：玩家 holy_barrier(ally_shield) 与佣兵 SK008 同一处理（仅特效，作用范围不同）——
         // 时长跟护盾真实持续时间走（player_skills 5s / merc_skills 6s，读 SkillConfig.duration），
         // 粒子临时改循环（预制体粒子 lengthInSec=1 且不循环，只闪一下就没了），
         // 整体缩小 20%（×0.8）。2026-11-01 主人拍板。

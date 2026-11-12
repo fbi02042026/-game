@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_603
   m_EditorClassIdentifier: 
   id: cave_603
-  monsterName: "石甲甲虫"
+  monsterName: "魔化黏浆"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

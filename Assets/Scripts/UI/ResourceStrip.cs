@@ -19,7 +19,7 @@ using UnityEngine.UI;
 ///
 /// 模式（只切显隐；几何按 2026-10-27 主人晚間新规：两个并排上排、三个横排一排（天赋石接排在金币
 /// 左侧）、四个按 prefab 原生 2×2——见 ApplyRightAlign）：
-///   Main          挂回 TopBar：金币/钻石/天赋石/体力四格全显（公会页 / 主界面观感）；
+///   Main          挂回 TopBar：金币/钻石/体力三格（2026-11-12 主人拍板「主界面去掉天赋石，其他界面不变」）；天赋石列仍留在条内供角色页 GoldDiaTalent 借用，主界面只隐藏不删除；
 ///   DiamondStamina 冒险页两格：只显钻石+体力（主人 2026-10-28 重申「冒险界面只有两个资源：
 ///                  一个钻石一个体力」；此前 10-27 晚的「四格统一」口径作废），金币/天赋石隐藏；
 ///                  两格并排上排（钻石左 / 体力右，见 ApplyRightAlign 的 N=2 分支）；
@@ -295,15 +295,15 @@ public static class ResourceStrip
     }
 
     /// <summary>切资源条列显隐（体力列显隐一并收口在此，2026-10-27 主人拍板）：
-    /// 金币/钻石恒显；天赋石除 GoldDia（两列）外都显；体力仅 Main（主界面）与 DiamondStamina（冒险页）显示。</summary>
+    /// 金币/钻石恒显；天赋石仅 GoldDiaTalent（角色页）显示，Main/GoldDia/DiamondStamina 均隐藏（2026-11-12 主界面去掉天赋石）；体力仅 Main 与 DiamondStamina 显示。</summary>
     public static void SetMode(Mode mode)
     {
         // 钻石列：所有模式都显示（主界面/冒险页/酒馆/各类弹窗都看钻石）
         if (_dia != null) _dia.gameObject.SetActive(true);
         // 金币列：仅 DiamondStamina（冒险页只显钻石+体力）隐藏，其余模式显示
         bool goldOn = mode != Mode.DiamondStamina;
-        // 天赋石列：GoldDia（两列弹窗/酒馆页）/ DiamondStamina（冒险页）隐藏，Main/GoldDiaTalent 显示
-        bool talentOn = mode != Mode.GoldDia && mode != Mode.DiamondStamina;
+        // 天赋石列：【2026-11-12 主人拍板「主界面把天赋石资源去掉 其他界面不变」】Main（主界面）也隐藏；GoldDia（两列弹窗/酒馆页）/ DiamondStamina（冒险页）隐藏；仅 GoldDiaTalent（角色页）显示
+        bool talentOn = mode != Mode.Main && mode != Mode.GoldDia && mode != Mode.DiamondStamina;
         if (_gold != null) _gold.gameObject.SetActive(goldOn);
         if (_talent != null) _talent.gameObject.SetActive(talentOn);
 
@@ -316,7 +316,7 @@ public static class ResourceStrip
         if (gp != null && gp.gameObject.activeSelf != goldOn)
             gp.gameObject.SetActive(goldOn);
 
-        ApplyRightAlign();
+        ApplyRightAlign(mode);
     }
 
     /// <summary>体力列显隐（体力列不迁，仍归主界面 TopBar）：仅 Main（主界面/冒险页）显示；
@@ -334,7 +334,7 @@ public static class ResourceStrip
     /// 右缘锚后「距右缘的边距」在任意屏宽下恒定：瘦屏（Match Width，逻辑宽恒 720）观感不变；
     /// 宽屏（逻辑宽 > 720）整组自动贴住右上角跟着右缘走。
     /// 纵坐标/锚 y/尺寸一律不动（基线全来自 prefab，不写死像素）。锚 x=1 后跟随右缘是锚点天性，无需轮询。</summary>
-    static void ApplyRightAlign()
+    static void ApplyRightAlign(Mode mode)
     {
         float halfDesignW = GameConfig.DESIGN_WIDTH * 0.5f;
 
@@ -370,7 +370,7 @@ public static class ResourceStrip
                     (isLeft ? leftVisual : rightVisual) - visible[i].bgOffset,
                     isLeft ? _goldHomePos.y : _diaHomePos.y);
             }
-            else if (visible.Count == 3)
+            else if (visible.Count == 3 && mode == Mode.GoldDiaTalent)   // Main 隐藏天赋石后同为 3 列，但不重排：各列保持 prefab 原位（不动主界面排版）
             {
                 if (i == 2)
                 {

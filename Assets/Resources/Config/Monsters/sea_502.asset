@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: sea_502
   m_EditorClassIdentifier: 
   id: sea_502
-  monsterName: "深渊水母"
+  monsterName: "独角奔袭者"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

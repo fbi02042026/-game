@@ -849,7 +849,7 @@ public class AdventureLogCodexPanel
             UIManager.Instance?.ShowToast("领取失败");
             return;
         }
-        UIManager.Instance?.ShowToast($"已领取日志里程 Lv{lv}");
+        // 2026-11-12：统一由 ClaimLevel 弹「获得奖励」窗，不再 Toast
         // ClaimAch 文案保持预制体，不改「已领取」
         if (_claimBtn != null) _claimBtn.interactable = false;
     }

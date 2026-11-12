@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: forest_103
   m_EditorClassIdentifier: 
   id: forest_103
-  monsterName: "树精守卫"
+  monsterName: "硬壳甲虫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

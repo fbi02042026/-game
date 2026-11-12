@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_201
   m_EditorClassIdentifier: 
   id: undead_201
-  monsterName: ???
+  monsterName: 幽冥幼灵
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

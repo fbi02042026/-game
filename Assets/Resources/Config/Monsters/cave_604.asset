@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: cave_604
   m_EditorClassIdentifier: 
   id: cave_604
-  monsterName: "岩窟领主"
+  monsterName: "深渊魔眼"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

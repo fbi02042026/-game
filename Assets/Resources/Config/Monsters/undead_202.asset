@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: undead_202
   m_EditorClassIdentifier: 
   id: undead_202
-  monsterName: "腐骨射手"
+  monsterName: "骷髅新兵"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

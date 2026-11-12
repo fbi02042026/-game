@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: jungle_303
   m_EditorClassIdentifier: 
   id: jungle_303
-  monsterName: "翡翠蛮兵"
+  monsterName: "寂静毒虫"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

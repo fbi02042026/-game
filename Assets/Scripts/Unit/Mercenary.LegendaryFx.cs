@@ -7,30 +7,31 @@ using UnityEngine;
 /// <para>① <b>形象流光已停用（2026-11-09 主人拍板）</b>：战斗形象不挂流光；以下仅为历史记录——
 /// 原实现：全身 SpriteRenderer 挂 Equip_shine_gold（SSU Shine，金色 HDR，
 /// Linear_Default 档吃 UnscaledShaderTime 全局时间，结算 timeScale=0 也继续扫）。
-/// 现仅 ② 脚下光环生效，光环是发光效果不是流光。</para>
-/// <para>② <b>脚下光环</b>：程序化环形金色发光地台，sortingOrder 3（同组内身体之上），
-/// MercHaloPulse 呼吸脉动（unscaled time）。</para>
+/// 现仅 ② 脚下法阵生效，法阵是发光效果不是流光。</para>
+/// <para>② <b>脚下法阵</b>：2026-11-12 主人拍板改用现成美术粒子 MagicFieldYellow（
+/// Resources/VFX/Legendary/，实例旋转 X=-100），替换 11-05 程序化光环（实现已删除）。</para>
 /// <para>传奇判定与名字颜色同源（RarityPalette.ResolveMercRarity）。受击闪白走 sr.color 顶点色，
 /// 与本特效（sharedMaterial）互不干扰。共用 asset 的佣兵（如 H005/H015 共用 gongshou101）
 /// 稀有度可能不同 → Init 与 SetHireId 都重判，非传奇幂等回滚到原始材质。</para>
 /// </summary>
 public partial class Mercenary
 {
-    const string HaloNodeName = "LegendaryHalo";
+    const string FieldNodeName = "LegendaryField";
+    const string FieldResourcePath = "VFX/Legendary/MagicFieldYellow";
 
-    SpriteRenderer _haloSr;
+    GameObject _fieldGo;
     SpriteRenderer[] _figureSrs;
     Material[] _figureMatBaseline;
 
-    /// <summary>Init / SetHireId 末尾调用：重判传奇并刷新光环（形象流光已停用）。</summary>
+    /// <summary>Init / SetHireId 末尾调用：重判传奇并刷新脚下法阵（形象流光已停用）。</summary>
     void ApplyLegendaryFx()
     {
         string rid = !string.IsNullOrEmpty(hireId) ? hireId : mercId;
         bool legendary = !string.IsNullOrEmpty(rid)
             && RarityPalette.ResolveMercRarity(rid) == MercRosterDefs.MercRarity.Legendary;
-        // 2026-11-09 口径：战斗形象不挂流光，只保留脚下光环；保留回滚以防旧状态残留。
+        // 2026-11-09 口径：战斗形象不挂流光，只保留脚下法阵；保留回滚以防旧状态残留。
         RestoreFigureMaterial();
-        EnsureHalo(legendary);
+        EnsureLegendaryField(legendary);
     }
 
     // ── ① 形象流光 ──
@@ -65,182 +66,79 @@ public partial class Mercenary
     static bool IsFxExcluded(SpriteRenderer r)
     {
         string n = r.gameObject.name;
-        return n == HaloNodeName
-            || n.IndexOf("FootShadow", System.StringComparison.OrdinalIgnoreCase) >= 0
+        return n.IndexOf("FootShadow", System.StringComparison.OrdinalIgnoreCase) >= 0
             || n.IndexOf("NameLabel", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
-    // ── ② 脚下光环 ──
+    // ── ② 脚下法阵（2026-11-12 改用现成美术粒子，替换已删除的程序化光环）──
 
-    void EnsureHalo(bool legendary)
+    /// <summary>
+    /// 脚下法阵：Resources/VFX/Legendary/MagicFieldYellow（3D 粒子，实例旋转 X=-100）。
+    /// 幂等：建一次缓存，之后只 SetActive；非传奇隐藏。取不到资源直接 LogError 不兜底。
+    /// </summary>
+    void EnsureLegendaryField(bool legendary)
     {
-        if (_haloSr == null)
+        if (_fieldGo == null)
         {
-            Transform existing = transform.Find(HaloNodeName);
-            if (existing != null) _haloSr = existing.GetComponent<SpriteRenderer>();
-            if (_haloSr == null)
+            var prefab = Resources.Load<GameObject>(FieldResourcePath);
+            if (prefab == null)
             {
-                // 挂进 SortingGroup host（与 Monster.EnsureFootShadow 同层口径，避免被地图整块盖住）
-                Transform host = transform;
-                var sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
-                if (sg == null) sg = GetComponentInChildren<UnityEngine.Rendering.SortingGroup>(true);
-                if (sg == null)
-                {
-                    GameConfig.ApplyUnitSorting(transform);
-                    sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
-                }
-                if (sg != null) host = sg.transform;
+                Debug.LogError("[Mercenary.LegendaryFx] 缺特效预制体 Resources/" + FieldResourcePath
+                    + " —— 资源未入库或路径错，脚下无法阵");
+                return;
+            }
 
-                var go = new GameObject(HaloNodeName);
-                go.transform.SetParent(host, false);
-                _haloSr = go.AddComponent<SpriteRenderer>();
-                _haloSr.sprite = HaloSprite();
-                _haloSr.sharedMaterial = HaloMaterial();
-                _haloSr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-                _haloSr.sortingOrder = 3;
-                _haloSr.transform.localPosition = new Vector3(0f, 0.02f, 0f);
-                _haloSr.transform.localRotation = Quaternion.identity;
+            // 挂进 SortingGroup host（与旧光环 / Monster.EnsureFootShadow 同层口径）
+            Transform host = transform;
+            var sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
+            if (sg == null) sg = GetComponentInChildren<UnityEngine.Rendering.SortingGroup>(true);
+            if (sg == null)
+            {
+                GameConfig.ApplyUnitSorting(transform);
+                sg = GetComponent<UnityEngine.Rendering.SortingGroup>();
+            }
+            if (sg != null) host = sg.transform;
 
-                float targetW = 1.1f;
-                if (sr != null && sr.sprite != null)
-                    targetW = Mathf.Max(0.6f, sr.bounds.size.x * 1.6f);
-                float nativeW = _haloSr.sprite != null ? Mathf.Max(0.01f, _haloSr.sprite.bounds.size.x) : 1f;
-                float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
-                float s = targetW / (nativeW * lossyX);
-                var baseScale = new Vector3(s, s * 0.75f, 1f);
-                _haloSr.transform.localScale = baseScale;
+            // 清掉旧程序化光环残留（对象池复用旧实例时防叠加）
+            Transform legacyHalo = host.Find("LegendaryHalo");
+            if (legacyHalo != null) Destroy(legacyHalo.gameObject);
 
-                var pulse = go.AddComponent<MercHaloPulse>();
-                pulse.sr = _haloSr;
-                pulse.baseScale = baseScale;
+            _fieldGo = Instantiate(prefab, host);
+            _fieldGo.name = FieldNodeName;
+            _fieldGo.transform.localPosition = new Vector3(0f, 0.02f, 0f);
+            // 主人拍板：旋转 X=-100（prefab 源是 -90，不动美术源，实例上覆盖）
+            _fieldGo.transform.localRotation = Quaternion.Euler(-100f, 0f, 0f);
 
-                // 2026-11-09 主人「可以带光效（粒子/发光）」：3 颗金色星尘，挂在 halo 节点下，
-                // 跟随 halo 节点同一句显隐开关，天然幂等、不新增 MonoBehaviour。
-                const int moteCount = 3;
-                var moteSrs = new SpriteRenderer[moteCount];
-                var moteBase = new Vector3[moteCount];
-                for (int i = 0; i < moteCount; i++)
-                {
-                    var moteGo = new GameObject("LegendaryMote" + i);
-                    moteGo.transform.SetParent(go.transform, false);
-                    var msr = moteGo.AddComponent<SpriteRenderer>();
-                    msr.sprite = MoteSprite();
-                    msr.sharedMaterial = HaloMaterial();
-                    msr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
-                    msr.sortingOrder = 4;                       // 同组，略高于地台环，别被身体整块吞掉
-                    moteGo.transform.localScale = Vector3.one * 0.28f;
-                    float ang = i * (Mathf.PI * 2f / moteCount);
-                    moteBase[i] = new Vector3(Mathf.Cos(ang) * 0.34f, 0.02f, (float)i / moteCount);
-                    moteGo.transform.localPosition = new Vector3(moteBase[i].x, moteBase[i].y, 0f);
-                    msr.color = new Color(1f, 0.82f, 0.38f, 0f);
-                    moteSrs[i] = msr;
-                }
-                pulse.moteSrs = moteSrs;
-                pulse.moteBase = moteBase;
+            // 大小：法阵视觉直径 ≈ 角色身宽 ×1.4；prefab 发射半径 1、视觉直径约 2.5（含粒子溢出），
+            // 按 host lossyScale 折算后 clamp（真机看效果可微调 2.5f 折算值）
+            float targetW = 1.3f;
+            if (sr != null && sr.sprite != null)
+                targetW = Mathf.Max(0.8f, sr.bounds.size.x * 1.4f);
+            float lossyX = Mathf.Max(0.001f, Mathf.Abs(host.lossyScale.x));
+            float s = Mathf.Clamp(targetW / (2.5f * lossyX), 0.15f, 1f);
+            _fieldGo.transform.localScale = new Vector3(s, s, s);
+
+            // 层级/渲染：粒子进单位 SortingGroup，order 用组内相对值（沿用旧光环 3 = 身体之上可见值）
+            var renderers = _fieldGo.GetComponentsInChildren<ParticleSystemRenderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                var r = renderers[i];
+                if (r == null) continue;
+                if (r.renderMode == ParticleSystemRenderMode.None && r.sharedMaterial != null)
+                    r.renderMode = ParticleSystemRenderMode.Billboard;
+                if (r.maxParticleSize < 2f) r.maxParticleSize = 100f;
+                r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+                r.sortingOrder = 3;
+            }
+            // Local 模拟让法阵跟随单位移动（World 会拖尾留原地）；已是 Local 则无操作
+            var pss = _fieldGo.GetComponentsInChildren<ParticleSystem>(true);
+            for (int i = 0; i < pss.Length; i++)
+            {
+                if (pss[i] == null) continue;
+                var main = pss[i].main;
+                main.simulationSpace = ParticleSystemSimulationSpace.Local;
             }
         }
-        _haloSr.gameObject.SetActive(legendary);
-    }
-
-    static Sprite _haloSprite;
-    static Material _haloMat;
-    static Sprite _moteSprite;
-
-    /// <summary>程序化环形发光地台（双阈值 ring 亮环 + 中心极淡底光，白底）——玩法需求主动生成，与 Monster 视觉的兜底圆同一思路。</summary>
-    static Sprite HaloSprite()
-    {
-        if (_haloSprite != null) return _haloSprite;
-        const int S = 128;
-        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
-        tex.name = "LegendaryHaloRing";
-        var pixels = new Color32[S * S];
-        float c = (S - 1) * 0.5f;
-        for (int y = 0; y < S; y++)
-        {
-            for (int x = 0; x < S; x++)
-            {
-                float dx = (x - c) / c, dy = (y - c) / c;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                // 环形发光地台：中心低亮、0.52~0.66R 渐入、0.66~0.78R 满亮金色亮环、0.78~0.94R 外缘柔和淡出（不再是实心渐变圆）
-                float ring = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.52f, 0.66f, d))
-                           * (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.78f, 0.94f, d)));
-                float inner = 0.08f * Mathf.Clamp01(1f - d / 0.5f);   // 中心极淡底光，不糊住脚
-                float a = Mathf.Clamp01(ring + inner);
-                byte v = (byte)Mathf.RoundToInt(a * 255f);
-                pixels[y * S + x] = new Color32(255, 255, 255, v);
-            }
-        }
-        tex.SetPixels32(pixels);
-        tex.Apply();
-        _haloSprite = Sprite.Create(tex, new Rect(0f, 0f, S, S), new Vector2(0.5f, 0.5f), 100f);
-        return _haloSprite;
-    }
-
-    static Material HaloMaterial()
-    {
-        if (_haloMat != null) return _haloMat;
-        var shader = Shader.Find("Sprites/Default");
-        _haloMat = shader != null ? new Material(shader) : null;
-        if (_haloMat == null)
-            Debug.LogError("[Mercenary.LegendaryFx] 找不到 Sprites/Default，脚下光环材质建不起来");
-        return _haloMat;
-    }
-
-    /// <summary>星尘粒子贴图：程序化软圆（径向 alpha 渐变，白底），复用 HaloMaterial 的发光材质。</summary>
-    static Sprite MoteSprite()
-    {
-        if (_moteSprite != null) return _moteSprite;
-        const int S = 32;
-        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
-        tex.name = "LegendaryMoteSoftCircle";
-        var pixels = new Color32[S * S];
-        float c = (S - 1) * 0.5f;
-        for (int y = 0; y < S; y++)
-        {
-            for (int x = 0; x < S; x++)
-            {
-                float dx = (x - c) / c, dy = (y - c) / c;
-                float d = Mathf.Sqrt(dx * dx + dy * dy);
-                float a = Mathf.Clamp01(1f - d);
-                a *= a;                              // 中心亮、边缘软的小光点
-                byte v = (byte)Mathf.RoundToInt(a * 255f);
-                pixels[y * S + x] = new Color32(255, 255, 255, v);
-            }
-        }
-        tex.SetPixels32(pixels);
-        tex.Apply();
-        _moteSprite = Sprite.Create(tex, new Rect(0f, 0f, S, S), new Vector2(0.5f, 0.5f), 100f);
-        return _moteSprite;
-    }
-}
-
-/// <summary>传奇佣兵脚下光环呼吸脉动（unscaled time，结算定格也继续）。</summary>
-public class MercHaloPulse : MonoBehaviour
-{
-    public SpriteRenderer sr;
-    public Vector3 baseScale = Vector3.one;
-    public SpriteRenderer[] moteSrs;     // 星尘渲染器（EnsureHalo 建一次缓存，避免逐帧 GetComponent）
-    public Vector3[] moteBase;           // 每个星尘：x=水平偏移, y=起始高度, z=相位 0~1
-    float _phase;
-
-    void OnEnable() => _phase = Random.value * Mathf.PI * 2f;
-
-    void Update()
-    {
-        if (sr == null) return;
-        float t = Time.unscaledTime * 2.2f + _phase;
-        float k = 0.9f + 0.1f * Mathf.Sin(t);
-        sr.color = new Color(1f, 0.82f, 0.38f, 0.85f + 0.15f * Mathf.Sin(t));   // alpha 提高，静止帧也看得清亮环
-        transform.localScale = baseScale * k;
-
-        if (moteSrs == null || moteBase == null) return;
-        for (int i = 0; i < moteSrs.Length; i++)
-        {
-            var m = moteSrs[i];
-            if (m == null) continue;
-            float p = Mathf.Repeat(Time.unscaledTime * 0.35f + moteBase[i].z + _phase, 1f);   // 缓慢上升、循环复位
-            m.transform.localPosition = new Vector3(moteBase[i].x, moteBase[i].y + p * 0.5f, 0f);
-            m.color = new Color(1f, 0.82f, 0.38f, 0.9f * Mathf.Sin(p * Mathf.PI));   // 起身淡入、到顶淡出
-        }
+        _fieldGo.SetActive(legendary);
     }
 }

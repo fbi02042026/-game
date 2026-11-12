@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: ice_802
   m_EditorClassIdentifier: 
   id: ice_802
-  monsterName: "冰晶幽灵"
+  monsterName: "游荡雪人"
   minWave: 0
   isBoss: 0
   unlockClearCount: 0

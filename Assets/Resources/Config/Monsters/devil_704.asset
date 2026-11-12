@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: devil_704
   m_EditorClassIdentifier: 
   id: devil_704
-  monsterName: "炼狱魔君"
+  monsterName: "异种狂怒者"
   minWave: 9
   isBoss: 1
   unlockClearCount: 0

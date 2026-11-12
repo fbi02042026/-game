@@ -29,6 +29,8 @@ public static class MonsterAffixDefs
         public Color Tint;
         /// <summary>【2026-11-03 主人拍板】词条一句话介绍：首次登场弹窗 / 冒险日志怪物Tip 共用。</summary>
         public string Desc;
+        // 2026-11-12 新增：该词条带来的基础属性提升短句；空 = 不显示第二行
+        public string StatDesc;
 
         public float AtkSpeedMul;
         public float MoveSpeedMul;
@@ -44,8 +46,22 @@ public static class MonsterAffixDefs
         public float CritChance;
         /// <summary>暴击伤害倍率（暴击词缀生效时实际伤害 × 此值）；运行时组件 MonsterAffix 默认 1f，非 Crit 词缀不进入乘算分支，故此处不写初始化器以兼容 C# 9.0</summary>
         public float CritDamageMul;
+        /// <summary>【2026-11-12 主人拍板】表定词缀怪基础属性乘子（>0 才乘，否则视为 1，不写实例初始化器，同 CritDamageMul）。</summary>
+        public float HpMul;
+        public float AtkMul;
+        public float DefMul;
     }
 
+    // 【2026-11-12 主人拍板：按词条各加一项属性，只表定词缀怪生效】
+    // 每个词条只加自己那一项基础属性（精英/Boss 掷骰词缀 RollAndAttach 的属性一律不动）：
+    //   铁壁 Bulwark → DefMul 1.5f：防御/魔防 ×1.5
+    //   狂暴 Frenzy  → AtkMul 1.3f：攻击/魔攻 ×1.3
+    //   暴击 Crit    → AtkMul 1.3f：攻击/魔攻 ×1.3
+    //   迅捷 Swift   → 只把移速从 ×1.6 提到 ×2.0（MoveSpeedMul），不另加别的属性
+    //   吸血 Leech   → HpMul 1.3f：生命 ×1.3
+    //   荆棘 Thorns  → HpMul 1.3f：生命 ×1.3
+    //   分裂 Split   → HpMul 1.4f：生命 ×1.4
+    // 消费点唯一 = MonsterAffix.Apply（仅 VisualTinted 表定词缀怪）；HpMul/AtkMul/DefMul 留空为 0 时视为 1。
     public static readonly Def[] All =
     {
         // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：
@@ -53,33 +69,40 @@ public static class MonsterAffixDefs
         // 吸血 30%→45%、分裂 2→3 只、暴击概率 20%→30%（倍率 1.6 不变，暴击期望增量正好 +50%）。
         new Def { Id = MonsterAffixId.Frenzy,  Name = "狂暴", Tint = new Color(1.00f, 0.42f, 0.32f),
                   Desc = "攻击速度提升 45%",
-                  AtkSpeedMul = 1.45f, MoveSpeedMul = 1f,   DamageTakenMul = 1f },
+                  StatDesc = "攻击 +30%",
+                  AtkSpeedMul = 1.45f, MoveSpeedMul = 1f,   DamageTakenMul = 1f, AtkMul = 1.3f },
         new Def { Id = MonsterAffixId.Bulwark, Name = "铁壁", Tint = new Color(0.62f, 0.78f, 1.00f),
                   Desc = "受到的伤害降低 37.5%",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.625f },
+                  StatDesc = "防御 +50%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 0.625f, DefMul = 1.5f },
         // 【2026-11-11 主人拍板】荆棘反弹回到 15%（撤销 11-10 的 15%→22.5% 加成）。
         new Def { Id = MonsterAffixId.Thorns,  Name = "荆棘", Tint = new Color(0.55f, 0.95f, 0.55f),
                   Desc = "近战攻击它会被反弹 15% 伤害",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f },
+                  StatDesc = "生命 +30%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f, HpMul = 1.3f },
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
-                  Desc = "移动速度提升 60%",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1.60f, DamageTakenMul = 1f },
+                  // 2026-11-12 随 MoveSpeedMul 2.0f 同步文案
+                  Desc = "移动速度提升 100%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 2.0f, DamageTakenMul = 1f },
         // 【2026-11-05 主人拍板】吸血 12% -> 30%：链路验证全通（普攻/弹道/技能都走 TakeDamage 回调），
         // 但 ch2 怪一刀只回 1~2 点、血条动 ~3%，Boss 更是 0.4% —— 肉眼不可见，主人实测「从来没见过回血」。
         // 提到 30% 后怪一刀回 4~6 点（血条动 8%+）肉眼可辨；Boss 血厚回血占比天然低，属合理衰减。
         // 【2026-11-10 主人拍板】全部词条效果 +50%：吸血 30% -> 45%。
         new Def { Id = MonsterAffixId.Leech,   Name = "吸血", Tint = new Color(0.85f, 0.45f, 0.90f),
                   Desc = "造成伤害的 45% 转化为自身治疗",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.45f },
+                  StatDesc = "生命 +30%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, LeechRatio = 0.45f, HpMul = 1.3f },
         new Def { Id = MonsterAffixId.Split,   Name = "分裂", Tint = new Color(0.75f, 0.75f, 0.80f),
                   Desc = "死亡时分裂出 3 只小怪",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 3 },
+                  StatDesc = "生命 +40%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, SplitCount = 3, HpMul = 1.4f },
         // 2026-10-26 词缀怪「暴击」：20% 概率 ×1.6，玩家侧看得见暴击飘字
         // 【2026-11-10 主人拍板】全部词条效果 +50%：暴击概率 20% -> 30%（×1.6 倍率不变，暴击期望增量 +50%）
         new Def { Id = MonsterAffixId.Crit,    Name = "暴击", Tint = new Color(1.00f, 0.55f, 0.10f),
                   Desc = "攻击有 30% 概率造成 1.6 倍伤害",
+                  StatDesc = "攻击 +30%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f,
-                  CritChance = 0.30f,  CritDamageMul = 1.6f },
+                  CritChance = 0.30f,  CritDamageMul = 1.6f, AtkMul = 1.3f },
     };
 
     /// <summary>
@@ -112,6 +135,7 @@ public static class MonsterAffixDefs
     /// <summary>
     /// 【2026-11-03 主人拍板】把词缀列表拼成「狂暴：攻击速度提升 45%\n…」的展示文本。
     /// 首次登场弹窗与冒险日志怪物 Tip 共用；空列表返回空串。
+    /// 【2026-11-12 补】每个词条两行：机制（名称：Desc）+ 属性（属性：StatDesc）；Swift 的 StatDesc 为空，只有机制一行。
     /// </summary>
     public static string Describe(List<MonsterAffixId> list)
     {
@@ -123,6 +147,7 @@ public static class MonsterAffixDefs
             if (string.IsNullOrEmpty(d.Name)) continue;
             if (sb.Length > 0) sb.Append('\n');
             sb.Append(d.Name).Append("：").Append(d.Desc);
+            if (!string.IsNullOrEmpty(d.StatDesc)) sb.Append('\n').Append("属性：").Append(d.StatDesc);
         }
         return sb.ToString();
     }

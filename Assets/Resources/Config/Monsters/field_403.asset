@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: field_403
   m_EditorClassIdentifier: 
   id: field_403
-  monsterName: "重装巡卫"
+  monsterName: "赤翼飞蛾"
   minWave: 1
   isBoss: 0
   unlockClearCount: 0

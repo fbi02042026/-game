@@ -53,6 +53,7 @@ public partial class EndlessRunGame : MonoBehaviour
     // ---- 数值（RunTrackTable 契约，Ensure 里 EnsureLoaded，Build 里读取）----
     float _worldSpeedPx, _bgFactor, _fgFactor, _pxPerMeter, _renderScale;
     float _jumpHeightPx, _jumpAirSec, _landStunSec, _inputBufferSec;
+    float _coyoteTime, _jumpCutSpeed, _fallGravityMul;   // 跳跃手感（视频 8 设置：土狼 / 截断 / 下落实沉）
     float _chunkWidthPx, _groundHPx, _playerXPx, _groundTopYPx, _viewMarginPx;
     int _chunkPoolSize;
 
@@ -80,7 +81,17 @@ public partial class EndlessRunGame : MonoBehaviour
 
     // ---- 玩家 / 跳跃 ----
     GameObject _playerGo;
-    float _playerY, _jumpT, _stunT, _bufferT;
+    float _playerY;                 // 当前 y（逻辑像素，地面 = _groundTopYPx）
+    float _playerVy;                // 当前垂直速度（逻辑像素/秒，正=上升，负=下落）
+    float _gravityPx;               // 上升时重力（逻辑像素/秒²）
+    float _jumpStunT, _bufferT, _coyoteT, _peakHangT;
+    bool _jumpHeld;                 // 跳跃键是否仍按住（可变高度：按住继续上升，松开截断）
+    bool _peakReached;              // 本次跳跃是否已过最高点（用于下落实沉感切换重力）
+
+    // ---- 跳跃轨迹历史（佣兵跟跳延迟复现用；每帧存 _playerY，环形缓冲，10 秒 @60fps = 600 帧）----
+    const int JUMP_HISTORY_LEN = 600;
+    readonly float[] _jumpHistory = new float[JUMP_HISTORY_LEN];
+    int _jumpHistoryIdx;
 
     /// <summary>是否在空中：后续攻击 / 碰撞 / 伤害判定须以 !IsAirborne 为前置闸门（空中不攻击不碰撞）。</summary>
     public bool IsAirborne { get; private set; }
@@ -175,6 +186,14 @@ public partial class EndlessRunGame : MonoBehaviour
         _jumpAirSec     = RunTrackTable.GetFloat("jump_air_time", 0.8f);
         _landStunSec    = RunTrackTable.GetFloat("jump_land_stun", 0.2f);
         _inputBufferSec = RunTrackTable.GetFloat("input_buffer", 0.15f);
+        // 视频"8 隐藏跳跃手感"：土狼 / 截断 / 下落实沉
+        _coyoteTime     = RunTrackTable.GetFloat("coyote_time", 0.12f);
+        _jumpCutSpeed   = RunTrackTable.GetFloat("jump_cut_speed", 600f);      // 截断后立即进入的下落速度（px/s，正绝对值）
+        _fallGravityMul = RunTrackTable.GetFloat("fall_gravity_mult", 1.5f);   // 下落重力倍率（比上升重，落得稳）
+        // 重力：从 jump_height 和 jump_air_time 反推（抛物线顶点 = _jumpHeightPx，到顶时间 = _jumpAirSec/2）
+        // h = ½ g t² → g = 2h / t²，t = _jumpAirSec * 0.5
+        float tTop = Mathf.Max(0.05f, _jumpAirSec * 0.5f);
+        _gravityPx = 2f * _jumpHeightPx / (tTop * tTop);   // 上升重力（px/s²）
         _chunkWidthPx   = RunTrackTable.GetFloat("chunk_width_px", 720f);
         _groundHPx      = RunTrackTable.GetFloat("ground_height_px", 160f);
         _playerXPx      = RunTrackTable.GetFloat("player_x_px", -120f);
@@ -326,7 +345,11 @@ public partial class EndlessRunGame : MonoBehaviour
 
         Meters = 0f;
         _playerY = _groundTopYPx;
-        _jumpT = _stunT = _bufferT = 0f;
+        _playerVy = 0f;
+        _jumpStunT = _bufferT = _coyoteT = _peakHangT = 0f;
+        _jumpHeld = false;
+        _peakReached = false;
+        _jumpHistoryIdx = 0;
         IsAirborne = false;
         ApplyPlayerPos();
 
@@ -353,57 +376,116 @@ public partial class EndlessRunGame : MonoBehaviour
         ApplyPlayerPos();      // 玩家 x 固定，仅 y 随跳跃
     }
 
-    /// <summary>单指点屏幕任意处 = 跳；其余输入（键盘 / 多指 / 滑动 / 右键等）一律不处理。</summary>
+    /// <summary>
+    /// 单指点屏幕任意处 = 跳；其余输入一律不处理。
+    /// 【视频 8 设置】记录按键按住/松开状态（可变高度 + 提前截断）。
+    /// </summary>
     void UpdateInput()
     {
-        // 天降二选一窗口内：全局单指跳禁用，避免点按钮同时触发跳跃（顶替改由按钮回调驱动）。
+        // 天降二选一窗口内：全局单指跳禁用，避免点按钮同时触发跳跃。
         if (_choiceOpen) return;
+
+        // 按住状态（可变跳跃高度 + 提前截断）
+        _jumpHeld = Input.GetMouseButton(0);
+
         // 单指触摸在 Unity 映射为鼠标左键按下（与竹篓 UpdateDrag 同口径）。
-        if (!Input.GetMouseButtonDown(0)) return;
-        if (!IsAirborne && _stunT <= 0f)
-            StartJump();
-        else
-            _bufferT = _inputBufferSec;   // 空中 / 落地硬直期间记输入缓冲
+        if (Input.GetMouseButtonDown(0))
+        {
+            // 【视频 8 设置 - 土狼时间 + 跳跃缓冲】
+            // ① 站地硬直过了 → 立刻起跳；
+            // ② 土狼窗口内（刚离开地面还能跳）→ 立刻起跳；
+            // ③ 否则记入输入缓冲（落地后自动消费）。
+            bool canGroundJump = !IsAirborne && _jumpStunT <= 0f;
+            bool canCoyoteJump = IsAirborne && !_peakReached && _coyoteT > 0f && _playerVy <= 0f;
+            if (canGroundJump || canCoyoteJump)
+            {
+                _bufferT = 0f;
+                StartJump();
+            }
+            else
+            {
+                _bufferT = _inputBufferSec;   // 空中 / 硬直 / 没土狼窗口 → 记缓冲
+            }
+        }
     }
 
     /// <summary>
-    /// 跳跃：高 _jumpHeightPx / 滞空 _jumpAirSec / 落地硬直 _landStunSec / 输入缓冲 _inputBufferSec。
-    /// 空中不攻击、不碰撞 —— 本框架不实现攻击 / 碰撞判定（后续任务范围），
-    /// 只维护公开的 IsAirborne 只读状态作为后续判定的前置闸门。
+    /// 跳跃物理：抛物线（初速度 + 重力）。
+    /// 【视频 8 设置 — 完整手感链】
+    ///   ① 跳跃缓冲：提前按跳、落地自动起跳；
+    ///   ② 土狼时间：离开地面后 _coyoteTime 内还能跳；
+    ///   ③ 可变跳跃高度：按住 = 正常上升，松开 = 立即截断下落（jump cut）；
+    ///   ④ 下落实沉感：过顶后下落重力 = 上升 × _fallGravityMul（落得稳不飘）。
+    /// 空中不攻击、不碰撞 —— 本框架只维护 IsAirborne 作为后续判定的前置闸门。
     /// </summary>
     void UpdateJump(float dt)
     {
-        if (_stunT > 0f) _stunT = Mathf.Max(0f, _stunT - dt);
+        // ---- 计时器 ----
+        if (_jumpStunT > 0f) _jumpStunT = Mathf.Max(0f, _jumpStunT - dt);
         if (_bufferT > 0f) _bufferT = Mathf.Max(0f, _bufferT - dt);
+        if (_coyoteT > 0f)  _coyoteT  = Mathf.Max(0f, _coyoteT - dt);
 
-        // 缓冲消费：可起跳且缓冲未过期 → 立刻起跳。
-        if (!IsAirborne && _stunT <= 0f && _bufferT > 0f)
+        // ---- 缓冲消费：可起跳（站地 + 硬直过了）且缓冲未过期 → 立刻起跳 ----
+        if (!IsAirborne && _jumpStunT <= 0f && _bufferT > 0f)
         {
             _bufferT = 0f;
             StartJump();
         }
 
-        if (!IsAirborne) return;
-        _jumpT += dt;
-        if (_jumpT >= _jumpAirSec)
+        // ---- 空中物理 ----
+        if (!IsAirborne)
         {
-            _jumpT = 0f;
-            IsAirborne = false;
+            // 站地时维持地面高度（防止滚动抖动造成 y 偏移）
             _playerY = _groundTopYPx;
-            _stunT = _landStunSec;
+            _playerVy = 0f;
+            return;
         }
-        else
+
+        // 截断触发：上升中松开跳跃键 → 立即进入快速下落（jump cut，视频设置 3）
+        if (_playerVy > 0f && !_jumpHeld)
         {
-            float k = _jumpT / Mathf.Max(0.0001f, _jumpAirSec);
-            _playerY = _groundTopYPx + _jumpHeightPx * Mathf.Sin(Mathf.PI * k);
+            _playerVy = -_jumpCutSpeed;
         }
+
+        // 重力：上升 = _gravityPx（正常），下落 = _fallGravityMul × _gravityPx（落得实）
+        float grav = _playerVy > 0f ? _gravityPx : _gravityPx * _fallGravityMul;
+        _playerVy -= grav * dt;
+        _playerY += _playerVy * dt;
+
+        // 过顶检测（从上升变下落 → 启用下落实沉感 + 启动土狼窗口给补救跳）
+        if (!_peakReached && _playerVy < 0f)
+        {
+            _peakReached = true;
+            _coyoteT = _coyoteTime;   // 下落开始那一瞬间启动土狼窗口（视频设置 2）
+        }
+
+        // 触地判定
+        if (_playerY <= _groundTopYPx)
+        {
+            _playerY = _groundTopYPx;
+            _playerVy = 0f;
+            IsAirborne = false;
+            _peakReached = false;
+            _coyoteT = 0f;
+            _jumpStunT = _landStunSec;
+        }
+
+        // 每帧存跳跃轨迹历史（佣兵跟跳延迟复现用）
+        _jumpHistory[_jumpHistoryIdx] = _playerY;
+        _jumpHistoryIdx = (_jumpHistoryIdx + 1) % JUMP_HISTORY_LEN;
     }
 
     void StartJump()
     {
-        IsAirborne = true;
-        _jumpT = 0f;
+        // 抛物线初速度：从 _jumpHeightPx 和上升重力反推
+        // v0 = sqrt(2 × g × h)
+        float v0 = Mathf.Sqrt(2f * _gravityPx * _jumpHeightPx);
+        _playerVy = v0;
         _playerY = _groundTopYPx;
+        IsAirborne = true;
+        _peakReached = false;
+        _jumpStunT = 0f;
+        _coyoteT = 0f;    // 起跳瞬间清零（刚离开就有土狼窗口，避免双算）
     }
 
     /// <summary>两层同层不同速：背景 ×_bgFactor(0.30) / 前景 ×_fgFactor(1.00)，前景内部同速不打滑。</summary>

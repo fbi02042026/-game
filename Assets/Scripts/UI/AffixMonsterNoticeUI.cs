@@ -11,6 +11,9 @@ using UnityEngine.UI;
 ///   正文为该怪的词条介绍；点弹窗任意处关闭 = 已看过 → 写存档标记，之后永久消失；
 /// - 不强制观看：不点也照常打，没看过的怪下次进战斗还会再提示；
 /// - 同一场战斗（场景）同一种怪只提示一次，场景重载后自动重置。
+/// - 【2026-11-12 主人拍板】已读粒度从「怪物 id」改为「词条种类」(MonsterAffixId，共 7 种)：
+///   某种词条的弹窗看过一次后，所有带该词条的怪都不再弹图标；同场景去重也按词条种类。
+///   图标外观与 MonsterTipPanel 弹窗全部保持原样，只改触发与已读判定。
 /// Canvas 走统一出口 UICanvasSetup.ApplyPopup（铁律 4.6：Screen Space - Camera + 自动适配）；
 /// 怪物头像复用 AdventureUI.LoadMonsterSprite（唯一出口，不另抄路径表）。
 /// </summary>
@@ -20,15 +23,17 @@ public static class AffixMonsterNoticeUI
     {
         public MonsterConfig Cfg;
         public GameObject Slot;
+        public List<MonsterAffixId> Affixes;   // 【2026-11-12】该怪所带词条，供 OnViewed 标已读
     }
 
     static Canvas _canvas;
     static RectTransform _stack;
     static readonly List<Entry> _entries = new List<Entry>();
+    // 【2026-11-12 主人拍板】已读粒度从「怪物 id」改为「词条种类」：_shownThisScene 现按词条种类去重（存 MonsterAffixId 枚举名字符串），不再是怪物 id。
     static readonly HashSet<string> _shownThisScene = new HashSet<string>();
 
-    /// <summary>战斗 UI 之上的高位排序（弹窗类按项目惯例取 400 段）。</summary>
-    const int SortOrder = 420;
+    /// <summary>战斗内怪物信息弹窗 Canvas 排序：压过战斗内全部常驻 UI 层（BattleSideHud 955 / MercJoinBanner 995 等），低于 Toast 11000。</summary>
+    const int SortOrder = 1000;
     const float IconSize = 88f;
     const float IconGap = 14f;
     /// <summary>
@@ -53,14 +58,23 @@ public static class AffixMonsterNoticeUI
     {
         if (cfg == null || affixes == null || affixes.Count == 0) return;
         if (string.IsNullOrEmpty(cfg.id)) return;
-
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        if (data == null || data.HasSeenAffixMonster(cfg.id)) return;   // 看过一次 → 永久消失
-        if (!_shownThisScene.Add(cfg.id)) return;                        // 同场景同种怪只提示一次
+        if (data == null) return;
+
+        // 【2026-11-12】已读粒度按词条种类：该怪所带词条里只要还有没看过的，就允许提示。
+        // 同场景去重也按词条：只对未看过的词条种类 Add，只要有一个是新的就弹图标。
+        bool anyNewKind = false;
+        for (int i = 0; i < affixes.Count; i++)
+        {
+            var id = affixes[i];
+            if (data.HasSeenAffixKind(id)) continue;   // 该词条种类的弹窗看过一次 -> 跳过
+            if (_shownThisScene.Add(id.ToString())) anyNewKind = true;   // 同场景同词条只提示一次
+        }
+        if (!anyNewKind) return;   // 词条全看过、或本场景都已提示过 -> 静默
 
         EnsureCanvas();
         if (_stack == null) return;
-        BuildSlot(cfg);
+        BuildSlot(cfg, affixes);
     }
 
     // ---------------------------------------------------------------- canvas
@@ -97,7 +111,7 @@ public static class AffixMonsterNoticeUI
         _stack.anchoredPosition = new Vector2(10f, -NoticeTopOffset);
     }
 
-    static void BuildSlot(MonsterConfig cfg)
+    static void BuildSlot(MonsterConfig cfg, List<MonsterAffixId> affixes)
     {
         int index = _entries.Count;
         var slot = new GameObject("AffixNotice_" + cfg.id,
@@ -146,10 +160,10 @@ public static class AffixMonsterNoticeUI
         outline.effectColor = Color.black;
         outline.effectDistance = new Vector2(2f, -2f);
 
-        var captured = cfg;
-        slot.GetComponent<Button>().onClick.AddListener(() => ShowPopup(captured));
+        var entry = new Entry { Cfg = cfg, Slot = slot, Affixes = affixes };
+        slot.GetComponent<Button>().onClick.AddListener(() => ShowPopup(entry));
 
-        _entries.Add(new Entry { Cfg = cfg, Slot = slot });
+        _entries.Add(entry);
         GameFonts.ApplyToHierarchy(slot.transform);
     }
 
@@ -160,29 +174,35 @@ public static class AffixMonsterNoticeUI
     /// 内容走 MonsterTipContent 单一出口（战力速览 / 词条 / 弱点 三段，与冒险日志 Tip 完全一致），
     /// 点弹窗关闭 = 已看过 → 存档标记永久消失 + 移除左缘图标。
     /// </summary>
-    static void ShowPopup(MonsterConfig cfg)
+    static void ShowPopup(Entry entry)
     {
-        if (_canvas == null || cfg == null) return;
+        if (_canvas == null || entry == null || entry.Cfg == null) return;
+        var cfg = entry.Cfg;
         int chapter = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : 1;
         MonsterTipPanel.Show(_canvas.transform,
             MonsterTipContent.Title(cfg),
             MonsterTipContent.BuildBody(cfg, chapter),
-            () => OnViewed(cfg));
+            () => OnViewed(entry));
     }
 
-    static void OnViewed(MonsterConfig cfg)
+    static void OnViewed(Entry entry)
     {
-        if (cfg == null || string.IsNullOrEmpty(cfg.id)) return;
+        if (entry == null || entry.Cfg == null || string.IsNullOrEmpty(entry.Cfg.id)) return;
 
-        // 存档标记：看过一次永久消失（镜像由 SyncListsFromRuntime 落盘，Save 即写）
+        // 【2026-11-12】存档标记：把该怪所带的所有词条种类全部标已读；
+        // 看过某种词条的弹窗一次后，所有带该词条的怪都不再弹图标（镜像由 SyncListsFromRuntime 落盘，Save 即写）。
         var save = SaveSystem.Instance;
         var data = save != null ? save.Data : null;
         if (data != null)
         {
-            data.MarkAffixMonsterSeen(cfg.id);
+            if (entry.Affixes != null)
+            {
+                for (int i = 0; i < entry.Affixes.Count; i++)
+                    data.MarkAffixKindSeen(entry.Affixes[i]);
+            }
             save.Save();
         }
-        RemoveEntry(cfg.id);
+        RemoveEntry(entry.Cfg.id);
     }
 
     static void RemoveEntry(string monsterId)

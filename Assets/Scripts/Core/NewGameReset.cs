@@ -36,7 +36,9 @@ public static class NewGameReset
         BattleRally.Reset();
         // 【2026-11-09】羁绊副本回城重开旗子（进程级静态），清档必须一起复位
         MercFavorUI.PendingOpenAfterBattleHireId = null;
+        // 2026-11-12 升级弹窗队列是进程级 static，清档必须清
+        LevelUpPopup.ResetForNewGame();
 
-        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM）");
+        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列）");
     }
 }

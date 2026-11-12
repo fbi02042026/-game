@@ -240,7 +240,10 @@ public class StageShopPopupUI : MonoBehaviour
         // 真池不足时 SpendBattleGold 只打 LogError，玩家点了没反应。
         // 退款分支（装备穿不上）onBuy 返回 false，走不到这，_gold 不会误扣。
         _gold -= item.price;
-        UIManager.Instance?.ShowToast($"已购买「{item.title}」");
+        // 【2026-11-12 主人拍板】商店购买统一走「获得奖励」窗（图标 / 稀有度色与商品卡同源）
+        Color? nc = item.rarity.HasValue ? (Color?)RarityPalette.Get(item.rarity.Value) : null;
+        Sprite frame = item.rarity.HasValue ? EquipRarityFrame.SpriteOf(item.rarity.Value) : null;
+        RewardPopupUI.ShowClaimGoods(item.icon, item.title + " ×1", nc, frame);
         RefreshAll();
     }
 

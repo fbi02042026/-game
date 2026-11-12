@@ -186,6 +186,8 @@ public static partial class GameConfig
         else if (stageIdx <= 5) { min = 3; max = 4; }
         else { min = 5; max = 6; }
     }
+    /// <summary>2026-11-12 主人拍板：每关词条怪上限 = 本关正常波总怪数 × 5%，取代旧 totalNormal/3 封顶；波数压缩后自动跟着降。</summary>
+    public const float AFFIX_QUOTA_RATIO = 0.05f;
     /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
     public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
@@ -494,9 +496,16 @@ public static partial class GameConfig
     /// 玩家技能 CD 以配表为准 → SKILL_COOLDOWN_MUL = 1f（表值即实机值，不要再乘）；
     /// 佣兵技能 CD 维持历史 ×4 → 本常量 = 4f（表值 × 4），不跟随玩家侧回退。
     /// 2026-10-10 主人拍板：玩家侧回退到 1f 后「佣兵 CD 不要减」，故拆出本常量单独保住 ×4。
-    /// 唯一消费点：MercSkillCaster.Bind 的 CooldownTotal。要调佣兵 CD 只改这一个值。
+    /// 唯一消费点：MercSkillCaster.Bind 的 _normalCooldown。要调佣兵 CD 只改这一个值。
     /// </summary>
     public const float MERC_SKILL_COOLDOWN_MUL = 4f;
+
+    /// <summary>
+    /// 佣兵开场首发技能冷却（秒）。2026-11-12 主人拍板：不再按满冷却进场，
+    /// 开打（UnitsCanAct 解冻）后先走这么久再放第一发；之后每轮仍走技能固有 CD。
+    /// 唯一消费点：MercSkillCaster.Bind。
+    /// </summary>
+    public const float MERC_SKILL_OPENING_CD = 5f;
 
     // ============================================================
     // 蓝条（MP）数值 —— 2026-10-06 主人拍板
@@ -600,6 +609,13 @@ public static partial class GameConfig
     /// 覆盖时长单独提成常量，后期升级可改这里延长/缩短。
     /// </summary>
     public const float HOLY_BARRIER_SHIELD_DURATION = 5f;
+
+    /// <summary>
+    /// 护盾抵扣比例唯一真源：玩家 holy_barrier 每次受伤只吸收 75% 伤害（剩 25% 照常扣血），
+    /// 塔克 SK008 完全吸收 100%（盾没破不掉血）。盾值按实际吸收量减少，过期/耗尽逻辑不变。
+    /// </summary>
+    public const float HOLY_BARRIER_SHIELD_ABSORB = 0.75f;
+    public const float MERC_TEAM_SHIELD_ABSORB = 1f;
 
     // ============================================================
     // 玩家被动技能：纯冷却制（2026-09-15 改版）
