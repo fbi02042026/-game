@@ -12,6 +12,13 @@ ELITE_GLASS_HP_MUL,0.75,精英血薄档血量倍率
 ELITE_GLASS_ATK_MUL,1.35,精英血薄档攻击倍率
 ELITE_GLASS_TELEGRAPH,2.0,精英血薄档预警时长
 GUILD_SCALE_PER,0.02,公会等级系数（0.02×公会等级）
+# ---- 装备攻击三档区间（RiftEquipGenerator；锚点=本章普通怪平均 baseAttack。2026-11-13 主人拍板「按章节平均值加系数、必须比初始武器好、别写死」） ----
+EQUIP_ATK_TIER_NORMAL_LO,1.2,普通档攻击下限系数（×本章敌人平均攻击）
+EQUIP_ATK_TIER_NORMAL_HI,2.0,普通档攻击上限系数
+EQUIP_ATK_TIER_RARE_LO,2.6,稀有档攻击下限系数
+EQUIP_ATK_TIER_RARE_HI,3.6,稀有档攻击上限系数
+EQUIP_ATK_TIER_LEGEND_LO,4.8,传奇档攻击下限系数
+EQUIP_ATK_TIER_LEGEND_HI,6.8,传奇档攻击上限系数
 # ---- 波次节奏（WavePlanner；只调波数与每波人数，不改敌人数值） ----
 AFFIX_SECOND_FROM_CHAPTER,4,精英/Boss 词缀：第几章开始有几率出 2 个词缀
 AFFIX_SECOND_CHANCE,0.3,精英/Boss 词缀：出第 2 个词缀的概率

@@ -97,7 +97,9 @@ public class GlobalToastUI : MonoBehaviour
 
     /// <summary>
     /// 排队播报一条汇总 toast（任务奖励明细专用）。固定走实例 Play：Plain 原文照发、
-    /// 不套 Persona 尾巴、不被 AnyBubbleShowing 压制、不套 Show 的 Loading 攥住逻辑，重绑相机也不丢。
+    /// 不套 Persona 尾巴、不被 AnyBubbleShowing 压制，重绑相机也不丢。
+    /// 【2026-11-13 主人拍板】Loading 遮罩显示期间只入队、不起播（登录瞬间日常任务就结算，
+    /// 原先的汇总 toast 会压在还没退场的 Loading 上）；遮罩收掉后由 FlushHeldToast 冲刷队列。
     /// 空闲（_co == null）时立即起播，否则只入队；CoPlay 收尾会自动接播下一条。
     /// 已知边界：普通 toast 打断队列播报时，被顶掉的只是「正在播的那条」（后顶前语义不变），
     /// 队列里剩余未播条目会在那条普通 toast 的 CoPlay 结束后接着播，信息不丢。
@@ -107,13 +109,16 @@ public class GlobalToastUI : MonoBehaviour
         if (string.IsNullOrEmpty(msg)) return;
         if (_queued.Count >= QUEUE_MAX) return;   // 队列满：丢弃后来的，不顶掉正在播的
         _queued.Enqueue(msg);
+        if (BattleLoadingOverlay.IsShowing) return;   // 等 Loading 收起再播，不盖遮罩
         if (_instance == null || _instance._co == null)
             PlayNextQueued();
     }
 
-    /// <summary>出队一条走实例 Play；队列空则什么也不做。ShowQueued 起播与 CoPlay 收尾共用。</summary>
+    /// <summary>出队一条走实例 Play；队列空 / Loading 未收则什么也不做（队列留着等冲刷）。
+    /// ShowQueued 起播、CoPlay 收尾、FlushHeldToast 冲刷共用。</summary>
     static void PlayNextQueued()
     {
+        if (BattleLoadingOverlay.IsShowing) return;   // 队列原样留着，遮罩收掉后再播
         if (_queued.Count == 0) return;
         Ensure().Play(_queued.Dequeue());
     }
@@ -121,6 +126,8 @@ public class GlobalToastUI : MonoBehaviour
     /// <summary>攥住的 toast（Loading 期间来的），等遮罩收掉后冲刷。</summary>
     static string _heldMsg;
     static bool _heldForce;
+    /// <summary>【2026-11-13】延迟冲刷协程（等开场铺垫走完再放 toast），域重载清。</summary>
+    static Coroutine _flushCo;
 
     /// <summary>【2026-11-01】域重载关闭时静态字段会跨 Play 残留（同 BattleLoadingOverlay.ResetStatics 口径），启动时清掉，防上一局的攥留 toast 开局冒出来。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -128,11 +135,16 @@ public class GlobalToastUI : MonoBehaviour
     {
         _heldMsg = null;
         _heldForce = false;
+        _flushCo = null;
     }
 
     /// <summary>
-    /// Loading 遮罩真正收掉时由 <see cref="BattleLoadingOverlay.Hide"/> 调：把攥住的 toast 放出来。
-    /// 若此刻又有新的一场 Loading 开着（连续切场景），继续攥着等下一次收。
+    /// Loading 遮罩真正收掉时由 <see cref="BattleLoadingOverlay.Hide"/> 调：把攥住的 toast 放出来，
+    /// 【2026-11-13】并冲刷 Loading 期间攒下的排队 toast（任务名 + 奖励汇总）。
+    /// 【2026-11-13 主人拍板「一进战斗不要直接出现 toast，要前面有铺垫」】
+    /// 「放出来」不再立即执行：等开场铺垫走完（主线进战斗的章节卡演完 + 收尾缓冲；
+    /// 其它场景给 1.2s 基础缓冲，先让玩家看到新画面）再放。
+    /// 若此刻又有新的一场 Loading 开着（连续切场景），沿原语义本次不放。
     /// </summary>
     /// <summary>【2026-11-06】进程级静态队列跨 Play 残留，与 _heldMsg 同口径：启动时清掉。</summary>
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -143,13 +155,60 @@ public class GlobalToastUI : MonoBehaviour
 
     public static void FlushHeldToast()
     {
-        if (string.IsNullOrEmpty(_heldMsg)) return;
         var msg = _heldMsg;
         var force = _heldForce;
+        bool hasHeld = !string.IsNullOrEmpty(msg);
         _heldMsg = null;
         _heldForce = false;
-        if (BattleLoadingOverlay.IsShowing) return;
-        Show(msg, force);
+        if (BattleLoadingOverlay.IsShowing) return;   // 连续切场景：沿原语义本次不放
+        var inst = Ensure();
+        // 新冲刷顶掉旧冲刷（旧协程还没放的 held 沿原「本次不放」语义丢弃；队列是静态的，不丢）
+        if (_flushCo != null) inst.StopCoroutine(_flushCo);
+        _flushCo = inst.StartCoroutine(CoFlushAfterIntro(msg, force, hasHeld));
+    }
+
+    /// <summary>
+    /// 延迟冲刷：① 1.2s 基础缓冲（Loading 刚收的画面先稳一稳，回城 / 无章节卡的关都吃这段）；
+    /// ② 主线进战斗的章节卡（ChapterSplashOverlay，Loading 关掉后才开演）是「铺垫」本体，
+    ///    等它演完（可点击跳过，15s 超时兜底防卡死）——toast 不得抢在它前面；
+    /// ③ 章节卡淡出后再缓 0.8s。等待期间又开新 Loading 则放弃（原「本次不放」语义）。
+    /// </summary>
+    static IEnumerator CoFlushAfterIntro(string msg, bool force, bool hasHeld)
+    {
+        float t = 0f;
+        while (t < 1.2f)
+        {
+            if (BattleLoadingOverlay.IsShowing) yield break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        float g = 0f;
+        while (ChapterSplashOverlay.BattleSplashPending && g < 15f)
+        {
+            if (BattleLoadingOverlay.IsShowing) yield break;
+            g += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        var splash = ChapterSplashOverlay.Current;
+        g = 0f;
+        while (splash != null && !splash.IsFinished && g < 15f)
+        {
+            if (BattleLoadingOverlay.IsShowing) yield break;
+            g += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        t = 0f;
+        while (t < 0.8f)
+        {
+            if (BattleLoadingOverlay.IsShowing) yield break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        if (hasHeld) Show(msg, force);
+        // Loading 期间只入队的汇总 toast 在这里起播；若此刻有普通 toast 正在播，
+        // 队列留给它 CoPlay 收尾时接播（后顶前语义不变），信息不丢。
+        if (_queued.Count > 0 && (_instance == null || _instance._co == null))
+            PlayNextQueued();
     }
 
     /// <summary>
@@ -304,6 +363,9 @@ public class GlobalToastUI : MonoBehaviour
     IEnumerator CoPlay(string msg)
     {
         _label.text = msg;
+        // 【2026-11-13 主人拍板】任务名 / 奖励两行都要居中：每次起播把对齐锁回 MiddleCenter
+        //（UGUI Text 多行时每行各自按自身宽度居中），字号仍是 Build 里的 28，一个字没改。
+        _label.alignment = TextAnchor.MiddleCenter;
         // 【2026-10-18 修「登录欢迎语换行别扭」】底板原固定 72 高，两行文案会上下溢出底板。
         // 宽度不变，按文字实际高度自动加高底板；单行提示 preferredHeight+16 不足 72，维持原样。
         if (_rootRt != null)

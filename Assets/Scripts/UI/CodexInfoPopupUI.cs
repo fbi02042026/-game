@@ -171,6 +171,16 @@ public class CodexInfoPopupUI : MonoBehaviour
         }
         Instance = this;
         BindRefs();
+        // 【2026-11-13 主人拍板】头部名字（top/Name）加描边：预制体名字色是浅黄绿、佣兵名还按稀有度
+        // 染亮色（RarityPalette 亮档本就是「深色底上可读」的配色），羊皮纸浅底上看不清（截图反馈）。
+        // 描边色走 RarityPalette.Outline（项目统一描线色）；只加组件，不动字号/框宽/位置。
+        // 阴影（Shadow）只往一侧偏、描边（Outline）四面包，浅字浅底用描边分隔更明显，故选描边。
+        if (topTitleText != null && topTitleText.GetComponent<Outline>() == null)
+        {
+            var nameOutline = topTitleText.gameObject.AddComponent<Outline>();
+            nameOutline.effectColor = RarityPalette.Outline;
+            nameOutline.effectDistance = new Vector2(1f, -1f);
+        }
         Wire();
         // 2026-10-31 主人报「怪物信息排版优化」时发现：本弹窗此前从未走 UICanvasSetup
         // （预制体 Canvas 是 Screen Space Camera 但相机为空、Match 写死按高），

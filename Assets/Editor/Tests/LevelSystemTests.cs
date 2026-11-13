@@ -102,4 +102,30 @@ public class LevelSystemTests
         Assert.AreEqual("魔攻", LevelSystem.JobTendencyLabel(PlayerJobId.Priest));
         Assert.AreEqual("力量", LevelSystem.JobTendencyLabel(PlayerJobId.Berserker));
     }
+
+    [Test]
+    public void ExtraVitalityPerLevel_OnlyMageAndRanger()
+    {
+        // 2026-11-13 主人拍板「让法师和弓手每级也加血量」：每级 +1 体质 = +10 血 +1 防
+        Assert.AreEqual(1, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.Mage), "法师每级加血");
+        Assert.AreEqual(1, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.Ranger), "游侠每级加血");
+        Assert.AreEqual(0, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.SwordShield), "剑盾倾向已是体质，不重复加");
+        Assert.AreEqual(0, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.Heavy), "重武倾向已是体质，不重复加");
+        Assert.AreEqual(0, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.Berserker), "狂战本次没提");
+        Assert.AreEqual(0, LevelSystem.ExtraVitalityPerLevel(PlayerJobId.Priest), "牧师本次没提");
+    }
+
+    [Test]
+    public void JobTendencyGainText_OneAttrPerLevel()
+    {
+        // 2026-11-13 主人拍板「每级只涨一个职业一个属性 / 就跟以前一样，只不过加了法师和弓手的血量」：
+        // 弹窗文案回到单属性短格式；额外加血由 ExtraVitalityPerLevel_OnlyMageAndRanger 单独断言
+        Assert.AreEqual("+2", LevelSystem.JobTendencyGainText(PlayerJobId.Mage, 1));
+        Assert.AreEqual("+1%", LevelSystem.JobTendencyGainText(PlayerJobId.Ranger, 1));
+        Assert.AreEqual("+10", LevelSystem.JobTendencyGainText(PlayerJobId.SwordShield, 1));
+        Assert.AreEqual("+2", LevelSystem.JobTendencyGainText(PlayerJobId.Priest, 1));
+        Assert.AreEqual("+1", LevelSystem.JobTendencyGainText(PlayerJobId.Berserker, 1));
+        Assert.AreEqual("+4", LevelSystem.JobTendencyGainText(PlayerJobId.Mage, 2), "连升两级按 delta 缩放");
+        Assert.IsFalse(LevelSystem.JobTendencyGainText(PlayerJobId.Mage, 1).Contains("血"), "加血不并进弹窗这一行");
+    }
 }

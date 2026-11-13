@@ -3,6 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// 日志碎片：关卡掉落 + 合成解锁隐藏内容（计划三期 §7.4）。
+/// 【2026-11-13 主人拍板】整套玩法下线：配方清空、通关不再投放、红点不再亮。
+/// 类与方法保留便于回退，但不得再启用。
 /// </summary>
 public static class AdventureLogFragments
 {
@@ -19,16 +21,15 @@ public static class AdventureLogFragments
 
     public static readonly Recipe[] Recipes =
     {
-        new Recipe { FragmentId = "frag_forest", Cost = 3, UnlockSideId = "S014", Label = "森林残页 → 隐藏支线「艾丽娅的信物」" },
-        new Recipe { FragmentId = "frag_guild", Cost = 5, UnlockWorldId = "W008", Label = "公会密函 → 世界「空洞之喉」" },
-        new Recipe { FragmentId = "frag_rift", Cost = 4, UnlockSideId = "S016", Label = "裂隙碎片 → 支线「最初的裂隙」" },
+        // 2026-11-13 主人拍板：日志碎片合成整体下线（森林残页先撤，公会密函×5→W008、
+        // 裂隙碎片×4→S016 两条一并撤）。配方清空后 HasAnyCraftable 恒 false，
+        // 碎片清单 / 兑换行都不再渲染；类与方法保留便于回退，但不得再启用。
     };
 
     public static string DisplayName(string fragmentId)
     {
         switch (fragmentId)
         {
-            case "frag_forest": return "森林残页";
             case "frag_guild": return "公会密函";
             case "frag_rift": return "裂隙碎片";
             default: return fragmentId ?? "碎片";
@@ -54,19 +55,16 @@ public static class AdventureLogFragments
         RedDot.RefreshCommon();
     }
 
-    /// <summary>关卡胜利时小概率掉落。</summary>
+    /// <summary>关卡胜利时小概率掉落（2026-11-13 已停用，保留签名便于回退）。</summary>
     public static void TryDropOnStageClear(int chapter, bool isBossStage)
     {
-        float chance = isBossStage ? 0.35f : 0.12f;
-        if (Random.value > chance) return;
-        string id = chapter <= 2 ? "frag_forest" : (chapter <= 4 ? "frag_guild" : "frag_rift");
-        Add(id, 1);
-        AddRunGain(id, 1);   // 战斗背包「本局获得」口径同步累计
-        UIManager.Instance?.ShowToast("获得日志碎片「" + DisplayName(id) + "」×1");
+        // 日志碎片合成整体下线 → 通关不再投放任何碎片。
+        // 原实现：普通关 12% / Boss 35%，按章产 frag_forest(1~2) / frag_guild(3~4) / frag_rift(5+)。
+        // 调用点（BattleManager.Settlement 关卡通关结算）已一并移除，不得再启用。
     }
 
     // ===== 本局获得追踪（2026-10-21 主人需求：战斗背包只显示当前战斗里获得的东西）=====
-    // 每次开新局由 BattleBagSystem.InitNewRun 清零；TryDropOnStageClear 掉落时累计。
+    // 每次开新局由 BattleBagSystem.InitNewRun 清零；原 TryDropOnStageClear 掉落时累计（2026-11-13 已停用）。
     static Dictionary<string, int> _runGained;
 
     /// <summary>开新局：清空「本局获得碎片」计数（战斗背包口径）。</summary>
@@ -156,9 +154,8 @@ public static class AdventureLogFragments
 
     public static string FormatInventory()
     {
-        return $"{DisplayName("frag_forest")}×{GetCount("frag_forest")}  "
-             + $"{DisplayName("frag_guild")}×{GetCount("frag_guild")}  "
-             + $"{DisplayName("frag_rift")}×{GetCount("frag_rift")}";
+        // 2026-11-13：碎片整体下线，清单为空（方法保留便于回退）。
+        return "";
     }
 
     public static string FormatRecipeLine(int index)

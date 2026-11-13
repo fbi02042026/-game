@@ -107,7 +107,7 @@ public partial class BattleManager
         BattleSideHud.Instance?.SetKillTotal(RunStats.KillCount);
         CombatJuice.Instance?.OnKillCombo(_killCombo);
         CombatJuice.Instance?.OnKillFinisher(m);
-        HeroThunderUltimate.Instance?.OnMonsterKilled(m);
+        // 2026-11-13 雷击奥义改独立 CD：击杀充能回调整条移除，保留击杀计数/连杀等其它逻辑。
 
         // 连杀续杯（R2）：连杀≥阈值时回少量血，高连击回得更多，让"连"成为资源
         // 2026-10-09 主人拍板：连杀不再回血，总开关关掉（不是删逻辑，想恢复改开关即可）

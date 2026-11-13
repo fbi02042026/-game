@@ -9,77 +9,20 @@ using UnityEngine.UI;
 /// </summary>
 public partial class MercObtainPopupUI : MonoBehaviour
 {
+    /// <summary>
+    /// 【2026-11-13 主人拍板「没有重生护符这个道具了」】护符提示行整体下线：
+    /// 不再运行时建「icon + ×N」节点、不再读 item_revive_charm（表行已删）。
+    /// 方法签名保留供 Binding / ShowFallenFromEntry 旧调用点编译（空实现）。
+    /// </summary>
     void EnsureReviveCharmHint()
     {
-        if (_root == null) return;
-        _reviveCharmHint = _root.transform.Find("Panel/" + ReviveCharmHintNode)?.gameObject;
-        if (_reviveCharmHint != null) return;
-
-        var panel = _root.transform.Find("Panel");
-        if (panel == null || _keepRt == null)
-        {
-            Debug.LogError("[MercObtainPopup] 缺 Panel 或 KeepButton，复活护符提示行挂不上（不影响其它功能）");
-            return;
-        }
-
-        _reviveCharmHint = new GameObject(ReviveCharmHintNode, typeof(RectTransform));
-        _reviveCharmHint.transform.SetParent(panel, false);
-        var rt = _reviveCharmHint.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        // 跟着复活钮的锚位走：正上方 ≈ 一个按钮高 + 间距（暂 95px，效果不对再调）
-        rt.anchoredPosition = new Vector2(_keepBasePos.x, _keepBasePos.y + 95f);
-        rt.sizeDelta = new Vector2(220f, 44f);
-
-        // 护符 icon
-        var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-        iconGo.transform.SetParent(_reviveCharmHint.transform, false);
-        var iRt = iconGo.GetComponent<RectTransform>();
-        iRt.anchorMin = new Vector2(0f, 0.5f); iRt.anchorMax = new Vector2(0f, 0.5f);
-        iRt.pivot = new Vector2(0f, 0.5f);
-        iRt.anchoredPosition = new Vector2(0f, 0f);
-        iRt.sizeDelta = new Vector2(40f, 40f);
-        var iImg = iconGo.GetComponent<Image>();
-        iImg.raycastTarget = false;
-        iImg.preserveAspect = true;
-        var iconSp = ItemDefs.LoadIcon(ReviveCharmItemIdForHint);
-        if (iconSp == null)
-            Debug.LogError("[MercObtainPopup] 重生护符图标加载失败（item_defs icon 路径或 Resources 图缺失）");
-        iImg.sprite = iconSp;
-        iImg.enabled = iconSp != null;
-
-        // ×N 数量
-        var txtGo = new GameObject("Count", typeof(RectTransform));
-        txtGo.transform.SetParent(_reviveCharmHint.transform, false);
-        var t = txtGo.AddComponent<Text>();
-        t.font = GameFonts.GetChinese();
-        t.fontSize = 30;
-        t.alignment = TextAnchor.MiddleLeft;
-        t.color = Color.white;
-        t.raycastTarget = false;
-        var tRt = txtGo.GetComponent<RectTransform>();
-        tRt.anchorMin = new Vector2(0f, 0f); tRt.anchorMax = new Vector2(0f, 1f);
-        tRt.pivot = new Vector2(0f, 0.5f);
-        tRt.anchoredPosition = new Vector2(48f, 0f);
-        tRt.sizeDelta = new Vector2(170f, 44f);
-        _reviveCharmCount = t;
-
-        _reviveCharmHint.SetActive(false);   // 只有阵亡复活模式显示
+        _reviveCharmHint = null;
+        _reviveCharmCount = null;
     }
 
-    /// <summary>阵亡复活模式开窗时刷提示行与复活钮颜色：有护符正常色，没护符字变红（点了 Toast 道具不足）。</summary>
+    /// <summary>阵亡复活模式已下线（护符无来源），保留空实现供旧调用点。</summary>
     void ApplyFallenCharm()
     {
-        int charms = 0;
-        var data = SaveSystem.Instance?.Data;
-        if (data != null) charms = data.reviveCharms;
-
-        if (_reviveCharmHint != null)
-        {
-            _reviveCharmHint.SetActive(true);
-            if (_reviveCharmCount != null) _reviveCharmCount.text = "×" + charms;
-        }
-        if (_keepLabel != null)
-            _keepLabel.color = charms > 0 ? _keepLabelColor0 : new Color(1f, 0.4f, 0.4f);
     }
 
     // ============================================================

@@ -26,11 +26,17 @@ public partial class BattleManager
     internal int _activeWaveIndex = -1;
     private bool _waveAnnounceRunning;
     Coroutine _waveAnnounceCo;
+    private bool _waveGatePlayed;   // 【2026-11-13 v5】全关唯一一次 Gate 是否已播；换关由 ResetWaveProgress 复位
     // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】波次闸门看门狗计时（真实时间）
     float _waveGateStuckSec;
     /// <summary>连杀计数</summary>
     private int _killCombo;
     private float _lastKillTime;
+    /// <summary>
+    /// 【2026-11-13 主人拍板】波流式衔接协程句柄：上一波出完后隔 WAVE_STREAM_GAP_SEC 秒
+    /// 直接刷下一波（不等清场）。收口点：StopBattleSpawnCoroutines / ResetWaveProgress / StopWaveStream。
+    /// </summary>
+    Coroutine _waveStreamCo;
     /// <summary>友军连杀加速倍率（1~1.5）。</summary>
     public float KillComboSpeedMul { get; private set; } = 1f;
 
@@ -112,6 +118,10 @@ public partial class BattleManager
         RevertBossStageBlessing();
         ResetMpForNewStage();
         HeroThunderUltimate.Instance?.ResetForBattle();
+        // 2026-11-13 职业自带技能：每关重新送 30% 起步槽，攒槽不跨关继承。
+        // 2026-11-13：ApplyForBattle 不是每关都走，这里兜住组件与事件订阅（幂等）。
+        PlayerPassiveCombat.EnsureCareerAttached(Hero.Instance);
+        PlayerPassiveCombat.Instance?.ResetCareerChargeForStage();
 
         float startX = GetStageStartX();
         float z = unitRoot != null ? unitRoot.position.z : 0f;
@@ -277,6 +287,8 @@ public partial class BattleManager
             _battleStartCo = null;
         }
         StopWaveAnnounce();
+        // 【2026-11-13】波流式衔接协程一并停掉（换关/撤离/重载不残留，防旧计时串台刷怪）
+        StopWaveStream();
         // 战前剧情若在播放中被打断，标志位必须复位，否则 CoFirstWaveHardFallback 会永久卡在等待里
         _preBattleStoryPlaying = false;
         // 【2026-10-29 实时抽改版】待出发的「开始战斗」一并作废（撤离/重载不残留）
@@ -301,7 +313,10 @@ public partial class BattleManager
     void ResetWaveProgress()
     {
         _activeWaveIndex = -1;
+        _waveGatePlayed = false;   // 【2026-11-13 v5】换关必清：每关各播 1 次 Gate
         _allWavesSpawned = false;
+        // 【2026-11-13】换关重置波次时把流式衔接计时一并清掉，防上一关的协程串台
+        StopWaveStream();
         _killCombo = 0;
         _lastKillTime = 0f;
         SyncKillComboHaste();
@@ -790,7 +805,7 @@ public partial class BattleManager
     void SpawnNextPendingWave() => Planner.SpawnNextPendingWave();
 
 
-    /// <summary>清完当前波后紧接着出下一波：普通波直接出兵，Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」再出兵（2026-11-12 新口径）</summary>
+    /// <summary>清完当前波后出下一波：第 1 波清场播全关唯一一次「下一波来袭」Gate，其余普通波清完直接出兵，Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」再出兵（2026-11-13 v5 口径）</summary>
     void BeginNextWaveCountdown()
     {
         if (Rules.SkipWaveAnnounce) return;
@@ -823,13 +838,72 @@ public partial class BattleManager
         // 无限裂隙与正式关/金币本同款 —— 旧口径：5 秒倒计时（不冻结）→「下一波来袭」预告出兵（2026-11-12 起停用）。
         // 旧「裂隙每波清完弹连抽窗」（2026-10-21/26 口径）作废。整段在 _waveAnnounceCo 里，
         // :671 `if (_waveAnnounceCo != null) return;` 的防重入语义不变。
-        // 【2026-11-12 主人拍板】一波打完紧接着出下一波：普通波取消「下一波来袭」中央大图与侧栏 5 秒倒计时，
-        // 直接 SpawnNextPendingWave() 出兵；Boss 波的「首领来袭」大图、羁绊本 Boss 前剧情保留（也不再倒计时）。
+        // 【2026-11-13 v5 覆盖 11-12 口径】普通波仅第 1 波清场播一次「下一波来袭」Gate（复用现成播报链），
+        // 其余普通波清完仍直接 SpawnNextPendingWave() 出兵；5 秒倒计时与「下一波来袭」旧链保持停用（只恢复一次 Gate 播报，不恢复倒计时）。
         // 旧 5 秒倒计时 + 下一波来袭预告整段停用，函数保留不删（下线≠删除）；
-        // Boss 波仍走 CoAnnounceThenSpawnNextWave 播首领来袭。
+        // Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」，羁绊本 Boss 前剧情保留。
         bool boss = _waves != null && nextIdx < _waves.Count && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-        if (!boss) { SpawnNextPendingWave(); return; }
+        // 【2026-11-13 v5】全关唯一一次 Gate / 旗帜波：仅第 1 波清场时复用现成播报链播「下一波来袭」，其余普通波仍直刷。
+        if (!boss)
+        {
+            if (!_waveGatePlayed && _activeWaveIndex == 0)
+            {
+                _waveGatePlayed = true;
+                _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+                return;
+            }
+            SpawnNextPendingWave();
+            return;
+        }
         _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+    }
+
+    // ============================================================
+    // 【2026-11-13 主人拍板】波流式衔接：两拨合成一波
+    // ============================================================
+    // 原节奏 = 清一波 → 才来下一波（普通波 2026-11-12 起已无「下一波来袭」过场，但两拨仍分开）。
+    // 现改为：上一波**出完**（出海协程结束）后隔 WAVE_STREAM_GAP_SEC=1 秒，下一波直接压上来，
+    // 不等清场、允许场上叠怪 —— 玩家面前始终有足够的怪，升级成长感与紧张感都在。
+    // 怪量口径不变（每波仍按既有表摇 10-15 等，只是衔接更紧）；Boss 波不参与流式，
+    // 仍等场上清空后走「首领来袭」过场（2026-11-12 拍板保留）。
+
+    /// <summary>上一波出完后调用：排 1 秒后的下一波。重复调用会重排（顺延），不叠协程。</summary>
+    internal void ScheduleWaveStreamNext()
+    {
+        StopWaveStream();
+        _waveStreamCo = StartCoroutine(CoWaveStreamNext());
+    }
+
+    IEnumerator CoWaveStreamNext()
+    {
+        // 用缩放时间：抽奖面板 / 剧情冻结时计时跟着停，不会在冻结里偷跑出怪
+        yield return new WaitForSeconds(GameConfig.WAVE_STREAM_GAP_SEC);
+        _waveStreamCo = null;
+        TickWaveStreamSpawn();
+    }
+
+    /// <summary>流式衔接到点：能刷就刷（允许叠刷），不能刷就按原因顺延或放弃。</summary>
+    void TickWaveStreamSpawn()
+    {
+        if (!isInBattle || _stageCleared || _runClosed || BattleLootMode.Active) return;
+        if (_preBattleStoryPlaying) return;
+        int nextIdx = FindNextUnspawnedWaveIndex();
+        if (nextIdx < 0) return;
+        var next = _waves != null && nextIdx < _waves.Count ? _waves[nextIdx] : null;
+        if (next == null || next.isBossWave) return;                    // Boss 波仍走清场 + 首领来袭
+        if (_waveAnnounceCo != null || _waveAnnounceRunning) return;    // 「首领来袭」播报中不抢跑
+        // 上一波还在出海（SpawnWave 会掐掉上一个出海协程，直接刷会截断上一波）→ 顺延再等 1 秒
+        if (_spawnWaveCo != null) { ScheduleWaveStreamNext(); return; }
+        Planner.SpawnNextPendingWave(allowStackWhileAlive: true);
+    }
+
+    void StopWaveStream()
+    {
+        if (_waveStreamCo != null)
+        {
+            StopCoroutine(_waveStreamCo);
+            _waveStreamCo = null;
+        }
     }
 
     /// <summary>

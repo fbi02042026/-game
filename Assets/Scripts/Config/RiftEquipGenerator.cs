@@ -36,6 +36,9 @@ public static class RiftEquipGenerator
     public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false)
     {
         RiftEquipTables.EnsureLoaded();
+        // 【2026-11-13 主人拍板】初级装备下限：采集一次本局开局发的初始武器 / 盾，
+        // 生成主属性与词条时逐条钳制（详见下方 StarterFloor 注释）。
+        var starter = CaptureStarterBaseline(job, fixedForTutorial);
         // 引导确定性化：稀有度恒 NORMAL（Ch1 20% 稀有曲线只影响正式关/非引导抽卡）。
         var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter);
         // 【2026-10-24 主人拍板】保底稀有：保底抽出的装备不许再是普通（白）。
@@ -92,10 +95,40 @@ public static class RiftEquipGenerator
         bool mainIsAttack = main == "ATK" || main == "MAGIC_ATK";
         bool anchorToTemplate = slot.IsWeapon && mainIsAttack && visual != null
                                 && TryGetTemplateAttack(visual, main == "MAGIC_ATK", out tplAtk);
+        // 【2026-11-13 主人拍板「按章节的平均值加系数、必须比初始武器好、别写死」】
+        // 正式局武器攻击主属性 = 本章普通怪平均 baseAttack × 档位系数 × chapterGrowth；
+        // 三档系数真源 = combat_tuning 表 EQUIP_ATK_TIER_*（GameConfig.EquipAtkTierLo/Hi 读表）。
+        // 模板退回纯外观/命名/伤害类型职责（10-18 方案A 的模板数值锚定正式局退役）；
+        // 引导局（确定性）与敌人表缺失（LogError 可见）仍走模板锚定，行为不变。
+        float enemyAvg = slot.IsWeapon && mainIsAttack && !fixedForTutorial ? EnemyAvgBaseAtk(chapter) : 0f;
+        bool enemyAnchored = enemyAvg > 0f;
+        float tierLo = GameConfig.EquipAtkTierLo(rarity.Id);
+        float tierHi = GameConfig.EquipAtkTierHi(rarity.Id);
+        // 配表 LO>HI 属配置错误：报出来（不静默），本次按 LO 单值生成，避免 Random.Range 反区间。
+        if (tierHi < tierLo)
+        {
+            Debug.LogError($"[RiftEquipGenerator] combat_tuning 档位系数区间反了：{rarity.Id} LO={tierLo:F2} > HI={tierHi:F2}");
+            tierHi = tierLo;
+        }
         float anchorRoll = fixedForTutorial ? 1.0f : Random.Range(1.0f, 1.1f);
-        float mainVal = anchorToTemplate
-            ? tplAtk * anchorRoll * chapterGrowth
-            : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth;
+        float mainVal = enemyAnchored
+            ? enemyAvg * Random.Range(tierLo, tierHi) * chapterGrowth
+            : anchorToTemplate
+                ? tplAtk * anchorRoll * chapterGrowth
+                : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth;
+        // 【2026-11-13】主属性下限：整条随机分布平移到「不低于初级装备」，不做硬钳。
+        // 硬钳会让 Ch1 普通装低半段全部落在同一个数（卡面 RoundToInt 后一模一样，
+        // 2026-10-20 主人报过「两次抽出同一个武器 数值都一样」），平移保住随机区间宽度。
+        float mainFloor = fixedForTutorial ? 0f : StarterFloor(main, starter);
+        float mainRolledMin = enemyAnchored
+            ? enemyAvg * tierLo * chapterGrowth
+            : anchorToTemplate
+            ? tplAtk * chapterGrowth                                      // anchorRoll 下限恒 1.0
+            : RolledMin(main, rarity.Id, rarity.BaseMul, chapterGrowth);
+        mainVal = LiftToStarterFloor(mainVal, mainRolledMin, mainFloor);
+        if (enemyAnchored)
+            Debug.Log($"[EQUIP-FLOOR] ch={chapter} 敌人均值={enemyAvg:F2} 档={rarity.Id} " +
+                      $"区间=[{tierLo:F2},{tierHi:F2}]×A 最终={mainVal:F2} 初始基准={starter.Attack:F2}");
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, job, out var mainBonus))
             attrs.Add(mainBonus);
@@ -112,6 +145,12 @@ public static class RiftEquipGenerator
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
             float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial) * chapterGrowth, attrBonus);
+            // 【2026-11-13】随机词条同口径平移保底（稀有 / 传奇区间本就远高于下限，实际不会触发）
+            float affixFloor = StarterFloor(id, starter);
+            float affixMin = RolledMin(id, rarity.Id, rarity.AffixMul, chapterGrowth);
+            // ApplyDropBonus 对非速率 / 非射程词条 +attrBonus；理论最小值同步加，避免多抬一次
+            if (attrBonus != 0f && !IsRateAttr(id) && id != "RANGE") affixMin += attrBonus;
+            v = LiftToStarterFloor(v, affixMin, affixFloor);
             if (TryMapAttr(id, v, job, out var bonus))
                 attrs.Add(bonus);
         }
@@ -481,6 +520,135 @@ public static class RiftEquipGenerator
         return id == "CRIT_RATE" || id == "CRIT_DMG" || id == "ATK_SPD" || id == "DMG_RED"
             || id == "DODGE" || id == "LIFE_STEAL" || id == "POISON" || id == "HEAL"
             || id == "HP_REGEN" || id == "CONTROL_RES" || id == "ANTI_CRIT" || id == "MS";
+    }
+
+    // ============================================================================
+    // 【2026-11-13 主人拍板】「所有战斗中掉落的装备不能比玩家自带的初级装备属性更低」
+    // 根因（三处折扣叠加，只发生在掉落路径 RiftEquipGenerator）：
+    //   ① equip_rarity_rules.csv 普通品质 BaseMul = 0.9；② 第一章 chapterGrowth = 0.88；
+    //   ③ 方案A 武器锚定取模板攻击值，普通档模板不少只有 6.6（甚至更低）。
+    //   → Ch1 普通武器攻击常掉到 3.5~5.8、防具 DEF 掉到 2 点上下。
+    //   而初始武器走 GenerateFromTemplate → ApplyTableDrivenWeaponAttack，取 Common 区间
+    //   4.5~6、不吃 0.9 / 0.88，所以「抽到很多都比初始还低」。两条生成路径数值口径分叉。
+    // 口径（只抬下限，不改概率曲线 / 品质 / 词条条数 / 上限封顶 / 引导确定性）：
+    //   实现方式 =「整条随机分布平移」，不是把低值硬钳到下限；这样下限达标且随机区间宽度不变，
+    //   不会重演 2026-10-20「两次抽出同一个武器 数值都一样」。
+    //   · 攻击 / 魔攻：下限 = 本局开局发的初级主手武器实际攻击值，钳在普通档上限
+    //     （CommonMax = 6）以内 —— 玩家换上更强装备后，下限不会跟着水涨船高；
+    //     引导局 / 取不到实例时用 CommonMax（确定性，且保证首抽也 ≥ 任意初始武器）。
+    //   · 防御 / 魔防：下限 = 初始副手盾实际防御（同样钳在普通档内），没盾就取普通档下限。
+    //   · 其它数值属性：下限 = 该属性普通档区间下限（equip_attr_ranges.csv），
+    //     把 0.9 × 0.88 压到「初级档」以下的那部分补回来；稀有 / 传奇区间远高于此，不受影响。
+    //   · 百分比 / 速率类：RollAttrValue 里已 ×0.01，下限同步 ×0.01；射程等小数类按表内原值。
+    // 唯一生效点：本文件 GenerateOne（关卡结算掉落 / 无限裂隙宝箱 / 抽奖池 / 引导宝箱 / 局内商店
+    // 全部走它），故所有战斗内产出的装备一次性覆盖，不用逐个调用点补。
+    // ============================================================================
+    struct StarterBaseline
+    {
+        public float Attack;
+        public float Defense;
+    }
+
+    /// <summary>采集「初级装备」基准：每生成一件读一次当前穿戴，不缓存、不跨局、不写存档。</summary>
+    static StarterBaseline CaptureStarterBaseline(PlayerJobId job, bool fixedForTutorial)
+    {
+        bool magic = PlayerJobBaseStats.IsMagicJob(job);
+        string atkId = magic ? "MAGIC_ATK" : "ATK";
+        // 【2026-11-13 主人拍板「抽到的必须比初始武器好」】攻击基准上界 = 普通档上限 ×1.05
+        //（真源 equip_attr_ranges 表 CommonMax，不再写死 6）：初始武器走 Common 区间 4.5~6，
+        // 任何初始值 ≤ CommonMax，×1.05 即严格好于初始；换上更强装备也不会水涨船高。
+        float atkCap = CommonBound(atkId, false, 6f) * 1.05f;
+        float defCap = CommonBound("DEF", false, 6f);
+        float defMin = CommonBound("DEF", true, 2.5f);
+
+        // 引导局必须确定性（2026-10-12「每次引导战力一样」）：不读随机生成的初始武器数值。
+        var baseline = new StarterBaseline { Attack = atkCap, Defense = defMin };
+        if (fixedForTutorial) return baseline;
+
+        // InstanceQuiet：战斗外 / 系统未装配时返回 null，不建空物体、不刷 Error。
+        var bag = BattleBagSystem.InstanceQuiet;
+        if (bag == null) return baseline;
+
+        var main = bag.GetEquippedInLogicalSlot(EquipSlotType.MainHand);
+        float starterAtk = MaxFlatAttr(main, magic ? AttrType.MagicAttack : AttrType.Attack);
+        if (starterAtk > 0f)
+            baseline.Attack = Mathf.Min(starterAtk, atkCap);
+
+        var off = bag.GetEquippedInSlot(EquipSlotType.OffHand);
+        float starterDef = MaxFlatAttr(off, AttrType.Defense);
+        if (starterDef > 0f)
+            baseline.Defense = Mathf.Clamp(starterDef, defMin, defCap);
+        return baseline;
+    }
+
+    /// <summary>
+    /// 【2026-11-13 主人拍板「按章节的平均值加系数」】本章普通怪（排除 Boss）baseAttack 平均值。
+    /// 真源 monster_stats 表；失败 LogError 不静默兜底（返回 0 → 调用方退回模板锚定口径，错误可见）。
+    /// </summary>
+    static float EnemyAvgBaseAtk(int chapter)
+    {
+        if (!MonsterStatsTable.TryGetChapterAverage(chapter, out _, out float avgAtk) || avgAtk <= 0f)
+        {
+            Debug.LogError($"[RiftEquipGenerator] 第 {chapter} 章取不到普通怪平均攻击（monster_stats 缺数据？），本次攻击退回模板锚定口径");
+            return 0f;
+        }
+        return avgAtk;
+    }
+
+    static float CommonBound(string attrId, bool min, float fallback)
+    {
+        return RiftEquipTables.TryGetRange(attrId, out var r) ? (min ? r.CommonMin : r.CommonMax) : fallback;
+    }
+
+    static float MaxFlatAttr(EquipInstance eq, AttrType type)
+    {
+        if (eq == null || eq.attrBonus == null) return 0f;
+        float best = 0f;
+        for (int i = 0; i < eq.attrBonus.Count; i++)
+        {
+            var b = eq.attrBonus[i];
+            if (b == null || b.isPercent || b.attrType != type) continue;
+            if (b.value > best) best = b.value;
+        }
+        return best;
+    }
+
+    /// <summary>该属性 id 的「不低于初级装备」下限；返回 0 = 不钳（无表 / 未落地词条）。</summary>
+    static float StarterFloor(string attrId, StarterBaseline baseline)
+    {
+        if (string.IsNullOrEmpty(attrId)) return 0f;
+        if (!RiftEquipTables.TryGetRange(attrId, out var r)) return 0f;
+        float scale = IsRateAttr(attrId) ? 0.01f : 1f;   // 速率类在 RollAttrValue 里已折算成小数
+        float floor = r.CommonMin * scale;
+        switch (attrId)
+        {
+            case "ATK":
+            case "MAGIC_ATK": floor = Mathf.Max(floor, baseline.Attack); break;
+            case "DEF":
+            case "MAGIC_DEF": floor = Mathf.Max(floor, baseline.Defense); break;
+        }
+        return floor;
+    }
+
+    /// <summary>本次 roll 的理论最小值（与 RollAttrValue 同口径：品质档 + 品质修正 + 速率折算 + 章节成长）。</summary>
+    static float RolledMin(string attrId, string rarityId, float mul, float growth)
+    {
+        if (!RiftEquipTables.TryGetRange(attrId, out var r)) return 0f;
+        float lo = rarityId == "RARE" ? r.RareMin
+                 : rarityId == "LEGEND" ? r.LegendMin
+                 : r.CommonMin;
+        return lo * mul * growth * (IsRateAttr(attrId) ? 0.01f : 1f);
+    }
+
+    /// <summary>
+    /// 把低于下限的整条随机分布平移上来，而不是把每个低值硬钳到下限。
+    /// 因为 value 恒 ≥ rolledMin，平移后恒 ≥ floor；rolledMin 本就达标时原样返回
+    ///（稀有 / 传奇、后期章节、模板高攻武器一律不受影响）。
+    /// </summary>
+    static float LiftToStarterFloor(float value, float rolledMin, float floor)
+    {
+        if (floor <= 0f || rolledMin >= floor) return value;
+        return value + (floor - rolledMin);
     }
 
     /// <summary>

@@ -349,7 +349,8 @@ public static class AdventureLogAchievements
 
     public static void RefreshRedDots()
     {
-        // 单一出口：成就页红点只看「成就可领」，里程等级 / 碎片合成走世界页红点。
+        // 单一出口：成就页红点只看「成就可领」，里程等级走世界页红点
+        // （2026-11-13 碎片合成整体下线，不再有碎片可合成红点）。
         // 2026-10-31 主人报「领取后标签上的提示还在」—— 旧版这里用宽口径
         // （成就可领 || 里程可领），成就是领完了但里程等级还能领，标签红点就一直不灭。
         AdventureCodex.RefreshRedDots();

@@ -720,12 +720,11 @@ public partial class BattleManager
     }
 
     // ===== 关卡商店（2026-10-21 主人需求：临时界面，后续正式化再出美术/预制体）=====
-    // 时机 = 每关进关抽奖之前（引导关不弹）。商品：重生护符 50% 占一格，其余出随机武器/装备。
+    // 时机 = 每关进关抽奖之前（引导关不弹）。商品：随机武器/装备 3 件。
     // 货币 = 战斗内抽奖币池 currentGold（玩家口中的「抽奖卷」，扣款走 SpendBattleGold 唯一出口）。
-    // 要调价格 / 概率，改下面三个常量即可。
-    const int StageShopCharmPrice = 100;
+    // 【2026-11-13 主人拍板「没有重生护符这个道具了」】原「重生护符 50% 占一格」整段删除；
+    // 关卡商店本身仍处于停用态（CoStageShop 调用已注释），若以后重启，只上装备、勿再上架护符。
     const int StageShopEquipPrice = 80;
-    const float StageShopCharmChance = 0.5f;
 
     static readonly EquipSlotType[] AllEquipSlots =
     {
@@ -756,32 +755,8 @@ public partial class BattleManager
     {
         var list = new List<StageShopPopupUI.ShopItem>();
 
-        // ① 重生护符：50% 概率上架，占一格
-        bool charm = Random.value < StageShopCharmChance;
-        if (charm)
-        {
-            list.Add(new StageShopPopupUI.ShopItem
-            {
-                title = "重生护符",
-                info = "佣兵阵亡时，点击其变灰的头像消耗 1 枚原地满血复活。",
-                icon = ItemDefs.LoadIcon("item_revive_charm"),
-                price = StageShopCharmPrice,
-                rarity = null,
-                onBuy = () =>
-                {
-                    var d = SaveSystem.Instance?.Data;
-                    if (d == null) return false;
-                    if (!SpendBattleGold(StageShopCharmPrice)) return false;
-                    d.reviveCharms++;
-                    SaveSystem.Instance?.Save();                 // 买了就落盘，别白嫖
-                    BattleUI.Instance?.UpdateCharacterSlots();   // 已有阵亡槽的话，护符闪烁立刻补上
-                    return true;
-                }
-            });
-        }
-
-        // ② 随机武器/装备：占满剩余格子，稀有度保底 ≥ 玩家当前已穿最高一档（「比玩家当前的装备好」）
-        int wantCount = 3 - (charm ? 1 : 0);
+        // 随机武器/装备 3 件：稀有度保底 ≥ 玩家当前已穿最高一档（「比玩家当前的装备好」）
+        int wantCount = 3;
         var equips = RollStageShopEquips(wantCount);
         foreach (var eq in equips)
         {
@@ -2195,7 +2170,8 @@ public partial class BattleManager
         //   ResetPortalGateState（无门时 _portalGate=null、_portalParty 空 → 循环/Close 全空转，安全）
         //   → TickFallenMercsStagePassed（阵亡佣兵养血）→ Planner.NotifyStageResult（压力阀）
         //   → PersistBattleGold（金币写回）→ ChapterManager.OnStageComplete（章节推进）
-        //   → Analytics.StageEnd / AdventureLogFragments 掉落 → Mode.SettleStageClear
+        //   → Analytics.StageEnd → Mode.SettleStageClear
+        //   （原 AdventureLogFragments 碎片投放已于 2026-11-13 随整套玩法下线移除）
         //   → SettleNormalStageClear 弹双钮结算（下一关/返回）。
         //   _tutorialPortalPending 分支不适用正式关：该标志只在引导局 BeginTutorialPortalExit
         //   （BattleManager.Death.cs 引导链）置位，正式关恒 false，不会误入引导撤离分支。
@@ -2428,12 +2404,9 @@ public partial class BattleManager
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
         Analytics.StageEnd(ch, currentStage != null ? currentStage.stageIndex : 0, true,
             (double)(Time.unscaledTime - _battleStartTime)); // 埋点：关卡通关（胜利）
-        bool bossStage = currentStage != null && currentStage.type == StageType.Boss;
-        // 【2026-11-08 不留隐患】冒险日志碎片是普通主线收集内容，只认主线正式关（Mode=Normal）。
-        // 原写法只挡竞技场（10-31：随机章号会污染收集进度），活动本/羁绊/支线岛/终章/裂隙的题材章号
-        // 同样不是玩家进度。难度局仍由 NormalOnlyContentAllowed 唯一出口挡。
-        if (IsFormalMainRun && NormalOnlyContentAllowed(BattleDifficulty))
-            AdventureLogFragments.TryDropOnStageClear(ch, bossStage);
+        // 【2026-11-13 主人拍板】冒险日志碎片合成整体下线：原先这里按章号概率投放
+        // 森林残页 / 公会密函 / 裂隙碎片（AdventureLogFragments.TryDropOnStageClear），已整段移除，
+        // 通关不再产出任何日志碎片。方法保留在 AdventureLogFragments 里便于回退，但不得再启用。
 
         // 通关结算交给模式：核心不需要知道一共有几种玩法、各自发什么、之后去哪。
         if (Mode == null)

@@ -3,13 +3,12 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 挂机向雷击奥义：击杀充能，满条自动释放。
-/// 总开关 GameConfig.THUNDER_ULT_ENABLED（当前关，等后期装备技能再开）。
+/// 挂机向雷击奥义：独立 CD 计时，冷却归零自动释放（2026-11-13 主人拍板）。
+/// THUNDER_ULT_ENABLED 只作 HUD 充能条隐藏判据（恒 false），不再闸功能。
 /// </summary>
 public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundSingleton
 {
-    int _charge;
-    int _need = GameConfig.THUNDER_ULT_NEED_MIN;
+    float _cdRemaining;   // 独立 CD 剩余秒数（Time.deltaTime 轴）
     bool _casting;
     Coroutine _castCo;
     /// <summary>教程内仅第一次雷击走压暗电影感。</summary>
@@ -21,14 +20,13 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
     SpriteRenderer _sceneDimSr;
     static Sprite _whiteSprite;
 
-    public float ChargeRatio => _need <= 0 ? 0f : Mathf.Clamp01(_charge / (float)_need);
+    // CD 制下充能条恒隐藏（THUNDER_ULT_ENABLED=false）。以下 4 个属性只保留给
+    // BattleUI.CharacterBar.RefreshPlayerUltBar 编译用，不参与任何战斗判定。
+    public float ChargeRatio => 0f;
     public bool IsCasting => _casting;
-    public bool IsReady => !_casting && _charge >= _need;
-
-    /// <summary>当前已攒充能点数（HUD 第二条显示 cur/need 用）。</summary>
-    public int Charge => _charge;
-    /// <summary>本关释放所需点数（随章节/关卡变化，见 GameConfig.GetThunderUltNeedPoints）。</summary>
-    public int Need => _need;
+    public bool IsReady => !_casting && _cdRemaining <= 0f;
+    public int Charge => 0;
+    public int Need => GameConfig.THUNDER_ULT_NEED_MIN;
 
     protected override void Awake()
     {
@@ -37,9 +35,9 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
 
     void Update()
     {
-        if (!GameConfig.THUNDER_ULT_ENABLED) return;
-        // 对话冻结时攒满：恢复行动后自动放
-        if (!IsReady) return;
+        // 2026-11-13：改独立 CD。对话/结算冻结期间 Time.deltaTime 同步停走，恢复行动后再放。
+        if (_cdRemaining > 0f) _cdRemaining -= Time.deltaTime;
+        if (_casting || _cdRemaining > 0f) return;
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         TryAutoCast();
@@ -61,11 +59,7 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
         RestoreSceneDim();
         _casting = false;
         _tutorialCinematicDone = false;
-        _charge = 0;
-        if (GameConfig.THUNDER_ULT_ENABLED)
-            RecalcNeed();
-        else
-            _need = GameConfig.THUNDER_ULT_NEED_MIN;
+        _cdRemaining = GameConfig.THUNDER_ULT_CD;
         HideUltButton();
     }
 
@@ -84,52 +78,19 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
             existing.gameObject.SetActive(false);
     }
 
-    public void RecalcNeed()
-    {
-        int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
-        int st = 0;
-        if (BattleManager.Instance != null && BattleManager.Instance.currentStage != null)
-            st = BattleManager.Instance.currentStage.stageIndex;
-        _need = GameConfig.GetThunderUltNeedPoints(ch, st);
-        if (_charge > _need) _charge = _need;
-        RefreshUi();
-    }
-
-    /// <summary>击杀记账：小怪 1 / 精英 3 / Boss 6。</summary>
-    public void OnMonsterKilled(Monster m)
-    {
-        if (!GameConfig.THUNDER_ULT_ENABLED) return;
-        if (m == null || _casting) return;
-        if (BattleManager.Instance == null || !BattleManager.Instance.isInBattle) return;
-
-        int pts = 1;
-        if (m.IsBossUnit) pts = 6;
-        else if (m.IsEliteWave) pts = 3;
-
-        _charge = Mathf.Min(_need, _charge + pts);
-        RefreshUi();
-
-        if (_charge >= _need)
-            TryAutoCast();
-    }
-
     public bool TryManualCast()
     {
-        if (!GameConfig.THUNDER_ULT_ENABLED) return false;
-        if (!IsReady) return false;
         return BeginCast();
     }
 
     void TryAutoCast()
     {
-        if (!GameConfig.THUNDER_ULT_ENABLED) return;
-        if (!IsReady) return;
+        if (_casting || _cdRemaining > 0f) return;
         BeginCast();
     }
 
     bool BeginCast()
     {
-        if (!GameConfig.THUNDER_ULT_ENABLED) return false;
         if (_casting) return false;
         var bm = BattleManager.Instance;
         var hero = bm != null ? bm.hero : Hero.Instance;
@@ -138,7 +99,7 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
             return false;
 
         _casting = true;
-        _charge = 0;
+        _cdRemaining = GameConfig.THUNDER_ULT_CD;
         RefreshUi();
         _castCo = StartCoroutine(CoCast(hero));
         return true;

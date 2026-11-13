@@ -11,6 +11,8 @@ using UnityEngine;
 ///   原挂在 RunLoadout（局内）上，但 10-24 拍板「只要打完就清」后每关都是新局 → 等级每关归 1、永远升不了级；
 /// · 升级收益 = 每级「本职业倾向」+1 点（映射见 <see cref="JobTendencyAttr"/>），
 ///   进战斗按「基底 + (level-1)」一次性重放（见 <see cref="RestoreHeroLevel"/>），不在局内逐级结算；
+///   【2026-11-13 追加】法师/游侠每级额外 +1 体质 = +10 血 +1 防（见 <see cref="ExtraVitalityPerLevel"/>），
+///   倾向收益（法师魔攻 / 游侠攻速）不变；两条成长统一走 <see cref="ApplyLevelGrowthToAttr"/>；
 /// · 升级反馈 = Level Up 特效（结算时刻英雄在场）+ 恭喜升级弹窗（LevelUpPopup，升级前→升级后，
 ///   点黑幕关闭；【2026-10-25 主人拍板】弹窗不在战斗里弹，挂起到打完回冒险界面（Town 就绪）才触发）；
 /// </summary>
@@ -80,6 +82,10 @@ public static class LevelSystem
     /// 与 AttrSystem.ApplyDerivedAttributes 派生系数同源，改派生系数时同步这里：
     /// 剑盾/重装=体质→每级+10血、游侠=敏捷→每级+1%攻速、法师/牧师=智力→每级+2魔攻、狂战=力量点本身+1。
     /// 2026-11-11 主人「把文案对齐一下」：弹窗原来显示的是倾向点数（+1），被误读成只加 1 点血，改显真实收益。
+    /// 【2026-11-13 主人拍板「每级只涨一个职业一个属性 / 就跟以前一样，只不过加了法师和弓手的血量」】
+    /// 这里保持**每级一个职业一个属性**的老口径（剑盾 +10 / 法师 +2 / 游侠 +1%），不把加血并进这一行；
+    /// 法师/游侠每级额外 +10 血 +1 防走 ExtraVitalityPerLevel 的体质派生，是等级成长里的隐性项，
+    /// 不进弹窗文案。文案改回短格式后，36 号字在 100px 格子里也不折行、不溢出，不需要任何字号适配。
     /// </summary>
     public static string JobTendencyGainText(PlayerJobId job, int delta)
     {
@@ -109,17 +115,50 @@ public static class LevelSystem
     }
 
     /// <summary>
-    /// 把「倾向属性 = 基底 + (level-1)」写到任意 AttrSystem 上（2026-10-26 新增公开出口）。
+    /// 【2026-11-13 主人拍板「让法师和弓手每级也加血量」】
+    /// 等级成长除「本职业倾向 +1/级」外，额外给脆皮远程职业补体质点（唯一出口）：
+    /// 体质每点 = +10 血 +1 防（派生见 AttrSystem.ApplyDerivedAttributes，不在本文件另算一份）。
+    /// 剑盾/重装倾向本来就是体质、已按 +1/级 加血，这里返回 0 防重复；狂战/牧师本次没提，保持原样。
+    /// 想调只改这张表（一行一职业）：返回 1 = 每级 +10 血 +1 防，返回 0 = 关掉。
+    /// </summary>
+    public static int ExtraVitalityPerLevel(PlayerJobId job)
+    {
+        switch (job)
+        {
+            case PlayerJobId.Mage:
+            case PlayerJobId.Ranger: return 1;
+            default: return 0;
+        }
+    }
+
+    /// <summary>
+    /// 等级成长整体写入 AttrSystem：倾向属性 = 基底 + (level-1)，并按职业补额外体质。
+    /// 战斗内回填（RestoreHeroLevel）与换装模拟副本（ApplyTendencyToAttr）共用本出口，
+    /// 不许在两个调用点各写一份，否则模拟侧血量会跟实战对不上。
+    /// level=1 时为 no-op。写完由调用方自行 RecalcAllAttr / RecalcAttr。
+    /// </summary>
+    public static void ApplyLevelGrowthToAttr(AttrSystem attr, int level)
+    {
+        if (attr == null || level <= 1) return;
+        var job = PlayerJobDefs.GetSelected();
+        int gain = level - 1;
+        AttrType tendency = JobTendencyAttr(job);
+        SetTendencyPoint(attr, tendency, BaseOf(tendency) + gain);
+        int extraVit = ExtraVitalityPerLevel(job);
+        if (extraVit > 0 && tendency != AttrType.Vitality)
+            attr.Vitality = GameConfig.BASE_VITALITY + gain * extraVit;
+    }
+
+    /// <summary>
+    /// 把等级成长写到任意 AttrSystem 上（2026-10-26 新增公开出口，11-13 改走统一出口）。
     /// 给 <see cref="PowerCalc.SimPlayerSegment"/> 的换装模拟副本用 —— 之前副本只写 BASE_* 基底，
-    /// 高等级玩家的倾向属性（狂战力量/法师智力/游侠敏捷/剑盾体质）模拟侧吃不到，
-    /// 暴击/攻速这类随属性放大的词条净差会偏低。level=1 时为 no-op（与 RestoreHeroLevel 同口径）。
+    /// 高等级玩家的倾向属性（狂战力量/法师智力/游侠敏捷/剑盾体质）与脆皮职业的额外体质模拟侧吃不到，
+    /// 暴击/攻速/血量这类随属性放大的词条净差会偏低。level=1 时为 no-op（与 RestoreHeroLevel 同口径）。
     /// 写完由调用方自行 RecalcAllAttr。
     /// </summary>
     public static void ApplyTendencyToAttr(AttrSystem attr, int level)
     {
-        if (attr == null || level <= 1) return;
-        AttrType tendency = JobTendencyAttr(PlayerJobDefs.GetSelected());
-        SetTendencyPoint(attr, tendency, BaseOf(tendency) + level - 1);
+        ApplyLevelGrowthToAttr(attr, level);
     }
 
     static int BaseOf(AttrType tendency)
@@ -344,8 +383,8 @@ public static class LevelSystem
     // ============================================================
 
     /// <summary>
-    /// 把存档里的等级/经验回填到英雄，并把「倾向属性 = 基底 + (level-1)」重放到 attr
-    /// （Hero.InitNewRun 已 ResetToBase 归 1，不重放则吃不到等级成长）。
+    /// 把存档里的等级/经验回填到英雄，并把等级成长（倾向属性 = 基底 + (level-1)、脆皮职业额外体质）
+    /// 重放到 attr（Hero.InitNewRun 已 ResetToBase 归 1，不重放则吃不到等级成长）。
     /// level=1 时为 no-op。等级是玩家永久属性，全模式同一本账（引导局新档自然 =1）。
     /// </summary>
     public static void RestoreHeroLevel(Hero hero)
@@ -360,8 +399,8 @@ public static class LevelSystem
         hero.expToNextLevel = GetExpForLevel(level);
         if (level <= 1) return;
 
-        AttrType tendency = JobTendencyAttr(PlayerJobDefs.GetSelected());
-        SetTendencyPoint(hero.attr, tendency, BaseOf(tendency) + level - 1);
+        // 11-13：倾向属性 + 脆皮职业额外体质统一走 ApplyLevelGrowthToAttr（与换装模拟同口径）
+        ApplyLevelGrowthToAttr(hero.attr, level);
         hero.RecalcAttr();
         hero.currentHp = hero.attr.GetAttr(AttrType.MaxHp);
     }

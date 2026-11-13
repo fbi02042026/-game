@@ -309,8 +309,8 @@ public partial class WavePlanner
         {
             var w = _waves[i];
             if (w == null || w.isBossWave || w.monsterCount <= 0) continue;   // Boss 本体波不插
-            spawnable.Add(i);
             totalNormal += w.monsterCount;
+            if (i != 0) spawnable.Add(i);   // 【2026-11-13 v5】开场波纯普通怪，特殊怪集中在 Gate 之后
         }
         if (spawnable.Count == 0) return;
         quota = Mathf.Clamp(quota, 0, Mathf.Max(0, Mathf.FloorToInt(totalNormal * GameConfig.AFFIX_QUOTA_RATIO)));   // 2026-11-12 主人拍板：封顶 = 本关正常波总怪数 × 5%，取代旧 totalNormal/3；波数压缩后自动跟着降

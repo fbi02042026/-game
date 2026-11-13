@@ -497,9 +497,12 @@ public partial class Monster
     //    命中按爆点小圆判定（走位可躲）。
     // ② 追踪弹幕：连续发射 3~5 发追踪弹（随机），每发随机锁定一名存活玩家/佣兵，单发伤害 = 普攻 × 80%，
     //    弹体实时跟人、命中才结算。
-    // 两技各 20s 冷却（GameConfig 可调）；仅远程风格精英/Boss 携带，与主动技能/瞬移/跳跃互斥。
-    // 携带与解锁进程（2026-10-20 主人拍板）：远程精英随机二选一整场不变；远程 Boss 开局只有扇形，
-    // 血量降到二阶段线（BOSS_PHASE2_HP_RATIO = 70%，触发时伴随 Boss 变身演出）后才开启追踪弹幕。
+    // 精英两技各 20s 冷却（GameConfig 可调）；Boss 扇形另走 BOSS_FAN_VOLLEY_COOLDOWN(40s)，2026-11-13 拍板。
+    // 仅远程风格精英/Boss 携带，与主动技能/瞬移/跳跃互斥。
+    // 携带与解锁进程（2026-10-20 主人拍板，2026-11-13 拉长 Boss 散射间隔）：
+    // 远程精英随机二选一整场不变；远程 Boss 两种全带（恒带扇形散射，首发延到
+    // BOSS_FAN_VOLLEY_FIRST_DELAY、之后每 BOSS_FAN_VOLLEY_COOLDOWN 一次），
+    // 追踪弹幕要血量降到二阶段线（BOSS_PHASE2_HP_RATIO = 70%，触发时伴随 Boss 变身演出）才解锁。
 
     /// <summary>弹幕单发伤害 = 普攻 raw × 80%（主人定）；暴击在命中时逐目标掷（与 ApplySkillDamage 同口径）。</summary>
     float VolleyBasicDamage()
@@ -526,7 +529,8 @@ public partial class Monster
         if (!GameConfig.IsInCombatViewport(target)) return false;
 
         // 携带判定：精英只随机带一种（Init 已定），Boss 两种全带但按进程解锁（2026-10-20 主人拍板）——
-        // 开局只有扇形，血量降到二阶段线（≤ BOSS_PHASE2_HP_RATIO = 70%）才开启追踪弹幕；
+        // Boss 扇形恒带、但 2026-11-13 起首发 8s、之后每 BOSS_FAN_VOLLEY_COOLDOWN(40s) 一次；
+        // Boss 追踪要血量降到二阶段线（≤ BOSS_PHASE2_HP_RATIO = 70%）才开启；
         // 精英带追踪不受阶段限制（它本来就只有这一种）。没带/没转好的不出手。
         bool fanReady = _fanVolleyOwned && _fanVolleyCd <= 0f;
         bool homingReady = _homingBarrageOwned && _homingBarrageCd <= 0f
@@ -535,7 +539,11 @@ public partial class Monster
 
         if (fanReady)
         {
-            _fanVolleyCd = GameConfig.MONSTER_FAN_VOLLEY_COOLDOWN;
+            // 【2026-11-13 主人拍板】Boss 单独一档更长的 CD（20s→BOSS_FAN_VOLLEY_COOLDOWN），
+            // 否则长时间 Boss 战里扇形散射显得一直在放；精英仍走 20s 不动。
+            _fanVolleyCd = _isBossUnit
+                ? GameConfig.BOSS_FAN_VOLLEY_COOLDOWN
+                : GameConfig.MONSTER_FAN_VOLLEY_COOLDOWN;
             StartCoroutine(CoFanVolley(target));
             return true;
         }

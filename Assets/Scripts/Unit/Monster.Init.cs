@@ -407,9 +407,9 @@ public partial class Monster
         // monster_stats 已全体减半(2.2→1.1)，1.1 × 0.3142 = 0.3456 世界单位。
         // 注：原 Boss 走 Mathf.Min(表值, DEFAULT×1.5) 会被钳回 1.0368；减半后表值远低于该上限，
         // 若保留上限会把减半后的速度又钳高，故这里不再设上限。
-        float moveSpd = (template != null && template.baseMoveSpeed > 0.01f)
+        float moveSpd = ((template != null && template.baseMoveSpeed > 0.01f)
             ? template.baseMoveSpeed * GameConfig.MONSTER_MOVE_SPEED_TO_WORLD
-            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED;
+            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED) * GameConfig.MONSTER_GLOBAL_MOVE_SPEED_MUL;
         float atkRange;
         if (_isBossUnit)
         {
@@ -418,6 +418,9 @@ public partial class Monster
         else
         {
             atkRange = AttackRangeTable.GetMonsterWorld(_attackStyle);
+            // 【2026-11-13 主人拍板】远程普通小怪（非精英波 / 非 Boss）攻击距离减 20%；Boss、精英波保持原值。
+            if (!eliteWave && MonsterAttackStyleTable.IsRanged(_attackStyle))
+                atkRange *= GameConfig.MONSTER_NORMAL_RANGED_RANGE_MUL;
         }
         attr.SetAttr(AttrType.MoveSpeed, moveSpd);
         // 2026-10-26 主人拍板：Boss 自带 10% 闪避、精英 5%（普攻十次约闪半次到一次，添堵不致命）；
@@ -502,13 +505,16 @@ public partial class Monster
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
-        // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开 2.5s / 5s，避免开打瞬间齐射。
-        // 携带规则：远程 Boss 两种全带（但追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；
+        // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开，避免开打瞬间齐射。
+        // 携带规则：远程 Boss 两种全带（追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；
         // 远程精英只随机带一种（扇形/追踪五五开，不受阶段限制）。近战怪与远程小怪不带。
+        // 【2026-11-13 主人拍板「boss 可以带，但是要有 cd 稍微长点」】Boss 散射保留恒带，
+        //   只把首发延到 BOSS_FAN_VOLLEY_FIRST_DELAY(8s)、之后每 BOSS_FAN_VOLLEY_COOLDOWN(40s) 一次
+        //   （长 CD 在 Monster.Skills 起手处按 _isBossUnit 分流，精英仍 20s）。
         bool volleyOwner = strong && MonsterAttackStyleTable.IsRanged(_attackStyle);
         _fanVolleyOwned = volleyOwner && (!_eliteWave || Random.value < 0.5f);
         _homingBarrageOwned = volleyOwner && (!_eliteWave || !_fanVolleyOwned);
-        _fanVolleyCd = _fanVolleyOwned ? 2.5f : 0f;
+        _fanVolleyCd = _fanVolleyOwned ? (_isBossUnit ? GameConfig.BOSS_FAN_VOLLEY_FIRST_DELAY : 2.5f) : 0f;
         _homingBarrageCd = _homingBarrageOwned ? 5f : 0f;
 
         // 【2026-10-16 主人摆的 JY 脚下光环】精英/Boss 出场显示，普通怪隐藏。

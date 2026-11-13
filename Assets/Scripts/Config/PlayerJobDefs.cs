@@ -451,6 +451,18 @@ public static class PlayerJobDefs
         }
     }
 
+    /// <summary>
+    /// 【角色界面职业装备栏】起步套主/副手模板 id 的唯一出口：复用内部 <see cref="GetJobWeaponKit"/>，
+    /// 绝不另写一份写死值（红线：三职业各自一套，切换严格按 job 取，不能串）。
+    /// 表优先、写死值兜底的口径与开战发装完全一致。
+    /// </summary>
+    public static void GetJobStarterTemplateIds(PlayerJobId job, out string mainId, out string offId)
+    {
+        var kit = GetJobWeaponKit(job);
+        mainId = kit.MainTemplateId;
+        offId = kit.OffTemplateId;
+    }
+
     /// <summary>表里的起步武器模板 id 优先；表没配（缺列/空）才用写死值。</summary>
     static string KitTemplate(string tableId, string fallback)
     {

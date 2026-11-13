@@ -180,10 +180,10 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 【2026-10-21 主人拍板】阵亡佣兵信息框：点变灰头像弹出，确认钮换成「复活」、右下「取消」，
-    /// 标题「佣兵信息」（复用招募模式的双钮布局与文案切换，见 ApplyRecruitButtons）。
-    /// <para><paramref name="tryRevive"/> 返回 true（有护符、扣款生效、复活成功）才关弹窗；
-    /// 返回 false（没护符等）Toast 已提示，留在弹窗里继续看信息。</para>
+    /// 【2026-10-21 主人拍板】阵亡佣兵信息框（「复活/取消」双钮）。
+    /// 【2026-11-13 主人拍板「没有重生护符这个道具了」】玩家侧入口已下线：
+    /// BattleUI.CharacterBar 阵亡点击改走只读详情，本方法**当前无调用点**，保留便于回退；
+    /// 复活回调与护符提示行（ApplyFallenCharm 已空实现）不再生效。
     /// </summary>
     public static void ShowFallenFromEntry(string hireId, string assetId, int level, int star,
         System.Func<bool> tryRevive)

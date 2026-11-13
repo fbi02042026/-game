@@ -260,11 +260,10 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     // ============================================================
-    // 阵亡复活模式 · 「护符 icon + 拥有数量」提示行（2026-10-21 主人需求）
-    // 挂在复活按钮正上方：icon + ×N。运行时补建（预制体没有这个节点），只认 Panel/ReviveCharmHint。
+    // 阵亡复活模式 · 提示行（2026-10-21 上线；【2026-11-13 主人拍板「没有重生护符这个道具了」】整体下线）
+    // 节点名常量保留只为兼容旧预制体查找（EnsureReviveCharmHint 已空实现，不再建节点/读图标）。
     // ============================================================
     const string ReviveCharmHintNode = "ReviveCharmHint";
-    const string ReviveCharmItemIdForHint = "item_revive_charm";
 
 
     public static void ShowForRecruit(MercenaryData offer, System.Func<bool> tryBuy)

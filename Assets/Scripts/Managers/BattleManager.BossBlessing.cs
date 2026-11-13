@@ -180,6 +180,8 @@ public partial class BattleManager
 
         // boss 线整段没挂背景图，剧情窗会直接浮在战斗画面上 → 铺一层常驻黑色半透底，
         // 排序 12999（Default 层最高）在剧情窗 Effects 层 13000 之下、不挡点击；选完 / 异常 / 超时统一撤掉。
+        // 【2026-11-13 主人拍板】这层是战前选择唯一的背景底（50%），对话窗自带的 Dim 由 hideFullDim 关掉，
+        // 不再出现首次叠两层、第二回只剩一层导致「剧情底又变透明了一些」。
         GameObject dimGo = BattleAmbienceBanner.ShowPersistent();
 
         bool done = false;
@@ -216,7 +218,7 @@ public partial class BattleManager
                     dimGo = null;
                     done = true;
                 }
-            });
+            }, hideFullDim: true);
         }
         catch (Exception e)
         {

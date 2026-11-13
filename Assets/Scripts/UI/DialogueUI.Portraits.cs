@@ -173,7 +173,7 @@ public partial class DialogueUI
         if (panel != null)
         {
             panel.gameObject.SetActive(true);
-            EnsureChoiceDim(panel);
+            HideChoiceDim(panel);
         }
 
         for (int i = 0; i < MaxChoices; i++)
@@ -186,29 +186,16 @@ public partial class DialogueUI
         }
     }
 
-    /// <summary>选项区背后半透明黑底（运行时加，不写回 prefab）。</summary>
-    void EnsureChoiceDim(Transform choicePanel)
+    /// <summary>
+    /// 【2026-11-13 主人拍板「三个选择后面不用带黑色半透底了」】不再运行时新建选项区黑底（原 0.45 纯黑）。
+    /// 旧会话 / 预制体里若已存在 ChoiceDim 节点，一律关掉，保证三个选项直接露在背景底上。
+    /// 只做显隐收口、不删节点、不写回 prefab，幂等。
+    /// </summary>
+    void HideChoiceDim(Transform choicePanel)
     {
         if (choicePanel == null) return;
         Transform existing = choicePanel.Find("ChoiceDim");
-        if (existing != null)
-        {
-            existing.SetAsFirstSibling();
-            existing.gameObject.SetActive(true);
-            return;
-        }
-
-        var go = new GameObject("ChoiceDim", typeof(RectTransform));
-        go.transform.SetParent(choicePanel, false);
-        go.transform.SetAsFirstSibling();
-        var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = new Vector2(-24f, -16f);
-        rt.offsetMax = new Vector2(24f, 16f);
-        var img = go.AddComponent<Image>();
-        img.color = new Color(0f, 0f, 0f, 0.45f);
-        img.raycastTarget = false;
+        if (existing != null) existing.gameObject.SetActive(false);
     }
 
     public void HideChoices()

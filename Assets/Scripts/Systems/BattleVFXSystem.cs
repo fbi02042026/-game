@@ -399,7 +399,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     public void PlaySkillProjectile(VfxFaction faction, Vector3 fromPos, Vector3 toPos,
         int facingDir, Transform target, AttackVfxKit kit = AttackVfxKit.Orb,
         GameObject impactOverride = null, float scaleMul = 1f, float speedMul = 1f,
-        System.Action onImpact = null, UnitBase caster = null)
+        System.Action onImpact = null, UnitBase caster = null, float impactScaleMul = 1f)
     {
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
@@ -430,7 +430,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 from = fromPos;
         if (kit == AttackVfxKit.Bow) from.y += bowFireYOffset;
         StartCoroutine(ProjectileFlightCoroutine(fly, impact, from, toPos, facingDir, target, faction,
-            scaleMul, speedMul, onImpact));
+            scaleMul, speedMul, onImpact, impactScaleMul));
     }
 
     /// <summary>
@@ -542,7 +542,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
 
     IEnumerator ProjectileFlightCoroutine(GameObject projectilePrefab, GameObject impactPrefab,
         Vector3 fromPos, Vector3 toPos, int facingDir, Transform target, VfxFaction faction,
-        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null)
+        float scaleMul = 1f, float speedMul = 1f, System.Action onImpact = null, float impactScaleMul = 1f)
     {
         // 飞向受击点（躯干中心），不要压成水平贴地
         Vector3 end = toPos;
@@ -603,7 +603,7 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         projectile.transform.position = end;
         if (impactPrefab != null)
         {
-            GameObject hitFx = PlayPreparedVfx(impactPrefab, end, facingDir, defaultDuration, 1f, prepareParticles: true);
+            GameObject hitFx = PlayPreparedVfx(impactPrefab, end, facingDir, defaultDuration, impactScaleMul, prepareParticles: true);
             if (hitFx != null)
                 ApplyFactionLook(hitFx, faction);
         }

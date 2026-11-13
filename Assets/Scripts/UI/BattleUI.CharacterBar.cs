@@ -221,19 +221,14 @@ public partial class BattleUI : MonoBehaviour
         var mercs = RunLoadout.Mercs();
         if (mercs == null || index >= mercs.Count || mercs[index] == null) return;   // 槽还没抽到人：正常态
         var e = mercs[index];
-        // 【2026-10-21 主人拍板】阵亡的佣兵点一下 = 弹佣兵信息框，确认钮换成「复活」+「取消」：
-        // 复活成功（有重生护符、原地复活生效）才关弹窗；没护符 Toast 提示、留在弹窗继续看。
-        // 活着才走普通详情弹窗（确定单钮）。
-        if (e.fallen)
-        {
-            int captured = index;
-            MercObtainPopupUI.ShowFallenFromEntry(e.hireId, e.mercId, e.level, e.star,
-                () => BattleManager.Instance != null && BattleManager.Instance.TryReviveMercWithCharm(captured));
-            return;
-        }
+        // 【2026-11-13 主人拍板「没有重生护符这个道具了」】阵亡佣兵不再弹「复活/取消」双钮：
+        // 护符道具已下线，玩家侧复活入口整条收掉，阵亡/存活统一走只读详情弹窗。
         MercObtainPopupUI.ShowFromEntry(e.hireId, e.mercId, e.level, e.star);
-        // 引导（TutorialDirector 二抽后那一步）在等这一下
-        TutorialDirector.Instance?.NotifyMercAvatarTapped();
+        if (!e.fallen)
+        {
+            // 引导（TutorialDirector 二抽后那一步）在等这一下
+            TutorialDirector.Instance?.NotifyMercAvatarTapped();
+        }
     }
 
     void RefreshTutorialMercSlot(MercenaryManager mm)

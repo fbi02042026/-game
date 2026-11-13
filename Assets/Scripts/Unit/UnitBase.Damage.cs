@@ -21,7 +21,7 @@ public partial class UnitBase
     /// 剧情侧（TutorialDirector）说完后解除再手动判死。默认 false，正式关完全不经过该分支。</summary>
     public bool holdAtDeathDoor;
 
-    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
+    public virtual void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false, float knockbackDistanceOverride = -1f)
     {
         if (_isDying) return;
         // 闪避无敌帧：仅免疫敌方伤害，关卡机制（source 为 null 或友方）仍生效
@@ -158,7 +158,7 @@ public partial class UnitBase
         if (unitAnim != null)
             PlayHitReaction();
 
-        ApplyHitKnockback(source);
+        ApplyHitKnockback(source, knockbackDistanceOverride);
 
         if (currentHp <= 0)
         {
@@ -264,7 +264,7 @@ public partial class UnitBase
     protected bool _knockbackBusy;   // 【2026-11-06】改 protected：Monster 是 UnitBase 子类，Monster.AI 击退窗口要读它判不写速度
     float _lastKnockbackAt;
 
-    void ApplyHitKnockback(UnitBase source)
+    void ApplyHitKnockback(UnitBase source, float distOverride = -1f)
     {
         if (source == null || _isDying) return;
 
@@ -282,6 +282,9 @@ public partial class UnitBase
             dist = GameConfig.KNOCKBACK_ALLY;
         }
 
+        // 2026-11-13 职业自带技能：只放大「普通怪被我方打」这一档的距离，
+        // 精英/Boss 免退、节流、AI 避让与刚体同步全部沿用上面既有规则。
+        if (distOverride > 0f) dist = distOverride;
         if (Time.time - _lastKnockbackAt < GameConfig.KNOCKBACK_RETRIGGER_INTERVAL) return;
         _lastKnockbackAt = Time.time;
 

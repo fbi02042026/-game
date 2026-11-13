@@ -220,30 +220,18 @@ public class BattleStatueEventUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 石像复活：复用重生护符的复活实现 <see cref="BattleManager.TryReviveMercWithCharm"/>（满血重新进场、
-    /// spawn 参数与护符同款）——先临时借 1 枚护符额度走同款链，成功后立即还回（石像复活不消耗玩家道具）。
-    /// 失败（预制体缺失/场上已有实例）只报错不卡流程。护符实现找不到时才需要就地满血复活兜底 —— 现已找到，无需另写。
+    /// 石像复活：复用 <see cref="BattleManager.TryReviveMercWithCharm"/>（满血重新进场、spawn 参数同款），
+    /// 传 <c>consumeCharm: false</c> —— 不消耗任何道具、也不再借 reviveCharms 额度
+    /// （【2026-11-13 主人拍板「没有重生护符这个道具了」】护符下线，石像复活是独立事件奖励）。
+    /// 失败（预制体缺失/场上已有实例）只报错不卡流程。
     /// </summary>
     static void ReviveMercForStatue(int loadoutIndex)
     {
         var bm = BattleManager.Instance;
         if (bm == null) return;
-        var data = SaveSystem.Instance?.Data;
-        int charmsBefore = data != null ? data.reviveCharms : 0;
-        if (data != null) data.reviveCharms = charmsBefore + 1;   // 借额度（护符为 0 也能走复活链）
-        bool ok = bm.TryReviveMercWithCharm(loadoutIndex);
-        if (data != null)
-        {
-            data.reviveCharms = charmsBefore;   // 借完即还
-            SaveSystem.Instance?.Save();
-        }
-        if (ok)
-        {
-            // TryReviveMercWithCharm 内部会弹「重生护符发动」toast，这里补一条石像口径的纠正提示
-            UIManager.Instance?.ShowToast("圣者之力：阵亡的伙伴复活了！", true);
-        }
-        else
-            Debug.LogError("[BattleStatueEvent] 石像复活失败（护符复活链未生效，详见其内部报错），本次恢复未生效");
+        bool ok = bm.TryReviveMercWithCharm(loadoutIndex, consumeCharm: false);
+        if (!ok)
+            Debug.LogError("[BattleStatueEvent] 石像复活失败（复活链未生效，详见其内部报错），本次恢复未生效");
     }
 
     // ============================================================

@@ -440,16 +440,8 @@ public partial class BattleUI : MonoBehaviour
                 CommonIconSprites.Load("icon_talent_stone"), (int)stones);
         }
 
-        // 4) 重生护符（当前持有，2026-10-21 主人需求：商店买的救命道具，玩家关心还剩几枚，不按本局增量算）
-        var saveData = SaveSystem.Instance?.Data;
-        int charms = saveData != null ? saveData.reviveCharms : 0;
-        if (charms > 0)
-        {
-            TryPlaceDisplay(occupied, width, unlockedRows, placements,
-                "重生护符",
-                ItemNoticeText.Build(ItemNoticeText.ReviveCharmDesc, "持有", charms),
-                ItemDefs.LoadIcon("item_revive_charm"), charms);
-        }
+        // 【2026-11-13 主人拍板「没有重生护符这个道具了」】原「4) 重生护符（当前持有）」展示位整段删除；
+        // 道具表行已删、reviveCharms 载入即清零，战斗背包不再有这一格。
     }
 
     /// <summary>在已占用集合中找第一个空格塞一个 1×1 展示位；放不下就 LogWarning（不静默吞）。</summary>

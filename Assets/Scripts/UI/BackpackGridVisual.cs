@@ -83,7 +83,8 @@ public static class BackpackGridVisual
     static Sprite _gridBgSprite;
 
     // ===== 日志碎片图标（2026-10-21 碎片进背包展示用，收集方调这里）=====
-    // 三种日志碎片（森林残页/公会密函/裂隙碎片）暂共用这一张现成的日志碎片图，
+    // 日志碎片图标：三种碎片原本共用这一张现成的图。
+    // 2026-11-13 碎片合成整体下线，图标方法保留供旧档 / 回退，运行时不再投放。
     // 以后美术出分图后各自替换即可。取不到资源按纪律直接 LogError，不做兜底。
     const string FragmentIconRes = "UI/Icons/Item/icon_log_fragment";
     static Sprite _fragmentIcon;

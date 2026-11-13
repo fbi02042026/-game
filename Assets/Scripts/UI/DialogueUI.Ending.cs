@@ -85,9 +85,35 @@ public partial class DialogueUI
         SetSceneBackground(null);
         SetRevealBlack(0f);
         SetBgDim(0f);
+        HideFullDim();
+        gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 关掉对话窗自带的全屏黑底（prefab 的 Dim，0.7）。
+    /// 【2026-11-13 主人报「第二回进的时候剧情底又变透明了一些」】DialogueUI 是 DDOL 单例，
+    /// Dim 在预制体里初始是开着的，Hide() 关掉后全项目没有任何地方再打开它 —— 于是首次弹剧情
+    /// 叠两层黑底（DialogueUI.Dim + 战前选择常驻底），第二回只剩一层，看着就更透。
+    /// 战前选择统一只留 BattleAmbienceBanner.ShowPersistent 那一层 50% 底：开播前调本方法收口，
+    /// 幂等，保证每次进的浓度一致；其它剧情不受影响（不写入口就不会动它的 Dim）。
+    /// </summary>
+    public void HideFullDim()
+    {
         var dim = transform.Find("Dim");
         if (dim != null) dim.gameObject.SetActive(false);
-        gameObject.SetActive(false);
+    }
+
+    /// <summary>
+    /// 【2026-11-13 主人拍板「所有剧情用黑色半透兜底」】每次剧情开播先把 prefab 的 Dim 拉起来：
+    /// 有剧情背景时 <see cref="SetSceneBackground"/>(非 null) 会把它关掉（用背景图）；
+    /// 没背景就留这层黑底，剧情窗不再裸浮在战斗画面上。
+    /// 与 Hide() 的关系：Hide 关掉、下一场 Play 开头由本方法拉起 —— 一开一关都有唯一出口。
+    /// 战前选择（hideFullDim=true）不走本方法：只留 ShowPersistent 的 50% 常驻底。
+    /// </summary>
+    public void ShowFullDim()
+    {
+        var dim = transform.Find("Dim");
+        if (dim != null) dim.gameObject.SetActive(true);
     }
 
     /// <summary>显示或清除剧情道具叠图（null = 立刻隐藏）。</summary>

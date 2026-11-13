@@ -39,9 +39,9 @@ item_fragment_log,日志碎片,UI/Icons/Item/icon_log_fragment,Material,999,0,1,
 # （useEffect 留空：不走背包「使用」按钮，洗点在天赋页确认时扣；角色页只做展示位）
 item_forget_potion,遗忘药水,UI/Art/Icons/Common/yiwangyaoshui,Consumable,99,0,1,,Self,重置右侧天赋时消耗 1 个（里程商店 500 点/周限 1）。,2
 # 2026-10-21 主人拍板：治疗药水(item_potion_hp)整行删除——「去掉治疗药水，会把技能和佣兵弱化」，战斗内不再有任何可用道具。
-# 同日新增重生护符：佣兵阵亡时点其变灰头像消耗 1 枚原地复活；唯一获取来源 = 战斗内关卡商店（50% 概率上架）。
-# 图标 = 主人供图 Resources/UI/Art/Icons/Common/chongshenghufu.png（2026-10-21 晚换入，此前暂借 icon_diamond_blue）。
-item_revive_charm,重生护符,UI/Art/Icons/Common/chongshenghufu,Material,99,0,0,,Self,佣兵阵亡时点击其变灰头像，消耗 1 枚原地复活（80% 血）。战斗内关卡商店有售。,2
+# 【2026-11-13 主人拍板「没有重生护符这个道具了」：重生护符(item_revive_charm)整行删除下线——
+#   旧存档 reviveCharms 由 SaveSystem.FinalizeLoadedData 载入时清零；战斗复活只剩钻石/广告档(BattleManager.Death)；
+#   石像事件借额度复活(BattleStatueEventUI)不受影响。若重启关卡商店，勿再上架此道具。】
 # 2026-10-22 主人拍板：本命碎片改为**按佣兵分行**的背包道具（一格最多 99、超了分格，2026-10-24 主人拍板与随身仓库统一）。
 # icon 先用稀有度碎片底版占位（UI/Icons/MercFragmentBase/普通|稀有|传奇碎片）；背包格渲染会按佣兵换头像（复用 MercFragmentCardUI 口径，T2）。
 # 稀有度对齐 merc_roster.csv：传奇=H004/H010/H014，稀有=H002/H003/H006/H008/H009/H012/H013/H015/H016/H017/H020/H022，其余普通。
@@ -70,3 +70,4 @@ item_frag_H020,凯尔碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0
 item_frag_H021,格拉克斯碎片,UI/Icons/MercFragmentBase/普通碎片,Material,99,0,0,,Self,「格拉克斯」的本命碎片。攒够可在升星界面为其升星。,0
 item_frag_H022,索尔碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「索尔」的本命碎片。攒够可在升星界面为其升星。,1
 item_frag_H023,加百列碎片,UI/Icons/MercFragmentBase/稀有碎片,Material,99,0,0,,Self,「加百列」的本命碎片。攒够可在升星界面为其升星。,1
+item_frag_H024,奥蕾莉亚碎片,UI/Icons/MercFragmentBase/传奇碎片,Material,99,0,0,,Self,「奥蕾莉亚」的本命碎片。攒够可在升星界面为其升星。,2

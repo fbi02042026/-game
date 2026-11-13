@@ -5,7 +5,10 @@ using UnityEngine;
 
 /// <summary>
 /// 里程商店：用日志里程点数兑换资源/招募卷/职业徽记，周限购（计划三期）。
-/// 不出装备。
+/// 不出装备（法杖/盾的初始武器走里程奖励「累计点数领取」，不是本商店的商品条目）。
+/// 【2026-11-13 主人拍板「徽记分家 + 三档上架」】法系徽记**固定上架**：法师/牧师 ×
+/// 低级20 / 中级10 / 高级2，每周补货一次（各自周限购 1 + 跨周 mileageShopBought 清零即「补」）；
+/// 不再按周轮换单职业。游侠/剑盾徽记在竞技场商店，狂战/重武留后期。
 /// </summary>
 public static class AdventureLogMileageShop
 {
@@ -57,62 +60,57 @@ public static class AdventureLogMileageShop
         new ShopItem { Id = "scroll_l", Name = "高级招募卷轴", CostPoints = 2000, WeeklyLimit = 1, Kind = RewardKind.ScrollLegendary, Amount = 1 },
         // 【2026-10-21 主人拍板】遗忘药水：洗天赋消耗道具，500 点/周限 1；发放口 = townBagItems（角色页可见）
         new ShopItem { Id = "forget_potion", Name = "遗忘药水", CostPoints = 500, WeeklyLimit = 1, Kind = RewardKind.Item, Amount = 1, DefId = "item_forget_potion" },
-        // 【2026-11-08 主人拍板】每周轮换 1 个职业的低级徽记：500 点 / 10 个 / 周限 1。
-        // 职业名与 defId 由 MakeBadgeItem 按 ISO 周 key 生成（确定性），跨周由 RefreshWeeklyBadge 刷新。
-        // 🔴 恒放数组末尾：现有 6 件索引 0~5 不变，存档 mileageShopBought 按 Id 计数不受影响。
-        MakeBadgeItem(),
+        // 【2026-11-13 主人拍板】法系徽记三档固定上架（法师/牧师 × 低级20 / 中级10 / 高级2），
+        // 每周补货一次 = 各自 WeeklyLimit 1 + 跨周 mileageShopBought 清零（EnsureWeek 既有机制）。
+        // 价格沿原徽记档 500 点锚点分档（500/800/1000），主人没拍板价格，随时可调。
+        // 🔴 仍恒放数组末尾：0~5 索引不变，存档 mileageShopBought 按 Id 计数不受影响。
+        // 旧 badge_weekly（11-08 单条轮换）随本拍板退役：旧档残留计数无害（id 不在货架即不可再买）。
+        MakeBadgeItem("法师", MercRosterDefs.MercRarity.Common,    "mage_low",  20, 500),
+        MakeBadgeItem("法师", MercRosterDefs.MercRarity.Rare,      "mage_mid",  10, 800),
+        MakeBadgeItem("法师", MercRosterDefs.MercRarity.Legendary, "mage_high",  2, 1000),
+        MakeBadgeItem("牧师", MercRosterDefs.MercRarity.Common,    "priest_low",  20, 500),
+        MakeBadgeItem("牧师", MercRosterDefs.MercRarity.Rare,      "priest_mid",  10, 800),
+        MakeBadgeItem("牧师", MercRosterDefs.MercRarity.Legendary, "priest_high",  2, 1000),
     };
 
-    // ── 每周轮换职业徽记（2026-11-08 主人拍板：6 职业轮换、每周只上 1 个）──────────────
-    // 档位 = 普通档（界面显示「低级」），只服务普通品质佣兵升星；稀有佣兵（塔克 H003）吃「中级」
-    // 徽记，那份仍由每日登录 D3 发放（本次每日链路不动）。
-    // 职业全集真源 = MercGrowInventory.BadgeJobKeys、档位 = MercStarDefs.BadgeTierOf、
-    // 显示名 = MercStarSystem.BadgeTierDisplayName、徽记 id = MercGrowInventory.BadgeId，均不在此抄一份。
+    // ── 法系徽记三档固定上架（2026-11-13 主人拍板，覆盖 11-08「每周轮换 1 个」）────────────────────────
+    // 法师/牧师 × 低级20 / 中级10 / 高级2，六条固定货架、每周补货一次（各自周限购 1 + 跨周计数清零）。
+    // 档位 = MercStarDefs.BadgeTierOf、显示名 = MercStarSystem.BadgeTierDisplayName、
+    // 徽记 id = MercGrowInventory.BadgeId（badge:{职业}:{档位}，与徽记副本/每日登录/邮件同仓），均不在此抄一份。
+    // ⚠ 6 职业全集真源仍是 MercGrowInventory.BadgeJobKeys（关卡掉落/徽记副本/福利邮件共用），这里只摆法系 2 职业。
 
-    /// <summary>本周轮换的职业 key（确定性：同一 ISO 周恒定，跨周按序号换下一个，6 职业循环）。</summary>
-    public static string CurrentBadgeJobKey()
+    /// <summary>构造一条固定徽记商品（静态初始化用；不读存档、不写存档）。</summary>
+    static ShopItem MakeBadgeItem(string jobKey, MercRosterDefs.MercRarity rarity, string idTail, int amount, int cost)
     {
-        var keys = MercGrowInventory.BadgeJobKeys;
-        if (keys == null || keys.Length == 0) return null;
-        return keys[WeekRotationIndex(keys.Length)];
-    }
-
-    /// <summary>ISO 周 key（yyyy-Www）→ 稳定序号：年×53+周 取模。跨周必变；跨年周号回卷可能跳号，不影响确定性。</summary>
-    static int WeekRotationIndex(int count)
-    {
-        string key = CurrentWeekKey();
-        int dash = key.IndexOf('-');
-        int year = int.Parse(key.Substring(0, dash));
-        int week = int.Parse(key.Substring(dash + 2));   // 跳过 'W'
-        int n = year * 53 + week;
-        return ((n % count) + count) % count;
-    }
-
-    /// <summary>构造本周徽记商品（静态初始化 + 跨周刷新共用；不读存档、不写存档）。</summary>
-    static ShopItem MakeBadgeItem()
-    {
-        const int amount = 10;
-        string job = CurrentBadgeJobKey();
-        string tier = MercStarDefs.BadgeTierOf(MercRosterDefs.MercRarity.Common);
+        string tier = MercStarDefs.BadgeTierOf(rarity);
         return new ShopItem
         {
-            Id = "badge_weekly",
-            Name = job + "徽记（" + MercStarSystem.BadgeTierDisplayName(tier) + "）×" + amount,
-            CostPoints = 500,
+            Id = "badge_wk_" + idTail,
+            Name = jobKey + "徽记（" + MercStarSystem.BadgeTierDisplayName(tier) + "）×" + amount,
+            CostPoints = cost,
             WeeklyLimit = 1,
             Kind = RewardKind.Badge,
             Amount = amount,
-            DefId = MercGrowInventory.BadgeId(job, tier),
+            DefId = MercGrowInventory.BadgeId(jobKey, tier),
         };
     }
 
-    /// <summary>跨周把徽记商品的职业名 / defId 刷成本周值（幂等；只改字段，数组与索引不变）。</summary>
-    static void RefreshWeeklyBadge()
+    /// <summary>
+    /// 货架徽记商品 id（badge_wk_{mage|priest}_{low|mid|high}）→ 职业 key + 稀有度。
+    /// 供面板图标 / 说明 / 名字颜色按 id 解析（AdventureLogPhase3Panel 用）；非徽记商品返回 false。
+    /// </summary>
+    public static bool TryParseBadgeItemId(string id, out string jobKey, out MercRosterDefs.MercRarity rarity)
     {
-        var cur = MakeBadgeItem();
-        var slot = Items[Items.Length - 1];
-        slot.Name = cur.Name;
-        slot.DefId = cur.DefId;
+        switch (id)
+        {
+            case "badge_wk_mage_low":    jobKey = "法师"; rarity = MercRosterDefs.MercRarity.Common;    return true;
+            case "badge_wk_mage_mid":    jobKey = "法师"; rarity = MercRosterDefs.MercRarity.Rare;      return true;
+            case "badge_wk_mage_high":   jobKey = "法师"; rarity = MercRosterDefs.MercRarity.Legendary; return true;
+            case "badge_wk_priest_low":  jobKey = "牧师"; rarity = MercRosterDefs.MercRarity.Common;    return true;
+            case "badge_wk_priest_mid":  jobKey = "牧师"; rarity = MercRosterDefs.MercRarity.Rare;      return true;
+            case "badge_wk_priest_high": jobKey = "牧师"; rarity = MercRosterDefs.MercRarity.Legendary; return true;
+            default: jobKey = null; rarity = default; return false;
+        }
     }
 
     public static string CurrentWeekKey()
@@ -126,7 +124,8 @@ public static class AdventureLogMileageShop
 
     public static void EnsureWeek()
     {
-        RefreshWeeklyBadge();   // 2026-11-08：每周轮换徽记（幂等；周 key 没变也刷，保证静态初始化后一定对）
+        // 2026-11-13 徽记改三档固定上架，原 RefreshWeeklyBadge 跨周刷新随轮换机制一并退役；
+        // 「每周补货」由下方周 key 变化清空 mileageShopBought 实现（限购次数恢复即补货）。
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
         string key = CurrentWeekKey();

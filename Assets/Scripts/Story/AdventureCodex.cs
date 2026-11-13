@@ -282,10 +282,10 @@ public static class AdventureCodex
         }
 
         // 2026-10-31 主人报「成就领完标签红点还在」：口径拆开 ——
-        // 成就 Tab 只看成就可领；里程等级 / 碎片合成挂世界页 Tab；日志入口键保持宽口径。
+        // 成就 Tab 只看成就可领；里程等级挂世界页 Tab；日志入口键保持宽口径。
+        // 2026-11-13：碎片合成整体下线，worldReward 不再含 HasAnyCraftable。
         bool achReward = AdventureLogAchievements.HasUnclaimed();
-        bool worldReward = AdventureLogMileage.HasUnclaimedLevel()
-                           || AdventureLogFragments.HasAnyCraftable();
+        bool worldReward = AdventureLogMileage.HasUnclaimedLevel();
         bool codex = HasUnviewedCodex();
         RedDot.Set(RedDot.Achievement, achReward);
         RedDot.Set(RedDot.LogWorld, worldReward);

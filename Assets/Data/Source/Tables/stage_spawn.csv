@@ -11,4 +11,4 @@ gameChapter,stageIndex,stageType,monsterTotal,waveCountMin,waveCountMax,eliteSca
 1,0,Normal,9,4,6,1.0,0.35,第一章首关固定9只4-6波
 *,*,Normal,0,3,6,1.0,0.35,默认普通关公式
 *,*,Elite,0,3,6,1.5,0.35,精英关公式
-*,*,Boss,0,3,7,1.0,0.5,Boss小怪公式（magicChance=主人定0.5）
+*,*,Boss,0,3,7,1.0,0.3,Boss小怪公式（2026-11-13 主人拍板 0.5→0.3，法系Boss别太常见）

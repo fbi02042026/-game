@@ -78,6 +78,8 @@ using System.Collections.Generic;
 
             // 发奖：天赋石（日常）/ 钻石（周常）+ 经验（2026-10-29 扩编，主人拍板「有些奖励可以给些经验」）
             // 【2026-11-06 主人拍板】奖励明细汇总成一条中央 toast（排队播，不顶前）：经验 → 天赋石/钻石。
+            // 【2026-11-13 主人拍板】改成「第一行任务名 / 第二行奖励」放进同一个 toast；
+            // 字号沿用 GlobalToastUI 的 28，不另调（两行时底板自适应见 GlobalToastUI.CoPlay）。
             // ResourceWallet 改 notify:false，避免它自带的单条 toast 顶掉汇总；经验照常走 LevelSystem。
             var lines = new List<string>();
             if (row.rewardStones > 0)
@@ -86,7 +88,7 @@ using System.Collections.Generic;
                 var result = ResourceWallet.Add(type,
                     row.rewardStones, save: true, notify: false);
                 if (result.added > 0)
-                    lines.Add("获得 " + ResourceWallet.DisplayName(type) + " +" + result.added);
+                    lines.Add(ResourceWallet.DisplayName(type) + " +" + result.added);
                 if (result.overflow > 0)
                     lines.Add(ResourceWallet.DisplayName(type) + "已满，溢出进邮箱");
             }
@@ -95,15 +97,16 @@ using System.Collections.Generic;
             if (row.rewardExp > 0)
             {
                 LevelSystem.AddDirectExp(row.rewardExp, data.playerLevel + 1);
-                lines.Insert(0, "获得 经验 +" + row.rewardExp);   // 经验置顶：汇总「经验 → 天赋石/钻石」
+                lines.Insert(0, "经验 +" + row.rewardExp);   // 经验置顶：汇总「经验 → 天赋石/钻石」
             }
 
-            // 【2026-11-04 主人拍板】任务完成提示统一左侧滑入横幅（仿新邮件模式）：
-            // 【2026-11-12 主人拍板】文案只写「任务完成」，不写具体任务名；
-            // 奖励明细也不再写（原 GlobalToastUI 的「获得 …」移除）。
-            QuestDoneToast.Show();
+            // 【2026-11-13 主人拍板】日常任务不再另弹左侧「任务完成」横幅：任务名 + 奖励
+            // 都写进同一条中央 toast。原调用留档备回退：QuestDoneToast.Show();
+            // （主线任务完成的横幅在 MainQuestSystem.Complete，不属本次改动，原样保留。）
+            string toastMsg = string.IsNullOrEmpty(row.title) ? "任务完成" : row.title;
             if (lines.Count > 0)
-                GlobalToastUI.ShowQueued(string.Join("\n", lines));
+                toastMsg += "\n获得 " + string.Join("  ", lines);
+            GlobalToastUI.ShowQueued(toastMsg);
 
             Debug.Log("[DailyTask] settle: " + row.id + " +" + row.rewardStones + (daily ? " 石" : " 钻")
                 + (row.rewardExp > 0 ? " +" + row.rewardExp + " exp" : ""));

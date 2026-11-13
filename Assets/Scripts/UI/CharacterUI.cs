@@ -138,6 +138,9 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     bool _bagFitCaptured;
     BackpackFitBase _bagFitBase;
 
+    /// <summary>角色页「职业装备栏」（背包上方常驻，三职业各有起步套）。运行时建树，不碰预制体。</summary>
+    CharacterEquipBar _equipBar;
+
     /// <summary>背包自适应用的原始值快照（主人手摆的矩形 + 手调的 GridLayoutGroup 参数），还原时原样套回。</summary>
     private struct BackpackFitBase
     {
@@ -260,11 +263,31 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         RefreshAll();
         // 【2026-10-26 主人拍板「背包要常显」】随身仓库进页直接摊开（不再是点「背包」按钮才开的弹层）
         EnsureBagAlwaysOpen();
+        EnsureEquipBar();
         EnsureStageShadow();
         // SPUM 仅离屏换装；Portrait 用玩家立绘
         TownHeroCostumePreview.EnsureOn(this)?.EnsureOffscreenCostume();
         RefreshPlayerPortrait();
         TutorialHintUI.Ensure().Hide();
+    }
+
+    /// <summary>职业装备栏（主人手摆的 Content 下 zhuangbei 节点：3 标签 + 战斗同款 6 槽）。
+    /// 首次 ShowPage 绑定一次；之后每次 ShowPage 切回存档职业并刷新。位置排版全在预制体里，代码不碰。</summary>
+    void EnsureEquipBar()
+    {
+        if (_equipBar != null)
+        {
+            _equipBar.RefreshToSelected();
+            return;
+        }
+        var root = transform.Find("Content/zhuangbei") ?? FindDeep(transform, "zhuangbei");
+        if (root == null)
+        {
+            Debug.LogError("[CharacterUI] 找不到 zhuangbei 节点，职业装备栏未绑定");
+            return;
+        }
+        var entry = transform.Find("Content/装备Button") ?? FindDeep(transform, "装备Button");
+        _equipBar = CharacterEquipBar.Bind(root, entry);
     }
 
     public void HidePage()

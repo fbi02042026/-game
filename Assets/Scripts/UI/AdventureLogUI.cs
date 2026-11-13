@@ -719,7 +719,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         if (_claim == null) return;
         bool has = AdventureLogAchievements.HasUnclaimed();
         // 按钮红点与置灰同口径同出口：只看成就可领，不再被里程/碎片宽口径撑亮（2026-10-20 主人报）
-        RedDot.Set(RedDot.AchClaim, has);
+        // 【2026-11-13 主人拍板】领取按钮不挂红点（截图反馈），Set 一并停用，键常量保留在 RedDot。
+        // RedDot.Set(RedDot.AchClaim, has);
         var btn = _claim.GetComponent<Button>();
         if (btn != null) btn.interactable = has;
         for (int i = 0; i < _claim.transform.childCount; i++)
@@ -747,12 +748,14 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var mercTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab3");
         if (mercTab != null)
             RedDot.Bind(mercTab, RedDot.LogMerc);
-        // 2026-10-31：里程等级 / 碎片合成挂世界页 Tab，成就 Tab 只留「成就可领」
+        // 2026-10-31：里程等级挂世界页 Tab，成就 Tab 只留「成就可领」；
+        // 2026-11-13 碎片合成整体下线，不再参与红点。
         var worldTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab5");
         if (worldTab != null)
             RedDot.Bind(worldTab, RedDot.LogWorld);
-        if (_claim != null)
-            RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -11f));
+        // 【2026-11-13 主人拍板】领取按钮不挂红点（截图反馈），Bind 停用；成就行的 ClaimRedDot 不受影响。
+        // if (_claim != null)
+        //     RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -11f));
     }
 
     void SelectTab(LogTab tab, bool force = false)
@@ -1100,7 +1103,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         // 2026-11-01 主人报「信息还是不对」：
         // ① 「当前目标」原先放当前条目的分类（组织/世界观），与目标槽语义不符 ——
         //    改为第一个未解锁条目的达成条件（与主线/支线页同口径），集齐后「世界记录已集齐」。
-        // ② 进度槽原先拼碎片清单换行文本（森林残页0…），窄框装不下挤成一团 —— 只留 x/y；
+        // ② 进度槽原先拼碎片清单换行文本（碎片0…），窄框装不下挤成一团 —— 只留 x/y；
         //    碎片/里程在世界页签的 Phase3 面板里已有展示。
         objective = NextGoal(list, AdventureLogCatalog.WorldUnlocked, e => e.Unlock)
                     ?? "世界记录已集齐";
@@ -1505,13 +1508,13 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             var claimBtn = prog.Find("ClaimButton");
             if (claimBtn == null && _claimButtonTemplate != null)
             {
-                // 【2026-11-12 主人拍板】复用成就页那颗手做按钮：底图/字体/粗体全来自预制体，
-                // 不再用代码画半透明色块；只把行内状态字换成「可领取」。
+                // 【2026-11-13 主人拍板】整颗照抄成就页那颗手做按钮：底图/尺寸/缩放/字体全用预制体原值，
+                // 不改 Image 比例、不拉伸父节点；只把行内状态字换成「可领取」（字框仍是模板 Label）。
                 var go = Instantiate(_claimButtonTemplate, prog, false);
                 go.name = "ClaimButton";
                 go.SetActive(true);
                 var bimg = go.GetComponent<Image>();
-                if (bimg != null) { bimg.raycastTarget = true; bimg.preserveAspect = true; }
+                if (bimg != null) bimg.raycastTarget = true;
                 var bbtn = go.GetComponent<Button>();
                 if (bbtn != null) bbtn.transition = Selectable.Transition.None;
                 var lt = go.GetComponentInChildren<Text>(true);
@@ -1572,20 +1575,26 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     }
 
     /// <summary>
-    /// 【2026-11-12】行内「可领取」按钮统一布局：整体缩小 30%、靠右、垂直居中。
-    /// 新建与复用都走这里；同步按压反馈基准 scale，否则 OnEnable/OnPointerUp 的 Restore 会把 0.7 冲回原值（领取后部分按钮变大）。
+    /// 【2026-11-13 主人拍板】行内「可领取」按钮整颗照抄成就页 ClaimAch 模板：
+    /// 100×33 的 Rect、scale 1.26（模板 1.4×0.9，11-13 二轮再小 10%）、子 Label 铺满居中、底图比例全部保持预制体原值。
+    /// 11-12 旧写法把父节点拉伸铺满 264×44 的 Progress（还改 pivot / 缩放 / preserveAspect），
+    /// 子文字框被压成细长条，「可领取」挤在绿条左端叠字。这里只挪位置：点锚靠右、
+    /// y +10 抵消 Progress 的 -10 下沉，不动尺寸与模板内任何节点。
+    /// 同步按压反馈基准 scale，避免 OnEnable/Restore 把按钮冲回原值（11-12 后遗症）。
     /// </summary>
     static void ApplyClaimButtonLayout(Transform btn)
     {
+        // 【2026-11-13 二轮拍板】按钮整体再小 10%：模板原 scale 1.4 × 0.9 = 1.26，
+        // 100×33 的 Rect、底图、子 Label 全沿用模板，只整体等比缩，不拉伸。
+        const float ClaimButtonScale = 1.26f;
         var brt = (RectTransform)btn;
-        brt.anchorMin = Vector2.zero;
-        brt.anchorMax = Vector2.one;
-        brt.pivot = new Vector2(1f, 0.5f);
-        brt.offsetMin = new Vector2(0f, 10f);   // 抵消 Progress 自身 -10 的下沉，按钮落在行的垂直中线上
-        brt.offsetMax = new Vector2(0f, 10f);
-        brt.localScale = Vector3.one * 0.7f;
+        brt.anchorMin = brt.anchorMax = new Vector2(1f, 0.5f);
+        brt.pivot = new Vector2(0.5f, 0.5f);
+        brt.sizeDelta = new Vector2(100f, 33f);          // 模板 ClaimAch 原尺寸
+        brt.anchoredPosition = new Vector2(-100f * ClaimButtonScale * 0.5f, 10f); //  右边缘贴 Progress 右端；y +10 抵消 -10 下沉
+        brt.localScale = Vector3.one * ClaimButtonScale;   // 等比缩 10%，不拉伸
         var press = btn.GetComponent<UiButtonPressFeedback>();
-        if (press != null) press.SyncBaseScale(Vector3.one * 0.7f);
+        if (press != null) press.SyncBaseScale(Vector3.one * ClaimButtonScale);
     }
 
     Transform FindTransform(string name)

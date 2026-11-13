@@ -56,6 +56,13 @@ public static partial class GameConfig
 
     /// <summary>清完一波后，下一波倒计时秒数</summary>
     public const float WAVE_SPAWN_INTERVAL = 4f;
+    /// <summary>
+    /// 【2026-11-13 主人拍板】波流式衔接间隔：上一波**出完**后隔这么多秒直接刷下一波（不等清场、允许场上叠怪），
+    /// 把原来「清一波 → 来一波」的两拨合成一波连续怪潮，保持足够怪量给玩家升级成长感 + 紧张感。
+    /// 只作用于非 Boss 波；Boss 波仍等清场后走「首领来袭」过场（2026-11-12 拍板保留）。
+    /// 唯一消费方 BattleManager.CoWaveStreamNext。
+    /// </summary>
+    public const float WAVE_STREAM_GAP_SEC = 1f;
     /// <summary>第一章第一关：波间隔（已减半）</summary>
     public const float OPENING_WAVE_SPAWN_INTERVAL = 7f;
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
@@ -315,8 +322,10 @@ public static partial class GameConfig
     public const float KILL_FINISHER_SHAKE_DUR = 0.1f;
     public static bool COMBAT_JUICE_KILL_FINISHER_SHAKE = true;
 
-    /// <summary>雷击奥义总开关：关闭时不充能、不自动释放（等后期玩家装备技能后再开）。</summary>
+    /// <summary>【2026-11-13 改】只作 HUD 充能条的隐藏判据（恒 false），不再闸功能；雷击已改独立 CD 自动释放。</summary>
     public static bool THUNDER_ULT_ENABLED = false;
+    /// <summary>雷击奥义独立冷却（秒）：CD 归零 + 战斗中可行动即自动释放，与玩家 4 槽技能互不干涉。</summary>
+    public const float THUNDER_ULT_CD = 22f;
 
     /// <summary>雷击奥义：伤害倍率、镜头、压暗</summary>
     public const float THUNDER_ULT_DAMAGE_MUL = 2.2f;

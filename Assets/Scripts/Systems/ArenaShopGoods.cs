@@ -5,7 +5,12 @@ using UnityEngine;
 /// 竞技场商店（2026-10-30 主人拍板「积分版」，覆盖 v1 竞技币方案）：
 /// · 唯一货币 = 竞技场积分（SaveData.arenaPoints），🔴 禁新增第二种货币字段；
 ///   扣分唯一出口 = <see cref="ArenaRules.TrySpendPoints"/>（守卫禁负数），扣积分后按原名次对齐积分序、排名不变；
-/// · 货架 8 件（§三）：逐风长弓（买断）+ 莉娜/索尔/伊芙（首购本体、复购转本命碎片）+ 金币包 + 徽记包×3（周限）；
+/// · 货架（§三）：逐风长弓（买断）+ 莉娜/索尔/伊芙（首购本体、复购转本命碎片）+ 金币包
+///   + 徽记包×2（游侠/剑盾，周限）+ 好感礼物×3（2 普通 + 1 稀有，周限）；
+/// · 【2026-11-13 主人拍板「徽记按职业分家」】徽记包只卖**游侠/剑盾**；
+///   法系（法师/牧师）徽记在里程商店，狂战/重武留后期（暂不上架）。
+/// · 【2026-11-13 主人拍板】礼物走 SaveData.AddFavorGift（好感礼物唯一发放出口），
+///   2 普通（面包/苹果）+ 1 稀有（幸运骰子），积分购买、周限 3；
 /// · 逐风长弓 = 运行时注册的稀有弓模板（照 <see cref="ArenaSeasonWeapons.BuildTemplate"/> 先例改 baseRarity=Rare），
 ///   不落 Resources 目录 → 掉落/抽奖池（Resources.LoadAll）永远扫不到，天然「竞技场独占」；
 ///   拥有判定真源 = SaveData.arenaShopBowId（购买记录），发放进随身仓库 legacyEquipPool（冠军武器邮件口径）；
@@ -17,7 +22,7 @@ using UnityEngine;
 /// </summary>
 public static class ArenaShopGoods
 {
-    public enum GoodKind { Bow, Merc, Gold, Badge }
+    public enum GoodKind { Bow, Merc, Gold, Badge, Gift }
 
     /// <summary>逐风长弓模板 id（运行时注册，Resources 里没有 → 掉落池不可见）。</summary>
     public const string BowId = "weapon_arena_shop_bow";
@@ -39,6 +44,8 @@ public static class ArenaShopGoods
         public string badgeJobKey;      // 徽记包职业 key（MercGrowSprites.JobKey 同套字符串）
         public string badgeTier;        // 徽记包档位（普通/稀有/传奇；中级=稀有、高级=传奇）
         public int badgeCount;          // 徽记包个数
+        public string giftId;           // 礼物货填 MercFavorDefs.Gifts 的 id（gift_xxx）
+        public int giftCount;           // 礼物货每次发放个数
         public MercRosterDefs.MercRarity frameRarity = MercRosterDefs.MercRarity.Common;   // 图标底框稀有度
 
         public string DisplayName
@@ -77,12 +84,21 @@ public static class ArenaShopGoods
                     sb.AppendLine($"{badgeJobKey}徽记（{badgeTier}档）×{badgeCount}。");
                     sb.Append($"每周限 {weeklyLimit} 次。职业固定不迷路，买来就给限定佣兵升星。");
                     break;
+                case GoodKind.Gift:
+                    // 【2026-11-13 主人拍板】礼物货：品质/好感值真源 = MercFavorDefs.GiftDef，不在这里抄数值
+                    if (MercFavorDefs.TryGetGift(giftId, out var gift))
+                        sb.AppendLine($"{MercFavorDefs.QualityName(gift.Quality)}礼物 ×{giftCount}，送出加好感 {gift.Favor}/个。");
+                    else
+                        sb.AppendLine($"礼物 ×{giftCount}。");
+                    sb.Append($"每周限 {weeklyLimit} 次。送给出战佣兵，好感攒满可解锁羁绊地图。");
+                    break;
             }
             return sb.ToString();
         }
     }
 
-    /// <summary>货架 8 件（§三 定稿：1 弓 + 3 佣兵 + 1 金币包 + 3 徽记包；徽记职业固定跟随限定佣兵）。</summary>
+    /// <summary>货架 10 件（§三 定稿：1 弓 + 3 佣兵 + 1 金币包 + 2 徽记包 + 3 礼物）。
+    /// 【2026-11-13 徽记分家】徽记包只卖游侠/剑盾（法系归里程商店，狂战/重武留后期）。</summary>
     public static readonly Good[] AllGoods =
     {
         new Good { id = "arena_bow", kind = GoodKind.Bow, name = "逐风长弓",
@@ -100,18 +116,25 @@ public static class ArenaShopGoods
         new Good { id = "arena_gold_2000", kind = GoodKind.Gold, name = "金币包",
             desc = "", price = 150, weeklyLimit = 5, grantGold = 2000,
             frameRarity = MercRosterDefs.MercRarity.Common },
-        new Good { id = "arena_badge_priest_5", kind = GoodKind.Badge, name = "牧师徽记（中级）",
+        // 【2026-11-13 徽记分家】游侠/剑盾各一包，档位/价格沿用原中级包口径（稀有×5 / 250 分 / 周限 2）
+        new Good { id = "arena_badge_ranger_5", kind = GoodKind.Badge, name = "游侠徽记（中级）",
             desc = "", price = 250, weeklyLimit = 2,
-            badgeJobKey = "牧师", badgeTier = "稀有", badgeCount = 5,
+            badgeJobKey = "游侠", badgeTier = "稀有", badgeCount = 5,
             frameRarity = MercRosterDefs.MercRarity.Rare },
-        new Good { id = "arena_badge_heavy_5", kind = GoodKind.Badge, name = "重武徽记（中级）",
+        new Good { id = "arena_badge_swordshield_5", kind = GoodKind.Badge, name = "剑盾徽记（中级）",
             desc = "", price = 250, weeklyLimit = 2,
-            badgeJobKey = "重武", badgeTier = "稀有", badgeCount = 5,
+            badgeJobKey = "剑盾", badgeTier = "稀有", badgeCount = 5,
             frameRarity = MercRosterDefs.MercRarity.Rare },
-        new Good { id = "arena_badge_mage_1", kind = GoodKind.Badge, name = "法师徽记（高级）",
-            desc = "", price = 300, weeklyLimit = 2,
-            badgeJobKey = "法师", badgeTier = "传奇", badgeCount = 1,
-            frameRarity = MercRosterDefs.MercRarity.Legendary },
+        // 【2026-11-13 主人拍板】好感礼物 ×3：2 普通（面包/苹果）+ 1 稀有（幸运骰子），150 分 / 周限 3
+        new Good { id = "arena_gift_bread_3", kind = GoodKind.Gift, name = "面包", giftId = "gift_301", giftCount = 3,
+            desc = "", price = 150, weeklyLimit = 3,
+            frameRarity = MercRosterDefs.MercRarity.Common },
+        new Good { id = "arena_gift_apple_3", kind = GoodKind.Gift, name = "苹果", giftId = "gift_302", giftCount = 3,
+            desc = "", price = 150, weeklyLimit = 3,
+            frameRarity = MercRosterDefs.MercRarity.Common },
+        new Good { id = "arena_gift_dice_1", kind = GoodKind.Gift, name = "幸运骰子", giftId = "gift_394", giftCount = 1,
+            desc = "", price = 150, weeklyLimit = 3,
+            frameRarity = MercRosterDefs.MercRarity.Rare },
     };
 
     static Good Find(string goodId)
@@ -299,6 +322,13 @@ public static class ArenaShopGoods
         EnsureWeek(data);
 
         if (good.kind == GoodKind.Bow && HasBowOwned(data)) { msg = "已经买过啦（买断制）"; return false; }
+        if (good.kind == GoodKind.Gift && !MercFavorDefs.TryGetGift(good.giftId, out _))
+        {
+            // 配表错误在扣分前拦下（不扣不发，LogError 不静默）
+            Debug.LogError($"[ArenaShop] 商品 {good.id} 的礼物 {good.giftId} 在 MercFavorDefs.Gifts 查不到");
+            msg = "礼物数据缺失";
+            return false;
+        }
         if (good.weeklyLimit > 0 && WeekBuyCount(data, good.id) >= good.weeklyLimit)
         {
             msg = "本周限购已用完，下周再来";
@@ -366,12 +396,20 @@ public static class ArenaShopGoods
             granted = true;
             msg = $"金币 +{good.grantGold} 到账";
         }
-        else
+        else if (good.kind == GoodKind.Badge)
         {
             // 徽记包走 MercGrowInventory（badge:{职业key}:{档位} 口径，id 与关卡掉落同仓）
             MercGrowInventory.Add(MercGrowInventory.BadgeId(good.badgeJobKey, good.badgeTier), good.badgeCount);
             granted = true;
             msg = $"获得 {good.badgeJobKey}徽记（{good.badgeTier}）×{good.badgeCount}";
+        }
+        else
+        {
+            // 礼物货：唯一发放出口 SaveData.AddFavorGift（不自动存档，由下方统一 Save）
+            MercFavorDefs.TryGetGift(good.giftId, out var giftDef);
+            data.AddFavorGift(good.giftId, good.giftCount);
+            granted = true;
+            msg = $"获得 {giftDef.Name} ×{good.giftCount}";
         }
 
         if (!granted)

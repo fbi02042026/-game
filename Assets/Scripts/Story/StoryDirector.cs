@@ -167,13 +167,15 @@ public class StoryDirector : Singleton<StoryDirector>
     /// 【2026-10-24 主人拍板「剧情弹出加黑幕过渡 + 字幕」】新增可选 <paramref name="introCaption"/>：
     /// 整段开播且首拍不换背景时，先过一道短黑幕（DialogueUI.PlayIntroVeil），黑幕上显示这行字幕；
     /// 不传则自动用当前背景的地名（StoryBackgrounds.DisplayName）。首拍换背景 / 首拍 SkipReveal 的不加（前者自带地点黑场，后者调用方明确不要）。
+    /// 【2026-11-13】<paramref name="hideFullDim"/>=true 时，开播前关掉对话窗自带的全屏黑底（prefab Dim），
+    /// 背景只由调用方铺的那一层常驻底负责；仅战前选择（Boss 三选一）传 true，其它剧情默认 false 不受影响。
     /// </summary>
-    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false, string introCaption = null)
+    public void Play(IList<StoryBeat> beats, Action onDone, Action<int> onChoice = null, bool keepSceneArt = false, string introCaption = null, bool hideFullDim = false)
     {
         _keepSceneArt = keepSceneArt;
         _introCaption = introCaption;
         if (_play != null) StopCoroutine(_play);
-        _play = StartCoroutine(PlayRoutine(beats, onDone, onChoice));
+        _play = StartCoroutine(PlayRoutine(beats, onDone, onChoice, hideFullDim));
     }
 
     public void PlayOne(StoryBeat beat, Action onDone)
@@ -191,7 +193,7 @@ public class StoryDirector : Singleton<StoryDirector>
         return UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == GameSceneManager.BATTLE_SCENE;
     }
 
-    IEnumerator PlayRoutine(IList<StoryBeat> beats, Action onDone, Action<int> onChoice)
+    IEnumerator PlayRoutine(IList<StoryBeat> beats, Action onDone, Action<int> onChoice, bool hideFullDim)
     {
         IsPlaying = true;
         bool battleStoryBgm = IsBattleScene();
@@ -201,6 +203,14 @@ public class StoryDirector : Singleton<StoryDirector>
         PauseGame();
         HideBattleSkillBar();
         var ui = EnsureUi();
+        // 【2026-11-13 主人拍板「有剧情背景就用剧情背景，没有就直接用黑色半透」】背景底统一两口径：
+        // · 默认剧情：开播先把对话窗自带的 Dim（黑色半透）拉起来兜底 —— 有背景图时
+        //   SetSceneBackground(非 null) 会自动关掉它；没背景就留这层黑底，剧情窗不再裸浮在战斗画面上。
+        //   （此前 Dim 被 Hide() 关掉后没人再打开，首段剧情有底、之后全裸 —— 「第二回变透」的根因，
+        //   现在收口为「开播先开兜底，指定关才关」。）
+        // · 战前选择（hideFullDim=true）：只用 ShowPersistent 的 50% 常驻底，关掉自带 Dim 防叠两层。
+        if (hideFullDim) ui?.HideFullDim();
+        else ui?.ShowFullDim();
         if (ui == null || beats == null || beats.Count == 0)
         {
             Debug.LogError("[StoryDirector] 无法播放：DialogueUI 或台词为空");

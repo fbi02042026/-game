@@ -40,9 +40,10 @@ public static class RedDot
     /// <summary>2026-10-20 主人报「成就领完了按钮红点不灭」：成就页「领取」按钮专属红点键。
     /// 只跟成就可领走（AdventureLogAchievements.HasUnclaimed），与按钮置灰同口径。
     /// 2026-10-31 主人报「领取后标签提示还在」：Achievement 这个侧栏 Tab 键也收窄成只跟成就可领，
-    /// 里程等级/碎片合成改由 <see cref="LogWorld"/>（世界页 Tab）承载。</summary>
+    /// 里程等级改由 <see cref="LogWorld"/>（世界页 Tab）承载；2026-11-13 碎片合成整体下线。</summary>
     public const string AchClaim = "log.ach.claim";
-    /// <summary>2026-10-31：世界页 Tab 红点 —— 日志里程等级可领 / 碎片可合成。
+    /// <summary>2026-10-31：世界页 Tab 红点 —— 日志里程等级可领
+    /// （2026-11-13 碎片合成整体下线，不再有「碎片可合成」这一项）。
     /// 与成就可领分开，避免成就领完后成就 Tab 红点被里程撑住不灭。</summary>
     public const string LogWorld = "log.world";
     public const string LogMonster = "log.monster";
@@ -176,9 +177,9 @@ public static class RedDot
     {
         Set(Mail, MailSystem.UnclaimedCount() > 0);
         bool achReward = AdventureLogAchievements.HasUnclaimed();
-        bool worldReward = AdventureLogMileage.HasUnclaimedLevel()
-                           || AdventureLogFragments.HasAnyCraftable();
-        // 2026-10-31：成就页 Tab 只跟「成就可领」走，里程/碎片挪到世界页 Tab
+        // 2026-11-13：碎片合成整体下线，worldReward 只看里程等级可领。
+        bool worldReward = AdventureLogMileage.HasUnclaimedLevel();
+        // 2026-10-31：成就页 Tab 只跟「成就可领」走，里程等级挪到世界页 Tab
         // （主人报：成就领完了成就标签红点还亮着，其实是里程等级能领）。
         Set(Activity, achReward || worldReward);
         Set(Achievement, achReward);

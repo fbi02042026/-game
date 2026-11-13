@@ -157,7 +157,11 @@ public partial class WavePlanner
     }
 
     // ---- extracted from BattleManager L1543-L1588 ----
-    internal void SpawnNextPendingWave()
+    /// <param name="allowStackWhileAlive">
+    /// 【2026-11-13 主人拍板】波流式衔接用：true = 场上还有上一波活怪也照刷（把两拨压成一波连续怪潮）。
+    /// 只由 BattleManager.TickWaveStreamSpawn 传 true；清场路径（波清→下一波）保持原闸门不动。
+    /// </param>
+    internal void SpawnNextPendingWave(bool allowStackWhileAlive = false)
     {
         if (_waves == null || _waves.Count == 0 || hero == null) return;
         EnsureMonsterPrefabReady();
@@ -171,8 +175,10 @@ public partial class WavePlanner
             return;
         }
 
-        // 场上还有上一波活怪时，不叠刷（教程关由 QueueTutorialWave 重置 _activeWaveIndex）
-        if (!Rules.AllowStackSpawnWhileAlive && CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
+        // 场上还有上一波活怪时，不叠刷（教程关由 QueueTutorialWave 重置 _activeWaveIndex；
+        // 波流式衔接 allowStackWhileAlive=true 例外，2026-11-13 主人拍板）
+        if (!Rules.AllowStackSpawnWhileAlive && !allowStackWhileAlive
+            && CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
             return;
 
         var wave = _waves[waveIdx];
@@ -195,6 +201,14 @@ public partial class WavePlanner
                 _activeWaveIndex = waveIdx;
                 StopWaveCountdown();
                 GamePerf.Log($"[BattleManager] 刷第{waveIdx + 1}/{_waves.Count}波 OK alive={aliveAfter} heroX={heroX:F2}");
+                // 【2026-11-13 主人拍板】顶部进度条随出波推进（流式衔接后波与波之间不再清场，
+                // 原「波清才推进」的点在普通波上摸不到了）：已刷波数 = waveIdx + 1
+                BattleUI.Instance?.UpdateWaveProgress(waveIdx + 1, _waves != null ? _waves.Count : 0);
+                // 【2026-11-13 v5 两段式】第 1 波（开场波 waveIdx==0）不排流式：单独刷、能清场，让全关唯一一次 Gate 播得出来。
+                // 自第 2 波出完起（waveIdx>=1）才排 1s 波流式衔接（多波连续怪潮）；引导局不走本轨（SkipWaveAnnounce）。
+                // Boss 波仍走「首领来袭」：不在协程里排，等场上清空后由 Update → BeginNextWaveCountdown 处理。
+                if (waveIdx >= 1 && !wave.isBossWave && !Rules.SkipWaveAnnounce)
+                    bm.ScheduleWaveStreamNext();
             }
             else
             {

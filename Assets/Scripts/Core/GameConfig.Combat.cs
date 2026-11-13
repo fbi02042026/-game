@@ -220,6 +220,8 @@ public static partial class GameConfig
     /// 300 × 0.767 ≈ 230 —— 与表同值，别让兜底和表各说一套。
     /// </summary>
     public const float MONSTER_RANGED_RANGE_MUL = 0.767f;
+    /// <summary>【2026-11-13 主人拍板】远程普通小怪攻击距离减 20%；唯一消费点 Monster.Init.cs 的 atkRange。</summary>
+    public const float MONSTER_NORMAL_RANGED_RANGE_MUL = 0.8f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public static float MONSTER_NORMAL_SKILL_DAMAGE_MUL => CombatTuningTable.Get("MONSTER_NORMAL_SKILL_DAMAGE_MUL", 0.55f);
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
@@ -244,15 +246,17 @@ public static partial class GameConfig
     /// monster_stats 表 moveSpeed 已全体减半（2.2→1.1），乘同一系数得 1.1 × 0.3142 = 0.3456（世界单位）。
     /// </summary>
     public const float MONSTER_MOVE_SPEED_TO_WORLD = 0.3142f;
+    /// <summary>【2026-11-13 主人拍板】所有敌人（怪物）最终移速减 20%；唯一消费点 Monster.Init.cs 的 moveSpd；jitter / 词缀基于降后的值，入场速度另由 MONSTER_ENTER_SPEED_MUL 补回。</summary>
+    public const float MONSTER_GLOBAL_MOVE_SPEED_MUL = 0.8f;
     /// <summary>
     /// 【2026-10-11 主人拍板】入场速度 = 怪物自身 MoveSpeed × 本系数。
     /// 旧实现是死的 1.0（`MONSTER_ENTER_SPEED`），而怪物常态移速只有 0.3456 → 入场比自己走路快 2.9 倍，
     /// 看着像「飞过来」再急刹。挂自身移速后又直除太慢（屏外到交战点约 3 个世界单位，
     /// 纯自身速度要 9 秒以上，一波到齐严重拖节奏），故保留一个「比走路略快」的倍率。
-    /// 2.0 → 约 0.69 世界单位/秒（旧值的 ~70%，仍是他自己走路的两倍，观感是跑不是飞）。
+    /// 2.5 → 约 0.69 世界单位/秒：11-13 常态移速降到 0.27648 后用它补回改动前的入场速度（仍是他走路的 2.5 倍，观感是跑不是飞）。
     /// <b>调快慢只改这一个出口。</b>
     /// </summary>
-    public const float MONSTER_ENTER_SPEED_MUL = 2.0f;
+    public const float MONSTER_ENTER_SPEED_MUL = 2.5f;
     /// <summary>
     /// 【2026-10-05 主人拍板「多点出生点」】同波第 i 只怪的入场起点比第 0 只再往外错开多少（世界单位）。
     /// 一整波不再从屏外同一个点排队进场，而是从远近不同的位置一起涌进来。
@@ -836,6 +840,19 @@ public static partial class GameConfig
              * GetStageStatScale(stageIndex0Based, subs)
              * GetGrandWallBonus(gameChapter, grandIndex1Based, stageIndex0Based);
     }
+    // ===== 【2026-11-13 主人拍板「按章节的平均值加系数、必须比初始武器好」】装备攻击三档区间 =====
+    /// <summary>档位系数下限（×本章普通怪平均 baseAttack）。真源 combat_tuning 表 EQUIP_ATK_TIER_*，缺表回退此处默认。</summary>
+    public static float EquipAtkTierLo(string rarityId) =>
+        rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_LO", 2.6f)
+        : rarityId == "LEGEND" ? CombatTuningTable.Get("EQUIP_ATK_TIER_LEGEND_LO", 4.8f)
+        : CombatTuningTable.Get("EQUIP_ATK_TIER_NORMAL_LO", 1.2f);
+
+    /// <summary>档位系数上限（×本章普通怪平均 baseAttack）。</summary>
+    public static float EquipAtkTierHi(string rarityId) =>
+        rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_HI", 3.6f)
+        : rarityId == "LEGEND" ? CombatTuningTable.Get("EQUIP_ATK_TIER_LEGEND_HI", 6.8f)
+        : CombatTuningTable.Get("EQUIP_ATK_TIER_NORMAL_HI", 2.0f);
+
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public static float ELITE_TTK_HP_MUL => CombatTuningTable.Get("ELITE_TTK_HP_MUL", 1.15f);
@@ -954,6 +971,16 @@ public static partial class GameConfig
     public static float MONSTER_BLINK_SETTLE_SEC => CombatTuningTable.Get("MONSTER_BLINK_SETTLE_SEC", 0.10f);
 
     // ==================== 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技 ====================
+    /// <summary>
+    /// 【2026-11-13 主人拍板「boss 可以带，但是要有 cd 稍微长点，现在感觉一直在放」】
+    /// 远程 Boss **依然恒带**扇形散射（10-20 原口径，不删不禁），只是给它单独一档更长的冷却：
+    /// 沿用精英的 MONSTER_FAN_VOLLEY_COOLDOWN(20s) 在长时间的 Boss 战里显得一直在放，故 Boss 拉到 40s。
+    /// 想调频率只改这一个数；精英仍走 MONSTER_FAN_VOLLEY_COOLDOWN，不受影响。
+    /// 消费点唯一 = Monster.Skills.TryCastRangedVolleySkill 扇形起手处。
+    /// </summary>
+    public const float BOSS_FAN_VOLLEY_COOLDOWN = 40f;
+    /// <summary>远程 Boss 扇形弹幕首发延迟（秒）：给玩家进射程前留缓冲，别一开打就齐射。</summary>
+    public const float BOSS_FAN_VOLLEY_FIRST_DELAY = 8f;
     /// <summary>扇形弹幕冷却（秒）。</summary>
     public static float MONSTER_FAN_VOLLEY_COOLDOWN => CombatTuningTable.Get("MONSTER_FAN_VOLLEY_COOLDOWN", 20f);
     /// <summary>扇形弹幕一次齐射的弹道数（Boss 用）。
@@ -1188,6 +1215,28 @@ public static partial class GameConfig
         return $"第{cn[idx]}章  {GetChapterMapName(gameChapter)}";
     }
 
+
+    // ============================================================
+    // 职业自带技能（2026-11-13 主人拍板）：独立攒槽通道，不占 4 槽 / 不进抽卡池 / 无 UI。
+    // 攒满靠普攻命中次数，表里 cooldown 只作「防连喷的短保底间隔」，长 CD 不在这里。
+    // ============================================================
+    public const float CAREER_SKILL_START_CHARGE_RATIO = 0.30f;  // 开局送 30% 起步槽
+    public const int   CAREER_CHARGE_HITS  = 8;   // 剑盾：攒满所需普攻命中数
+    public const int   CAREER_SCATTER_HITS = 10;  // 游侠
+    public const int   CAREER_ORB_HITS     = 9;   // 法师
+
+    public const float CAREER_SKILL_KNOCKBACK = 1.6f;   // 职业技命中的强击退距离（普通怪），精英/Boss 仍免退
+    public const float CAREER_CHARGE_DIST = 3.2f;       // 冲锋最大横移距离（只动 X，不动 lane 的 Y）
+    public const float CAREER_CHARGE_DURATION = 0.12f;  // 冲锋时长：越短越快
+    public const float CAREER_CHARGE_STOP_GAP = 0.8f;   // 停在目标身前，避免穿模
+
+    public const float CAREER_SCATTER_ANGLE_STEP = 9f;  // 每条箭道的角度间隔（度）
+    public const float CAREER_SCATTER_RANGE = 9f;       // 箭道飞行距离上限
+    public const float CAREER_SCATTER_HIT_RADIUS = 1.4f;
+    public const int   CAREER_SCATTER_MAX_HITS_PER_ENEMY = 2;
+
+    public const float CAREER_ORB_SCALE_MUL = 3.5f;     // 法球放大倍数（飞行体 + 命中特效同倍）
+    public const float CAREER_ORB_SPEED_MUL = 0.55f;    // 大法球慢速飞行，压迫感
 
     // ---- 受击后退（2026-11-05 主人拍板：普通怪受击小退；精英/Boss 免击退；它们打玩家/俇兵把人打退）----
     public const float KNOCKBACK_MONSTER = 0.35f; // 普通怪受击退移（世界单位）

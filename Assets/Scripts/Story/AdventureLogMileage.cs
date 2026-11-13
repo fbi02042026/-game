@@ -365,6 +365,10 @@ public static class AdventureLogMileage
         data.logMileagePoints = Mathf.Max(0, data.logMileagePoints + points);
         // 累计获得同步上涨（等级依据），消费不扣这里（2026-10-20 主人拍板：消费不掉级）
         data.logMileageTotalEarned = Mathf.Max(0, data.logMileageTotalEarned + points);
+        // 【2026-11-13 主人拍板】每次实际获得里程点数都弹 toast（Plain 原样文案）。
+        // 唯一入账出口在此弹：图鉴遇怪/结识佣兵/成就/世界/主线/支线及未来新增来源全覆盖；
+        // 防重复（sourceKey 已发过直接 return 0）天然保证不双弹。
+        UIManager.Instance?.ShowToast($"里程点数 +{points}");
         if (save) SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         return points;

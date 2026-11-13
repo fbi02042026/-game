@@ -99,7 +99,7 @@ public partial class Monster : UnitBase
         return _isMagicType ? attr.GetAttr(AttrType.MagicAttack) : attr.GetAttr(AttrType.Attack);
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false, float knockbackDistanceOverride = -1f)
     {
         // V6 词缀「铁壁」：减伤在扣血之前生效
         var affix = MonsterAffix.Get(this);
@@ -114,7 +114,7 @@ public partial class Monster : UnitBase
             if (bonus > 0f) inDamage *= (1f + bonus);
         }
 
-        base.TakeDamage(inDamage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source, suppressDamageText);
+        base.TakeDamage(inDamage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source, suppressDamageText, knockbackDistanceOverride);
 
         // V6 词缀「荆棘」：打我的人按比例吃回一点伤害。
         // 这里不区分攻击者是近战还是远程 —— 用一个「攻击者类型」判定既不可靠也会让词缀显得随机，

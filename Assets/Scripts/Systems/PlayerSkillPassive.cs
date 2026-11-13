@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// 玩家主动技改为被动：自动释放，禁止点头像手动放。
-/// 雷击奥义仍走 HeroThunderUltimate 满条自动。
+/// 雷击奥义走 HeroThunderUltimate 独立 CD 自动（2026-11-13 主人拍板）。
 /// <para>
 /// 2026-09-15：充能槽取消，改<b>纯冷却制</b> —— 开局由 BattleManager 按槽位错峰给初始 CD，
 /// 冷却好了按槽序放一个，放完重新进入自己的冷却；任意两次释放之间还要隔 GameConfig.PLAYER_SKILL_GCD 秒，
@@ -136,6 +136,11 @@ public static class PlayerSkillPassive
         ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = HeavyCleaveTriggerRadius },
         ["whirlwind"]       = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = WhirlwindTriggerRadius },
         ["starfall"]        = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = StarfallTriggerRadius },
+        // 2026-11-13 职业自带技能走独立攒槽通道，不经 FindReadySkillSlot；登记 Always 只为
+        // 不让 IsTriggerMet 打「未登记触发条件」的 Error，实际释放闸门在 CareerSkillAccumulator。
+        ["career_charge"]  = new Trigger { kind = TriggerKind.Always },
+        ["career_scatter"] = new Trigger { kind = TriggerKind.Always },
+        ["career_orb"]     = new Trigger { kind = TriggerKind.Always },
     };
 
     /// <summary>

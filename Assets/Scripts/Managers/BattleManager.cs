@@ -553,7 +553,8 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         Debug.Log($"[BattleManager] 已生成佣兵 {spawned} 个 (tavern槽={max})");
     }
 
-    /// <summary>重生护符复活血比例（2026-10-21 主人拍板「护符给 80 的血」）。</summary>
+    /// <summary>复活链复活血比例（2026-10-21 主人拍板「护符给 80 的血」；
+    /// 2026-11-13 护符下线后，石像事件复活沿用同一比例，保证手感不变）。</summary>
     const float ReviveCharmHpRatio = 0.8f;
 
     /// <summary>
@@ -628,13 +629,14 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     }
 
     /// <summary>
-    /// 【2026-10-21 主人需求】重生护符复活：战斗中佣兵阵亡时，在佣兵信息框点「复活」消耗 1 枚重生护符，
-    /// <b>原地按 80% 血复活</b>（主人拍板「护符给 80 的血」）。
+    /// 【2026-10-21 主人需求】复活链（原「重生护符复活」）：战斗中佣兵阵亡时原地按 80% 血复活。
+    /// <para>【2026-11-13 主人拍板「没有重生护符这个道具了」】玩家侧护符入口已下线，
+    /// 本方法现在只服务石像事件（<c>BattleStatueEventUI</c>，<paramref name="consumeCharm"/>=false，不消耗任何道具）；
+    /// 护符分支保留便于回退，但道具表行已删、reviveCharms 载入即清零，玩家侧不会再触发。</para>
     /// <para>与 <see cref="ReviveFallenMercsForStage"/>（下一关惩罚性 20% 起步复活）并存；
     /// spawn 参数照抄该方法（星级/技能/名字/OnDead 订阅一个不少），血量在满血生成后补砍到 80%。</para>
-    /// <para>返回 false（没护符/状态不对）时 Toast 已提示、信息框留在原处（主人拍板的「复活/取消」双钮）。</para>
     /// </summary>
-    public bool TryReviveMercWithCharm(int loadoutIndex)
+    public bool TryReviveMercWithCharm(int loadoutIndex, bool consumeCharm = true)
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null || !RunLoadout.IsActive) return false;
@@ -658,13 +660,12 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             if (mKey == key) return false;
         }
 
-        if (data.reviveCharms <= 0)
+        if (consumeCharm && data.reviveCharms <= 0)
         {
-            // 【2026-10-21 主人拍板】没护符点复活 = 提示道具不足（信息框留在原处继续看）
-            UIManager.Instance?.ShowToast("道具不足：没有重生护符（关卡商店有售）。");
+            UIManager.Instance?.ShowToast("道具不足：没有重生护符。");
             return false;
         }
-        data.reviveCharms--;
+        if (consumeCharm) data.reviveCharms--;
         e.fallen = false;
         e.fallenStages = 0;
 
@@ -681,12 +682,12 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         var merc = mm.SpawnMercenary(e.mercId, pos, Mathf.Max(1, e.level));
         if (merc == null)
         {
-            // 复活失败要把护符与 fallen 记账退回去，不能白扣
-            data.reviveCharms++;
+            // 复活失败要把护符与 fallen 记账退回去，不能白扣（不消耗道具的石像链无需退）
+            if (consumeCharm) data.reviveCharms++;
             e.fallen = true;
             e.fallenStages = 0;
-            Debug.LogError($"[BattleManager] 重生护符复活失败：预制体缺失 mercId={e.mercId}（护符已退还）");
-            UIManager.Instance?.ShowToast("复活失败（佣兵预制体缺失），护符已退还。");
+            Debug.LogError($"[BattleManager] 复活失败：预制体缺失 mercId={e.mercId}（{(consumeCharm ? "护符已退还" : "石像复活未生效")}）");
+            UIManager.Instance?.ShowToast(consumeCharm ? "复活失败（佣兵预制体缺失），护符已退还。" : "复活失败（佣兵预制体缺失）。");
             return false;
         }
         merc.mercStar = Mathf.Clamp(e.star, 1, 5);
@@ -708,10 +709,12 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         merc.OnDead += OnMercenaryDead;
         merc.Face(1);
 
-        SaveSystem.Instance?.Save();   // 护符扣了就落盘，中途杀进程别白嫖
-        UIManager.Instance?.ShowToast($"重生护符发动，「{e.displayName}」原地复活！");
-        BattleUI.Instance?.UpdateCharacterSlots();   // 槽亮回来 + 护符图标自动收掉
-        Debug.Log($"[BattleManager] 重生护符复活：{e.displayName}({e.mercId}) 血量 {ReviveCharmHpRatio * 100f:0.}%（剩余护符 {data.reviveCharms}）");
+        if (consumeCharm) SaveSystem.Instance?.Save();   // 护符扣了就落盘，中途杀进程别白嫖
+        UIManager.Instance?.ShowToast(consumeCharm
+            ? $"重生护符发动，「{e.displayName}」原地复活！"
+            : $"圣者之力：「{e.displayName}」原地复活！");
+        BattleUI.Instance?.UpdateCharacterSlots();   // 槽亮回来
+        Debug.Log($"[BattleManager] 复活：{e.displayName}({e.mercId}) 血量 {ReviveCharmHpRatio * 100f:0.}%（{(consumeCharm ? "护符" : "石像")}）");
         return true;
     }
 

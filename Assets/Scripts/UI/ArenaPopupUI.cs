@@ -1026,7 +1026,8 @@ public class ArenaPopupUI : MonoBehaviour
     // ───────────────────────── 竞技商店（2026-10-30 积分版） ─────────────────────────
     // 页面结构（主人手摆，名字/层级可改、美术排版保持原样）：
     // 竞技商店(全屏页) > RecordsBox(689×739) > 人 / 底框 / RTitle / 积分icon>Text(余额) / RCloseBtn / 商品(示例单元)
-    // 货架 8 件 = ArenaShopGoods.AllGoods（1 弓 + 3 佣兵 + 1 金币包 + 3 徽记包），运行时纵向滚动列表单列排。
+    // 货架 10 件 = ArenaShopGoods.AllGoods（1 弓 + 3 佣兵 + 1 金币包 + 2 徽记包 + 3 礼物），运行时纵向滚动列表单列排。
+    // 【2026-11-13 徽记分家】徽记包只卖游侠/剑盾；法系徽记在里程商店，狂战/重武留后期。
 
     // 货架滚动区（RecordsBox 中心锚坐标）：顶部让开余额行（积分icon 底 ≈ y137），底部到框底 y-345。
     const float ShopShelfTopY = 137f;
@@ -1331,6 +1332,18 @@ public class ArenaPopupUI : MonoBehaviour
             {
                 var sp = MercGrowSprites.LoadJobBadge(good.badgeJobKey, good.frameRarity);
                 if (sp == null) Debug.LogError($"[Arena] 职业徽记加载失败：{good.badgeJobKey}/{good.badgeTier}");
+                return sp;
+            }
+            case ArenaShopGoods.GoodKind.Gift:
+            {
+                // 【2026-11-13 主人拍板】好感礼物货：图标路径真源 = MercFavorDefs.GiftDef.IconPath（按路径加载）
+                if (!MercFavorDefs.TryGetGift(good.giftId, out var gift))
+                {
+                    Debug.LogError($"[Arena] 礼物查不到：{good.giftId}（商品 {good.id}）");
+                    return null;
+                }
+                var sp = Resources.Load<Sprite>(gift.IconPath);
+                if (sp == null) Debug.LogError($"[Arena] 礼物图标缺失：Resources/{gift.IconPath}（商品 {good.id}）");
                 return sp;
             }
             default:

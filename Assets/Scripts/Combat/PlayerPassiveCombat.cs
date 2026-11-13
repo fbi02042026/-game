@@ -31,6 +31,9 @@ public class PlayerPassiveCombat : MonoBehaviour
     float _selfShieldUntil;
     float _selfShieldAbsorb;
     float _selfShieldMax;
+    /// <summary>2026-11-13 职业自带技能攒槽器：随本组件生命周期走，不用静态状态，跨局由 BindForBattle 复位。</summary>
+    CareerSkillAccumulator _career;
+    Hero _careerHookTarget;
 
     void Awake()
     {
@@ -44,6 +47,7 @@ public class PlayerPassiveCombat : MonoBehaviour
 
     void OnDestroy()
     {
+        if (_careerHookTarget != null) _careerHookTarget.OnAttack -= OnHeroBasicAttackHit;
         if (Instance == this) Instance = null;
     }
 
@@ -73,14 +77,61 @@ public class PlayerPassiveCombat : MonoBehaviour
         _selfShieldMax = 0f;
         _selfShieldUntil = 0f;
         _selfShieldAbsorb = 0f;
+
+        // 2026-11-13 职业自带技能：每局重绑，开局送 30% 槽；订阅统一走 EnsureCareerHook。
+        if (_career == null) _career = new CareerSkillAccumulator();
+        _career.ResetForBattle(this, _job);
+        EnsureCareerHook();
     }
 
     void Update()
     {
         if (Hero.Instance == null || Hero.Instance.isDead) return;
         if (BattleManager.Instance == null || !BattleManager.Instance.isInBattle) return;
+        EnsureCareerHook();
+        // 职业技攒槽不依赖职业被动模块，放在 _passiveId 早退之前，保证任何职业都能攒。
+        if (_career != null) _career.Tick();
         if (string.IsNullOrEmpty(_passiveId)) return;
         if (_module != null) _module.OnUpdate();
+    }
+
+    /// <summary>每关 LoadStage 复位职业技攒槽（回到开局 30%），与雷击 ResetForBattle 同钩。</summary>
+    public void ResetCareerChargeForStage()
+    {
+        if (_career != null) _career.ResetForBattle(this, _job);
+    }
+
+    /// <summary>
+    /// 攒槽事件订阅自愈（2026-11-13 主人报「没看到释放技能」后补）。
+    /// 原来订阅只挂在 ApplyForBattle 一条路径上，LoadStage 单独进关时组件/订阅都不在。
+    /// 这里按 Hero.Instance 判重，Hero 被重建也能自动重绑；不重建职业被动模块。
+    /// </summary>
+    void EnsureCareerHook()
+    {
+        var hero = Hero.Instance;
+        if (hero == null) return;
+        if (_career == null) _career = new CareerSkillAccumulator();
+        if (!_career.IsReady)
+        {
+            _job = PlayerJobDefs.GetSelected();
+            _career.ResetForBattle(this, _job);
+        }
+        if (_careerHookTarget == hero) return;
+        if (_careerHookTarget != null)
+            _careerHookTarget.OnAttack -= OnHeroBasicAttackHit;
+        hero.OnAttack -= OnHeroBasicAttackHit;
+        hero.OnAttack += OnHeroBasicAttackHit;
+        _careerHookTarget = hero;
+        Debug.Log($"[CareerSkill] 已订阅 Hero.OnAttack（职业 {_job} / 技能就绪 {_career.IsReady}）");
+    }
+
+    /// <summary>每关 LoadStage 调：确保攒槽组件与事件订阅在位（不重建职业被动模块）。</summary>
+    public static void EnsureCareerAttached(Hero hero)
+    {
+        if (hero == null) return;
+        var c = hero.GetComponent<PlayerPassiveCombat>();
+        if (c == null) c = hero.gameObject.AddComponent<PlayerPassiveCombat>();
+        c.EnsureCareerHook();
     }
 
     /// <summary>暴击命中后由 UnitBase 调用。</summary>
@@ -88,6 +139,12 @@ public class PlayerPassiveCombat : MonoBehaviour
     {
         if (target == null || target.isDead) return;
         if (_module != null) _module.OnHeroCritHit(target);
+    }
+
+    /// <summary>玩家普攻命中回调（Hero.OnAttack）：闪避时 damage=0，由攒槽器过滤。</summary>
+    void OnHeroBasicAttackHit(UnitBase target, float damage, bool isCrit)
+    {
+        if (_career != null) _career.OnHeroBasicAttackHit(target, damage, isCrit);
     }
 
     /// <summary>友军受击减伤倍率（1=无减）。</summary>

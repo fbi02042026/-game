@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 冒险日志三期运行时面板：碎片合成 / 里程商店。
+/// 冒险日志三期运行时面板：里程商店（碎片合成 2026-11-13 整体下线，代码保留便于回退）。
 /// 2026-10-19 正式化：木质描边弹窗 + 全屏遮罩 + 右上角关闭，
 /// 修复旧版行数溢出面板、关闭按钮落在面板外的问题。
 /// 2026-10-19 预制体化：运行时只实例化预制体并按节点名绑定，缺预制体直接报错
@@ -24,6 +24,7 @@ using UnityEngine.UI;
 /// </summary>
 public class AdventureLogPhase3Panel : MonoBehaviour
 {
+    // Craft：2026-11-13 碎片合成整体下线后停用，枚举值保留便于回退。
     enum Mode { None, Craft, Shop }
 
     public const string PrefabResPath = "Prefabs/Town/AdventureLogPhase3Panel";
@@ -189,8 +190,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         var dimBtn = _dim.GetComponent<Button>();
         if (dimBtn != null)
         {
+            // 【2026-11-13 主人拍板】点四周（暗幕）不再关闭本面板，只点 CloseX 关闭。
+            // RemoveAllListeners 保留：连预制体里可能自带的持久监听一起清掉，保证点暗幕零反应。
             dimBtn.onClick.RemoveAllListeners();
-            dimBtn.onClick.AddListener(ClosePanel);
+            // dimBtn.onClick.AddListener(ClosePanel);
         }
 
         var inner = _panel.transform.Find(InnerName);
@@ -394,12 +397,29 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         crt.anchoredPosition = Vector2.zero;
         crt.sizeDelta = new Vector2(0f, srt.sizeDelta.y);
 
+        // 【2026-11-13 修复「只有图标列能拖」】行内文字/底图 raycastTarget 多为关（2026-10-20 修
+        // 「Label 遮挡吃兑换点击」的历史口径），行身大面积不可命中 → 拖拽穿透到窗体底图被丢弃。
+        // 给 Content 垫一张铺满的全透明可命中底图：拖行身任意空白处命中它 → 冒泡进 ScrollRect；
+        // 图标/按钮渲染在其上仍优先命中，兑换点击不受影响；全透明不改视觉。
+        var dragPad = new GameObject("DragPad", typeof(RectTransform), typeof(Image));
+        dragPad.transform.SetParent(crt, false);
+        var dprt = dragPad.GetComponent<RectTransform>();
+        dprt.anchorMin = Vector2.zero;
+        dprt.anchorMax = Vector2.one;
+        dprt.offsetMin = Vector2.zero;
+        dprt.offsetMax = Vector2.zero;
+        var dpImg = dragPad.GetComponent<Image>();
+        dpImg.color = new Color(0f, 0f, 0f, 0f);
+        dpImg.raycastTarget = true;
+        dragPad.transform.SetAsFirstSibling();   // 垫底：行/按钮在其上，raycast 优先命中它们
+
         var sr = scroll.GetComponent<ScrollRect>();
         sr.content = crt;
         sr.viewport = vrt;
         sr.horizontal = false;
         sr.vertical = true;
-        sr.movementType = ScrollRect.MovementType.Clamped;
+        // 【2026-11-13 主人拍板】Elastic：货不足一屏也能拖拽回弹一小段；超一屏正常滚 + 边界回弹。
+        sr.movementType = ScrollRect.MovementType.Elastic;
         sr.scrollSensitivity = 15f;
         sr.inertia = true;          // 2026-10-21 滚动优化：松手后继续滑一段（Clamped 保持不变，防滚过头）
         sr.decelerationRate = 0.135f;
@@ -557,8 +577,8 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
     void OpenCraft()
     {
-        _mode = Mode.Craft;
-        RefreshPanel();
+        // 2026-11-13 主人拍板：碎片合成整体下线，入口不再开放（方法保留便于回退）。
+        Debug.LogWarning("[Phase3Panel] 碎片合成已下线，入口不再开放");
     }
 
     void OpenShop()
@@ -612,70 +632,34 @@ public class AdventureLogPhase3Panel : MonoBehaviour
 
         if (_mode == Mode.Craft)
         {
-            if (_title != null) _title.text = "碎片合成";
-            if (_body != null) _body.text = AdventureLogFragments.FormatInventory();
-            // 2026-10-21 行池化：合成条目同样不限 6 行，先按配方数扩容/缩池再填
-            int recipeCount = AdventureLogFragments.Recipes.Length;
-            EnsureRowCount(recipeCount);
-            for (int i = 0; i < recipeCount; i++)
-            {
-                if (_rowPool[i] == null) continue;
-                _rowPool[i].SetActive(true);
-                int idx = i;
-                bool can = AdventureLogFragments.CanCraft(idx);
-                if (_actionLabels[i] != null)
-                {
-                    _actionLabels[i].text = AdventureLogFragments.FormatRecipeLine(idx);
-                    _actionLabels[i].color = can ? CreamColor : DisabledColor;
-                }
-                if (_countTexts[i] != null)
-                {
-                    _countTexts[i].text = "";
-                    _countTexts[i].color = _countBaseColors[i];
-                }
-                if (_icons[i] != null) _icons[i].sprite = LoadResIcon("UI/Icons/Item/icon_log_fragment");
-                if (_exchangeBtns[i] != null)
-                {
-                    SetExchangeState(i, can);
-                    _exchangeBtns[i].onClick.RemoveAllListeners();
-                    _exchangeBtns[i].onClick.AddListener(() =>
-                    {
-                        if (AdventureLogFragments.TryCraft(idx, out string msg))
-                            UIManager.Instance?.ShowToast(msg);
-                        else
-                            UIManager.Instance?.ShowToast(msg ?? "无法合成");
-                        RefreshPanel();
-                        _host?.RefreshAfterPhase3();
-                    });
-                }
-            }
-            UpdateContentHeight(recipeCount);
+            // 2026-11-13 主人拍板：碎片合成整体下线，配方表已清空。
+            // 原「碎片合成」标题 / 清单 / 配方行 / 兑换按钮整段移除，这里只收掉面板。
+            // 三期面板此后唯一用途 = 里程商店。
+            ClosePanel();
+            return;
         }
         else
         {
             if (_title != null) _title.text = "里程商店";
             if (_body != null)
             {
-                // 【2026-10-20 主人拍板】去掉「本周：周key」行；按主人给的样式：点数行 + 等级（称号）行 + 卷轴库存行，
-                // 数字统一用面板已有的价格亮金（PriceColorHex）做颜色，方便玩家看
+                // 【2026-10-20 主人拍板】去掉「本周：周key」行；数字统一用面板已有的价格亮金（PriceColorHex）做颜色。
+                // 【2026-11-12 主人拍板】等级称号前补 Lv 数字；点数数字亮金加粗（里程数变色）。
+                // 【2026-11-13 主人改版预制体顶部：body 字号 24、等级行拆「日志里程等级：」+「Lv 称号 累计/门槛」两行】
+                // → 字号一律跟预制体（去掉 <size=36>），正文只留 点数 + 等级；卷轴/药水行随主人新版式撤下。
                 string gold = ColorUtility.ToHtmlStringRGB(PriceColorHex);
                 int pts = AdventureLogMileage.Points;           // 可消费钱包（点数行展示）
                 int earned = AdventureLogMileage.TotalEarned;   // 累计获得 = 等级进度（2026-10-20 主人拍板：消费不掉级）
                 int lv = AdventureLogMileage.GetLevel();
                 string titleName = AdventureLogMileage.LevelRewards[lv - 1].Label;
-                // 【2026-11-12 主人拍板】等级称号前补 Lv 数字，玩家一眼知道当前是第几级
-                string levelLine = lv >= AdventureLogMileage.MaxLevel
-                    ? $"日志里程等级：<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}点（满级）</color>"
-                    : $"日志里程等级：<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}/{AdventureLogMileage.NextThreshold()}</color>";
-                int scrollCommon = SaveSystem.Instance?.Data?.mercScrollCommon ?? 0;
-                int scrollLegendary = SaveSystem.Instance?.Data?.mercScrollLegendary ?? 0;
-                // 2026-10-21 遗忘药水库存行（洗天赋消耗道具，里程商店 500 点/周限 1）
-                int potionHave = SaveSystem.Instance?.Data?.TownBagCount("item_forget_potion") ?? 0;
+                string levelDetail = lv >= AdventureLogMileage.MaxLevel
+                    ? $"<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}点（满级）</color>"
+                    : $"<color=#{gold}>Lv{lv}</color> {titleName} <color=#{gold}>{earned}/{AdventureLogMileage.NextThreshold()}</color>";
+                // 【2026-11-13 主人拍板】点数恢复 11-12 的大金字（size=36 加粗亮金）：改版式后回正文字号
+                // 被主人报「颜色没变化」，显眼度优先。等级行字号仍跟预制体 24。
                 _body.text = $"日志里程点数：<size=36><b><color=#{gold}>{pts}</color></b></size>"
-                             + $"\n{levelLine}"
-                             + $"\n卷轴库存 普通<color=#{gold}>{scrollCommon}</color>"
-                             + $"/高级<color=#{gold}>{scrollLegendary}</color>"
-                             + $"\n遗忘药水 <color=#{gold}>{potionHave}</color>";
+                             + $"\n日志里程等级："
+                             + $"\n{levelDetail}";
             }
 
             // 2026-10-26 主人拍板：暮火之杖行保留，只去掉「Lv2里程奖励」那句字（先前理解岔了整行删掉，已恢复）；
@@ -783,11 +767,18 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             case "scroll_c":       return "普通招募卷轴 ×1，在酒馆招募佣兵时消耗。";
             case "scroll_l":       return "高级招募卷轴 ×1，用于招募传奇品质佣兵。";
             case "forget_potion":  return "洗点重置天赋时消耗的道具，每周限购 1 瓶。";
-            // 2026-11-08 每周轮换职业徽记：职业名按当周 key 取（与货架 Name 同源）
-            case "badge_weekly":
-                return AdventureLogMileageShop.CurrentBadgeJobKey()
-                    + "徽记（低级）×10，用于普通品质佣兵升星。每周轮换一个职业，每周限购 1 次。";
             default:
+                // 2026-11-13 法系徽记三档（法师/牧师 × 低级20/中级10/高级2）：说明按 id 解析，数量从货架取回
+                if (AdventureLogMileageShop.TryParseBadgeItemId(id, out var bJob, out var bRar))
+                {
+                    string tierName = MercStarSystem.BadgeTierDisplayName(MercStarDefs.BadgeTierOf(bRar));
+                    int bAmt = 0;
+                    var shop = AdventureLogMileageShop.Items;
+                    for (int i = 0; i < shop.Length; i++)
+                        if (shop[i].Id == id) { bAmt = shop[i].Amount; break; }
+                    return bJob + "徽记（" + tierName + "）×" + bAmt
+                        + "，用于" + MercStarDefs.BadgeTierOf(bRar) + "品质佣兵升星。每周补货一次，每周限购 1 次。";
+                }
                 Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺说明文案（ShopItemDesc 未收录）");
                 return "";
         }
@@ -995,6 +986,14 @@ public class AdventureLogPhase3Panel : MonoBehaviour
     /// </summary>
     static Color ShopItemLabelColor(string itemId)
     {
+        // 【2026-11-13】法系徽记三档按稀有度变色（沿用 10-24 拍板「列表里的字按稀有度变」）：
+        // 中级=稀有蓝、高级=传奇金，低级保持奶油原色。
+        if (AdventureLogMileageShop.TryParseBadgeItemId(itemId, out _, out var bRar))
+        {
+            if (bRar == MercRosterDefs.MercRarity.Legendary) return RarityPalette.Legendary;
+            if (bRar == MercRosterDefs.MercRarity.Rare) return RarityPalette.Rare;
+            return CreamColor;
+        }
         switch (itemId)
         {
             case "scroll_l":       // 高级招募卷轴（招募传奇佣兵）
@@ -1021,12 +1020,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                 return adv != null ? adv : CommonIconSprites.Load("icon_hire_scroll");
             // 遗忘药水（2026-10-21 主人拍板：洗天赋消耗道具，里程商店 500 点/周限 1）
             case "forget_potion": return LoadResIcon("UI/Art/Icons/Common/yiwangyaoshui");
-            // 2026-11-08 每周轮换职业徽记：档位 = 普通档，文件名「{职业}普通.png」（6 职业 × 3 档已齐）
-            case "badge_weekly":
-                return LoadResIcon(ContentPaths.Icons.JobBadge + "/"
-                    + AdventureLogMileageShop.CurrentBadgeJobKey()
-                    + MercStarDefs.BadgeTierOf(MercRosterDefs.MercRarity.Common));
             default:
+                // 2026-11-13 法系徽记三档：图标文件「{职业}{档位}.png」（6 职业 × 3 档已齐），按 id 解析职业+档位
+                if (AdventureLogMileageShop.TryParseBadgeItemId(id, out var iJob, out var iRar))
+                    return LoadResIcon(ContentPaths.Icons.JobBadge + "/" + iJob + MercStarDefs.BadgeTierOf(iRar));
                 Debug.LogError($"[Phase3Panel] 里程商店商品 {id} 缺图标配置（ShopIconFor 未收录）");
                 return null;
         }

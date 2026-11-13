@@ -246,6 +246,10 @@ public class SaveSystem : Singleton<SaveSystem>
             PlayerPrefs.Save();
             ForceArenaTopRank(data);
         }
+        // 【2026-11-13 主人拍板「没有重生护符这个道具了」】旧存档残留数量载入即清零：
+        // 道具表行已删、玩家侧获取/展示/复活入口全部下线；石像事件改走不消耗道具的独立复活，
+        // 不再借 reviveCharms 额度。字段保留只为兼容旧档序列化，值恒为 0。
+        data.reviveCharms = 0;
         StaminaSystem.Tick(save: false);
         MercSkillMigrate.SyncAutoCastPrefsFromSave();
         // 【2026-11-12 主人拍板】关卡升级额度只在「通关 → 回城」同一会话内有效，载入时清 0：

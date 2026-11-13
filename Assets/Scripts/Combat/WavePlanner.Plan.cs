@@ -757,8 +757,8 @@ public partial class WavePlanner
         {
             var formalRoundWaves = RollFormalRoundWaveCounts(CurrentChapter);
             formalBossRoundEnd = FormalRoundEndFlags(formalRoundWaves);
-            // 【2026-11-12 主人拍板】正式关 Boss 关小怪波改按 cap - 1；含 Boss 波在内前期 2 波 / 后期 3 波。
-            minionWaves = Mathf.Max(1, GameConfig.StageWaveCap(CurrentChapter) - 1);
+            // 【2026-11-13 主人拍板 v5】正式关 Boss 关小怪波下限 2（前期章节由 1 补到 2，给 Gate「下一波来袭」/ 词缀怪配额 / 击杀抽奖币留位置；后期章节仍 2 波不变）；此为 Boss 关例外，普通/精英关与资源副本波数上限仍由 StageWaveCap 管。
+            minionWaves = Mathf.Max(2, GameConfig.StageWaveCap(CurrentChapter) - 1);
             perWave = new int[minionWaves];
             for (int i = 0; i < minionWaves; i++)
                 perWave[i] = UnityEngine.Random.Range(GameConfig.FORMAL_WAVE_MONSTERS_MIN, GameConfig.FORMAL_WAVE_MONSTERS_MAX + 1);

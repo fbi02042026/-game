@@ -46,6 +46,12 @@ public static class SkillDraftMeta
         { "whirlwind",       M(SkillRarity.Legendary, SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
         { "starfall",        M(SkillRarity.Legendary, SynergyTag.Summon,  (int)PlayerJobId.Ranger) },
 
+        // —— 2026-11-13 职业自带技能：走独立攒槽通道，不进局内抽卡池 ——
+        // 不登记会走 FallbackMeta(InDraftPool=true) 被 DraftPool 抽出来；M() 工厂写死 true，这里直接构造。
+        { "career_charge",  new Meta { Rarity = SkillRarity.Rare, Tag = SynergyTag.Combo,  JobAffinity = (int)PlayerJobId.SwordShield, InDraftPool = false } },
+        { "career_scatter", new Meta { Rarity = SkillRarity.Rare, Tag = SynergyTag.Combo,  JobAffinity = (int)PlayerJobId.Ranger,      InDraftPool = false } },
+        { "career_orb",     new Meta { Rarity = SkillRarity.Rare, Tag = SynergyTag.Summon, JobAffinity = (int)PlayerJobId.Mage,        InDraftPool = false } },
+
         // 🔴 2026-11-05 主人确认「没让做过」：原 2026-09-15「技能池 13→24」扩充的 18 个技能
         // （flame_burst/thunder_chain/wolf_volley/war_banner/iron_wall/frost_nova/blood_harvest/
         //   swift_mend/sacred_revival/stone_skin/aegis_oath/bull_rush/quake_slam/hawk_eye/

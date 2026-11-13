@@ -214,19 +214,8 @@ public static class HeroVaultSystem
             });
         }
 
-        // ④ 重生护符（当前持有，2026-10-21 主人需求：战斗内关卡商店买的救命道具，出战斗也看得到存量）
-        if (data.reviveCharms > 0)
-        {
-            entries.Add(new DisplayEntry
-            {
-                category = 4,
-                rarityRank = 0,
-                name = "重生护符",
-                info = ItemNoticeText.Build(ItemNoticeText.ReviveCharmDesc, "持有", data.reviveCharms),
-                icon = ItemDefs.LoadIcon("item_revive_charm"),
-                count = data.reviveCharms
-            });
-        }
+        // 【2026-11-13 主人拍板「没有重生护符这个道具了」】原「④ 重生护符（当前持有）」展示位整段删除；
+        // 道具表行已删、reviveCharms 载入即清零，城镇仓库不再有这一格。
 
         // ⑤ 职业徽记（佣兵升星材料；数据真源 = SaveData.mercGrowItems 的 badge:{职业key}:{档位}，
         //    升星扣费读写同仓；此处只做展示，键解析不出就 LogWarning 跳过（不静默吞））

@@ -143,7 +143,7 @@ public partial class Mercenary : UnitBase
         return false;
     }
 
-    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false)
+    public override void TakeDamage(float damage, bool isCrit, bool ignoreDefense = false, bool showHitVfx = true, int hitVfxFacing = 0, UnitBase source = null, bool suppressDamageText = false, float knockbackDistanceOverride = -1f)
     {
         if (TutorialStunned)
         {
@@ -168,7 +168,7 @@ public partial class Mercenary : UnitBase
             damage = PassiveRunner.ModifyIncomingDamage(damage);
 
         float before = currentHp;
-        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source, suppressDamageText);
+        base.TakeDamage(damage, isCrit, ignoreDefense, showHitVfx, hitVfxFacing, source, suppressDamageText, knockbackDistanceOverride);
         if (PassiveRunner != null && !Mathf.Approximately(before, currentHp))
             PassiveRunner.OnHpChanged();
     }

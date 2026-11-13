@@ -844,7 +844,7 @@ public class SaveData
     /// <summary>第一章已通关最高难度：-1 未通关，0 普通，1 困难，2 噩梦</summary>
     public int ch1BestClearDifficulty = -1;
 
-    // === 日志碎片合成 / 里程商店（三期）===
+    // === 里程商店（三期）+ 旧档日志碎片合成记录（2026-11-13 下线，字段保留兼容旧档）===
     public List<StringIdEntry> craftedFragmentRecipeEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> craftedFragmentRecipes = new HashSet<string>();
     public string mileageShopWeekKey = "";
