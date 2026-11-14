@@ -26,7 +26,8 @@ public partial class BattleManager
     internal int _activeWaveIndex = -1;
     private bool _waveAnnounceRunning;
     Coroutine _waveAnnounceCo;
-    private bool _waveGatePlayed;   // 【2026-11-13 v5】全关唯一一次 Gate 是否已播；换关由 ResetWaveProgress 复位
+    // 【2026-11-14 撤除】_waveGatePlayed「全关只播一次 Gate」的闸门已由「跨大波才播」取代，
+    // 字段本身没有读取方了，按不留死字段的口径整段删掉（播报条件见波清链 crossRound）。
     // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】波次闸门看门狗计时（真实时间）
     float _waveGateStuckSec;
     /// <summary>连杀计数</summary>
@@ -91,6 +92,9 @@ public partial class BattleManager
         // 供冒险页「获得奖励」弹窗（AdventureRewardNotice，与结算同账不新造数值）。
         SnapshotStageRewardBaseline();
         ClearAllMonsters();
+        // 【2026-11-14 主人报「怪物信息也带到了下一关」】进关唯一出口统一清零：
+        // 词条怪图标栈 / 本场去重表 / 还开着的怪物信息弹窗（原地换关不切场景，不在这里清就会跟过去）。
+        AffixMonsterNoticeUI.ResetForNewStage();
         _waves.Clear();
         _totalWaves = 0;
         _allWavesSpawned = false;
@@ -163,7 +167,16 @@ public partial class BattleManager
 
         // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）。
         // 【2026-10-31 主人拍板】竞技场对战与首领/精英同用 bgm_boss（新曲「boss战」）；普通关维持 bgm_battle。
-        if (IsArena)
+        // 【2026-11-14 主人报「背景音乐还是重叠了」】胜负 jingle 原本只在 sceneLoaded 停，
+        // 「点下一关」是原地换关不切场景 → 胜利曲还在响、新关 BGM 又起 = 两首叠在一起。
+        // 进关是唯一出口，这里统一停一次（幂等，没在播时什么都不做），再切 BGM。
+        GameSting.Stop();
+        // 【2026-11-14 主人拍板「只有 BOSS 响 boss 曲」】裂隙精英层不再共用 bgm_boss：
+        // 全局 TrackForStage(Elite) = Boss 的口径给主线/活动本留着，这里只给裂隙单独分流，
+        // 于是第 2 层（现为普通层）与第 5/15 层（精英）都播 bgm_battle，只有 10/20/30 层播 boss 曲。
+        if (IsEndlessRift)
+            GameBgm.Play(stage.type == StageType.Boss ? GameBgm.Track.Boss : GameBgm.Track.Battle);
+        else if (IsArena)
             GameBgm.Play(GameBgm.Track.Boss);
         else
             GameBgm.PlayForStage(stage.type);
@@ -277,6 +290,16 @@ public partial class BattleManager
     // OnLiveStartFight 消费；撤离/重载经 StopBattleSpawnCoroutines 清掉，不残留。
     bool _liveStartAdvancePending;
     CameraFollow _liveStartFollow;
+    /// <summary>
+    /// 【2026-11-14 修「1-5 点开始战斗无反应」】玩家**已经点过**「开始战斗」的持久标记。
+    /// <para>根因：Boss 关的 <c>CoBossStageBlessingChoice</c>（三选一）阻塞在「置 _liveStartAdvancePending」
+    /// 之前，玩家在那一段里点开战 → <see cref="DoStartFight"/> 当场消费不到 pending → 之后协程把 pending
+    /// 置上却没人再点按钮 → 队伍永久停在开战位（Editor.log 实证：怪已刷 monsters=1，全程零「出发采样」）。</para>
+    /// <para>本标记只做一件事：协程走到出发点（Waves.cs 置 pending 那处）时补消费一次。
+    /// 正常流程（玩家等按钮亮着点）里它同样为 true，但那时 pending 已当场消费、这里无 pending 可消费，
+    /// 行为与改动前一致，不会二次出发。</para>
+    /// </summary>
+    bool _liveStartRequested;
 
     /// <summary>停掉开战/硬刷协程，避免连续 LoadStage 叠多个兜底。</summary>
     public void StopBattleSpawnCoroutines()
@@ -293,6 +316,8 @@ public partial class BattleManager
         _preBattleStoryPlaying = false;
         // 【2026-10-29 实时抽改版】待出发的「开始战斗」一并作废（撤离/重载不残留）
         _liveStartAdvancePending = false;
+        // 【2026-11-14】玩家已点标记同源作废：换关/撤离/重载后不该沿用上一关的点击意图
+        _liveStartRequested = false;
         if (_firstWaveSpawnCo != null)
         {
             StopCoroutine(_firstWaveSpawnCo);
@@ -313,7 +338,6 @@ public partial class BattleManager
     void ResetWaveProgress()
     {
         _activeWaveIndex = -1;
-        _waveGatePlayed = false;   // 【2026-11-13 v5】换关必清：每关各播 1 次 Gate
         _allWavesSpawned = false;
         // 【2026-11-13】换关重置波次时把流式衔接计时一并清掉，防上一关的协程串台
         StopWaveStream();
@@ -436,6 +460,36 @@ public partial class BattleManager
         var parallax = FindObjectOfType<ParallaxBackground>();
         if (parallax != null) parallax.ResetHeroOrigin();
 
+        // 【2026-11-13 修「抽奖面板一上来不是打开状态」】常显实时抽面板必须在等章节卡之前落位。
+        // 根因：本块原放在下面「等章节卡演完」的两个 while 之后，而 GameSceneManager 从 10-20 起
+        // 把章节卡挪到 Loading 关闭之后才 Show（LoadBattleAsync :247-266），卡片不透明 + Hold 2.5s/Fade 1.5s。
+        // 结果 BeginLive 实际发生在揭幕 + 4s 之后：章节卡淡出过程中底下仍是 Build() 拍的收起态
+        //（600 / DraftRoot -400），淡完那一帧突然展开 →「一上来没打开 / 按钮窜一下」。
+        // 现在提前到本协程开头（场景激活帧，章节卡还没 Show）：面板 600→750 一步落位、DraftPool
+        // 首次装载全藏在不透明黑卡底下；卡片淡出时底下已经是展开态，揭幕第一帧按钮就在屏上。
+        // 覆盖：主线正式关 / 金币本 / 竞技场 / 支线岛（裂隙与资源副本仍走各自旧面板流程，不动）。
+        // 引导局走脚本化硬引导、羁绊本 T8 拍板全程无抽奖，两者排除。
+        // 剧情窗(13000) / 半透横幅(928) 的播放顺序与层级一律不动：面板先开出，剧情照播仍盖在其上。
+        // ⚠ 必须同时提前压住硬刷：CoFirstWaveHardFallback 的等待闸门是一次性的，
+        //   从现在起直到 DoStartFight（点「开始战斗」）才解除，中途不得再有置 false 的窗口。
+        // ⚠ 只此一处 BeginLive：CoPreBattleStoryThenFirstWave 的 liveStartEarly 分支只补压制位，
+        //   二次 Begin 会重置抽奖 CD / 引导 /「开始战斗」回调（口径不变）。
+        bool liveStartEarly = !IsTutorialRun && !IsBondDungeon && !IsEndlessRift && !IsResourceDungeon;
+        if (liveStartEarly)
+        {
+            _preBattleStoryPlaying = true;
+            EnterLiveStartPhase();
+        }
+
+        // 【2026-11-14 主人「一进战斗就开始」】会播进关剧情的关（章节战前剧情 / Boss 线引子+三选一）：
+        // 从 BeginLive 这一帧起先把四个抽奖按钮置灰，剧情在章节卡淡出第一帧就播，播完才解冻。
+        // 判据与下方提前播放共用同一个 bool（不多入口）；不播剧情的关一律不冻结、不提前，行为零变化。
+        // 置灰走 BattleEntryDraftPanel.SetDrawLocked 唯一出口（_drawLocked → Refresh.cs:73），
+        // 不新增遮罩 / 输入锁 / 字段；LockDrawKeepVisible 会强隐「开始战斗」+ 抬层，进关阶段不能用。
+        bool entryStoryEarly = ShouldPlayPreBattleStory() || ShouldOfferBossBlessing();
+        if (entryStoryEarly)
+            BattleEntryDraftPanel.Instance?.SetDrawLocked(true);
+
         // 【2026-10-20 主人拍板】进战斗顺序 = Loading 装载完 → 章节卡演完 → 队伍进场开打。
         // 本协程在场景激活帧就启动（AutoGameInitializer.Awake 同步 StartNewRun），
         // 而章节卡要等 Loading 关闭后才 Show（见 GameSceneManager.LoadBattleAsync）——
@@ -455,22 +509,19 @@ public partial class BattleManager
             yield return null;
         }
 
-        // 章节开场卡已由 GameSceneManager 在 Loading 关闭后演出完毕（2026-10-20 起顺序：Loading → 章节卡 → 开打）。
-        // 【2026-11-11 主人拍板「所有战斗除了引导一开始抽奖面板都是常驻」+「按钮出来时别窜一下」】
-        // 常显实时抽面板开出时点：章节卡演完立刻开出，压在 Loading 遮罩收起之前 ——
-        // 面板 600→750 一步落位、DraftPool 首次装载全藏在遮罩底下，揭幕第一帧按钮就在屏上，
-        // 「一上来没看到常驻 / 按钮出来时玩家和场景窜一下」从根上关掉。
-        // 本批覆盖：主线正式关 / 金币本 / 竞技场 / 支线岛（裂隙与资源副本仍走各自旧面板流程，
-        // 并入要动抽奖经济分流，主人叮嘱「别把别的改出毛病」→ 本批不动）。
-        // 引导局走脚本化硬引导、羁绊本 T8 拍板全程无抽奖，两者排除。
-        // 剧情窗(13000) / 半透横幅(928) 的播放顺序与层级一律不动：面板先开出，剧情照播仍盖在其上。
-        // ⚠ 必须同时提前压住硬刷：CoFirstWaveHardFallback 的等待闸门是一次性的，
-        //   从现在起直到 DoStartFight（点「开始战斗」）才解除，中途不得再有置 false 的窗口。
-        bool liveStartEarly = !IsTutorialRun && !IsBondDungeon && !IsEndlessRift && !IsResourceDungeon;
-        if (liveStartEarly)
+        // 抽奖面板已在本协程开头开出（11-13），章节卡演完后不再二次 BeginLive。
+
+        // 【2026-11-14 主人「一进战斗就开始」】章节卡淡出那一帧（玩家看到战斗画面的第一帧）就播
+        // 进关剧情，不再等队伍走进场 / FinishBattleIntro；抽奖按钮此时仍置灰，玩家抽不了。
+        // 剧情窗 StoryDialogue(13000) > 章节卡 FullscreenFx(12000)，但章节卡此时已 Destroy，
+        // 两层不会叠；Loading 也已被 GameSceneManager 等关掉，剧情窗不会压在加载遮罩上。
+        // 只对 entryStoryEarly 的关提前：其余关 CoPreBattleStoryThenFirstWave 的后半段
+        //（抽奖分流 / ScheduleFirstWaveSpawn）仍留在走进场之后，时序一字不动。
+        if (entryStoryEarly)
         {
-            _preBattleStoryPlaying = true;
-            EnterLiveStartPhase();
+            yield return CoPreBattleStoryThenFirstWave();
+            yield return CoBossStageBlessingChoice();
+            BattleEntryDraftPanel.Instance?.SetDrawLocked(false);   // 剧情播完才恢复可抽
         }
 
         // 【2026-11-09】走进场必须等 Loading 遮罩真正收起再播：开场定位与相机跳位仍留在遮罩底下执行，
@@ -494,16 +545,19 @@ public partial class BattleManager
                 yield return CoStageEntryDraft();
             TutorialDirector.Instance?.NotifyBattleSplashFinished();
         }
-        else
+        else if (!entryStoryEarly)
             // 时序：过场卡→队伍进场→战前剧情→抽奖→首波。
             // 协程内部已包含“剧情不可用则直接放行首波”的兜底逻辑。
+            // 【2026-11-14】会播进关剧情的关已在章节卡淡出后提前播完，这里不再重播。
             yield return CoPreBattleStoryThenFirstWave();
 
         // 【2026-11-11 主人拍板「三选一就是战前剧情之后出现的」】Boss 关的 boss 线引子 + 三选一
         // 统一挂在章节线战前剧情之后：剧情窗收干净了才弹，不再压在剧情前面。
         // 门槛与防卡死仍收口在 CoBossStageBlessingChoice（非主线正式关/难度局/引导局直接 yield break）；
         // 正式关此时抽奖面板已开出但首波未刷（_preBattleStoryPlaying 压着），选完仍由「开始战斗」放行。
-        yield return CoBossStageBlessingChoice();
+        // 【2026-11-14】entryStoryEarly 的关已在提前块里播过，这里不再重播（提前块内顺序仍是先章节线后 Boss 线）。
+        if (!entryStoryEarly)
+            yield return CoBossStageBlessingChoice();
 
         // 【2026-10-18 主人报「撤离结算下面还能点抽奖」】抽奖等待期间撤离/死亡 → 上游协程当场退场：
         // 不再 StartPartyAdvance（结算界面后面队伍乱跑），也不再走开战日志分支。
@@ -518,6 +572,18 @@ public partial class BattleManager
         {
             _liveStartFollow = follow;
             _liveStartAdvancePending = true;
+            // 【2026-11-14 修「1-5 点开始战斗无反应」】玩家若在协程走到这里之前就点过「开始战斗」
+            //（Boss 关三选一 / 战前剧情那一段，按钮早已亮出），DoStartFight 当时消费不到 pending，
+            // 不补这一步队伍会永久停在开战位。补消费后 pending 立即清零，正常流程零影响。
+            // 同时解除 _preBattleStoryPlaying：玩家已明确要开打，剧情只是插播，
+            // 不解除的话若他点得更早（首波还没刷出），硬刷兜底会一直等这个位。
+            if (_liveStartRequested)
+            {
+                _liveStartAdvancePending = false;
+                _preBattleStoryPlaying = false;
+                ScheduleFirstWaveSpawn();   // 幂等：首波已刷过就直接返回
+                StartPartyAdvance(_liveStartFollow);
+            }
         }
         else
             StartPartyAdvance(follow);
@@ -843,12 +909,18 @@ public partial class BattleManager
         // 旧 5 秒倒计时 + 下一波来袭预告整段停用，函数保留不删（下线≠删除）；
         // Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」，羁绊本 Boss 前剧情保留。
         bool boss = _waves != null && nextIdx < _waves.Count && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-        // 【2026-11-13 v5】全关唯一一次 Gate / 旗帜波：仅第 1 波清场时复用现成播报链播「下一波来袭」，其余普通波仍直刷。
+        // 【2026-11-14 主人拍板·覆盖 2026-11-13 v5「全关唯一一次 Gate」】
+        // 「下一波来袭」只在**跨大波**那一拍播：下一个待刷波是另一个回合（大波）的首波时才播，
+        // 同一大波里的小波之间一律直刷（配合 WAVE_STREAM_GAP_SEC=1 秒流式压上）——
+        // 就是植物大战僵尸那种「一波跟一波涌上来，只有新的一大波才亮旗」的节奏。
+        // 大波边界真源 = 上一波的 WaveData.isRoundEnd（FormalRoundEndFlags 铺的回合末标记）。
         if (!boss)
         {
-            if (!_waveGatePlayed && _activeWaveIndex == 0)
+            bool crossRound = nextIdx > 0
+                && _waves != null && nextIdx - 1 < _waves.Count
+                && _waves[nextIdx - 1] != null && _waves[nextIdx - 1].isRoundEnd;
+            if (crossRound)
             {
-                _waveGatePlayed = true;
                 _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
                 return;
             }
@@ -892,6 +964,12 @@ public partial class BattleManager
         var next = _waves != null && nextIdx < _waves.Count ? _waves[nextIdx] : null;
         if (next == null || next.isBossWave) return;                    // Boss 波仍走清场 + 首领来袭
         if (_waveAnnounceCo != null || _waveAnnounceRunning) return;    // 「首领来袭」播报中不抢跑
+        // 【2026-11-14 主人拍板「只有跨回合才播下一波来袭」】上一波是回合末（大波边界）时流式不抢跑：
+        // 交给波清链 BeginNextWaveCountdown 的跨回合横幅（CoAnnounceThenSpawnNextWave）出兵。
+        // 不加这道闸，1 秒流式会把 ch2 [2,2] / ch3+ [2,2,2] 的跨回合横幅全部吃掉（实测零横幅）。
+        if (nextIdx > 0 && _waves != null && nextIdx - 1 < _waves.Count
+            && _waves[nextIdx - 1] != null && _waves[nextIdx - 1].isRoundEnd)
+            return;
         // 上一波还在出海（SpawnWave 会掐掉上一个出海协程，直接刷会截断上一波）→ 顺延再等 1 秒
         if (_spawnWaveCo != null) { ScheduleWaveStreamNext(); return; }
         Planner.SpawnNextPendingWave(allowStackWhileAlive: true);

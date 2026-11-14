@@ -209,11 +209,17 @@ public partial class BattleEntryDraftPanel
 
     /// <summary>
     /// 抽完之后锁住抽奖按钮（<b>只置灰，不动显隐 / 不动美术</b>），这一拍玩家只剩「继续」可点。
-    /// 正式关连抽本身就是玩法 → <b>不要调它</b>（主人 2026-10-06：正式关抽完也要点继续，但还能接着抽）。
+    /// 正式关连抽本身就是玩法 → <b>不要拿它锁「抽完一拍」</b>（主人 2026-10-06：正式关抽完也要点继续，但还能接着抽）。
+    /// 【2026-11-14】进关剧情冻结是另一回事：由 BattleStartSequenceCoroutine 在进关第一帧锁、剧情播完解锁，
+    /// 同一出口、同一语义（不让点抽），不新增第二个开关。
     /// </summary>
     public void SetDrawLocked(bool locked)
     {
         _drawLocked = locked;
+        // 【2026-11-14】LiveMode（常显实时抽）下 _draftActive 恒为 false（BeginLive 置的），
+        // 只写字段不刷新的话四个按钮仍是可点态 —— 进关剧情冻结等于没冻。
+        // 走 RefreshLive 现算出价/余额同一口径，不另算一套。
+        if (_liveMode) { RefreshLive(); return; }
         if (!_draftActive) return;
         // 按上一次 Refresh 的同一组参数重刷，不另算一套
         Refresh(_lastRandomPrice, _lastFocusPrice, _lastCats, _lastCoins, _lastFreeLeft);
