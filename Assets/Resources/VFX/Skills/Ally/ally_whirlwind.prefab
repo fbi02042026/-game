@@ -50,5 +50,6 @@ MonoBehaviour:
   loopOverride: 0
   destroyOnFinish: 0
   autoDestroyAfter: 8
-  scale: 1.5
+  scale: 1.95
   sortingOrder: 20
+  whiten: 0.45

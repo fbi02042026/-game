@@ -14,8 +14,8 @@ gale_stance,疾风架势,AtkSpeedBuff,进入疾风状态，攻速大幅提升。
 deadly_focus,致命专注,CritBuff,集中精神，暴击率提升。,暴击率 ×1.25，持续 8 秒,18,8,Boss 战或精英怪出现时自动释放,0,ally_crit_up,Buff,None,0,0,6,1,12,CritRate,0.25,1,0,0,1,0,0,0,0
 thunder_verdict,天雷裁决,Aoe,召唤天雷轰击目标区域。,造成 80% 攻击的范围伤害 每星多打 1 个目标,18,0,怪群聚集或 Boss 虚弱时自动释放,0,ally_thunder,AOE,None,0.8,0,8,1,12,Attack,0,0,0,0,1,0,0,3,0.1
 heavy_cleave,重斩,Aoe,凝聚全身力量向下重斩。,造成 80% 攻击的范围伤害（小范围高伤）,18,0,身边有敌人时自动释放,0,ally_heavy_cleave,AOE,None,0.8,0,4.5,1,12,Attack,0,0,0,0,1,0,0,3,0.1
-whirlwind,风龙卷,Aoe,召唤风龙卷向前漂移卷过敌人。,龙卷向怪群漂移，路径上每个敌人造成 65% 攻击伤害（各最多 1 次）,21,0,身边有敌人时自动释放,0,ally_whirlwind,MoveAoe,None,0.65,0,7,1,12,Attack,0,0,0,0,1,0,0,4,0.1
+whirlwind,风龙卷,Aoe,召唤风龙卷向前漂移卷过敌人。,龙卷向怪群漂移，路径上每个敌人造成 65% 攻击伤害（各最多 1 次）,21,0,身边有敌人时自动释放,0,ally_whirlwind,MoveAoe,None,0.65,0,7,1,12,Attack,0,0,0,0,1,0,0,3,0.1
 starfall,星落,Aoe,召唤星辉在大范围坠落。,造成 65% 攻击的大范围伤害,21,0,身边有敌人时自动释放,0,ally_starfall,AOE,None,0.65,0,9,1,12,Attack,0,0,0,0,1,0,0,5,0.1
 career_charge,破阵冲锋,Aoe,高速冲向敌人并撞散怪群。,造成 80% 攻击的范围伤害 并击退,2.5,0,攒满自动释放,0,ally_career_charge,AOE,MeleeSlash,0.8,0,4.5,1,12,Attack,0,0,0,0,1,0,0,3,0.1
 career_scatter,散射箭,Aoe,一次射出多支箭覆盖扇形区域。,每支箭造成 35% 攻击伤害 单体最多吃 2 箭,2.5,0,攒满自动释放,0,ally_career_scatter,AOE,Bow,0.35,0,1.4,5,12,Attack,0,0,0,0,1,0,0,0,0.1
-career_orb,大法球,Aoe,凝聚巨型法球砸向怪群。,造成 120% 攻击的范围伤害 并击退,4,0,攒满自动释放,0,ally_career_orb,AOE,Orb,1.2,0,6,1,12,Attack,0,0,0,0,1,0,0,5,0.1
+career_orb,大法球,Aoe,凝聚巨型法球砸向怪群。,造成 120% 攻击的范围伤害 并击退,4,0,攒满自动释放,0,ally_career_orb,AOE,Orb,1.2,0,6,1,12,Attack,0,0,0,0,1,0,0,4,0.1

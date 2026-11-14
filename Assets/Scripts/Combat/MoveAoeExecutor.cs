@@ -4,33 +4,41 @@ using UnityEngine;
 /// <summary>
 /// 移动判定 AOE（2026-11-05 主人拍板「风龙卷是移动的 所有范围也是移动的」，
 /// 改造点见 Docs/《战斗趣味升级_pixelfx特效与打击反馈》_待办任务清单.md）：
-/// 生成时锁定怪群方向，判定盒随锚点直线漂移，周期性重叠检测；
-/// 每个目标整个持续期最多吃 1 次伤害（防反复碾怪刷伤），命中名单容量 = aoeMaxTargets；
-/// 走完漂移距离 / 命满名单 / 战斗结束 / 施法者销毁 → 自毁（VFX 子物体随之销毁）。
+/// 锚点绕怪群质心做圆周运动，判定盒随锚点走，周期性重叠检测；
+/// 2026-11-14 改为可重复碰触：每只怪有独立内置 CD，每次扫描只结算 aoeMaxTargets 个最近目标；
+/// 走完弧长 / 战斗结束 / 施法者销毁 → 自毁（VFX 子物体随之销毁）。
 /// 表驱动入口：SkillType.MoveAoe（player_skills / merc_skills 均可），由 SkillSystem.UseSkill 分支进入。
-/// 降级口径：若要「半径内游走」不必改本组件——把漂移方向每 0.5s 随机化即可（当前按主人首选的直线漂移实现）。
+/// 风龙卷与佣兵 SK021 烈焰龙卷共用本组件，轨迹 / 速度 / 碰触口径同步生效。
 /// </summary>
 public class MoveAoeExecutor : MonoBehaviour
 {
     const float ScanInterval = 0.1f;
-    // 2026-11-08 主人拍板「龙卷时间太短还没看到就没了」：漂移 3.2 → 1.0 单位/秒，
-    // 与下面钳进镜头的漂移距离配合，龙卷在屏内稳定停留约 3.5 秒（原 2.2s，且命满 4 只即秒销毁）。
-    const float MoveSpeed = 1.0f;
-    // 漂移距离上限：战斗镜头半屏宽 ≈ CAMERA_ORTHO_SIZE × 720/1280 ≈ 3.04，取 3.5 保证走完仍在屏内。
-    // 原样吃表半径(风7/火8)会一路飘出镜头，而 Scan 对屏外怪直接 continue —— 后半程纯空跑还看不见。
+    // 2026-11-14：1.0 → 0.7（慢 30%）。3.5 弧长 / 0.7 = 5s 判定段，+2s 余韵 = 7s < prefab 8s 保险丝。
+    const float MoveSpeed = 0.7f;
+    // 弧长累计上限（原「直线漂移距离」）：绕圈也按走过的弧长收口，位置不再单向累加。
     const float MaxTravelDist = 3.5f;
     // 判定结束后的「余韵」（2026-11-08 主人追加「触发完了也可以再转一会消失」）：
-    // 不再移动、不再结算伤害，只让 loop 特效再转一整轮才收。2 秒 = sheet 60 帧 @30fps 的完整一轮；
-    // 总展示 3.5+2=5.5s < 两个龙卷 prefab 的 autoDestroyAfter=8s 保险丝，不会中途被掐掉。
+    // 不再移动、不再结算伤害，只让 loop 特效再转一整轮才收。
     const float LingerDuration = 2f;
+    // 圆周半径：取施法者到怪群质心的距离，钳在 0.8~1.5 —— 龙卷始终贴着怪群绕，不会飘出镜头。
+    const float OrbitRadiusMin = 0.8f;
+    const float OrbitRadiusMax = 1.5f;
+    // 同一只怪两次受击的最小间隔（可重复碰触的内置 CD）。
+    const float HitCooldown = 0.8f;
+    // 每次扫描最多结算的敌人数上限；表 aoeMaxTargets 为 0 = 不限的技能不受此约束。
+    const int MaxHitTargets = 6;
 
     float _damage = 1f;
     UnitBase _caster;
     float _hitRadius = 2.5f;
     int _maxTargets = int.MaxValue;
     float _remainDist;
-    Vector2 _dir = Vector2.right;
-    readonly HashSet<UnitBase> _hit = new HashSet<UnitBase>();
+    float _planeZ;
+    Vector2 _orbitCenter;
+    float _orbitRadius;
+    float _orbitAngle;
+    readonly Dictionary<UnitBase, float> _nextHitAt = new Dictionary<UnitBase, float>();
+    readonly List<UnitBase> _candidates = new List<UnitBase>();
     float _scanTimer;
     /// <summary>≥0 = 已进入余韵（判定结束、只播特效）；-1 = 仍在漂移判定。</summary>
     float _lingerTimer = -1f;
@@ -43,20 +51,23 @@ public class MoveAoeExecutor : MonoBehaviour
         if (bm == null) return;
 
         var go = new GameObject($"MoveAoe_{skill.skillId}");
-        go.transform.position = caster.GetHitPosition();
 
         var ex = go.AddComponent<MoveAoeExecutor>();
         ex._caster = caster;
         ex._damage = Mathf.Max(1f, damage);
-        // 判定盒半径：表半径的缩小档（漂移的是「路径」，不是一锤子大圆），钳在 2~3.5
+        // 判定盒半径：表半径的缩小档，钳在 2~3.5（视觉放大 30% 不改判定盒）
         ex._hitRadius = Mathf.Clamp(skill.aoeRadius > 0f ? skill.aoeRadius * 0.4f : 2.5f, 2f, 3.5f);
-        if (skill.aoeMaxTargets > 0) ex._maxTargets = skill.aoeMaxTargets;
+        if (skill.aoeMaxTargets > 0)
+            ex._maxTargets = Mathf.Min(skill.aoeMaxTargets, MaxHitTargets);
         ex._remainDist = Mathf.Min(skill.aoeRadius > 0f ? skill.aoeRadius : 7f, MaxTravelDist);
 
-        // 生成瞬间锁「身边怪最密的那只」的方向 = 直冲怪群（与 SkillSystem.PickAoeCenter 同思想，简化成方向）
-        Vector2 self = caster.transform.position;
-        Vector2 best = self;
-        int bestCount = -1;
+        // 圆心 = 屏内怪群质心；半径取施法者到质心的距离（钳 0.8~1.5）。
+        // 圆周起点就是生成点 → 龙卷直接出现在怪群里，第一帧不跳变，也不会一路飘出镜头。
+        Vector3 origin = caster.GetHitPosition();
+        Vector2 self = origin;
+        ex._planeZ = origin.z;
+        Vector2 sum = Vector2.zero;
+        int count = 0;
         var enemyList = caster.isAlly ? bm.monsters : bm.allyUnits;
         if (enemyList != null)
         {
@@ -65,24 +76,17 @@ public class MoveAoeExecutor : MonoBehaviour
                 var e = enemyList[i];
                 if (e == null || e.isDead) continue;
                 if (!GameConfig.IsInCombatViewport(e)) continue;
-                int n = 0;
-                for (int j = 0; j < enemyList.Count; j++)
-                {
-                    var o = enemyList[j];
-                    if (o == null || o.isDead) continue;
-                    if (Vector2.Distance(e.transform.position, o.transform.position) <= 3f) n++;
-                }
-                if (n > bestCount)
-                {
-                    bestCount = n;
-                    best = e.transform.position;
-                }
+                sum += (Vector2)e.transform.position;
+                count++;
             }
         }
-        Vector2 d = best - self;
-        ex._dir = d.sqrMagnitude > 0.0001f
-            ? d.normalized
-            : new Vector2(Mathf.Abs(caster.GetVfxFacingDir()) < 0.5f ? 1f : caster.GetVfxFacingDir(), 0f);
+        ex._orbitCenter = count > 0 ? sum / count : self;
+        Vector2 off = self - ex._orbitCenter;
+        ex._orbitRadius = Mathf.Clamp(off.magnitude, OrbitRadiusMin, OrbitRadiusMax);
+        ex._orbitAngle = Mathf.Atan2(off.y, off.x);
+        Vector2 start = ex._orbitCenter
+            + new Vector2(Mathf.Cos(ex._orbitAngle), Mathf.Sin(ex._orbitAngle)) * ex._orbitRadius;
+        go.transform.position = new Vector3(start.x, start.y, ex._planeZ);
 
         // VFX 挂在锚点上随行（prefab 根挂 PixelFxSheetPlayer；龙卷类 sheet 自带 loop）
         var fxPrefab = SkillRegistry.Instance != null
@@ -121,9 +125,12 @@ public class MoveAoeExecutor : MonoBehaviour
             return;
         }
 
-        Vector2 step = _dir * (MoveSpeed * dt);
-        transform.position += (Vector3)step;
-        _remainDist -= step.magnitude;
+        // 圆周：角速度 = 线速度 / 半径；位置直接落在圆周上，不累加单向位移。
+        _orbitAngle += (MoveSpeed / Mathf.Max(0.01f, _orbitRadius)) * dt;
+        Vector2 radial = new Vector2(Mathf.Cos(_orbitAngle), Mathf.Sin(_orbitAngle));
+        Vector2 p = _orbitCenter + radial * _orbitRadius;
+        transform.position = new Vector3(p.x, p.y, _planeZ);
+        _remainDist -= MoveSpeed * dt;
 
         _scanTimer -= dt;
         if (_scanTimer <= 0f)
@@ -132,8 +139,7 @@ public class MoveAoeExecutor : MonoBehaviour
             Scan();
         }
 
-        // 2026-11-08：命满名单不提前销毁、走完漂移也不立刻销毁 —— 进余韵再转一整轮。
-        // 伤害上限由 _hit 名单 + Scan 的 _maxTargets 判断保证，与展示时长彻底解耦。
+        // 走完弧长后不立刻销毁 —— 进余韵再转一整轮；判定段完全由 _remainDist 收口，与命中数解耦。
         if (_remainDist <= 0f)
             _lingerTimer = LingerDuration;
     }
@@ -152,15 +158,27 @@ public class MoveAoeExecutor : MonoBehaviour
         if (enemyList == null) return;
 
         Vector2 center = transform.position;
+        float now = Time.time;
+        _candidates.Clear();
         for (int i = 0; i < enemyList.Count; i++)
         {
             var e = enemyList[i];
-            if (e == null || e.isDead || _hit.Contains(e)) continue;
+            if (e == null || e.isDead) continue;
             if (!GameConfig.IsInCombatViewport(e)) continue;
             if (Vector2.Distance(center, e.transform.position) > _hitRadius) continue;
-            if (_hit.Count >= _maxTargets) break;
+            if (_nextHitAt.TryGetValue(e, out float readyAt) && now < readyAt) continue;
+            _candidates.Add(e);
+        }
+        if (_candidates.Count == 0) return;
 
-            _hit.Add(e);   // 先记名单再结算：打死触发波次逻辑也不会二次进入
+        // 就近优先：每次扫描只结算 _maxTargets 只，内置 CD 让同一只怪可以反复被刮到。
+        _candidates.Sort((a, b) => Vector2.Distance(center, a.transform.position)
+            .CompareTo(Vector2.Distance(center, b.transform.position)));
+        int n = Mathf.Min(_candidates.Count, _maxTargets);
+        for (int i = 0; i < n; i++)
+        {
+            var e = _candidates[i];
+            _nextHitAt[e] = now + HitCooldown;  // 先记 CD 再结算：打死触发波次逻辑也不会同帧二次进入
             float dmg = DamageFormula.ApplyCrit(_damage, _caster.attr, out bool isCrit);
             dmg = DamageFormula.ApplyAttackerSpecials(dmg, _caster, e);
             int vfxDir = e.transform.position.x >= center.x ? 1 : -1;

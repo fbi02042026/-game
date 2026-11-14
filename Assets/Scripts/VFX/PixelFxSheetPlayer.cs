@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
@@ -27,6 +28,9 @@ public class PixelFxSheetPlayer : MonoBehaviour
     public float scale = 1f;
     public int sortingOrder = 20;
 
+    [Header("偏白（0 = 原贴图；>0 = 运行时向白插值，只对本 prefab 生效）")]
+    [Range(0f, 1f)] public float whiten;
+
     SpriteRenderer _sr;
     Sprite[] _frames;
     float _frameDur = 1f / 30f;
@@ -35,6 +39,9 @@ public class PixelFxSheetPlayer : MonoBehaviour
     float _timer;
     bool _finished;
     float _bornAt;
+
+    // 亮化后的 sheet 缓存：贴图 isReadable=0，每次施法重新读 2M 像素会卡，按 path+whiten 只算一次。
+    static readonly Dictionary<string, Texture2D> _whitenedCache = new Dictionary<string, Texture2D>();
 
     // —— sheet JSON 反序列化结构（只取需要的字段；JsonUtility 不吃字典，pixelfx 是固定形状） ——
     [System.Serializable] class SheetJson { public FrameEntry[] frames; public SheetMeta meta; }
@@ -89,6 +96,8 @@ public class PixelFxSheetPlayer : MonoBehaviour
         }
 
         var px = json.meta.pixelfx;
+        // 只替换本实例用的纹理；whiten=0 时原样引用，其余特效零变化。
+        Texture2D sheetTex = whiten > 0f ? GetWhitened(tex, whiten, sheetPath) : tex;
         int fw = px.frameSize[0], fh = px.frameSize[1];
         int cols = px.columns > 0 ? px.columns : Mathf.Max(1, Mathf.CeilToInt((float)tex.width / fw));
         int count = px.frames > 0 ? px.frames : (json.frames != null ? json.frames.Length : 0);
@@ -110,12 +119,52 @@ public class PixelFxSheetPlayer : MonoBehaviour
             int col = i % cols;
             int row = i / cols;
             var rect = new Rect(col * fw, row * fh, fw, fh);
-            _frames[i] = Sprite.Create(tex, rect, pivot, 100f, 0u, SpriteMeshType.FullRect);
+            _frames[i] = Sprite.Create(sheetTex, rect, pivot, 100f, 0u, SpriteMeshType.FullRect);
         }
 
         _frameDur = 1f / (fpsOverride > 0 ? fpsOverride : (px.fps > 0 ? px.fps : 30));
         // fpsOverride>0 时 loop 也以 prefab 上的覆盖为准；否则信 JSON
         _loop = fpsOverride > 0 ? loopOverride : px.loop;
+    }
+
+    /// <summary>
+    /// 运行时把 sheet 往白色插值（提亮 + 去饱和），只替换本实例用的纹理副本，不动磁盘贴图。
+    /// 贴图 isReadable=0 取不到像素 → 先 Blit 到 sRGB RT 再 ReadPixels 拿一份可读副本；
+    /// 按 path+whiten 缓存，避免每次施法重复 200 万像素运算。
+    /// alpha=0 的透明背景一律跳过，否则会露出白方块。
+    /// </summary>
+    static Texture2D GetWhitened(Texture2D src, float amount, string keyPath)
+    {
+        string key = keyPath + "|" + amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        if (_whitenedCache.TryGetValue(key, out var cached) && cached != null) return cached;
+
+        int w = src.width, h = src.height;
+        var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        var prevActive = RenderTexture.active;
+        Graphics.Blit(src, rt);
+        RenderTexture.active = rt;
+        var copy = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        copy.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+        copy.Apply(false, false);
+        RenderTexture.active = prevActive;
+        RenderTexture.ReleaseTemporary(rt);
+
+        var px = copy.GetPixels32();
+        for (int i = 0; i < px.Length; i++)
+        {
+            var c = px[i];
+            if (c.a == 0) continue;
+            c.r = (byte)Mathf.RoundToInt(Mathf.Lerp(c.r, 255f, amount));
+            c.g = (byte)Mathf.RoundToInt(Mathf.Lerp(c.g, 255f, amount));
+            c.b = (byte)Mathf.RoundToInt(Mathf.Lerp(c.b, 255f, amount));
+            px[i] = c;
+        }
+        copy.SetPixels32(px);
+        copy.filterMode = FilterMode.Point;
+        copy.wrapMode = TextureWrapMode.Clamp;
+        copy.Apply(false, true);
+        _whitenedCache[key] = copy;
+        return copy;
     }
 
     void Update()
