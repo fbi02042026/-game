@@ -417,7 +417,7 @@ public partial class UnitBase
             if (enemy == null || enemy.isDead || !enemy.gameObject.activeInHierarchy) continue;
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
-            if (!GameConfig.IsInCombatViewport(enemy)) continue;
+            if (!GameConfig.CanAcquireTarget(this, enemy)) continue;
             if (enemy == target) currentTargetCandidate = true;
             float dist = GetCombatDist(this, enemy);
             if (dist < minDist)

@@ -119,17 +119,29 @@ public class MonsterAffix : MonoBehaviour
         if (!Mathf.Approximately(moveSpeed, 1f))
             m.attr.SetAttr(AttrType.MoveSpeed, m.attr.GetAttr(AttrType.MoveSpeed) * moveSpeed);
 
-        // 【2026-11-12 主人拍板】只表定词缀怪（VisualTinted）按词条加基础属性：
-        // 每个词条只加自己那一项，多个词条累乘；精英/Boss 掷骰词缀属性一律不动。
-        if (VisualTinted)
+        // 【2026-11-14 主人拍板「要让带词条的怪比普通怪难打」→ 覆盖 2026-11-12 的「掷骰词缀属性一律不动」】
+        // 旧口径只有表定词缀怪（VisualTinted）吃 HpMul/AtkMul/DefMul，精英/Boss 掷骰词缀完全不加血攻
+        // → 玩家在普通关顺手打死的随机词缀怪，血攻和普通怪一模一样，「带词条更难打」根本不成立。
+        // 现口径：两类都吃；表定全额，掷骰按 RollAttrScale（0.6）向 1 收敛（精英/Boss 本身够厚，避免叠过头）。
         {
+            float attrScale = VisualTinted ? 1f : MonsterAffixDefs.RollAttrScale;
             float hpMul = 1f, atkMul = 1f, defMul = 1f;
             for (int i = 0; i < ids.Count; i++)
             {
                 var d = MonsterAffixDefs.Get(ids[i]);
-                if (d.HpMul > 0f) hpMul *= d.HpMul;
-                if (d.AtkMul > 0f) atkMul *= d.AtkMul;
-                if (d.DefMul > 0f) defMul *= d.DefMul;
+                if (d.HpMul > 0f) hpMul *= Mathf.Lerp(1f, d.HpMul, attrScale);
+                if (d.AtkMul > 0f) atkMul *= Mathf.Lerp(1f, d.AtkMul, attrScale);
+                if (d.DefMul > 0f) defMul *= Mathf.Lerp(1f, d.DefMul, attrScale);
+            }
+            // 【2026-11-14 主人拍板「词条怪就要比普通硬」】表定词缀怪整体再乘一层强度档
+            // （【2026-11-15 口径】血 ×3 / 攻 ×2，真源 MonsterAffixDefs.FixedAffix*），叠在各词条自己的乘子之上；
+            // 精英/Boss 掷骰词缀不吃这层（VisualTinted=false）。
+            // 基准说明：这里乘的 m.attr 是 Monster.Init 按当前章/座/节 + 当前波算完的属性，
+            // 跟着当前关的小怪一起爬坡；不取第一章表值、不写死常量。
+            if (VisualTinted)
+            {
+                hpMul *= MonsterAffixDefs.FixedAffixHpMul;
+                atkMul *= MonsterAffixDefs.FixedAffixAtkMul;
             }
             if (!Mathf.Approximately(hpMul, 1f))
             {

@@ -194,7 +194,7 @@ public static class StaminaSystem
         return true;
     }
 
-    /// <summary>无限裂隙进本扣体力（15 体力；每日 2 次机会按打通层数扣，见 EndlessRiftRules.ConsumeStageClear）</summary>
+    /// <summary>无限裂隙进本扣体力（15 体力；每日 2 次机会也在此同时扣，见 EndlessRiftRules.TryConsumeEnter）</summary>
     public static bool TrySpendForEndlessRift()
     {
         return TrySpend(ENDLESS_RIFT_COST);

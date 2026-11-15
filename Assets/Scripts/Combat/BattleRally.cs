@@ -8,7 +8,7 @@ using System.Collections.Generic;
 /// 【2026-11-09 主人拍板】战斗中「点击地点 → 我方全体集结」。
 /// 口径：战场 = 顶栏底边 ~ 底部面板顶边之间（UI 实时矩形）；落点 X 钳到当前相机视野、
 ///       Y 钳到 walk 可行走带；点击不推动相机 / 推图；引导期间禁点；
-///       首人到达后 2 秒才恢复自动索敌；落点有敌人立即恢复。
+///       首人一到点立即恢复自动索敌 / 追敌（不留驻留期）；落点有敌人立即恢复。
 /// 【2026-11-11 第五版】判「点在哪」用屏幕 UI 区域，判「走到哪」用世界真源，两层分开。
 ///       旧版把可行走带（walk 投影只有约 1.65 世界单位）当可点区，整屏只剩中间一条窄带能点，
 ///       主人报「有的地方有用有的没用」；再上一版拿 map UI 矩形（140×140）判更是全屏误杀。
@@ -16,8 +16,12 @@ using System.Collections.Generic;
 /// </summary>
 public static class BattleRally
 {
-    /// <summary>首人到达后驻留时长（秒）。</summary>
-    public const float HOLD_SEC = 2f;
+    /// <summary>
+    /// 首人到达后的驻留时长（秒）。【2026-11-13 主人拍板「集结之后要立即开始寻敌」】恒为 0：
+    /// 到达同帧即 Reset，全队立刻回自动索敌 / 追敌。不要再调回正数 —— 正数会让到点后
+    /// Hero.AIUpdate / Mercenary.AIUpdate 继续把 target 置 null，全队站着发呆。
+    /// </summary>
+    public const float HOLD_SEC = 0f;
     /// <summary>到达判定阈值（世界单位）。</summary>
     public const float ARRIVE_EPS = 0.35f;
     /// <summary>落点附近有敌人的判定半径（世界单位）。</summary>
@@ -98,7 +102,9 @@ public static class BattleRally
         if (!_active) return;
         if (!CanTap(bm)) { Reset(); return; }
 
-        // 【2026-11-09 主人拍板「按首人到达」】第一个我方单位到点就开始 2 秒驻留
+        // 【2026-11-13 主人拍板「集结之后要立即开始寻敌」】第一个我方单位真到点就结束集结：
+        // HOLD_SEC=0 → 本帧下面两条出口必命中其一，Reset 让全队同帧恢复自动索敌 / 追敌。
+        // 旧口径「到达后再驻留 2 秒」已废：那 2 秒里 Hero / Mercenary 都把 target 置 null 站着不动。
         if (_firstArriveAt < 0f && AnyAllyArrived(bm))
         {
             _firstArriveAt = Time.time;
@@ -250,9 +256,12 @@ public static class BattleRally
 
     static bool AnyAllyArrived(BattleManager bm)
     {
+        // 【2026-11-13】旧实现只比 X：点队伍正上 / 正下方（X 相同）时点击当帧就误判「已到达」，
+        // 驻留归零后会同帧 Reset，全队根本不出发。补 Y，与 TryGetMoveDir 的到点口径一致。
         var hero = bm.hero;
         if (hero != null && !hero.isDead
-            && Mathf.Abs(hero.transform.position.x - _point.x) <= ARRIVE_EPS)
+            && Mathf.Abs(hero.transform.position.x - _point.x) <= ARRIVE_EPS
+            && Mathf.Abs(hero.FootY - _point.y) <= ARRIVE_EPS)
             return true;
         var allies = bm.allyUnits;
         if (allies == null) return false;
@@ -260,7 +269,8 @@ public static class BattleRally
         {
             var u = allies[i];
             if (u == null || u.isDead) continue;
-            if (Mathf.Abs(u.transform.position.x - _point.x) <= ARRIVE_EPS)
+            if (Mathf.Abs(u.transform.position.x - _point.x) <= ARRIVE_EPS
+                && Mathf.Abs(u.FootY - _point.y) <= ARRIVE_EPS)
                 return true;
         }
         return false;

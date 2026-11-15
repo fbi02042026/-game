@@ -149,6 +149,20 @@ public static partial class GameConfig
     }
 
     /// <summary>
+    /// 【2026-11-15 主人拍板「即使超出屏幕也应该去寻敌」】索敌专用的视口闸。
+    /// 我方（isAlly=true）寻敌不看镜头：冲锋越过头后敌人被甩到相机后方，按旧闸会 target=null
+    /// 原地站桩，只能等怪追回来才重新开打。敌方（怪物 / 竞技场机器人）仍走 IsInCombatViewport 原闸，行为一字不变。
+    /// ⚠ 只用于「选目标 / 维持锁」；出手、伤害、技能结算一律用 IsInCombatViewport 原闸
+    /// （UnitBase.Attack.cs 仍在），屏外目标锁到后由 AI 走回视口内才开打，绝不隔空开砍。
+    /// </summary>
+    public static bool CanAcquireTarget(UnitBase seeker, UnitBase candidate)
+    {
+        if (candidate == null) return false;
+        if (seeker != null && seeker.isAlly) return true;
+        return IsInCombatViewport(candidate);
+    }
+
+    /// <summary>
     /// 主手/副手武器射程：一律以 WeaponKind 表为准。
     /// 历史模板大量写死 96 像素，若优先读模板会把弓也锁成近战距。
     /// </summary>

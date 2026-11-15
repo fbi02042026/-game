@@ -196,10 +196,16 @@ public partial class Monster
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = statScale * guildScale * diffScale;
+        // 【2026-11-15 主人口径「小怪的属性也要增加」】裂隙普通小怪随绝对层数额外爬坡，
+        // 配合「越往后普通怪越少」做少而精。只作用非精英非 BOSS 槽位（精英 4f / 大 BOSS 0.96f 锚点不叠）。
+        // mobScale 只喂属性；掉金 / 经验两处仍用 scale，不连带放大经济产出。
+        float endlessMobMul = endlessRift && !bossUnit && !eliteWave
+            ? GameConfig.EndlessMobStatMul(BattleManager.Instance.EndlessRiftStage) : 1f;
+        float mobScale = scale * endlessMobMul;
         // 【2026-11-02 主人拍板「无限裂隙血陡攻缓」】攻击侧单独一条线：血量吃满层数曲线（打不动 = 时间压力），
         // 攻击只吃 45%（EndlessAttackMul），避免深层一刀秒人。非裂隙 atkScale 恒等于 scale，行为零变化。
         float atkScale = endlessRift
-            ? GameConfig.EndlessAttackMul(BattleManager.Instance.EndlessRiftStage) * guildScale * diffScale
+            ? GameConfig.EndlessAttackMul(BattleManager.Instance.EndlessRiftStage) * guildScale * diffScale * endlessMobMul
             : scale;
 
         float baseHp = template != null && template.baseHp > 0 ? template.baseHp : GameConfig.MONSTER_NORMAL_HP;
@@ -273,7 +279,7 @@ public partial class Monster
         else
             ttkMul = GameConfig.GetStatScale(chapter, stageIdx0);
         // ?????? chapterScale????Boss ??TTK ????????
-        float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (scale);
+        float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (mobScale);
         // 【2026-10-22 主人拍板「无限裂隙先排除了 分成两条线」】血量分两条线：
         // 主线吃全局砍半（MONSTER_HP_GLOBAL_MUL=0.5）；无尽裂隙不吃全局砍半，
         // 强度只随层数走（EndlessDifficultyMul）。攻击侧同样裂隙不参与（ChapterAtkMul）。
@@ -341,7 +347,25 @@ public partial class Monster
                 baseHp = firstMob.baseHp * roleMul * bossStatMul;
             }
         }
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul);
+        // 【2026-11-14 主人拍板「属性分维度爬坡 + 数个小高潮，不要一马平川」】正式主线关逐关属性轮动
+        // 偏差层（真源 GameConfig.GetStageStatDev*，叠在既有 章×座×节 曲线上）：
+        //   血 = 奇数关 +6%；攻 = 精英关 +10% / Boss 关 +8%（两个小高潮，其余关回落）；防 = 精英 +5% / Boss +6%。
+        // 门槛 IsFormalMainRun：裂隙 / 副本 / 支线岛 / 引导一律 1，不吃（只影响主线体感）。
+        // 精英/Boss 本体吃攻/防偏差（与既有 statScale 同语义）；血偏差只吃普通怪
+        // （精英/Boss 血量走 chapterFirstHpRule 独立链，不与本层叠加）。
+        bool stageDevOn = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
+        bool devEliteStage = stageDevOn && gStageType == StageType.Elite;
+        bool devFinalStage = stageDevOn && BattleManager.Instance != null
+            && stageIdx0 == GameConfig.StagesPerGrandOf(BattleManager.Instance.CurrentChapter) - 1;
+        float devHp = stageDevOn && !bossUnit && !eliteWave
+            ? GameConfig.GetStageStatDevHp(stageIdx0) : 1f;
+        float devAtk = stageDevOn ? GameConfig.GetStageStatDevAtk(devEliteStage, devFinalStage) : 1f;
+        float devDef = stageDevOn ? GameConfig.GetStageStatDevDef(devEliteStage, devFinalStage) : 1f;
+
+        // 【2026-11-15】裂隙精英血量加倍：裂隙不走 chapterFirstHpRule 的大血量档，单独补一档。
+        // 只判裂隙 + 精英槽位，Boss / 小怪 / 其它玩法一律 ×1，行为零变化。
+        float endlessEliteHpMul = endlessRift && eliteWave ? GameConfig.ENDLESS_ELITE_HP_MUL : 1f;
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
         // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；
@@ -360,9 +384,19 @@ public partial class Monster
         // 【2026-10-23 主人拍板「引导的不要动」】引导局不吃远程削减（10-22 批次的一部分）。
         if (!_isBossUnit && !isTutorialRun && MonsterAttackStyleTable.IsRanged(_attackStyle))
             baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
-        // 【2026-10-14】style 已定稿（含魔法型强制 Ranged），此处抽索敌策略：近战按距离、
-        // 远程先打脆皮职业、按 MONSTER_LOW_HP_TARGET_RATIO 比例抽出「挑血少的打」。
-        _targetingPolicy = MonsterTargeting.RollPolicy(MonsterAttackStyleTable.IsRanged(_attackStyle));
+        // 【2026-11-15 口径】词条判定前移：索敌按「这只怪有没有词条」分流，真源 = monster_stats.affix 列。
+        // 表定词条怪 / 精英 / Boss 都会挂上词缀（下方挂词缀与这里共用同一份解析结果，不写第二份判定）；
+        // 精英与 Boss 走 RollAndAttach 恒会掷到至少 1 个词缀，其余普通小怪不挂。
+        var tableAffixes = MonsterAffixDefs.ParseAffixList(template != null ? template.tableAffix : null);
+        bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
+        // 【2026-11-15 主人口径「让裂隙也刷表定词条怪」】主线正式关与无限裂隙都挂表定词缀；
+        // 引导 / 活动副本 / 支线岛 / 竞技场仍不挂（它们没有词条怪配额池，护住原有体验）。
+        bool affixRunAllowed = formalMainRun || endlessRift;
+        bool hasFixedAffix = !(_isBossUnit || eliteWave) && tableAffixes.Count > 0 && affixRunAllowed;
+        bool hasAffix = hasFixedAffix || _isBossUnit || eliteWave;
+        // 【2026-11-15 口径】style 已定稿（含魔法型强制 Ranged），此处抽索敌策略：
+        // 无词条的普通小怪恒按范围（谁近打谁）；只有带词条的怪才可能抽到「先打脆皮 / 挑血少的」。
+        _targetingPolicy = MonsterTargeting.RollPolicy(MonsterAttackStyleTable.IsRanged(_attackStyle), hasAffix);
         if (_isBossUnit)
         {
             _bossTargetShiftCd = GameConfig.BOSS_TARGET_SHIFT_INTERVAL;
@@ -379,13 +413,13 @@ public partial class Monster
             float baseMagDef = (template != null && template.baseMagicDefense > 0f)
                 ? template.baseMagicDefense
                 : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
-            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul);
-            attr.SetAttr(AttrType.MagicDefense, baseMagDef * scale);
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk);
+            attr.SetAttr(AttrType.MagicDefense, baseMagDef * mobScale * devDef);
         }
         else
         {
-            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul);
-            attr.SetAttr(AttrType.Defense, baseDef * scale);
+            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk);
+            attr.SetAttr(AttrType.Defense, baseDef * mobScale * devDef);
             attr.SetAttr(AttrType.MagicAttack, 0f);
             attr.SetAttr(AttrType.MagicDefense, 0f);
         }
@@ -478,12 +512,11 @@ public partial class Monster
         _bossPhase2Started = false;
 
         // V6 词缀：属性全部按表算完之后再叠乘子，避免被后续赋值覆盖。
-        // 【2026-10-26 词缀怪】monster_stats.affix 列：普通小怪挂表定词缀（仅正式主线关；
-        // 引导局/金币本/徽记本/裂隙不动，护住演出与 farming 体验）。
+        // 【2026-10-26 词缀怪】monster_stats.affix 列：普通小怪挂表定词缀。
+        // 【2026-11-15】适用范围由「仅正式主线关」放宽到「正式主线关 + 无限裂隙」；
+        // 引导局/金币本/徽记本等仍不动，护住演出与 farming 体验。
         // 精英/Boss/签名怪仍走掷骰（签名怪偏好经 pendingBias 进 Roll，优先级高于表定词缀，不能截胡）。
-        var tableAffixes = MonsterAffixDefs.ParseAffixList(template != null ? template.tableAffix : null);
-        bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
-        if (!(_isBossUnit || _eliteWave) && tableAffixes.Count > 0 && formalMainRun)
+        if (hasFixedAffix)
         {
             MonsterAffix.AttachFixed(this, tableAffixes);
             // 【2026-11-03 主人拍板】表定词条怪首次登场提示：屏幕左缘头像 + 黄叹号，
@@ -500,21 +533,31 @@ public partial class Monster
         _canUseActiveSkill = !string.IsNullOrEmpty(_skillId);
         bool strong = eliteWave || _isBossUnit;
         bool rangedSkill = _canUseActiveSkill && MonsterAttackStyleTable.IsRanged(_attackStyle);
+        // 【2026-11-15 全局口径】精英/Boss 出场不预置半槽能量：头顶充能条只在开打后真攒槽时才亮，
+        // 不再「一出场就显示」。普通小怪（含远程 0.88f）逐字不变。
         _skillEnergy = _canUseActiveSkill
-            ? (strong ? 0.5f : (rangedSkill ? 0.88f : 0f))
+            ? (strong ? 0f : (rangedSkill ? 0.88f : 0f))
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
 
         // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开，避免开打瞬间齐射。
         // 携带规则：远程 Boss 两种全带（追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；
-        // 远程精英只随机带一种（扇形/追踪五五开，不受阶段限制）。近战怪与远程小怪不带。
+        // 远程精英扇形散射恒带、追踪弹幕五五开（2026-11-14 改）。近战怪与远程小怪不带。
         // 【2026-11-13 主人拍板「boss 可以带，但是要有 cd 稍微长点」】Boss 散射保留恒带，
         //   只把首发延到 BOSS_FAN_VOLLEY_FIRST_DELAY(8s)、之后每 BOSS_FAN_VOLLEY_COOLDOWN(40s) 一次
-        //   （长 CD 在 Monster.Skills 起手处按 _isBossUnit 分流，精英仍 20s）。
+        //   （长 CD 在 Monster.Skills 起手处按「真 Boss」分流，精英仍 20s）。
+        // 【2026-11-14 主人「不要总是发射那个散射，但是不能一次不发」】原来精英扇形/追踪二选一，
+        //   叠加近战精英不带弹幕，能放散射的精英只剩约 1/4，一场下来可能一次都看不到。
+        //   改为远程精英恒带扇形散射、首发 1.2s（入场走位期间 CD 已走完，进射程即放），
+        //   之后仍走 MONSTER_FAN_VOLLEY_COOLDOWN(20s) 长 CD，不回到「一直在放」。
+        //   Boss 专属 8s/40s 只对「真 Boss」(_isBossUnit && !_eliteWave) 生效：被贴图编号≥11
+        //   误判成 _isBossUnit 的精英若吃这一档，整场精英战撑不到首发，就成了零次。
         bool volleyOwner = strong && MonsterAttackStyleTable.IsRanged(_attackStyle);
-        _fanVolleyOwned = volleyOwner && (!_eliteWave || Random.value < 0.5f);
-        _homingBarrageOwned = volleyOwner && (!_eliteWave || !_fanVolleyOwned);
-        _fanVolleyCd = _fanVolleyOwned ? (_isBossUnit ? GameConfig.BOSS_FAN_VOLLEY_FIRST_DELAY : 2.5f) : 0f;
+        _fanVolleyOwned = volleyOwner;
+        _homingBarrageOwned = volleyOwner && (!_eliteWave || Random.value < 0.5f);
+        _fanVolleyCd = _fanVolleyOwned
+            ? (_isBossUnit && !_eliteWave ? GameConfig.BOSS_FAN_VOLLEY_FIRST_DELAY : 1.2f)
+            : 0f;
         _homingBarrageCd = _homingBarrageOwned ? 5f : 0f;
 
         // 【2026-10-16 主人摆的 JY 脚下光环】精英/Boss 出场显示，普通怪隐藏。
@@ -524,6 +567,7 @@ public partial class Monster
         // 【2026-11-05 主人拍板「词条怪的头顶加上词条」】表定词缀怪头顶显示词条名；
         // 普通怪 / 精英 / Boss 在方法内自动隐藏（精英/Boss 的词缀走屏幕 Boss 血条后缀）。
         RefreshAffixHeadLabel();
+        EnsureSkillChargeBar();   // 【2026-11-14】只给精英/Boss 头顶挂技能充能条，普通小怪不建
 
         BattleBossHpBar.RefreshFromField();
     }
@@ -622,7 +666,7 @@ public partial class Monster
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
 
         EnsureFootShadow();
-        ApplyAirHoverOffset();
+        ApplyAirHoverOffset(bossUnit);
         // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
         // 2026-10-17 上线稳定优先：一次性探针已完成使命，真机不再执行，仅编辑器保留
 #if UNITY_EDITOR
@@ -637,12 +681,20 @@ public partial class Monster
     /// 陆地怪：本体 y 归零，阴影回到基线、正常贴在脚下。
     /// 【2026-11-10 主人拍板「活动副本里的怪不要有空中的」「陆地就是和影子在正常脚下」】
     /// 活动副本内一律按陆地处理（不改配表、不换模板），只有其它玩法保留浮空表现。
+    /// 【2026-11-15 主人口径】① 第 10 层（及 10 的倍数）裂隙大 BOSS 按地面单位处理：不改配表、
+    ///   不换模板，只关掉本玩法的浮空；第 2 章主线里同一张 airUnit=1 的怪保持原样；
+    ///   ② 浮空距离减半（MONSTER_AIR_HOVER 0.3→0.15）；③ 阴影必须落在地面。
     /// 幂等：阴影按基线绝对定位（不是每次叠加偏移），池化复用多次 Init 不累积。
     /// </summary>
-    void ApplyAirHoverOffset()
+    void ApplyAirHoverOffset(bool bossUnit)
     {
-        bool activityGrounded = BattleManager.Instance != null && BattleManager.Instance.IsActivityDungeon;
-        bool air = !activityGrounded && config != null && config.airUnit;
+        var bm = BattleManager.Instance;
+        bool activityGrounded = bm != null && bm.IsActivityDungeon;
+        // 只让大 BOSS 本体落地，同层小怪仍按各自 airUnit 走。
+        // bossUnit 由 Init 传入：此处 _isBossUnit 尚未赋值（在 LoadSprite 之后），不能用它判。
+        bool endlessBigBossGrounded = bm != null && bm.IsEndlessRift && bossUnit
+            && GameConfig.IsEndlessBigBossStage(bm.EndlessRiftStage);
+        bool air = !activityGrounded && !endlessBigBossGrounded && config != null && config.airUnit;
         float hover = air ? GameConfig.MONSTER_AIR_HOVER : 0f;
 
         // 本体 y 绝对归位（覆盖 EnsureBodyRoot / RectTransform 分支 / 复用残留的任何值）
@@ -669,11 +721,15 @@ public partial class Monster
         Transform shadow = FindFootShadowNode(transform);
         if (shadow == null) return; // EnsureFootShadow 已对缺失阴影 fail-closed，这里不重复报
         if (float.IsNaN(_airShadowBaseY)) _airShadowBaseY = shadow.localPosition.y;
-        // 阴影可能挂在本体下的任意子层：按其父链 lossyScale 换算，精英/Boss 根缩放不同也能对准地面
+        // 【2026-11-15 修】本体 local y 上抬 hover 的世界位移 = hover × MoveRoot.lossyScale.y
+        //（MoveRoot 缩放约 2.6~4.5）。旧写法只除阴影父链 lossyScale，漏乘移动根这一项，
+        // 补偿量小了 3~4 倍 → 阴影跟着身体一起飘在半空。这里按「世界位移 ÷ 阴影父链缩放」精确反算回地面。
+        float moveRootLossy = Mathf.Max(0.001f, Mathf.Abs(MoveRoot.lossyScale.y));
         float parentLossy = shadow.parent != null ? shadow.parent.lossyScale.y : transform.lossyScale.y;
         float ls = Mathf.Max(0.001f, Mathf.Abs(parentLossy));
+        float worldLift = hover * moveRootLossy;
         Vector3 lp = shadow.localPosition;
-        shadow.localPosition = new Vector3(lp.x, _airShadowBaseY - hover / ls, lp.z);
+        shadow.localPosition = new Vector3(lp.x, _airShadowBaseY - worldLift / ls, lp.z);
     }
 
     /// <summary>

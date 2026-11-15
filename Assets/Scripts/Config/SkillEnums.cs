@@ -155,7 +155,7 @@ public enum DraftCategory
     Merc = 1,    // 佣兵：招募 / 升级 / 升星
     Equip = 2,   // 装备：本局掉落三选一（不带出）
     // 【2026-10-19 主人拍板】抽奖币从「混在各类池子里的安慰奖」改成**独立方向**：
-    // 抽中它 = 直接得抽奖币（当抽价 × 0.5），概率与佣兵相同（见 SlotMachineDefs.CATEGORY_WEIGHT_GOLD）。
+    // 抽中它 = 直接得抽奖币（当抽价 × 0.6），概率与佣兵相同（见 SlotMachineDefs.CATEGORY_WEIGHT_GOLD）。
     // 只会从「随机抽」里出（定向按钮没有它；「再来一次」老虎机也排除它）。
     Gold = 3     // 抽奖币方向
 }

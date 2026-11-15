@@ -155,9 +155,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// 不另写第二份。
     /// 【2026-10-18 主人拍板】showReplace=true 时右下显示「替换」钮，点击关弹窗并回调 onReplace
     /// （仅佣兵池点未入队的已获得佣兵时传；战斗头像入口/未获得详情走默认值 false，行为不变）。
+    /// 【2026-11-14 主人拍板】owned=false（佣兵池图鉴里未获得的佣兵）时立绘全黑，与列表卡同口径；
+    /// 其余入口默认 true，外观不变。
     /// </summary>
     public static void ShowFromEntry(string hireId, string assetId, int level, int star,
-        bool showReplace = false, System.Action onReplace = null)
+        bool showReplace = false, System.Action onReplace = null, bool owned = true)
     {
         var ui = Ensure();
         if (ui == null) return;
@@ -171,7 +173,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
             MercLevel = Mathf.Max(1, level),
             Star = Mathf.Clamp(star < 1 ? 1 : star, 1, 5)
         };
-        if (!ui.Fill(card)) { ui.Close(); return; }
+        if (!ui.Fill(card, owned)) { ui.Close(); return; }
         ui._onReplace = onReplace;
         ui.ApplyReplaceButton(showReplace);
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗

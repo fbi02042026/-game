@@ -739,7 +739,7 @@ public class AdventureLogCodexPanel
         // 种类（普通/精英/首领）与「·XX关」一律不写。
         // 2026-11-07 图鉴怪物详情：头部怪名普通红/首领紫；大字地点名前加「出现：」前缀
         // 【2026-11-11】副行改放图鉴外号；未遇到的怪副行/头部/小字一律「未知」。
-        CodexInfoPopupUI.Show("出现：" + CodexPlaceName(e.Place), nickLine, body, tip,
+        CodexInfoPopupUI.Show(nickLine, "出现：" + CodexPlaceName(e.Place), body, tip,
             AdventureCodex.LoadMonsterSprite(e), zoomSprite: null, codexKind: false,
             topTitleOverride: topTitle,
             nameColor: seen ? (isBoss ? BossMonsterNameColor : NormalMonsterNameColor) : (Color?)null,

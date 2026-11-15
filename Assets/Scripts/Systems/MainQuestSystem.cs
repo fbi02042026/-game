@@ -464,7 +464,10 @@ public static class MainQuestSystem
         if (IsDoneId(def.id)) return;
 
         MarkDone(def.id);
-        QuestDoneToast.Show();
+        // 【2026-11-14 主人拍板】任务提示统一走左侧滑入横幅，文案「完成XX任务 / 获得XX奖励」。
+        // 主线奖励是完成后再去冒险日志手动领取（见 QuestRewardClaim.ClaimMain），此刻并没有入账，
+        // 所以不写「获得」那行 —— 奖励到手时由领取流程自己弹「获得奖励」窗，不在这里虚报。
+        QuestDoneToast.Show(def.title, null);
 
         Debug.Log("[MainQuest] done: " + def.id);
         // 埋点在领取时上报，完成时不再上报

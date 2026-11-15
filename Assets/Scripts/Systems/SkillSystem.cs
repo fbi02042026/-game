@@ -192,21 +192,28 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         UnitBase caster, UnitBase target, VfxFaction faction, int vfxDir,
         AttackVfxKit kit, GameObject impactOverride, float dmg, bool crit, float delay)
     {
+        // 前摇内目标可能死亡或被回收：出手前锁死落点与挂点，出弹不因目标失效被吞。
+        // 伤害结算由下方 onImpact 的 locked 存亡判断兜住。
+        Vector3 lockedHitPos = target.GetHitPosition();
+        Transform lockedHitTf = target.transform;
+
         if (delay > 0.001f)
             yield return new WaitForSeconds(delay);
-        if (caster == null || caster.isDead || target == null || target.isDead)
+        if (caster == null || caster.isDead)
             yield break;
         if (BattleVFXSystem.Instance == null)
         {
-            target.TakeDamage(dmg, crit, false, true, vfxDir, caster);
+            // 无飞行体时的纯结算路径：目标已失效就不结算，行为不变。
+            if (target != null && !target.isDead)
+                target.TakeDamage(dmg, crit, false, true, vfxDir, caster);
             yield break;
         }
         Vector3 from = caster.GetFirePosition();
-        Vector3 to = target.GetHitPosition();
+        Vector3 to = lockedHitPos;
         UnitBase locked = target;
         UnitBase src = caster;
         BattleVFXSystem.Instance.PlaySkillProjectile(
-            faction, from, to, vfxDir, locked.transform, kit,
+            faction, from, to, vfxDir, lockedHitTf, kit,
             impactOverride, 1f, 1f,
             () =>
             {

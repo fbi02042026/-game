@@ -39,6 +39,15 @@ public class PixelFxSheetPlayer : MonoBehaviour
     float _timer;
     bool _finished;
     float _bornAt;
+    int _footTrimPx;
+
+    /// <summary>
+    /// 【2026-11-15 主人「最下面都要和脚的位置对齐」】帧底透明边（sheet 像素）折算成世界距离。
+    /// SpriteRenderer.bounds.min.y 量的是「整帧矩形」的底，玩家看到的「最下面」是不透明像素的底，
+    /// 两者差 footTrimPx 个帧像素。按整帧矩形底边贴脚，可见图形就会悬空偏上。
+    /// 帧像素按 Sprite.Create 的 pixelsPerUnit=100 换算，再乘实际世界缩放；未配该字段的 sheet 恒为 0，行为不变。
+    /// </summary>
+    public float VisibleFootTrimWorld => _footTrimPx / 100f * Mathf.Abs(transform.lossyScale.y);
 
     // 亮化后的 sheet 缓存：贴图 isReadable=0，每次施法重新读 2M 像素会卡，按 path+whiten 只算一次。
     static readonly Dictionary<string, Texture2D> _whitenedCache = new Dictionary<string, Texture2D>();
@@ -47,7 +56,7 @@ public class PixelFxSheetPlayer : MonoBehaviour
     [System.Serializable] class SheetJson { public FrameEntry[] frames; public SheetMeta meta; }
     [System.Serializable] class FrameEntry { public int duration; }
     [System.Serializable] class SheetMeta { public PixelfxMeta pixelfx; }
-    [System.Serializable] class PixelfxMeta { public int fps; public bool loop; public int frames; public int[] frameSize; public int[] pivot; public int columns; }
+    [System.Serializable] class PixelfxMeta { public int fps; public bool loop; public int frames; public int[] frameSize; public int[] pivot; public int columns; public int footTrimPx; }
 
     void Awake()
     {
@@ -96,6 +105,7 @@ public class PixelFxSheetPlayer : MonoBehaviour
         }
 
         var px = json.meta.pixelfx;
+        _footTrimPx = px.footTrimPx;
         // 只替换本实例用的纹理；whiten=0 时原样引用，其余特效零变化。
         Texture2D sheetTex = whiten > 0f ? GetWhitened(tex, whiten, sheetPath) : tex;
         int fw = px.frameSize[0], fh = px.frameSize[1];

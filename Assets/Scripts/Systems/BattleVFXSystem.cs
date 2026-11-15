@@ -207,18 +207,31 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         Vector3 baseScale = prefab.transform.localScale;
         float mul = Mathf.Max(0.01f, sharedKitScale);
         if (faction == VfxFaction.Ally) mul *= 1.3f;
-        // 【2026-11-12 主人报「玩家朝左攻击没有特效」→ 回退 10-10「刀光挂父级」改造，恢复此前稳定版】
-        // 根因：10-10 起把刀光 SetParent 到攻击者的翻转父级，并补 SortingGroup(sortAtRoot)。
-        // 朝左时攻击者 scale.x 为正，刀光本身又是负 scale.x，累计 scale.x 为负（朝右是负负得正），
-        // SortingGroup 在负缩放下的包围盒被算反 → 整条粒子被视锥剔除 → 朝左看不见。
-        // 受击刀光（PlayVictimHit 不传 attacker，走非挂载）一直左右都正常，可反证负 scale 不是问题、挂载才是。
-        // 现在刀光不挂角色、不加 SortingGroup，只把根节点按 facingDir 整体 x 取反做镜像（10-10 前原版）。
-        float signedX = Mathf.Abs(baseScale.x) * mul * (facingDir < 0 ? -1f : 1f);
-        go.transform.localScale = new Vector3(signedX, baseScale.y * mul, baseScale.z * mul);
+        // 【2026-11-14 主人再报「朝左攻击还是没有特效」→ 真根因 = 负缩放本身】
+        // 11-12 只拆了 10-10 的「挂攻击者翻转父级 + SortingGroup」，负 scale.x 镜像这条路留着，
+        // 所以症状没变。负 x 缩放的行列式为负 → ParticleSystemRenderer 的包围盒被算反
+        //（粒子在视锥剔除阶段整条被丢掉）；本刀光用的 Vefects shader 还带 Hull 细分，
+        // 三角形绕序同样被翻，patch 也会被判掉。朝右 scale.x 为正，所以只有朝左看不见。
+        // 现口径：缩放<b>恒为正</b>，朝左改用绕 Y 轴 180° 旋转做镜像 —— 旋转不产生负行列式，
+        // 绕序与包围盒都正常；粒子已是 Local 模拟空间（见 ApplySlashLocalFacing），位置随旋转镜像。
+        float sx = Mathf.Abs(baseScale.x) * mul;
+        go.transform.localScale = new Vector3(sx, baseScale.y * mul, baseScale.z * mul);
         // 复位成预制体自身旋转（池化实例会带走上一次的旋转，旧代码这里写死过 Z=180）
-        go.transform.rotation = prefab.transform.rotation;
+        go.transform.rotation = facingDir < 0
+            ? Quaternion.Euler(0f, 180f, 0f) * prefab.transform.rotation
+            : prefab.transform.rotation;
 
         PrepareSlashParticles(go);
+        // 【2026-11-14 主人报「朝左特效有了但是是反的」】绕 Y 轴 180° 只镜像了粒子位置，
+        // 纹理 UV 不随旋转翻 → 刀光弧线看着还是朝右的（位置对、图形反）。
+        // 补 ParticleSystemRenderer.flip.x 把 UV 一起翻，才是完整镜像；仍然全程不产生负缩放。
+        // 每次都要设（含 facingDir>0 的复位）：池化实例会带上一次的方向。
+        var flipTargets = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < flipTargets.Length; i++)
+        {
+            if (flipTargets[i] == null) continue;
+            flipTargets[i].flip = facingDir < 0 ? new Vector3(1f, 0f, 0f) : Vector3.zero;
+        }
         ApplySlashLocalFacing(go);
         // 2026-10-10 主人拍板：刀光用材质默认颜色，不做运行时改色，此处请勿再加着色/换材质逻辑。
 
@@ -399,7 +412,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
     public void PlaySkillProjectile(VfxFaction faction, Vector3 fromPos, Vector3 toPos,
         int facingDir, Transform target, AttackVfxKit kit = AttackVfxKit.Orb,
         GameObject impactOverride = null, float scaleMul = 1f, float speedMul = 1f,
-        System.Action onImpact = null, UnitBase caster = null, float impactScaleMul = 1f)
+        System.Action onImpact = null, UnitBase caster = null, float impactScaleMul = 1f,
+        string skillId = null)
     {
         if (kit != AttackVfxKit.Bow && kit != AttackVfxKit.Orb)
             kit = AttackVfxKit.Orb;
@@ -407,7 +421,8 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         // 2026-10-24 主人拍板：敌人远程飞行体分档（普攻/技能弹同口径）
         // 2026-11-03 主人拍板：我方法球按佣兵分专属弹/命中（H014=orb1、H013=orb2，其余走旧名 Base）
         bool allyOrb = faction == VfxFaction.Ally && kit == AttackVfxKit.Orb;
-        int allyOrbFileNo = (allyOrb && caster != null) ? WeaponVfxVariant.ResolveAllyOrb(caster) : 0;
+        // skillId 仅职业技能弹透传（默认 null）：普攻法球与其余技能不传，ResolveAllyOrb 走原佣兵分套逻辑。
+        int allyOrbFileNo = (allyOrb && caster != null) ? WeaponVfxVariant.ResolveAllyOrb(caster, skillId) : 0;
         int flyVariant = (faction == VfxFaction.Enemy && caster != null)
             ? WeaponVfxVariant.Resolve(caster) : WeaponVfxVariant.Base;
         GameObject fly = allyOrb
@@ -492,10 +507,13 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         PrepareSlashParticles(projectile);
         ApplySlashLocalFacing(projectile);
         int initialFacing = target != null && target.transform.position.x >= fromPos.x ? 1 : -1;
-        // 【2026-10-20 主人报：Boss 从左往右放弹道，子弹是反的】同直线弹道协程：
-        // 弹体镜像按阵营定死（Ally 尖端朝右/Enemy 尖端朝左），方向全靠每帧 AlignProjectileToward 旋转；
-        // initialFacing 只留给命中特效用，不再参与弹体镜像。
-        ApplyVfxFacing(projectile, faction == VfxFaction.Ally ? 1 : -1);
+        // 【2026-11-15】与 ProjectileFlightCoroutine 同口径：缩放恒正 + 按方向显式翻粒子 UV；
+        // initialFacing 仍只给命中特效用，弹体方向以每帧真实 to 为准。
+        Vector3 projScale = projectile.transform.localScale;
+        projScale.x = Mathf.Abs(projScale.x);
+        projectile.transform.localScale = projScale;
+        Vector3 homingDir = Vector3.right * initialFacing;
+        ApplyProjectileUvFlip(projectile, homingDir);
         SetVFXSortingLayer(projectile.transform);
         EnsureSlashParticleVisible(projectile);
         EnsureProjectileSpriteVisible(projectile);
@@ -524,6 +542,11 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
             }
             projectile.transform.position = pos + to.normalized * step;
             AlignProjectileToward(projectile.transform, to);
+            if ((to.x < 0f) != (homingDir.x < 0f))
+            {
+                homingDir = to;
+                ApplyProjectileUvFlip(projectile, homingDir);
+            }
             yield return null;
         }
 
@@ -574,11 +597,15 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         ResetTintableColors(projectile);
         PrepareSlashParticles(projectile);
         ApplySlashLocalFacing(projectile);
-        // 【2026-10-20 主人报：Boss 从左往右放弹道，子弹是反的】
-        // 指向已由下方 AlignProjectileToward 按真实飞行方向旋转负责；镜像不能再跟 facingDir 走，
-        // 否则「贴图尖端朝左的敌弹」朝右飞时双重翻转 180°（尖端朝后）。改为按阵营定死基准朝向：
-        // Ally 弹贴图尖端朝右(+1)，Enemy 弹贴图尖端朝左(-1)，左右飞行全靠旋转对准。
-        ApplyVfxFacing(projectile, faction == VfxFaction.Ally ? 1 : -1);
+        // 【2026-11-15 敌我弹道统一朝向口径】粒子 Billboard 的 UV 不随根节点旋转
+        // （11-14 09:4x 在 PlaySlash 已实证：只旋转＝方向对、图形反），必须显式翻 UV。
+        // 旧的按阵营写死 scale.x 符号（Enemy 恒负）会与下方 AlignProjectileToward 的旋转叠加成
+        // 双重翻转，且负缩放会把粒子在视锥剔除阶段丢掉。现改为缩放恒正 + 按真实方向翻 UV，
+        // 与 PlaySlash 同一口径；SpriteRenderer 的贴图本来就跟着旋转走，不额外写 flipX。
+        Vector3 projScale = projectile.transform.localScale;
+        projScale.x = Mathf.Abs(projScale.x);
+        projectile.transform.localScale = projScale;
+        ApplyProjectileUvFlip(projectile, dirN);
         SetVFXSortingLayer(projectile.transform);
         EnsureSlashParticleVisible(projectile);
         EnsureProjectileSpriteVisible(projectile);
@@ -619,6 +646,20 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         if (t == null || dir.sqrMagnitude < 1e-8f) return;
         float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg + projectileAngleOffset;
         t.rotation = Quaternion.Euler(0f, 0f, angle);
+    }
+
+    /// <summary>粒子 Billboard 的 UV 不随根节点旋转（PlaySlash 11-14 实证），按真实飞行方向显式翻。
+    /// 两个方向都写，实例复用时不会带上一次的值；SpriteRenderer 由旋转负责，不在这里处理。</summary>
+    static void ApplyProjectileUvFlip(GameObject go, Vector3 dir)
+    {
+        if (go == null) return;
+        Vector3 flip = dir.x < 0f ? new Vector3(1f, 0f, 0f) : Vector3.zero;
+        var rs = go.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < rs.Length; i++)
+        {
+            if (rs[i] == null) continue;
+            rs[i].flip = flip;
+        }
     }
 
     #endregion

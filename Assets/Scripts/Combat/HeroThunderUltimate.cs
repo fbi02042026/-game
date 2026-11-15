@@ -35,6 +35,9 @@ public class HeroThunderUltimate : Singleton<HeroThunderUltimate>, ICombatBoundS
 
     void Update()
     {
+        // 【2026-11-13 21:4x 主人撤掉】「独立 CD 自动释放」未经授权，恢复总闸关闭；
+        // 注释里旧写的「主人拍板」是误记，不得再据此启用自动落雷。
+        if (!GameConfig.THUNDER_ULT_ENABLED) return;
         // 2026-11-13：改独立 CD。对话/结算冻结期间 Time.deltaTime 同步停走，恢复行动后再放。
         if (_cdRemaining > 0f) _cdRemaining -= Time.deltaTime;
         if (_casting || _cdRemaining > 0f) return;

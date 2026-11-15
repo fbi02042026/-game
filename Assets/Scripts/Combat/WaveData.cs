@@ -82,7 +82,7 @@ public class WaveData
     public bool isRoundEnd;
     /// <summary>
     /// 【2026-10-26 前期优化】本波「签名怪」精灵：&gt;0 时本波最后一个名额强制该精灵并做成迷你精英带词缀。
-    /// 仅前期正式关双段爆发段使用；0 = 无签名怪。精灵必须 1-10（不碰 11/12 Boss）。
+    /// 仅前期正式关双段爆发段使用；0 = 无签名怪。精灵锁 1~8（实际数组上限，不碰 10~12 Boss 段）。
     /// </summary>
     public int signatureSpriteIndex;
     /// <summary>签名怪词缀偏好（| 分隔的 MonsterAffixId 名，如 "Bulwark"、"Bulwark|Thorns"）。</summary>

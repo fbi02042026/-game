@@ -20,6 +20,12 @@ public static class GameSting
     const string DefeatClip = "战斗失败";
 
     static AudioSource _src;
+    /// <summary>
+    /// jingle 是否正在播（胜利曲/失败曲都算）。
+    /// 【2026-11-14 主人报「从剧情回来后胜利音乐和战斗音乐重叠了」】GameBgm 剧情收窗恢复战斗曲前
+    /// 用它判断：胜负曲已接管就不再把战斗曲铺回去。只读，不改播放状态。
+    /// </summary>
+    public static bool IsPlaying => _src != null && _src.isPlaying && _src.clip != null;
     /// <summary>当前 jingle 是不是失败曲（失败曲循环，见 PlayBattleResult；StopDefeat 只停它，不误伤胜利曲）。</summary>
     static bool _defeatPlaying;
     /// <summary>当前 jingle 的归属者（结果界面实例）：Destroy 是帧末执行，旧窗口销毁时不能误停
@@ -90,6 +96,25 @@ public static class GameSting
     static void EnsureHost()
     {
         if (_src != null) return;
+        // 【2026-11-14】运行中重编译触发 Domain Reload：static 清空但 DontDestroyOnLoad 的
+        // MusicSting 宿主还在、jingle 还在响；不接管就会新建第二个源 → 两首曲子叠着放。
+        // 按宿主名收敛所有残留，只留一个（多余的整份销毁）。
+        var allSources = Object.FindObjectsOfType<AudioSource>();
+        AudioSource reuse = null;
+        for (int i = 0; i < allSources.Length; i++)
+        {
+            if (allSources[i] == null || allSources[i].gameObject.name != "MusicSting") continue;
+            if (reuse == null) { reuse = allSources[i]; continue; }
+            Object.Destroy(allSources[i].gameObject);
+        }
+        if (reuse != null)
+        {
+            _src = reuse;
+            _src.playOnAwake = false;
+            _src.spatialBlend = 0f;
+            _src.priority = 0;
+            return;   // sceneLoaded 订阅在旧宿主上仍然有效，接管路径不再重复挂
+        }
         var go = new GameObject("MusicSting");
         Object.DontDestroyOnLoad(go);
         _src = go.AddComponent<AudioSource>();

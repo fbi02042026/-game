@@ -108,7 +108,9 @@ public static class QuestRewardClaim
         return SideIslandDefs.IsCleared(islandId, data) && !data.claimedSideIslandIds.Contains(islandId);
     }
 
-    /// <summary>发放主线任务奖励：标记领取态 → 发金币/天赋石 → 汇总 Toast → 埋点 → 存档。</summary>
+    /// <summary>发放主线任务奖励：标记领取态 → 发金币/天赋石/经验 → 汇总弹窗 → 埋点 → 存档。
+    /// 【2026-11-15 主人拍板「主线任务要给经验」】经验真源 = quest.csv 的 reward_exp（该章普通关卡经验的一半），
+    /// 与通关关卡经验叠加不抵扣；领取即入账、升级当场弹，连续领取允许多级连升；奖励窗不展示经验。</summary>
     public static bool ClaimMain(string questId)
     {
         EnsureMigrated();
@@ -143,6 +145,12 @@ public static class QuestRewardClaim
             if (stone.overflow > 0)
                 overflow.Add(ResourceWallet.DisplayName(ResourceWallet.ResourceType.TalentPoint) + "已满，溢出进邮箱");
         }
+        // 【2026-11-15 主人拍板「主线任务要给经验」】经验在领取时发放（不在完成瞬间），
+        // capLevel=0 不封顶 → 一次领奖可连升；showLevelUpNow=true → 升级当场弹、关掉后可接着领下一条。
+        // 奖励窗按拍板不展示经验；主线经验不在 DailyTaskSystem.SettleRows 里发，两者互不干扰。
+        if (def.rewardExp > 0)
+            LevelSystem.AddDirectExp(def.rewardExp, 0, showLevelUpNow: true);
+
         // 【2026-11-12 主人拍板】领奖统一弹「获得奖励」窗；溢出提示仍走 Toast（不是奖励本体）
         RewardPopupUI.ShowClaimRewards(gotGold, 0, gotStone, 0);
         if (overflow.Count > 0)

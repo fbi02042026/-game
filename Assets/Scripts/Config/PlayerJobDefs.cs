@@ -14,6 +14,18 @@ public enum PlayerJobId
     Heavy = 5
 }
 
+/// <summary>
+/// 职业自带技能的演出类型。真源在 <see cref="PlayerJobDefs.Def.CareerSkillKind"/>，
+/// 由 CareerSkillExecutor 按它分派演出，战斗层不再按职业枚举硬编码。
+/// </summary>
+public enum CareerSkillKind
+{
+    None = 0,
+    Charge = 1,
+    Scatter = 2,
+    Orb = 3
+}
+
 public static class PlayerJobDefs
 {
     public struct Def
@@ -23,6 +35,12 @@ public static class PlayerJobDefs
         public string ConfigId;
         public string DisplayName;
         public string DefaultSkillId;
+        /// <summary>职业自带技能 id：普攻攒满自动释放，不占 4 槽、不进技能栏、不进抽卡池。空=该职业无自带技能。</summary>
+        public string CareerSkillId;
+        /// <summary>攒满所需普攻命中数；数值真源仍是 GameConfig.CAREER_*_HITS，这里只做职业登记不写第二份数值。</summary>
+        public int CareerSkillHits;
+        /// <summary>自带技能演出类型（决定 CareerSkillExecutor 走哪套演出）。</summary>
+        public CareerSkillKind CareerSkillKind;
         public WeaponCombatTable.WeaponKind PrimaryWeapon;
         /// <summary>对应职业 101 佣兵 AssetId（武器外观/种类以此为准）。</summary>
         public string MercAssetId;
@@ -52,6 +70,9 @@ public static class PlayerJobDefs
             ConfigId = "P001",
             DisplayName = "剑盾卫士",
             DefaultSkillId = "holy_barrier",
+            CareerSkillId = "career_charge",
+            CareerSkillHits = GameConfig.CAREER_CHARGE_HITS,
+            CareerSkillKind = CareerSkillKind.Charge,
             PrimaryWeapon = WeaponCombatTable.WeaponKind.Sword,
             MercAssetId = "dunbing101",
             Blurb = "近战防御，保护队友",
@@ -90,6 +111,9 @@ public static class PlayerJobDefs
             ConfigId = "P004",
             DisplayName = "游侠",
             DefaultSkillId = "deadly_focus",
+            CareerSkillId = "career_scatter",
+            CareerSkillHits = GameConfig.CAREER_SCATTER_HITS,
+            CareerSkillKind = CareerSkillKind.Scatter,
             PrimaryWeapon = WeaponCombatTable.WeaponKind.Bow,
             MercAssetId = "gongshou101",
             Blurb = "远程物理，机动输出",
@@ -114,6 +138,9 @@ public static class PlayerJobDefs
             // 现在 ① 没了，本字段只剩 ② —— 即局外技能选择界面（SkillSelectUI）的**预选项**，
             // 不再进战斗、不再参与局内抽卡。战斗侧技能只认 RunLoadout 的本局构筑。
             DefaultSkillId = "thunder_verdict",
+            CareerSkillId = "career_orb",
+            CareerSkillHits = GameConfig.CAREER_ORB_HITS,
+            CareerSkillKind = CareerSkillKind.Orb,
             PrimaryWeapon = WeaponCombatTable.WeaponKind.Staff,
             MercAssetId = "fashi101",
             Blurb = "远程魔法，高伤脆弱",
@@ -467,6 +494,47 @@ public static class PlayerJobDefs
     static string KitTemplate(string tableId, string fallback)
     {
         return !string.IsNullOrEmpty(tableId) ? tableId : fallback;
+    }
+
+    /// <summary>
+    /// 【2026-11-14 主人需求「购买了商店的装备后应该直接替换到角色界面的装备栏」】
+    /// 该职业开战<b>实际会穿的专属武器</b>（商店购买 / 里程领取 / 赛季冠军那几类），没有则返回 null。
+    ///
+    /// <para>🔴 优先级必须与 <see cref="ApplyForBattle"/> 的主/副手分支逐条对齐，改任何一边都要同步另一边：<br/>
+    /// 主手：竞技场冠军武器 → 稀有·暮火之杖（法师）→ 逐风长弓（游侠）→ 起步套；<br/>
+    /// 副手：竞技场冠军盾（剑盾）→ 稀有·钢骨盾（剑盾）→ 起步套。</para>
+    /// <para>本方法只做<b>查询与实例生成</b>，不写存档、不碰 BattleBagSystem（战斗发装仍走 ApplyForBattle 唯一出口），
+    /// 供角色页装备栏显示用，保证「买完/领完 → 装备栏立刻换掉起步白装」。</para>
+    /// </summary>
+    public static EquipInstance CreateStartupOverrideWeapon(PlayerJobId job, bool offHand)
+    {
+        var data = SaveSystem.Instance?.Data;
+        var jobKind = Get(job).PrimaryWeapon;
+        // 角色页在城镇，Hero 常不存在 → 用存档等级唯一出口（LevelSystem.CurrentLevel），属性/需求等级才对得上
+        int lv = LevelSystem.CurrentLevel;
+
+        // 冠军武器 / 冠军盾：仓库里拥有且与本职业匹配 → 传奇档直接顶掉起步装（优先级最高，同开战）
+        var arenaTpl = ArenaSeasonWeapons.OwnedTemplateForJob(data, job, offHand);
+        if (arenaTpl != null)
+            return ArenaSeasonWeapons.CreateBattleInstance(arenaTpl, jobKind, lv);
+
+        if (offHand)
+        {
+            // 盾只在剑盾职业生效（与开战口径一致）
+            if (job == PlayerJobId.SwordShield && AdventureLogMileage.HasShieldMilestoneOwned())
+                return AdventureLogMileage.CreateShieldBattleInstance(lv);
+            return null;
+        }
+
+        if (job == PlayerJobId.Mage && SpecialWeapons.HasTwilightStaffOwned())
+            return SpecialWeapons.CreateTwilightStaff(lv);
+
+        if (job == PlayerJobId.Ranger && ArenaShopGoods.HasBowOwned(data))
+        {
+            var bowTpl = ArenaShopGoods.BowTemplate();
+            if (bowTpl != null) return ArenaShopGoods.CreateBowBattleInstance(bowTpl, jobKind, lv);
+        }
+        return null;
     }
 
     /// <summary>

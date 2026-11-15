@@ -7,6 +7,11 @@ using UnityEngine;
 /// </summary>
 public partial class Mercenary : UnitBase
 {
+    /// <summary>【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
+    /// 我方佣兵交战前压停步线：距目标 ≤ 有效射程 × 此比例才站桩（0.55 ≈ 走进射程一半）。
+    /// 只影响「已进攻击射程后是否继续往前走」，不改射程、攻击 CD、伤害与索敌。</summary>
+    const float MERC_ENGAGE_DIST_RATIO = 0.55f;
+
     // —— 屏外走入（2026-10-31 主人拍板「竞技场敌人从屏幕外走进来，不能突然出现」）——
     // 仅敌方佣兵（isAlly=false，竞技场机器人小队）使用；己方抽卡入场走 SpawnRunMerc 的拴绳回队，不经过这里。
     bool _mapEnterActive;
@@ -93,7 +98,12 @@ public partial class Mercenary : UnitBase
     bool StepMapEnter()
     {
         float dx = _mapEnterTargetX - GetCombatX(this);
-        if (Mathf.Abs(dx) <= 0.08f)
+        // 【2026-11-14 主人报「佣兵还是一会就跑后面消失」】走入速度提到 3.5 倍后，
+        // 低帧率下每帧位移可能超过旧的 0.08 到点阈值 → 越过目标后 dir 反号、左右震荡，
+        // _mapEnterActive 永不结束，AIUpdate 每帧在走入段 return（拴绳 / 回队整段不执行）。
+        // 到点容差按本帧位移放大：走过目标即算到点，交还普通 AI。
+        float step = GetCombatMoveSpeed() * GameConfig.MERC_ENTER_SPEED_MUL * Time.deltaTime;
+        if (Mathf.Abs(dx) <= Mathf.Max(0.08f, step))
         {
             _mapEnterActive = false;
             if (rb != null) rb.velocity = Vector2.zero;
@@ -103,7 +113,10 @@ public partial class Mercenary : UnitBase
         int dir = dx > 0f ? 1 : -1;
         facingDir = dir;
         ApplyFacing(facingDir);
-        if (rb != null) rb.velocity = new Vector2(dir * GetCombatMoveSpeed(), rb.velocity.y);
+        // 【2026-11-14 主人报「佣兵出来得太慢」】走入段原本吃 1.0 倍移速（屏外到编队位约 9 个单位 → 9 秒多），
+        // 单独乘 MERC_ENTER_SPEED_MUL 加速；GetCombatMoveSpeed 在 _mapEnterActive 时故意不吃冲刺/追赶倍率，这里显式乘。
+        if (rb != null)
+            rb.velocity = new Vector2(dir * GetCombatMoveSpeed() * GameConfig.MERC_ENTER_SPEED_MUL, rb.velocity.y);
         if (unitAnim != null) unitAnim.SetMove(true, facingDir);
         return true;
     }
@@ -126,10 +139,66 @@ public partial class Mercenary : UnitBase
                   $"spd={GetCombatMoveSpeed():F2} hp={currentHp:F0} stun={IsStunned}");
     }
 
+    /// <summary>
+    /// 【2026-11-14 主人报「佣兵一会就跑后面消失」】相机只跟玩家（CameraFollow 仅 X 跟随），
+    /// 竖屏半宽约 3 个世界单位；MERC_LEASH_RADIUS=4.2 比屏幕还宽 —— 按旧口径佣兵必须先跑出
+    /// 左边屏幕才会被拴绳拉回。而拴绳（UpdateHeroLeash）排在走入段 / 攻击锁 / 受击硬直 / 集结 /
+    /// 牧师定身之后，任一分支 return 就整帧不判回队，玩家继续右推 → 越落越远、出屏消失。
+    /// 这里只在「快到相机左缘」或「已在回队途中」时抢回行动权，沿玩家方向追回编队距离；
+    /// 屏内正常交战 / 入场 / 集结 / 传送门 / 竞技场敌方完全不介入。
+    /// </summary>
+    bool TryForceRejoinWhenOffscreen()
+    {
+        if (!isAlly || _mapEnterActive || TutorialStunned || BattleRally.Active) return false;
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.UnitsCanAct || bm.PortalWalkMode) return false;
+        var hero = Hero.Instance;
+        if (hero == null || hero.isDead) return false;
+        var cam = Camera.main;
+        if (cam == null || !cam.orthographic) return false;
+
+        float myX = GetCombatX(this);
+        float heroX = GetCombatX(hero);
+        float distHero = Mathf.Abs(heroX - myX);
+
+        if (_recallingToHero)
+        {
+            // 已在回队途中：一路追回编队距离再交还普通 AI，中途不再被攻击锁 / 受击硬直打断
+            if (distHero <= GameConfig.MERC_LAG_EXIT_DIST)
+            {
+                _recallingToHero = false;
+                _awayFightTimer = 0f;
+                return false;
+            }
+        }
+        else
+        {
+            // 相机中心≈玩家；出屏前 0.6 个单位就开追（半宽按当前屏幕比例算，横竖屏都成立）
+            float halfW = cam.orthographicSize * cam.aspect;
+            float leftEdge = cam.transform.position.x - halfW + 0.6f;
+            if (myX >= leftEdge) return false;   // 还在屏内：照旧走下面的拴绳 / 交战
+        }
+
+        BeginRecallToHero();
+        int dir = heroX > myX ? 1 : -1;
+        facingDir = 1;
+        ApplyFacing(facingDir);
+        // 不走 GetCombatMoveSpeed 覆写，避免与 lagBoost / rush 叠乘；紧急回队固定吃入队冲刺倍率
+        float speed = base.GetCombatMoveSpeed() * GameConfig.MERC_RUSH_SPEED_MUL;
+        if (rb != null) rb.velocity = new Vector2(dir * speed, rb.velocity.y);
+        if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+        ApplyLaneY(Time.deltaTime);
+        return true;
+    }
+
     protected override void AIUpdate()
     {
         // 【2026-11-06】先刷新冲刺/掉队加速开关，本帧所有移动点统一走 GetCombatMoveSpeed。
         UpdateSpeedBoostState();
+
+        // 【2026-11-14】回队判定必须在所有早退分支之前（详见 TryForceRejoinWhenOffscreen 注释）。
+        if (TryForceRejoinWhenOffscreen())
+            return;
 
         // 【2026-11-01 临时诊断】主人报「竞技场玩家形象的机器人（弓）一直往左走 不攻击，佣兵攻击了」
         // —— 敌方单位每秒一条 AI 状态，定位卡在哪条分支；定位根因后整段删掉。
@@ -182,10 +251,16 @@ public partial class Mercenary : UnitBase
             return;
         }
 
-        if (TryHoldDuringAttack())
+        // 【2026-11-15 定稿·硬直期间也要前压】这两个硬直早退排在索敌/移动之前，每帧清零速度就 return。
+        // 远程怪站在自己射程边缘放箭时我方佣兵持续受击 → InDamagedRecovery 长期为真 → 整段交战 AI
+        // （含下方 pressForward 前压分支）永远执行不到，观感就是「佣兵不上前、也不往前走」。
+        // 现只在「我方 + 场上有怪 + 距目标仍远于交战停步线」时补一次朝目标位移；
+        // 硬直动画、出手判定、攻击锁、受击恢复一字不动，敌方竞技场机器人 / 无怪推图行为不变。
+        if (TryHoldDuringAttack() || TryHoldDuringDamaged())
+        {
+            TryEngageMoveDuringHold();
             return;
-        if (TryHoldDuringDamaged())
-            return;
+        }
 
         EnsureAiPolicy();
 
@@ -311,7 +386,21 @@ public partial class Mercenary : UnitBase
                 }
                 else
                 {
-                    if (rb != null) rb.velocity = Vector2.zero;
+                    // 【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
+                    // 旧实现一进攻击射程就把速度清零站桩：远程怪站在自己射程边缘不贴近时，
+                    // 佣兵锁到目标后原地放箭、一步不往前（Editor.log 实证 AIUpdate 大量 Attack、
+                    // 位移恒 0）。现改为：我方且场上有怪时，射程内继续朝目标前压到
+                    // ENGAGE_DIST_RATIO × 射程 才站桩；前压期间下面这段出手逻辑一字不动，输出不中断。
+                    // 敌方竞技场机器人 / 无怪 / mustStickBack 回队 / 牧师 / 集结一律走原路径。
+                    bool pressForward = isAlly && HasAliveEnemyOnField()
+                                        && distance > attackRange * MERC_ENGAGE_DIST_RATIO;
+                    if (pressForward)
+                    {
+                        if (rb != null)
+                            rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
+                        isMoving = true;
+                    }
+                    else if (rb != null) rb.velocity = Vector2.zero;
                     // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
                     if (attackCd <= 0f
                         && (unitAnim == null || !unitAnim.InAttackLock))
@@ -415,7 +504,14 @@ public partial class Mercenary : UnitBase
         target = null;
     }
 
-    /// <summary>只认索敌距离：进距最近者锁定，直至死亡或出距。收队中不索敌。</summary>
+    /// <summary>
+    /// 【2026-11-15 主人口径「就算怪物不贴近 佣兵也要去寻敌」】场上有怪时与玩家同口径走全场寻敌
+    /// （Hero.cs:567 → FindNearestEnemyOnField，不设屏宽距离闸，只挡屏外目标），锁到后由 AIUpdate 主动前压。
+    /// 旧实现恒用 FindNearestEnemyInDetectRange + 出距即清锁：怪站远处时佣兵锁不到目标，
+    /// 落进 FollowHeroOrIdle 贴玩家站桩，观感「不上前战斗」。
+    /// 无怪时仍走索敌距（推图 / 集结口径不变）；敌方竞技场佣兵 isAlly=false 行为一字不变。
+    /// 收队中不索敌。
+    /// </summary>
     void RefreshAcquireTarget()
     {
         if (_recallingToHero)
@@ -424,6 +520,7 @@ public partial class Mercenary : UnitBase
             return;
         }
 
+        bool seekOnField = isAlly && HasAliveEnemyOnField();
         float detect = GetDetectRange();
         float myX = GetCombatX(this);
         const float leaveSlack = 0.75f;
@@ -432,18 +529,53 @@ public partial class Mercenary : UnitBase
         {
             if (_acquireLock.isDead || _acquireLock.isAlly == isAlly)
                 _acquireLock = null;
-            else if (Mathf.Abs(myX - GetCombatX(_acquireLock)) > detect + leaveSlack)
+            else if (!seekOnField && Mathf.Abs(myX - GetCombatX(_acquireLock)) > detect + leaveSlack)
                 _acquireLock = null;
-            else if (!GameConfig.IsInCombatViewport(_acquireLock))
+            else if (!GameConfig.CanAcquireTarget(this, _acquireLock))
                 _acquireLock = null;
         }
 
         if (_acquireLock == null)
-            _acquireLock = FindNearestEnemyInDetectRange();
+            _acquireLock = seekOnField ? FindNearestEnemyOnField() : FindNearestEnemyInDetectRange();
 
         target = _acquireLock;
         if (target != null && target.isAlly == isAlly)
             ClearAcquireLock();
+    }
+
+    /// <summary>
+    /// 攻击/受击硬直早退期间补一次交战前压位移。与 AIUpdate 里 pressForward 同一停步线
+    /// （MERC_ENGAGE_DIST_RATIO），同语义单一出口；不改硬直动画、不改出手、不改索敌口径。
+    /// 保险：离玩家已超过拴绳半径时不再往外走，交给 UpdateHeroLeash 下一帧收队，避免脱队抖动。
+    /// </summary>
+    void TryEngageMoveDuringHold()
+    {
+        if (!isAlly || !HasAliveEnemyOnField()) return;
+
+        var hero = Hero.Instance;
+        if (hero != null && !hero.isDead
+            && Mathf.Abs(GetCombatX(this) - GetCombatX(hero)) > GameConfig.MERC_LEASH_RADIUS)
+            return;
+
+        var enemy = target;
+        if (enemy == null || enemy.isDead || enemy.isAlly == isAlly
+            || !enemy.gameObject.activeInHierarchy || !GameConfig.CanAcquireTarget(this, enemy))
+            enemy = FindNearestEnemyOnField();
+        if (enemy == null) return;
+
+        float dist = Mathf.Abs(GetCombatX(this) - GetCombatX(enemy));
+        if (dist <= GetEffectiveAttackRange() * MERC_ENGAGE_DIST_RATIO) return;
+
+        int dir = GetCombatX(enemy) > GetCombatX(this) ? 1 : -1;
+        if (dir != facingDir)
+        {
+            facingDir = dir;
+            ApplyFacing(facingDir);
+        }
+        if (rb != null)
+            rb.velocity = new Vector2(dir * GetCombatMoveSpeed(), rb.velocity.y);
+        if (unitAnim != null)
+            unitAnim.SetMove(true, facingDir);
     }
 
     /// <summary>无锁定目标：贴玩家编队站位；玩家在推图则跟着走。

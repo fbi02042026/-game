@@ -261,6 +261,12 @@ public class AttrSystem
         // 体质→生命+防御
         AddAttr(AttrType.MaxHp, vit * 10f, false);
         AddAttr(AttrType.Defense, vit * 1f, false);
+        // 【2026-11-14 主人拍板·方案 B】2026-09-27 防御拆成物防/魔防两条后，这里只补了物防，
+        // 玩家角色页「基础属性」里魔防恒比物防少一整份体质（基底 5），看着像魔防被克扣。
+        // 只给 Player 补魔防侧：本方法是玩家/佣兵/怪物三方共用，怪物魔防走 Monster.Init、
+        // 佣兵走 Mercenary.Attributes，数值一律不动（同 226-227 行口径）。
+        if (OwnerKind == AttrOwnerKind.Player)
+            AddAttr(AttrType.MagicDefense, vit * 1f, false);
     }
 
     /// <summary>

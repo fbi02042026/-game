@@ -15,6 +15,10 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     public const string DefaultMercMeleeSkillId = "ally_shield";
     public const string DefaultMercRangedSkillId = "ally_thunder";
     public const string DefaultMercHealSkillId = "ally_heal";
+    // 佣兵横扫千军 SK003 复用玩家重斩大下劈特效，尺寸缩小到 0.8
+    public const float MercHeavyCleaveScale = 0.8f;
+    public const float StarfallVfxScale = 4f; // 星落像素特效放大倍率（prefab 序列值 1.5，伤害半径 9 需更大覆盖）
+    public const float HeavyCleaveVfxScale = 5f; // 重斩像素特效放大倍率，与星落同口径（prefab 序列值不动）
 
     public const string MonsterEliteMeleeSkillId = "mon_slam_multi";
     public const string MonsterEliteRangedSkillId = "mon_magic_burst";
@@ -221,6 +225,9 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     public GameObject GetSkillVfxPrefab(string skillId)
     {
         if (string.IsNullOrEmpty(skillId)) return null;
+        // SK003 复用玩家重斩大下劈，须先于 cfg/按 id 加载返回，否则被 Merc 目录旧 prefab 挡住
+        if (skillId == "SK003")
+            return Resources.Load<GameObject>("VFX/Skills/Ally/ally_heavy_cleave");
         var cfg = Get(skillId);
         if (cfg != null && cfg.vfxPrefab != null) return cfg.vfxPrefab;
 
@@ -277,6 +284,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         AttackVfxKit kit = SkillNaming.ResolveSkillVfxKit(cfg, skillId, casterBasicKit);
 
         GameObject prefab = GetSkillVfxPrefab(skillId);
+        bool mercHeavyCleave = skillId == "SK003";
         // 【2026-11-01】技能护盾特效：玩家 holy_barrier(ally_shield) 与佣兵 SK008 同一处理（仅特效，作用范围不同）——
         // 时长跟护盾真实持续时间走（player_skills 5s / merc_skills 6s，读 SkillConfig.duration），
         // 粒子临时改循环（预制体粒子 lengthInSec=1 且不循环，只闪一下就没了），
@@ -326,7 +334,43 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
             if (starfallSkill && fxGo != null)
             {
                 var sheet = fxGo.GetComponent<PixelFxSheetPlayer>();
-                if (sheet != null) sheet.SetLooping();
+                if (sheet != null)
+                {
+                    sheet.SetLooping();
+                    // 池内实例每次显式设放大倍率，ApplyFrame 下一帧按 scale 写 localScale 生效
+                    sheet.scale = StarfallVfxScale;
+                }
+            }
+            // 池化实例会串味：SK003 与玩家重斩共用 ally_heavy_cleave 的池，scale 是实例字段且 OnEnable 不复位，
+            // 所以两个来源都显式设一次：SK003 用缩小倍率，玩家重斩用放大倍率（prefab 序列值不动）。
+            bool heavyCleaveReuse = prefab != null && prefab.name == "ally_heavy_cleave";
+            if (heavyCleaveReuse && fxGo != null)
+            {
+                var sheet = fxGo.GetComponent<PixelFxSheetPlayer>();
+                if (sheet != null)
+                {
+                    // 玩家来源先摘父级，脱离 hero 朝右时 localScale.x=-1 的水平镜像（与星落 vfxAttach=null 同口径）
+                    if (!mercHeavyCleave)
+                        fxGo.transform.SetParent(null, true);
+                    sheet.scale = mercHeavyCleave ? MercHeavyCleaveScale : HeavyCleaveVfxScale;
+                    // 两来源都复位全正缩放；须在 SetParent 之后，worldPositionStays 会把父级负 x 带进 localScale
+                    fxGo.transform.localScale = Vector3.one * sheet.scale;
+                    var sr = fxGo.GetComponent<SpriteRenderer>();
+                    // 仅玩家来源：可见图形最下沿对齐到玩家脚部（attach 根节点 y）。
+                    // 【2026-11-15 主人「最下面都要和脚的位置对齐」】整帧矩形底边还带一截透明边，
+                    // 直接拿它贴脚会让可见图形悬空偏上，故从 sheet 真源扣掉 footTrimPx。
+                    if (!mercHeavyCleave && attach != null && sr != null && sr.sprite != null)
+                    {
+                        float bottomOffset = -sr.sprite.bounds.min.y * fxGo.transform.localScale.y;
+                        var p = fxGo.transform.position;
+                        p.y = attach.position.y + bottomOffset - sheet.VisibleFootTrimWorld;
+                        p.x = toPos.x;
+                        fxGo.transform.position = p;
+                    }
+                    // 两来源共用同一池实例，镜像统一走 SpriteRenderer.flipX；SK003 复位 false
+                    if (sr != null)
+                        sr.flipX = mercHeavyCleave ? false : (facingDir < 0);
+                }
             }
             return;
         }

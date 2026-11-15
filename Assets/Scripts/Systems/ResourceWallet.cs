@@ -153,7 +153,10 @@ public static class ResourceWallet
         if (overflow > 0 && overflowToMail)
             MailSystem.EnqueueResourceOverflow(type, overflow);
 
-        if (notify)
+        // 【2026-11-15 主人拍板「战斗中获得的只有战斗结束弹窗」】战斗场景内资源发放只入账、不弹 toast，
+        // 反馈统一归战斗结束弹窗；钱照发、上限/溢出/计数/埋点照旧，回城不补弹。
+        // 这是「获得 XX +N」的唯一生成出口，一处即覆盖成就/里程/天赋石/钻石/金币全部自动发放。
+        if (notify && !GameSceneGate.IsBattle)
         {
             // 统一「获得」反馈：凡是显式要求 notify 的发放都弹一条，玩家不必去看顶部数字。
             // 战斗内逐次结算的发放走 notify:false，不会刷屏。

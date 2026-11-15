@@ -25,6 +25,8 @@ public sealed partial class WavePlanner
     StageData currentStage => bm.currentStage;
     TutorialRules Rules => bm.Rules;
     int CurrentChapter => bm.CurrentChapter;
+    /// <summary>【2026-11-14 拍板「难度随座爬坡」】篇内第几座大关（1 起），与 Monster.Init 大关属性爬坡同源。</summary>
+    int CurrentGrand => ChapterManager.Instance != null ? ChapterManager.Instance.currentGrand : 1;
     bool isInBattle => bm.isInBattle;
     // 【2026-10-05】这两个旗标真源唯一 = 规则包，BattleManager 侧已改只读直通，
     // 这里同步去掉 setter（原先每次教程波都写一遍，是残留值的帮凶）。

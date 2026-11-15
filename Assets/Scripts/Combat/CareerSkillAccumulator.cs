@@ -26,25 +26,10 @@ public sealed class CareerSkillAccumulator
     {
         _runner = runner;
         _job = job;
-        switch (job)
-        {
-            case PlayerJobId.SwordShield:
-                _skillId = CareerSkillExecutor.ChargeSkillId;
-                _need = GameConfig.CAREER_CHARGE_HITS;
-                break;
-            case PlayerJobId.Ranger:
-                _skillId = CareerSkillExecutor.ScatterSkillId;
-                _need = GameConfig.CAREER_SCATTER_HITS;
-                break;
-            case PlayerJobId.Mage:
-                _skillId = CareerSkillExecutor.OrbSkillId;
-                _need = GameConfig.CAREER_ORB_HITS;
-                break;
-            default:
-                _skillId = null;
-                _need = 0;
-                break;
-        }
+        // 技能 id 与攒满阈值一律读职业真源 PlayerJobDefs.Def，战斗层不按职业枚举硬编码分叉。
+        var def = PlayerJobDefs.Get(job);
+        _skillId = def.CareerSkillId;
+        _need = def.CareerSkillHits;
 
         _cooldown = 0f;
         var reg = SkillRegistry.Instance;
@@ -81,7 +66,15 @@ public sealed class CareerSkillAccumulator
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         if (BattleLootMode.Active) return;
+        // 【2026-11-14 主人「不要冲锋的时候还在攻击」】冲锋协程还没跑完时不允许叠放第二次冲锋。
+        if (CareerSkillExecutor.IsCharging) return;
         if (_charge < _need || Time.time < _nextCastAt) return;
+        // 【2026-11-14 主人拍板「引导中不要触发剑盾的冲锋技能」】引导局是 TutorialDirector
+        // 脚本化逐拍刷怪，破阵冲锋一次把整簇怪撞光会让那一拍空转（等清场/等精英直接跳空）。
+        // 只挡 Charge 类（剑盾破阵冲锋）；判据走职业真源 CareerSkillKind，不按职业枚举硬编码。
+        // 引导局的「看技能自动放」那一拍等的是 4 槽技能（RunLoadout / FillPlayerSkillEnergy），
+        // 与职业自带技能无关，挡这里不会断引导。
+        if (bm.IsTutorialRun && PlayerJobDefs.Get(_job).CareerSkillKind == CareerSkillKind.Charge) return;
         if (!CareerSkillExecutor.HasVisibleEnemy()) return;
 
         Debug.Log($"[CareerSkill] 攒满，准备释放 {_skillId}（{_charge}/{_need}）");

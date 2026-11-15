@@ -109,6 +109,76 @@ public static partial class GameConfig
     /// </summary>
     public static int StageWaveCap(int chapter) => chapter <= 2 ? 2 : 3;
     /// <summary>
+    /// 【2026-11-14 主人拍板「第一波的数量要保证玩家能抽 1-2 次奖，后期 2-3 次」】
+    /// 每关<b>第 1 小波</b>的保底怪数。依据是击杀给币口径：普通怪每只 `KILL_GOLD_NORMAL=10`，
+    /// 首抽 40 / 二抽 50 / 三抽 60 → 10 只 = 100 币 = 抽 2 次；15 只 = 150 = 抽 3 次。
+    /// 后期总量大，第一波自然落在 12~15（2~3 抽），本保底只兜住前期/低关。
+    /// 唯一消费方 WavePlanner.BuildCombatWaves 的 formalMain 分配段。
+    /// </summary>
+    public const int FORMAL_FIRST_WAVE_MIN = 10;
+    /// <summary>
+    /// 第 1 小波保底怪数按章取值：ch1/ch2 = 10 只（100 币 = 抽 2 次，对应「前期 1-2 次」上限）；
+    /// ch3 起 = 12 只（120 币 = 抽 2 次并留 30 给下一波，对应「后期 2-3 次」）。
+    /// 想让后期直接给到 3 抽（150 币）就改成 15 —— 代价是后面几波被摊薄，自己权衡。
+    /// </summary>
+    public static int FormalFirstWaveMin(int chapter)
+        => chapter >= 3 ? 12 : FORMAL_FIRST_WAVE_MIN;
+    /// <summary>
+    /// 【2026-11-14 主人拍板「一次比一次的怪多，而不是下一波来袭的次数多」】
+    /// 第一波之后各小波的权重步长：第 k 个尾波权重 = 1 + k × 本值。
+    /// 0.15 时 5 个尾波 ≈ 15%/18%/20%/22%/25% —— 越后越厚，且峰值不会顶破 15。
+    /// </summary>
+    public const float FORMAL_WAVE_WEIGHT_STEP = 0.15f;
+    /// <summary>
+    /// 【2026-11-14 主人拍板「第2关波数涨太多、不要让玩家觉得打得久；参考植物大战僵尸：
+    /// 下一波来袭 1-2 次就够，要的是每次来袭怪更多，不是来袭次数更多」】
+    /// 正式主线关的<b>本关怪量总量</b>定表（唯一真源），随关卡序号递增。
+    /// 波数由 <see cref="FormalRoundSubWaves"/> 的 Σ 决定，均摊后单波必须 ≤ <see cref="FORMAL_WAVE_MONSTERS_MAX"/>。
+    /// <para>【2026-11-14 二批拍板「难度随座爬坡」（主人报「2-1 难度跟 1-1 差不多」）】
+    /// 第 1 篇 10 座大关原先每座重放同一条曲线（怪量公式只有章+大关内序号，座数没喂进来；
+    /// 属性侧大关爬坡 GRAND_STAT_STEP=0.02 体感为零）→ 现把座数喂进定表：</para>
+    /// <para>ch1 第 1 座 28/31/34/37/40（2026-11-14 原表不动）；第 2 座起 40+(座-2)×12+i×3，
+    /// 4 小波（[2,2]）总量封顶 55、第 5 座起 6 小波封顶 85 —— 封顶值 = 首波保底 10 + 其余波 ×15，
+    /// 超出会被分配段静默削掉（第一波钉死 10 不回填），所以封顶必须按这个口径算。</para>
+    /// <para>ch2/ch3+ 的既有定表一字不动。</para>
+    /// </summary>
+    public static int FormalStageMonsterTotal(int chapter, int grandIndex1Based, int stageIndex0Based)
+    {
+        int i = Mathf.Max(0, stageIndex0Based);
+        int grand = Mathf.Max(1, grandIndex1Based);
+        if (chapter <= 1)
+        {
+            if (grand <= 1) return 28 + i * 3;                     // 第 1 座：原表 28/31/34/37/40
+            int waves = grand >= 5 ? 6 : 4;                        // [2,2] / [2,2,2]
+            int cap = (waves - 1) * FORMAL_WAVE_MONSTERS_MAX + FORMAL_FIRST_WAVE_MIN;
+            return Mathf.Min(40 + (grand - 2) * 12 + i * 3, cap);
+        }
+        if (chapter == 2) return 40 + i * 3;   // 40 / 43 / 46 / 48
+        return 60 + i * 4;                     // 60 / 64 / 68 / 72
+    }
+
+    /// <summary>
+    /// 【2026-11-14 主人拍板】「大波（旗帜）少、每次更厚」的结构：每回合 = 一个大波，内部 1~3 个小波。
+    /// 小波之间走 <see cref="WAVE_STREAM_GAP_SEC"/> 秒流式压上（不等清场、允许叠怪），
+    /// 只有<b>跨回合</b>才播一次「下一波来袭」—— 全关 1~2 次，不再每小波都亮旗。
+    /// <para>【2026-11-14 二批拍板「难度随座爬坡」】第 1 篇座数入表（只动 ch1，ch2/ch3+ 既有拍板不动）：
+    /// 第 1 座 [1,2]（3 小波 / 1 次来袭）；第 2~4 座 [2,2]（4 小波 / 1 次来袭，大波更厚）；
+    /// 第 5 座起 [2,2,2]（6 小波 / 2 次来袭）。</para>
+    /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts。
+    /// </summary>
+    public static int FormalRoundSubWaves(int chapter, int grandIndex1Based, int roundIndex0Based)
+    {
+        if (roundIndex0Based < 0) return 0;
+        int grand = Mathf.Max(1, grandIndex1Based);
+        if (chapter <= 1)
+        {
+            if (grand >= 2) return 2;                                // 第 2 座起每回合 2 小波（回合数由 RollFormalRoundWaveCounts 的 cap 决定）
+            return roundIndex0Based == 0 ? 1 : 2;                    // 第 1 座原样：起手 1 波轻，第二面旗 2 波压上
+        }
+        if (chapter == 2) return 2;                                // 两面旗，各 2 小波 → 1 次来袭
+        return 2;                                                  // 三面旗，各 2 小波 → 2 次来袭
+    }
+    /// <summary>
     /// 【2026-11-05 主人拍板】主线正式关每关削减的波数（从最后一回合扣，每回合保底 1 波）。
     /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts；引导局 / 活动副本 / 无限裂隙不走定表，不受影响。
     /// 2 = ch1 6→4、ch2 9→6（Boss 关 7 波）、ch3+ 9→7（Ch3+ 双段爆发补 1 波 → 8，净减 3 波）。
@@ -175,7 +245,7 @@ public static partial class GameConfig
     /// <summary>
     /// 【2026-10-26 前期优化】每关「签名怪」：强制一只特定精灵 + 带 1 个词缀（做成迷你精英，复用现成 MonsterAffix）。
     /// 按(章,关)轮换，保证每关长得不同、还带词缀，解决「总是一样的怪」。
-    /// 精灵锁 1-10（不碰 11/12 Boss，否则会被当成 Boss 单位）；词缀从现有 6 种挑，
+    /// 精灵锁 1~8（实际数组上限，不碰 10~12 Boss 段，否则会被当成 Boss 单位）；词缀从现有 6 种挑，
     /// Ch2「变化」档用温和 4 种（铁壁/荆棘/狂暴/迅捷），Ch3+「运气」档再加吸血/分裂。
     /// </summary>
     public static void GetSignatureMonster(int chapter, int stageIdx, out int spriteIndex, out string affixBias)
@@ -216,6 +286,8 @@ public static partial class GameConfig
     public const int FORMAL_STAGE_ROUND_WAVES = 3;
     /// <summary>
     /// 【2026-10-22 主人拍板 v4.1】正式关每个普通波怪数下限：每波独立摇，不再把关卡总怪数均摊到波。
+    /// ⚠ 2026-11-14 起<b>正式关不再使用</b>（怪量改走 <see cref="FormalStageMonsterTotal"/> 定表均摊），
+    /// 常量保留不删；现在只有注释里提到它。
     /// </summary>
     public const int FORMAL_WAVE_MONSTERS_MIN = 10;
     /// <summary>
@@ -433,52 +505,76 @@ public static partial class GameConfig
     // ============================================================
 
     /// <summary>
-    /// 无限裂隙强度倍率 —— 【2026-11-02 主人拍板·重做陡坡】旧「每节 +6%、节内 +4%」的线性锯齿作废。
-    /// <para>为什么要改：实测玩家一局两小时推到 49 层且全程无压力。旧曲线 49 层只有 1.66×，
-    /// 而主线终章章末 Boss 已经是 2.12 × 1.50 = 3.18× —— 裂隙打到 49 层还没主线最终 Boss 硬；
-    /// 同期每层还给 3 次免费抽（49 层 = 147 张卡，指数级滚雪球），一涨指数一涨线性，必然脱缰。</para>
-    /// <para>新曲线 = 分档基线（每节 ×1.18~1.20 复利）+ 节内爬升（锯齿）+ 精英层小鼓包：</para>
-    ///   · 以 5 层一节（BOSS 记录点节奏）：节内每层 +8%，爬到 BOSS 峰（节首 ×1.32）；
-    ///   · BOSS 打完进下一节，节首比 BOSS 峰**回落约 10%**（1.19 ÷ 1.32 − 1）—— 记录点后仍有喘息；
-    ///   · 精英层本层 ×1.45 上浮（2026-11-02 由 1.10 提高），其下一层回到曲线值 = 相对回落的小缓冲；
-    ///   · 60 层后按 ×1.155/节 继续复利，不封顶（无限玩法本来就没有终点）。
-    /// 锚点：1 层 1.00；10 层 1.87；20 层 2.20；30 层 3.17；49 层 5.82；60 层 8.00。
-    /// 只随层数走，与循环映射章解耦。消费点：Monster.Init 怪血量 / TTK。
+    /// 无限裂隙强度倍率 —— 【2026-11-14 主人拍板·10 层一节的上升锯齿】
+    /// 主人原话：「每打一层敌人的属性增加一部分 到第10层打到一个小高潮 然后11层再降一点
+    /// 然后再慢慢涨到20打到一个小高潮 正式是升的曲线 每逢第6关也可以降一些有个过渡」。
+    /// <para>形状（每 10 层一节，与记录点 / 大 BOSS 同节奏）：</para>
+    ///   · 节内每层 +8%，第 10 层爬到本节**小高潮**（节首 ×1.72）；
+    ///   · 第 11 层换节：节首基线比上一节节首高、但低于上一节峰值 → 回落一点给喘息；
+    ///   · 第 6/16/26 层（每节相位 5）额外乘 <see cref="ENDLESS_DIFF_DIP_MUL"/> 降一档做过渡；
+    ///   · 节基线逐节复利抬高（<see cref="EndlessSectionBase"/>），所以峰值 10 层 &lt; 20 层 &lt; 30 层，
+    ///     **整体是升的曲线**，不是每节回到原点；
+    ///   · 精英层（5/15/25…）留小尖峰，倍率压到不盖过本节第 10 层高潮。
+    /// 消费点：Monster.Init 怪血量 / TTK；攻击侧走 <see cref="EndlessAttackMul"/> 只吃 45%。
     /// </summary>
     public static float EndlessDifficultyMul(int riftStage)
     {
         int stage = Mathf.Max(1, riftStage);
-        int section = (stage - 1) / ENDLESS_CHECKPOINT_INTERVAL;   // 节序（0 基）
-        int phase = (stage - 1) % ENDLESS_CHECKPOINT_INTERVAL;     // 节内相位 0..4（4 = BOSS）
+        int section = (stage - 1) / ENDLESS_SAVE_INTERVAL;   // 节序（0 基，每 10 层一节）
+        int phase = (stage - 1) % ENDLESS_SAVE_INTERVAL;     // 节内相位 0..9（9 = 第 10 层小高潮）
         float mul = EndlessSectionBase(section) * (1f + ENDLESS_DIFF_INTRA_STEP * phase);
+        // 每逢第 6 关（相位 5）降一档，作为爬升途中的过渡
+        if (phase == ENDLESS_DIFF_DIP_PHASE) mul *= ENDLESS_DIFF_DIP_MUL;
         if (IsEndlessEliteStage(stage)) mul *= ENDLESS_DIFF_ELITE_BUMP;
-        return mul;
+        return mul * ENDLESS_DIFFICULTY_GLOBAL_MUL;
     }
 
     /// <summary>
-    /// 每节（5 层）**节首**的基线倍率。下标 = 节序（0 基），第 1 节 = 1-5 层。
-    /// 相邻两节比值约 ×1.18~1.20（复利），比旧线性陡得多；想整体调软/调硬只动这张表。
-    /// 表尾之外（61 层起）按 <see cref="ENDLESS_SECTION_GROWTH_TAIL"/> 每节续涨。
+    /// 每节（**10 层**，2026-11-14 起）**节首**的基线倍率。下标 = 节序（0 基），第 1 节 = 1-10 层。
+    /// 相邻两节比值约 ×1.18~1.20（复利）；表本身单调升，是「整体为升的曲线」的保证。
+    /// 表尾之外（121 层起）按 <see cref="ENDLESS_SECTION_GROWTH_TAIL"/> 每节续涨。
     /// </summary>
     static readonly float[] ENDLESS_SECTION_BASE_TABLE =
     {
-        1.00f, 1.19f, 1.42f, 1.67f, 2.00f,   // 第 1-5 节：1-25 层
-        2.40f, 2.86f, 3.40f, 4.02f, 4.69f,   // 第 6-10 节：26-50 层
-        5.25f, 6.06f                          // 第 11-12 节：51-60 层
+        1.00f, 1.19f, 1.42f, 1.67f, 2.00f,   // 第 1-5 节：1-50 层
+        2.40f, 2.86f, 3.40f, 4.02f, 4.69f,   // 第 6-10 节：51-100 层
+        5.25f, 6.06f                          // 第 11-12 节：101-120 层
     };
-    /// <summary>表尾之外每节复利（60 层后继续涨，不封顶）</summary>
+    /// <summary>表尾之外每节复利（121 层后继续涨，不封顶）</summary>
     public const float ENDLESS_SECTION_GROWTH_TAIL = 1.155f;
-    /// <summary>锯齿曲线：节内每层爬升（BOSS 峰 = 节首 ×1.32；进下一节回落约 10%）</summary>
+    /// <summary>锯齿曲线：节内每层爬升（10 层节 → 第 10 层高潮 = 节首 ×1.72）</summary>
     public const float ENDLESS_DIFF_INTRA_STEP = 0.08f;
+
+    /// <summary>【2026-11-14】每逢第 6 关（节内相位 5，即 6/16/26… 层）的过渡位</summary>
+    public const int ENDLESS_DIFF_DIP_PHASE = 5;
+
+    /// <summary>【2026-11-14】过渡位难度折扣：爬升途中降 10%，给一节喘息</summary>
+    public const float ENDLESS_DIFF_DIP_MUL = 0.90f;
     /// <summary>
-    /// 锯齿曲线：精英层本层上浮 —— 【2026-11-02 主人拍板 1.10 → 1.45】
-    /// 主人原话：「在有的关卡有一个厉害点的，而不是还是线性的增长」。
-    /// 旧值 1.10 只有一成人，玩家基本感觉不到，整条曲线读起来就是"每层差不多"；
-    /// 提到 1.45 后，精英层比相邻普通层高 35%~45%（例：47 层 5.07× → 若 48 层是精英则 7.62×），
-    /// 形成明确的"这一层要小心"的尖峰。每 10 层块内有 2~4 个精英层（见 IsEndlessEliteStage），
-    /// 节首层恒普通，所以节奏是「热身 → 尖峰 → 回落 → 记录点 BOSS」。
+    /// 精英层（5/15/25…）小尖峰。【2026-11-14 由 1.45 收回 1.15】
+    /// 10 层一节的新曲线要求「第 10 层是本节高潮」；1.45 会让第 5 层
+    /// （节首 ×1.32×1.45 = 1.914）反而高过第 10 层（×1.72），高潮跑到精英层去了。
+    /// 1.15 → 第 5 层 1.518 &lt; 第 10 层 1.72，仍留一个可感知的小尖峰但不抢高潮。
     /// </summary>
-    public const float ENDLESS_DIFF_ELITE_BUMP = 1.45f;
+    public const float ENDLESS_DIFF_ELITE_BUMP = 1.15f;
+
+    /// <summary>
+    /// 【2026-11-15】无限裂隙精英怪血量补档（×4）。
+    /// 裂隙不吃 chapterFirstHpRule 的「章首怪血 ×10/×15」，精英血量只走
+    /// 「本章均值 × ELITE_HP_FROM_CHAPTER_AVG × 玻璃/坦克档」，实测第 5 层精英两下被打死。
+    /// 只作用裂隙精英怪；主线 / 活动副本 / 支线岛 / 竞技场数值零变化。
+    /// ⚠ 基准 = 未补档的原始值（第 5 层「两下打死」那一版），最终血量 = 原始 ×4。
+    ///   这是全节共用系数，5/15/25… 所有精英层一起抬，不是只写死第 5 层。
+    /// </summary>
+    public const float ENDLESS_ELITE_HP_MUL = 4f;
+
+    /// <summary>
+    /// 【2026-11-14 主人拍板「整体再调高一档」】裂隙强度总倍率。
+    /// 层类型改固定排布 + 10 层一节后，这里统一抬 20% 作为整体档位。要调软/调硬只改这一个常量。
+    /// 锚点（乘后）：1 层 1.20、10 层 2.06、11 层 1.43、20 层 2.46；攻击侧按 45% 联动。
+    /// </summary>
+    public const float ENDLESS_DIFFICULTY_GLOBAL_MUL = 1.20f;
+
     // ⚠【2026-10-29 已删除】旧线性常量 ENDLESS_DIFFICULTY_STEP_PER_STAGE(0.07) 与
     //   缓冲关折扣 ENDLESS_BUFFER_DISCOUNT(0.9) + IsEndlessBufferStage() —— 职责被锯齿曲线取代
     //   （节内相位 0 本身就是缓冲位），按项目惯例删除不留开关，别再加回来。
@@ -498,9 +594,8 @@ public static partial class GameConfig
     /// <summary>
     /// 无限裂隙**攻击侧**强度倍率 —— 【2026-11-02 主人拍板】血量吃满曲线，攻击只吃 45%。
     /// <para>为什么分开：血量决定「打不打得动」（该陡就陡，制造时间压力），
-    /// 攻击决定「会不会被秒」。若攻击跟满 5.82×，49 层小怪一击就能带走玩家，
-    /// 变成纯数值劝退而不是操作难度；只吃 45% 后 49 层约 3.17×，比主线终章（含 0.75 章级减免）
-    /// 略高，属于「会疼但能救」的区间。</para>
+    /// 攻击决定「会不会被秒」。攻击只吃 45% 后深层仍属「会疼但能救」的区间，
+    /// 不会被小怪一击带走而变成纯数值劝退。</para>
     /// 主线 / 副本不吃这条线（Monster.Init 里非裂隙分支 atkScale == scale，行为零变化）。
     /// </summary>
     public static float EndlessAttackMul(int riftStage)
@@ -508,11 +603,12 @@ public static partial class GameConfig
 
     /// <summary>无限裂隙攻击侧吃难度曲线的比例（0 = 攻击不涨，1 = 跟满血量曲线）</summary>
     public const float ENDLESS_ATK_SHARE = 0.45f;
-    /// <summary>无限裂隙每日机会数（2026-11-10 口径：3 → 2；每打通一层消耗 1 次，见 EndlessRiftRules.ConsumeStageClear）。
+    /// <summary>无限裂隙每日机会数（2026-11-10 口径：3 → 2）。
+    /// 【2026-11-14】改为**进本扣 1 次**、通关不扣（见 EndlessRiftRules.TryConsumeEnter）。
     /// 一次 15 体力见 StaminaSystem.ENDLESS_RIFT_COST。</summary>
     public const int ENDLESS_DAILY_TRIES = 2;
 
-    /// <summary>记录点间隔：每 5 层一个（第 5/10/15…层 = BOSS 记录点）</summary>
+    /// <summary>层类型模数 / 每 5 层换景间隔。⚠ 难度锯齿周期已改用 ENDLESS_SAVE_INTERVAL(10)，别混</summary>
     public const int ENDLESS_CHECKPOINT_INTERVAL = 5;
 
     /// <summary>
@@ -541,28 +637,64 @@ public static partial class GameConfig
     public const int ENDLESS_CATCHUP_DRAW_CAP = 40;
 
     /// <summary>
-    /// 【2026-11-02 主人拍板】重置后重打**已通关过**的层，金币按首通金币的这个比例发，天赋石一律不发。
-    /// 主人原话「奖励是不是可以多少给点」→ 取 30%：既有反馈，又不会把经济冲垮
-    /// （50 层全刷 ≈ +7,200 金/周，天赋树全树 75,180 → 约 10 周点满；全额则是 3 周，等于开高速通道）。
-    /// ⚠ 复刷**不吃** BOSS 层的 <see cref="ENDLESS_BOSS_FIRSTCLEAR_MUL"/>（否则 BOSS 层复刷 = 首通的 90%）。
+    /// 【2026-11-14 已迁表】复刷金币倍率改由 endless_reward.csv 的 repeatMul 列驱动
+    /// （见 <see cref="EndlessRepeatGoldMul"/>；表尾外 / 缺表回退 0.3）。常量保留不删，别再当真源引用。
     /// </summary>
     public const float ENDLESS_REPEAT_GOLD_RATE = 0.30f;
 
-    /// <summary>该层是否 BOSS 记录点层</summary>
-    public static bool IsEndlessBossStage(int riftStage) => Mathf.Max(1, riftStage) % ENDLESS_CHECKPOINT_INTERVAL == 0;
+    /// <summary>
+    /// 该层是否 BOSS 层。【2026-11-14 主人拍板「只有 5 是精英、10 是 boss，其他都是普通」】
+    /// 由「5 的倍数」收窄为「10 的倍数」；5/15/25 改判精英（见 <see cref="IsEndlessEliteStage"/>）。
+    /// ⚠ ENDLESS_CHECKPOINT_INTERVAL(5) 仍管每 5 层换景与层类型模数；难度锯齿周期用 ENDLESS_SAVE_INTERVAL(10)。
+    /// </summary>
+    public static bool IsEndlessBossStage(int riftStage)
+        => Mathf.Max(1, riftStage) % (ENDLESS_CHECKPOINT_INTERVAL * 2) == 0;
 
-    // —— 层类型排布（2026-10-19 主人拍板；2026-11-01 主人拍板收紧节首层）——
-    // 每 5 层小 BOSS、每 10 层大 BOSS；精英层每 10 层块随机 2~4 个，
-    // 且节首层（每节第 1 层）恒普通 —— 开局/记录点之后先热身，隔几关才来一次精英或 Boss。
-    // 排布只由层号决定（种子哈希），同一层号永远同一结果，重进/换机不翻脸。
+    // —— 层类型排布（2026-11-14 主人拍板固定排布，旧随机洗牌整条下线）——
+    // 5/15/25…（5 的倍数非 10 的倍数）= 精英层；10/20/30…（10 的倍数）= BOSS 层（也是存档点）；
+    // 其余全普通。排布只由层号决定，同一层号永远同一结果，重进/换机不翻脸。
 
-    /// <summary>该层是否大 BOSS 层（10 的倍数；小 BOSS 是 5 的倍数但非 10 的倍数）</summary>
+    /// <summary>该层是否大 BOSS 层（10 的倍数；旧「小 BOSS（5 的倍数非 10）」已改判精英，见 IsEndlessEliteStage）</summary>
     public static bool IsEndlessBigBossStage(int riftStage) => Mathf.Max(1, riftStage) % (ENDLESS_CHECKPOINT_INTERVAL * 2) == 0;
+
+    /// <summary>
+    /// 【2026-11-15 主人口径「不是每一层都开宝箱 只有每5和每10是开宝箱」】
+    /// 5 的倍数层（精英 5/15/25… + BOSS 存档层 10/20/30…）才开宝箱；其余普通层
+    /// 打完直接结算 → 弹一条金币 toast → 立刻进下一层，不摆宝箱、不播任何演出。
+    /// 真源只此一处；消费点 = StageClearRewardDirector.CoReward（无限裂隙唯一结算出口）。
+    /// </summary>
+    public static bool IsEndlessChestStage(int riftStage)
+        => Mathf.Max(1, riftStage) % ENDLESS_CHECKPOINT_INTERVAL == 0;
+
+    // —— 裂隙表定词条怪投放（2026-11-15 主人口径）——
+    // 「把普通关卡的词条怪按照一定比例分别加到每层里面 前面少后面多 越往后普通怪越少」：
+    // 主线的 AffixQuotaRange(关序号) 对裂隙不适用（裂隙 layer 映射进 0..4 的输入域，前 18 层恒 0 配额），
+    // 所以裂隙单独按**绝对层数**给一条连续比例曲线。真源只此一处，消费点 = WavePlanner.Picks.InitAffixQuota。
+    public const float ENDLESS_AFFIX_RATIO_START = 0.05f;   // 第 1 层 5%（裂隙独立曲线；主线 AFFIX_QUOTA_RATIO 11-15 起改 25%，不联动）
+    public const float ENDLESS_AFFIX_RATIO_STEP = 0.0075f;  // 每层 +0.75 个百分点
+    public const float ENDLESS_AFFIX_RATIO_CAP = 0.40f;     // 47 层起封顶 40%，之后普通怪占六成
+    public static float EndlessAffixRatio(int riftStage)
+        => Mathf.Min(ENDLESS_AFFIX_RATIO_CAP,
+                     ENDLESS_AFFIX_RATIO_START + (Mathf.Max(1, riftStage) - 1) * ENDLESS_AFFIX_RATIO_STEP);
+
+    // 「小怪的属性也要增加」：普通怪变少，单体也要随层数变强。只作用裂隙的普通小怪槽
+    // （含表定词条怪），精英 / BOSS 本体不吃 —— 11-15 已拍的 ENDLESS_ELITE_HP_MUL=4f /
+    // ENDLESS_BIGBOSS_HP_MUL=0.96f 两条锚点保持原样，不叠乘、不重算。
+    public const float ENDLESS_MOB_STAT_STEP = 0.01f;       // 每层 +1%
+    public const float ENDLESS_MOB_STAT_CAP = 1.50f;        // 50 层起封顶 ×1.5
+    public static float EndlessMobStatMul(int riftStage)
+        => Mathf.Min(ENDLESS_MOB_STAT_CAP,
+                     1f + (Mathf.Max(1, riftStage) - 1) * ENDLESS_MOB_STAT_STEP);
 
     /// <summary>大 BOSS 体型：小 BOSS 基础上再乘的系数（手感不对只改这里）</summary>
     public const float ENDLESS_BIGBOSS_SCALE_EXTRA = 1.15f;
-    /// <summary>大 BOSS 血量：小 BOSS 基础上再乘的系数（手感不对只改这里）</summary>
-    public const float ENDLESS_BIGBOSS_HP_MUL = 1.6f;
+    /// <summary>
+    /// 大 BOSS 血量：小 BOSS 基础上再乘的系数（手感不对只改这里）。
+    /// 【2026-11-15】1.6 → 0.96（降 40%）：第 10 层 Boss 相对第 5 层精英跨度过大，
+    /// 与 ENDLESS_ELITE_HP_MUL 的抬升一起把 5→10 层落差压平。
+    /// 这是全节共用系数，10/20/30… 所有大 BOSS 高潮同步降一档，但仍是本节最高点。
+    /// </summary>
+    public const float ENDLESS_BIGBOSS_HP_MUL = 0.96f;
 
     /// <summary>
     /// 每 10 层块内的精英层数（2~4）。块序号越深，摇到 3/4 的概率越大：
@@ -587,21 +719,12 @@ public static partial class GameConfig
     public static bool IsEndlessEliteStage(int riftStage)
     {
         int stage = Mathf.Max(1, riftStage);
-        if (IsEndlessBossStage(stage)) return false; // 5/10 的倍数是 BOSS，不当精英
-        int block = (stage - 1) / 10;
-        int slot = (stage - 1) % 10;
-        // 候选槽位：排除槽 4/9（小/大 BOSS）与槽 0/5（节首层恒普通，2026-11-01 主人拍板）
-        var candidates = new System.Collections.Generic.List<int> { 1, 2, 3, 6, 7, 8 };
-        var rng = new System.Random((int)(block * 83492791L + 297121507L));
-        for (int i = candidates.Count - 1; i > 0; i--) // Fisher-Yates 洗牌
-        {
-            int j = rng.Next(i + 1);
-            (candidates[i], candidates[j]) = (candidates[j], candidates[i]);
-        }
-        int count = EndlessEliteCountInBlock(block);
-        for (int i = 0; i < count && i < candidates.Count; i++)
-            if (candidates[i] == slot) return true;
-        return false;
+        // 【2026-11-14 主人拍板】固定排布：5/15/25…（5 的倍数且非 10 的倍数）= 精英，
+        // 10/20/30… = BOSS，其余全普通。旧的「每 10 层块随机洗牌挑 2~4 个」整条下线
+        // （主人原话「我以为只有5是精英10是boss 其他的都是普通」）—— 固定种子洗牌会让
+        // 第 2、3 层就变精英，进而因「精英/首领共用 bgm_boss」在第 2 层响起 boss 曲。
+        // EndlessEliteCountInBlock 保留不删（下线≠删除），已无调用点。
+        return stage % ENDLESS_CHECKPOINT_INTERVAL == 0 && !IsEndlessBossStage(stage);
     }
 
     /// <summary>
@@ -613,24 +736,32 @@ public static partial class GameConfig
     public static int EndlessMonsterCountStageIdx(int riftStage)
         => Mathf.Min(STAGES_PER_GRAND - 1, Mathf.Max(0, (Mathf.Max(1, riftStage) - 1) / 9));
 
-    /// <summary>层 → 背景章映射（每 5 层换一套：第 1-5 层森林 → 6-10 墓园 → … → 40 层后循环）</summary>
+    /// <summary>
+    /// 【2026-11-15 主人口径「每20层换个地图和怪物 按照章节里的来」】层 → 章映射，
+    /// 每 20 层按顺序换下一章（第 1-20 层森林 → 21-40 墓园 → … → 8 章走完循环）。
+    /// 单一真源：ChapterManager.StartEndlessRift 的 currentChapter（怪物池）、续层 Loading 背景、
+    /// 进本 targetChapter 三处都读它，别在别处再算一遍。
+    /// </summary>
+    public const int ENDLESS_CHAPTER_INTERVAL = 20;
     public static int EndlessChapterForStage(int riftStage)
-        => ((Mathf.Max(1, riftStage) - 1) / ENDLESS_CHECKPOINT_INTERVAL) % ChapterMonsterFolders.Length + 1;
+        => ((Mathf.Max(1, riftStage) - 1) / ENDLESS_CHAPTER_INTERVAL) % ChapterMonsterFolders.Length + 1;
 
     // —— 首通奖励（金币走局内钱包、天赋石直进钱包）——
     // 【2026-11-02 主人拍板·奖励随层数加速】设计意图（主人原话口径）：
     //   「前期可以打好几次，后期每次最多 1-2 层，但获得奖励会比前期多」
     //   → 奖励必须**超线性**增长，否则深层一层给的还没浅层一层多，玩家没理由往深处冒险。
     // 曲线 = 30 + 2×层 + 0.25×层²（二次项负责拉开深潜收益）：
-    //   10 层 75 / 20 层 170 / 30 层 315 / 50 层 755（BOSS 层 ×3 = 2,265）。
-    //   锚点校验：50 层单层 755+106 宝箱 = 861 ≈ 前期一次推 10 层的累计 917 ——
+    //   10 层 75 / 20 层 170 / 30 层 315 / 50 层 755（实际发多少由 endless_reward.csv 的 firstGoldMul
+    //   倍率决定：普通 ×1、精英 ×2、BOSS 层 0 = 不发金币，2026-11-14 主人拍板「boss层不给金币」）。
+    //   锚点校验：50 层普通层单层 755+106 宝箱 = 861 ≈ 前期一次推 10 层的累计 917 ——
     //   「后期打一层 ≈ 前期打一整次」，正是主人要的节奏对价。
-    // 总量控制：10 层 917 / 20 层 3,089 / 30 层 7,216 / 50 层 24,135。
+    // 总量控制（按表倍率折算后）：普通层全额 / 精英层双倍 / BOSS 层 0，经济不失控。
     //   对照基准：主线全通 8 章 ≈ 4,580 金、左列天赋树全树 ≈ 75,180 金
     //   → 30 层（普通玩家天花板）≈ 主线 1.6 倍；50 层（顶级）≈ 天赋树 32%，不失控。
     // ⚠ 旧公式「60+25×层」实测 50 层发 6.08 万（叠加成约 8 万）= 一局点满天赋树，已作废。
     // ⚠ 天赋石不跟着改：50 层 295 颗 vs 右列天赋全解锁 2,298 颗 = 13%，量级正常，别顺手动。
-    /// <summary>普通层首通金币 = 30 + 2×层 + 0.25×层²（50 层 755 / BOSS 层 ×3 = 2,265）</summary>
+    /// <summary>首通金币公式 = 30 + 2×层 + 0.25×层²（50 层 755）；实际发放 = 公式 × 表倍率
+    /// （endless_reward.csv firstGoldMul，见 <see cref="EndlessRewardMul"/>）</summary>
     public static int EndlessFirstClearGold(int riftStage)
     {
         int s = Mathf.Max(1, riftStage);
@@ -638,10 +769,87 @@ public static partial class GameConfig
     }
     /// <summary>普通层首通天赋石 = 2 + 层/10（整除）</summary>
     public static int EndlessFirstClearTalent(int riftStage) => 2 + Mathf.Max(1, riftStage) / 10;
-    /// <summary>BOSS 记录点层首通额外倍率（金币与天赋石同乘）</summary>
-    public const int ENDLESS_BOSS_FIRSTCLEAR_MUL = 3;
-    /// <summary>宝箱掉落（每次通关都发，可重复小额金币）= 6 + 2×层（50 层 106）</summary>
-    public static int EndlessChestGold(int riftStage) => 6 + 2 * Mathf.Max(1, riftStage);
+    /// <summary>
+    /// 裂隙首通**金币**倍率 —— 表驱动（endless_reward.csv 的 firstGoldMul 列，2026-11-14 主人拍板
+    /// 「直接配个表 以后直接改表就行」），缺表回退公式行：普通 ×1 / 精英 ×2 / BOSS 层 **0（不发金币）**。
+    /// 乘公式 30+2×层+0.25×层² 得绝对值。
+    /// </summary>
+    public static int EndlessRewardMul(int riftStage)
+        => Mathf.RoundToInt(EndlessRewardTable.RowOf(riftStage).firstGoldMul);
+
+    /// <summary>
+    /// 裂隙首通**天赋石**倍率 —— 表驱动（talentMul 列）：普通 ×0 / 精英 ×0（精英只发金币+徽记）/ BOSS ×3。
+    /// 【2026-11-15 主人口径「只有每5层和每10层的奖励特殊，其他的都是金币」】普通层 1 → 0，
+    /// 天赋石只归 10 层档；乘公式 2+层/10 得绝对值。
+    /// </summary>
+    public static int EndlessRewardTalentMul(int riftStage)
+        => Mathf.RoundToInt(EndlessRewardTable.RowOf(riftStage).talentMul);
+
+    /// <summary>
+    /// 裂隙**复刷金币**倍率 —— 表驱动（repeatMul 列）：普通/精英 0.3、BOSS 层 0（复刷同样不给金币）。
+    /// 乘公式 30+2×层+0.25×层² 得绝对值。
+    /// </summary>
+    public static float EndlessRepeatGoldMul(int riftStage)
+        => EndlessRewardTable.RowOf(riftStage).repeatMul;
+
+    /// <summary>
+    /// BOSS 存档层（10 的倍数）钻石 —— 表驱动（diamond 列）：10 层 10 → 20 层 15 → 30 层 20…（表尾外每档 +5）。
+    /// 主线 / 活动本的 Boss 关不走这条（维持 StageClearRewardDirector.BossChestDiamond=10）。
+    /// </summary>
+    public static int EndlessBossDiamond(int riftStage)
+        => EndlessRewardTable.RowOf(riftStage).diamond;
+
+    /// <summary>
+    /// BOSS 存档层加发的普通招募卷 —— 表驱动（scroll 列）。
+    /// 【2026-11-15 主人口径「每10层掉2个」】每 10 层固定 2 个，不再随档递增。
+    /// </summary>
+    public static int EndlessBossScrollCount(int riftStage)
+        => EndlessRewardTable.RowOf(riftStage).scroll;
+
+    /// <summary>
+    /// 【2026-11-15 主人口径「招募卷越往后越高级」「50层以后再加1个高级的」】
+    /// BOSS 存档层额外加发的高级（传奇）招募卷 —— 表驱动（scrollAdvanced 列）：50 层起每 10 层 1 个。
+    /// 深层想再加档直接改表，不在代码里写第二套口径。
+    /// </summary>
+    public static int EndlessBossAdvancedScrollCount(int riftStage)
+        => EndlessRewardTable.RowOf(riftStage).scrollAdvanced;
+
+    /// <summary>
+    /// 精英层（5/15/25…）徽记轮换 —— 表驱动（badgeJob/badgeTier 列）：
+    /// 每 10 层换一个职业（剑盾→游侠→法师→牧师→重武→狂战循环），每轮换完一遍升档
+    /// （普通→稀有→传奇封顶）。数量走 <see cref="EndlessEliteBadgeCount"/>。
+    /// </summary>
+    public static void EndlessEliteBadge(int riftStage, out string jobKey, out string tier)
+    {
+        var row = EndlessRewardTable.RowOf(riftStage);
+        jobKey = row.badgeJob;
+        tier = row.badgeTier;
+    }
+
+    /// <summary>精英层徽记每层发放数量 —— 表驱动（badgeCount 列，当前 5）。</summary>
+    public static int EndlessEliteBadgeCount(int riftStage)
+        => EndlessRewardTable.RowOf(riftStage).badgeCount;
+
+    /// <summary>
+    /// 宝箱金币（每次通关都发，可重复小额）—— 表驱动（chestGold 列）：
+    /// 0 = 本档不发（BOSS 层拍板不给金币）；&gt;0 = 每层固定发这个数；-1 = 走公式 6+2×层（普通/精英默认）。
+    /// </summary>
+    public static int EndlessChestGold(int riftStage)
+    {
+        int cfg = EndlessRewardTable.RowOf(riftStage).chestGold;
+        if (cfg == 0) return 0;
+        if (cfg > 0) return cfg;
+        return 6 + 2 * Mathf.Max(1, riftStage);
+    }
+
+    /// <summary>
+    /// 【2026-11-15 主人拍板「每10层金币+10%」】按 10 层一档给金币奖励加成：
+    /// 1-10 层 ×1.0，11-20 层 ×1.1，21-30 层 ×1.2 …（线性叠加，不封顶）。
+    /// 单一出口，只由 SettleEndlessStageClear 在**发放前**乘，保证入账额 = 提示额。
+    /// BOSS 层按 11-14「boss层不给金币」口径本身不发通关金币，本系数作用于会发金币的层。
+    /// </summary>
+    public static float EndlessGoldDecadeMul(int riftStage)
+        => 1f + 0.1f * ((Mathf.Max(1, riftStage) - 1) / ENDLESS_SAVE_INTERVAL);
 
     // —— Boss 掉落卷轴（2026-10-17 主人拍板：Boss 有几率掉卷轴，高级卷轴几率很低）——
     /// <summary>Boss 击杀掉「普通卷轴」的几率（招募稀有佣兵用）</summary>
@@ -705,13 +913,18 @@ public static partial class GameConfig
     [Header("渐进式怪物解锁")]
     /// <summary>每章怪物总类型数</summary>
     public const int MONSTERS_PER_CHAPTER = 12;
-    /// <summary>BOSS类型的起始编号（11-12为BOSS，不会被当做小怪）</summary>
-    public const int BOSS_SPRITE_START = 11;
+    /// <summary>BOSS类型的起始编号（10-12为BOSS，不会被当做小怪）</summary>
+    /// <remarks>【2026-11-15 主人拍板·怪物结构定稿】每章 1~2 普通小怪 / 3~6 词条怪 / 7~9 精英 / 10~12 Boss，
+    /// 8 章结构完全同构。10 号由原「高阶小怪」并入 Boss 段，唯一真源只此一处。
+    /// 【同日 xiaoboss 定稿】10 号 = xiaoboss（小 Boss）：minWave=0 ⇒ 5/8 节短章末关也有 Boss 模板；
+    /// 11/12 = 真 Boss：minWave=9 ⇒ 仅 10 节章末关可取。分层由 GetWaveMonsterPool 的 minWave 过滤天然实现，
+    /// 不新增判定、不新增类别标记；主线用不到的 11/12 形象由副本/无限裂隙 Boss 波复用。</remarks>
+    public const int BOSS_SPRITE_START = 10;
     /// <summary>首次通关可出现的最大怪物类型编号（前4-5种）</summary>
     public const int TIER0_MAX_SPRITE = 5;
     /// <summary>通关2-3次后可出现的最大怪物类型编号（前7-8种）</summary>
     public const int TIER1_MAX_SPRITE = 8;
-    /// <summary>通关4次以上可出现的最大怪物类型编号（前10种，11-12始终是BOSS）</summary>
+    /// <summary>通关4次以上可出现的最大怪物类型编号（前10种；10=xiaoboss，11/12=真Boss，均被普通池过滤）</summary>
     public const int TIER2_MAX_SPRITE = 10;
     /// <summary>Tier1解锁所需的通关次数</summary>
     public const int TIER1_UNLOCK_CLEARS = 2;

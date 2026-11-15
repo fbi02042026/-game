@@ -783,11 +783,14 @@ public sealed class ArenaBattleMode : BattleMode
 
 /// <summary>
 /// 无限裂隙（UI「无限裂隙」，冒险界面下标 2，原占位名「迷宫探索」）。
-/// 玩法（2026-11-10 口径）：每天 2 次机会 × 15 体力（见 StaminaSystem.ENDLESS_RIFT_COST）；
-/// **打通一层才算用掉 1 次机会**，进本不扣（没打通不算），见 EndlessRiftRules.ConsumeStageClear；
-/// **每层开始抽 3 次奖**（免费额度层间重置，定向抽不开启）；抽奖价格按本局已抽数递增；
-/// 难度走分档陡坡（每节 ×1.18~1.20 + 节内每层 +8% 锯齿 + 精英层 ×1.45，见 GameConfig.EndlessDifficultyMul）；
-/// 每 5 层一个 BOSS、**每 10 层一个存档点**（大 BOSS 层，2026-11-02 主人拍板由 5 改 10）；
+/// 玩法（2026-11-14 口径）：每天 2 次机会 × 15 体力（见 StaminaSystem.ENDLESS_RIFT_COST）；
+/// **进本时扣 1 次机会**（TryConsumeEnter），通关不扣、一直续层到死亡 / 撤离 ——
+/// 「一次进本死亡再出来算一次」（ConsumeStageClear 保留恒 true，便于回退旧口径）；
+/// 免费抽**每层固定 3 次**（2026-11-15 口径，额度每层清零，见 SlotMachineDefs.EndlessFreeDrawsForRun；
+/// 通关补贴抽奖币已停发；定向抽不开启，抽奖价格按本局已抽数递增）；
+/// 难度走 10 层一节的上升锯齿（每层 +8%、第 6 关过渡降、第 10 层高潮、换节回落，见 GameConfig.EndlessDifficultyMul）；
+/// 层类型固定排布（2026-11-14 主人拍板）：5/15/25… = 精英、10/20/30… = BOSS（也是存档点）、其余全普通；
+/// **宝箱结算完不开传送门直接进下层**（裂隙专属，主线/活动本传送门照旧，见 StageClearRewardDirector）；
 /// 首通奖励（金币+天赋石）一次性、宝箱掉落每次都发；重置进度后重打旧层只发 30% 金币（天赋石不发）；
 /// 死亡/撤离当层不发、已通层保留；下次从存档点 +1 层开打；每 5 层换一套场景背景（轮换现有 8 章资源）；
 /// 层间黑屏过场字幕「第 N 层」。佣兵/技能跨层保留，直到死亡退出。
@@ -800,10 +803,8 @@ public sealed class EndlessBattleMode : BattleMode
     public override bool IsPlayable => true;
 
     /// <summary>
-    /// 每层开始免费抽 —— 两层口径（2026-11-02 主人拍板）：
-    /// ① 进本第一层 = 3 抽 + **按起始层补偿**（每 3 层 +1，封顶 +12）—— 解「构筑重置 + 深层难度」死锁；
-    /// ② 之后按本次连打层数递减：第 2-3 层 3 抽 → 第 4-6 层 2 抽 → 第 7 层起 1 抽。
-    /// 唯一出口 <see cref="SlotMachineDefs.EndlessFreeDrawsForRun"/>。
+    /// 【2026-11-15 主人口径「每层抽3次」】每层固定 3 次免费抽，唯一出口
+    /// <see cref="SlotMachineDefs.EndlessFreeDrawsForRun"/>；额度每层由 CoStageEntryDraft 清零。
     /// </summary>
     public override int FreeEntryDraws => SlotMachineDefs.EndlessFreeDrawsForRun(
         BattleManager.Instance != null
@@ -882,8 +883,10 @@ public static class EndlessRiftRules
     }
 
     /// <summary>
-    /// 进本：只扣体力 + 落盘标记，**不扣每日次数**（次数只在打通一层时扣，见 <see cref="ConsumeStageClear"/>）。
-    /// 次数为 0 或体力不足都返回 false 并弹对应提示。
+    /// 进本：扣 1 次每日机会 + 15 体力，然后落盘标记。
+    /// 【2026-11-14 主人拍板「一次进本死亡再出来算一次」】次数改在**进本**时扣（原来每打通一层扣 1 次，
+    /// 一次进本最多连打 2 层就被强制回城，根本摸不到第 10 层记录点）。通关不再扣，一直续层到死。
+    /// 次数为 0 或体力不足都返回 false 并弹对应提示（体力不足时次数不扣，避免白扣一次）。
     /// </summary>
     public static bool TryConsumeEnter()
     {
@@ -897,6 +900,7 @@ public static class EndlessRiftRules
         }
         if (!StaminaSystem.TrySpendForEndlessRift())
             return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
+        data.endlessRiftTriesToday++;
         // 虚拟排行榜的闲置衰减锚点（2026-10-24）：只有真实进本才写，隔了几天没玩排名会回落
         data.endlessRiftLastPlayDayKey = DateTime.UtcNow.ToString("yyyyMMdd");
         // 【2026-11-02 晚】「新纪录」角标的清账点：进本即视为玩家已看到（回城那波展示结束）
@@ -906,9 +910,9 @@ public static class EndlessRiftRules
     }
 
     /// <summary>
-    /// 【2026-11-10 口径】打通一层 = 用掉 1 次机会，唯一扣次出口（调用点 = SettleEndlessStageClear）。
-    /// 返回扣完是否还有剩余：false = 次数用尽，本局收尾回城，不许自动续层。
-    /// 死亡 / 主动撤离 / 只是进本都不调这里 → 不算用掉机会。
+    /// 【2026-11-14 主人拍板「一次进本死亡再出来算一次」】打通一层**不再扣次数**，恒返回 true = 一直续层。
+    /// 每日机会只在 <see cref="TryConsumeEnter"/> 进本时扣 1 次；死亡 / 主动撤离出本即算用完这一次。
+    /// 方法保留不删（SettleEndlessStageClear 的 canContinue 仍走这里，便于回退旧口径）。
     /// </summary>
     public static bool ConsumeStageClear()
     {
@@ -918,15 +922,7 @@ public static class EndlessRiftRules
             Debug.LogError("[EndlessRift] 打通一层时存档为空，本局收尾");
             return false;
         }
-        EnsureDay(data);
-        if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
-        {
-            Debug.LogError("[EndlessRift] 次数已用完仍打通一层，进本闸失效，本局收尾");
-            return false;
-        }
-        data.endlessRiftTriesToday++;
-        SaveSystem.Instance?.Save();
-        return TriesLeft(data) > 0;
+        return true;   // 次数已在进本扣，通关不扣、恒续层
     }
 
     /// <summary>
@@ -983,7 +979,9 @@ public static class EndlessRiftRules
         int cap = GameConfig.ENDLESS_CATCHUP_DRAW_CAP;
         int total = 0;
         // 到封顶就提前收手：深层跳层时 to - from 可能上百，没必要白算完
-        for (int s = from; s < to && total < cap; s++)
+        // 【2026-11-15】每层固定 3 抽后，直达跳过的层按「本该每层 3 抽」补回；
+        // 从 from+1 起算（第一层额度由模式本身发，不算「被跳过的层」），总额封顶 ENDLESS_CATCHUP_DRAW_CAP。
+        for (int s = from + 1; s < to && total < cap; s++)
             total += SlotMachineDefs.EndlessFreeDrawsForRun(s - from, from);
         return Mathf.Min(total, cap);
     }

@@ -9,11 +9,11 @@ using UnityEngine.UI;
 /// <para>绑定方式照 <c>BattleUI.WidgetFactory.BindEquipQuickSlots</c>：抓槽位节点、
 /// 记下美术放的占位图（空槽还原）、icon 层填装备图标。不碰预制体文件，只挂运行时组件/节点。</para>
 ///
-/// <para>🔴 数据口径（2026-11-13 主人拍板「我要的是站立的一套，直接复制过去」）：
-/// · <b>当前职业</b>（存档选中）→ 显示<b>已穿装备</b>（<see cref="BattleBagSystem.GetEquippedInSlot"/>，
-///   与战斗装备栏同一数据源，随 OnBackpackChanged/OnCostumeChanged 实时刷新）；
-/// · <b>其他职业</b>标签 → 显示该职业<b>起步套</b>预览（<see cref="PlayerJobDefs.GetJobStarterTemplateIds"/>，
-///   严格按 job 取，三套互不串——红线）。起步无护甲 → 头/胸/手/脚空槽（还原占位图）。</para>
+/// <para>🔴 数据口径（2026-11-14 修正）：三个职业标签<b>一律显示该职业起步套</b>
+/// （<see cref="PlayerJobDefs.GetJobStarterTemplateIds"/>，严格按 job 取，三套互不串——红线）。
+/// 原「当前职业显示已穿装备（BattleBagSystem.GetEquippedInSlot）」作废：局内背包开局/回城/结算
+/// 都会被清空（肉鸽口径，局外没有装备存档字段），角色页只会得到 6 个空槽——这就是「剑盾初始不见了」。
+/// 起步无护甲 → 头/胸/手/脚空槽（还原占位图）。</para>
 ///
 /// <para>交互：点标签切职业；左右箭头（运行时补建，预制体无）也可切换；点已装备槽弹
 /// <see cref="EquipDetailPopupUI"/> 属性框。</para>
@@ -47,11 +47,14 @@ public class CharacterEquipBar : MonoBehaviour
 
     Transform _container;                 // 装备容器（6 槽的父）
     readonly List<SlotView> _slots = new List<SlotView>();
-    readonly List<Text> _tabTexts = new List<Text>();
     readonly List<PlayerJobId> _tabJobs = new List<PlayerJobId>();
+    // 2026-11-13 主人拍板：标签上的字是金色的，代码一律不许改文字颜色。
+    // 选中/未选中状态 = 主人手摆在 prefab zhuangbei/1|2|3 下的同名两张图，运行时只切显隐。
+    readonly List<GameObject> _tabSelected = new List<GameObject>();
+    readonly List<GameObject> _tabUnselected = new List<GameObject>();
     Button _leftArrow, _rightArrow;       // 运行时补建
     Button _entryBtn;                     // 右侧装备图标入口（主人手摆的「装备Button」）
-    bool _collapsed;
+    bool _collapsed = true;   // 默认折叠（关闭），由右侧 装备Button 点开；DoBind 里 ApplyCollapsed 显式应用
     bool _wired;
     int _idx;
 
@@ -105,6 +108,7 @@ public class CharacterEquipBar : MonoBehaviour
         BindEntry(entryButton);
         _idx = IndexOf(PlayerJobDefs.GetSelected());
         RefreshCurrent();
+        ApplyCollapsed();   // 默认折叠需显式应用，否则沿用预制体 m_IsActive=1（开）
     }
 
     // ============================================================
@@ -129,8 +133,11 @@ public class CharacterEquipBar : MonoBehaviour
     void ToggleBar()
     {
         _collapsed = !_collapsed;
-        gameObject.SetActive(!_collapsed);
+        ApplyCollapsed();
     }
+
+    /// <summary>按当前 _collapsed 应用显隐（绑定初值与 ToggleBar 共用单一出口）。</summary>
+    void ApplyCollapsed() => gameObject.SetActive(!_collapsed);
 
     /// <summary>照战斗 ResolveSlotIcon：优先美术摆的 icon/ItemIcon/Icon 子节点，回退槽自身 Image。</summary>
     static SlotView BuildSlotView(Transform t, EquipSlotType slot)
@@ -173,8 +180,9 @@ public class CharacterEquipBar : MonoBehaviour
 
     void BindTabs(Transform root)
     {
-        _tabTexts.Clear();
         _tabJobs.Clear();
+        _tabSelected.Clear();
+        _tabUnselected.Clear();
         for (int i = 0; i < root.childCount; i++)
         {
             var child = root.GetChild(i);
@@ -187,6 +195,14 @@ public class CharacterEquipBar : MonoBehaviour
                 Debug.LogError($"[CharacterEquipBar] 标签文本「{t.text}」无法映射职业（需含 剑/法/游），该标签未绑定");
                 continue;
             }
+
+            // 2026-11-13 主人拍板：选中/未选中两张图是主人在 prefab 里手摆好的同名节点，
+            // 代码只切显隐，绝不给它们换图 / 改色 / 改文字。缺图 = LogError 报出，不造图不兜底。
+            var sel = child.Find("选中");
+            var unsel = child.Find("未选中");
+            if (sel == null || unsel == null)
+                Debug.LogError($"[CharacterEquipBar] 标签「{t.text}」缺「选中」或「未选中」状态图节点（请核对 zhuangbei 下的节点名）");
+
             var btn = child.GetComponent<Button>();
             if (btn == null) btn = child.gameObject.AddComponent<Button>();
             btn.transition = Selectable.Transition.None;
@@ -196,11 +212,12 @@ public class CharacterEquipBar : MonoBehaviour
             btn.targetGraphic = target;
             var captured = job.Value;
             btn.onClick.AddListener(() => SelectJob(captured));
-            _tabTexts.Add(t);
             _tabJobs.Add(captured);
+            _tabSelected.Add(sel != null ? sel.gameObject : null);
+            _tabUnselected.Add(unsel != null ? unsel.gameObject : null);
         }
-        if (_tabTexts.Count < PlayerJobDefs.Playable.Length)
-            Debug.LogError($"[CharacterEquipBar] 职业标签只绑到 {_tabTexts.Count}/{PlayerJobDefs.Playable.Length} 个，请核对 zhuangbei 下的标签节点");
+        if (_tabJobs.Count < PlayerJobDefs.Playable.Length)
+            Debug.LogError($"[CharacterEquipBar] 职业标签只绑到 {_tabJobs.Count}/{PlayerJobDefs.Playable.Length} 个，请核对 zhuangbei 下的标签节点");
     }
 
     static PlayerJobId? JobFromLabel(string label)
@@ -220,9 +237,11 @@ public class CharacterEquipBar : MonoBehaviour
         RefreshCurrent();
     }
 
-    /// <summary>切回「存档当前职业」（ShowPage 时调用）。</summary>
+    /// <summary>切回「存档当前职业」（ShowPage 时调用）。
+    /// 同时清空起步套缓存：商店购买/奖励领取可能已换了专属武器，每次进页重算一次。</summary>
     public void RefreshToSelected()
     {
+        _kitCache.Clear();
         _idx = IndexOf(PlayerJobDefs.GetSelected());
         RefreshCurrent();
     }
@@ -278,41 +297,35 @@ public class CharacterEquipBar : MonoBehaviour
     }
 
     // ============================================================
-    // 刷新：当前职业 = 已穿装备；其他职业 = 起步套
+    // 刷新：三个职业一律取该职业起步套（严格按 job 隔离）
     // ============================================================
 
     void RefreshCurrent()
     {
         var job = PlayerJobDefs.Playable[_idx];
-        bool isCurrentJob = job == PlayerJobDefs.GetSelected();
-        var kit = isCurrentJob ? null : GetKit(job);
+        var kit = GetKit(job);
 
         for (int i = 0; i < _slots.Count; i++)
         {
-            EquipInstance eq;
-            if (isCurrentJob)
-            {
-                // 站立的一套：与战斗装备栏同源（GetEquippedInSlot 内部已处理主/副手逻辑槽）
-                eq = BattleBagSystem.Instance != null
-                    ? BattleBagSystem.Instance.GetEquippedInSlot(_slots[i].slot)
-                    : null;
-            }
-            else
-            {
-                eq = _slots[i].slot == EquipSlotType.MainHand ? kit[0]
-                   : _slots[i].slot == EquipSlotType.OffHand ? kit[1]
-                   : null;   // 起步无护甲 → 头/胸/手/脚空槽
-            }
+            // 【2026-11-14 修「剑盾初始不见了」】三个职业一律走起步套预览。
+            // 原「当前职业读 BattleBagSystem.GetEquippedInSlot」是死路：局内背包在开局/回城/结算
+            // 都被 InitNewRun 清空（肉鸽设计，局外无装备存档字段），角色页在城镇必然 6 槽全空。
+            EquipInstance eq =
+                _slots[i].slot == EquipSlotType.MainHand ? kit[0]
+              : _slots[i].slot == EquipSlotType.OffHand  ? kit[1]
+              : null;   // 起步无护甲 → 头/胸/手/脚空槽
             BindSlot(_slots[i], eq);
         }
 
-        // 标签高亮：当前职业白，其他灰（色值主人可在 Inspector 里的 Text 上自行改）
-        for (int i = 0; i < _tabTexts.Count; i++)
+        // 2026-11-13 主人拍板：标签状态只切 prefab 里手摆的「选中/未选中」两张图显隐。
+        // 文字是金色（预制体 m_Color），代码一行都不碰；也不给状态图换 sprite / 改 color。
+        for (int i = 0; i < _tabJobs.Count; i++)
         {
-            if (_tabTexts[i] == null) continue;
-            _tabTexts[i].color = _tabJobs[i] == job
-                ? Color.white
-                : new Color(0.55f, 0.55f, 0.55f, 1f);
+            bool on = _tabJobs[i] == job;
+            if (_tabSelected[i] != null) _tabSelected[i].SetActive(on);
+            else Debug.LogError($"[CharacterEquipBar] 标签 {i} 缺「选中」状态图，状态未刷新");
+            if (_tabUnselected[i] != null) _tabUnselected[i].SetActive(!on);
+            else Debug.LogError($"[CharacterEquipBar] 标签 {i} 缺「未选中」状态图，状态未刷新");
         }
     }
 
@@ -347,14 +360,16 @@ public class CharacterEquipBar : MonoBehaviour
         }
     }
 
-    /// <summary>三职业起步套缓存（主手/副手，副手仅剑盾有盾）。</summary>
+    /// <summary>三职业起步套缓存（主手/副手，副手仅剑盾有盾）。
+    /// 【2026-11-14】已购买/已领取的专属武器优先（与开战发装同源，见 PlayerJobDefs.CreateStartupOverrideWeapon），
+    /// 没有才用起步白装。</summary>
     EquipInstance[] GetKit(PlayerJobId job)
     {
         if (_kitCache.TryGetValue(job, out var cached)) return cached;
         var arr = new EquipInstance[SlotDefs.Length];
         PlayerJobDefs.GetJobStarterTemplateIds(job, out string mainId, out string offId);
-        arr[0] = MakeStarterInstance(mainId, job);
-        arr[1] = MakeStarterInstance(offId, job);
+        arr[0] = PlayerJobDefs.CreateStartupOverrideWeapon(job, offHand: false) ?? MakeStarterInstance(mainId, job);
+        arr[1] = PlayerJobDefs.CreateStartupOverrideWeapon(job, offHand: true) ?? MakeStarterInstance(offId, job);
         _kitCache[job] = arr;
         return arr;
     }

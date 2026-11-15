@@ -32,7 +32,7 @@ using UnityEngine;
 ///        ① 每局启动金 **200** + 初始资金天赋每级 80（`SlotMachineSystem.GrantRunStarterGold`）
 ///        ② 每关通关：**50 起，每关 ×1.4 复利递增，单关封顶 200**
 ///           （战斗内；金币本不发 —— `IBattleMode.GrantsRunCoins`；发放入口 `GrantStageCoins`）
-///        ③ 抽中「金币」安慰奖（一抽价 × 0.5）
+///        ③ 抽中「金币」安慰奖（一抽价 × 0.6）
 ///      ⚠ ①②③ 都是 `countsAsEarned=false` → 抬高本局起点 `_goldAtRunStart`，
 ///        结算差额不含它们 = **进得来、带不走**（仍符合 2026-10-05「战斗内的都是局内的」）。
 ///      ⚠ 引导局**没有任何中途补贴**（「每两波 +100」那条已于 2026-10-05 删除，见三·补②）。
@@ -239,7 +239,7 @@ public static class SlotMachineDefs
 
     /// <summary>
     /// 【2026-10-19 主人拍板】抽奖币改成**独立方向** —— 抽中它 = 直接得抽奖币
-    /// （当抽价 × 0.5，见 <see cref="GOLD_PRIZE_PRICE_MULT"/>），不再混进三类池子。
+    /// （当抽价 × 0.6，见 <see cref="GOLD_PRIZE_PRICE_MULT"/>），不再混进三类池子。
     /// 权重 5：2026-10-20 主人确认，佣兵提到 20 后抽奖币<b>不跟佣兵联动</b>，维持 5 不变
     ///（此前 10-19 的「与佣兵同为 5」联动口径就此作废）。
     /// 本局最多出 <see cref="MAX_GOLD_PRIZE_PER_RUN"/> 次，超过后这个方向不进候选。
@@ -255,9 +255,10 @@ public static class SlotMachineDefs
 
     /// <summary>
     /// 抽中「金币」给多少抽奖币 = 本关一抽价格 × 这个倍率。
-    /// 0.5 = 回血一半（必须低于 1，否则「抽一次白赚一次」会变成无限抽）。
+    /// 【2026-11-14 主人拍板「抽奖获得抽奖币给的太少了 最少给60%」】0.5 → 0.6（首抽 40 → 给 24）。
+    /// 必须低于 1，否则「抽一次白赚一次」会变成无限抽。
     /// </summary>
-    public const float GOLD_PRIZE_PRICE_MULT = 0.5f;
+    public const float GOLD_PRIZE_PRICE_MULT = 0.6f;
 
     // ⚠【2026-10-05 已删除】强化石安慰奖（`WEIGHT_MATERIAL` / `MATERIAL_PRIZE_*` / `DraftCardKind.Material`）。
     //   主人拍板：「强化石不能抽奖得到」—— 强化石走铁匠铺 / 休息关 / 商店，抽奖只留「金币」一档安慰奖。
@@ -535,32 +536,22 @@ public static class SlotMachineDefs
     /// <summary>起步抽补偿：每几层 +1 抽</summary>
     public const int ENDLESS_RUN_DRAW_BONUS_PER_STAGE = 3;
 
+    /// <summary>【2026-11-14 主人拍板】记录点续局起送的免费抽基数（第 10 层记录点 = 3 次）</summary>
+    public const int ENDLESS_CHECKPOINT_FREE_DRAWS_BASE = 3;
+
+    /// <summary>【2026-11-14 主人拍板】免费抽上限：每 10 层 +1，最多 5 次</summary>
+    public const int ENDLESS_CHECKPOINT_FREE_DRAWS_CAP = 5;
+
     /// <summary>
     /// 无限裂隙该层的免费抽额度（唯一出口）。
+    /// 【2026-11-15 主人口径「我记得应该是每层抽3次」「没有抽奖卷的事」】每层固定 3 次，
+    /// 不再按记录点 / 本次推进层数递减，也不再发通关补贴抽奖币（见 BeginRewardSequence）。
+    /// 额度由 SlotMachineSystem.ResetStageFreeDraws 每层清零，故每层都能抽满 3 次。
     /// </summary>
-    /// <param name="stagesAdvanced">
-    /// **本次进入内已推进的层数**（0 = 刚进本的第一层），
-    /// 调用方传 <c>BattleManager.EndlessRiftStage - EndlessRiftEntryStage</c>。
-    /// ⚠ 不要传绝对层数 —— 那会变成「下次进只能抽一回」，与主人拍板相反。
-    /// </param>
-    /// <param name="startStage">
-    /// 本次进入的起始层（记录点+1）。只用于第一层的起步抽补偿。
-    /// </param>
+    /// <param name="stagesAdvanced">保留参数：本次进入内已推进的层数（现行口径不消费）。</param>
+    /// <param name="startStage">保留参数：本次进入的起始层（现行口径不消费）。</param>
     public static int EndlessFreeDrawsForRun(int stagesAdvanced, int startStage)
-    {
-        if (stagesAdvanced <= 0)
-        {
-            // 进本第一层：3 抽基础 + 按起始层补偿（解「构筑重置 + 深层难度」死锁）
-            int bonus = Mathf.Clamp(
-                (Mathf.Max(1, startStage) - 1) / ENDLESS_RUN_DRAW_BONUS_PER_STAGE,
-                0, ENDLESS_RUN_DRAW_START_BONUS_CAP);
-            return ENDLESS_RIFT_FREE_DRAWS + bonus;
-        }
-        // 之后按「本次连打了几层」递减：第 2-3 层 3 抽 → 第 4-6 层 2 抽 → 第 7 层起 1 抽
-        if (stagesAdvanced <= ENDLESS_RUN_DRAW_TIER3_ADVANCE) return ENDLESS_RIFT_FREE_DRAWS;
-        if (stagesAdvanced <= ENDLESS_RUN_DRAW_TIER2_ADVANCE) return ENDLESS_RIFT_FREE_DRAWS_DEEP;
-        return ENDLESS_RIFT_FREE_DRAWS_DEEPER;
-    }
+        => ENDLESS_RIFT_FREE_DRAWS;
 
     // 【2026-10-14 主人拍板】10-13 那版「引导三拍免费抽」（TUTORIAL_FREE_DRAWS = 3）已整条删除，
     // 不留开关 —— 引导三拍照常扣钱，由引导启动金兜住（2026-10-23 起 200 ≥ 150，见 TUTORIAL_STARTER_COINS）。

@@ -547,7 +547,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         // 几何从预制体实测值反推：bg 中心 y = headerH/2 − 54（垂下 54，其余上探框顶）。
         // 2026-10-25 二次拍板：左侧绶带贴齐屏幕左边缘——Frame 左缘被 FrameSidePad 内缩，
         // x 取 bg半宽 − FrameSidePad，任何分辨率下绶带左端都顶到画布 x=0（原框左内缩 30 已废）。
-        const float HeaderInsideDrop = 54f; // 横幅垂进框顶以内的部分
+        const float HeaderInsideDrop = 34f; // 横幅垂进框顶以内的部分（2026-11-13 主人拍板「图鉴标题往上移 20」：54→34，横幅整体上移 20px）
         var biaotou = frame.Find("biaotou") as RectTransform;
         if (biaotou == null)
         {
@@ -748,11 +748,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         var mercTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab3");
         if (mercTab != null)
             RedDot.Bind(mercTab, RedDot.LogMerc);
-        // 2026-10-31：里程等级挂世界页 Tab，成就 Tab 只留「成就可领」；
-        // 2026-11-13 碎片合成整体下线，不再参与红点。
-        var worldTab = transform.Find("Root/Frame/Sidebar/Tabs/Tab5");
-        if (worldTab != null)
-            RedDot.Bind(worldTab, RedDot.LogWorld);
+        // 【2026-11-14 主人报「世界标签没有提示为什么要加红点」】世界页只列世界记录，
+        // 页内没有可领/新内容提示；这个红点原本代表的里程等级奖励在「里程商店」面板（侧栏 Emblem 入口）。
+        // 世界 Tab 不再挂红点；其它 Tab / 日志入口红点口径照旧，LogWorld 键只报告不清理（铁律 18）。
         // 【2026-11-13 主人拍板】领取按钮不挂红点（截图反馈），Bind 停用；成就行的 ClaimRedDot 不受影响。
         // if (_claim != null)
         //     RedDot.Bind(_claim.transform, RedDot.AchClaim, new Vector2(-16f, -11f));
@@ -880,7 +878,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                     : v.done ? "已完成"
                     : !reachable ? "未开启"
                     : v.need > 1 ? v.progress + "/" + v.need
-                    : "进行中";
+                    : "0/1";
                 // 【2026-11-12 主人拍板】三档：已完成未领取置顶、未完成居中、已领取沉底。
                 // 只改归属列表，行内容与状态词不变。
                 AddRow(claimable ? claimableRows : (claimed ? doneRows : rows), name, status,
@@ -1029,8 +1027,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         AdventureLogAchievements.EvaluateAll();
         var list = AdventureLogCatalog.Achievements;
-        // 【2026-11-07 主人拍板】已领取的条沉到列表最下面：先按原表顺序分两批，末尾合并（稳定，不打乱其余顺序）。
+        // 【2026-11-07 主人拍板】已领取的条沉到列表最下面。
+        // 【2026-11-13 修复】补「可领取置顶」一档，与主线/支线页三档口径一致：
+        // 可领取 → 顶、其它（进行中/已完成未领）→ 中、已领取 → 底。先按原表顺序分三批，稳定合并。
         var claimedRows = new List<LogRow>();
+        var claimableRows = new List<LogRow>();
         int unlocked = 0;
         int claimable = 0;
         AdventureLogCatalog.AchEntry current = default;
@@ -1058,10 +1059,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 ? e.Desc + "\n奖励：" + AdventureLogAchievements.GetReward(e.Id).Label
                 : e.Category + "　" + e.Desc;
             // 【2026-11-07 主人拍板】可领取的条右上角挂红点；已领取的条整条压暗，并排到最后面。
-            AddRow(claimed ? claimedRows : rows, e.Name, prog, detail, !done, e.Unlock, e.Id,
+            // 【2026-11-13 修复】可领取的条归到 claimableRows，统一在列表顶部（与主线/支线页同口径）。
+            AddRow(claimed ? claimedRows : (canClaim ? claimableRows : rows), e.Name, prog, detail, !done, e.Unlock, e.Id,
                 claimed: claimed, claimable: canClaim);
         }
-        rows.AddRange(claimedRows);
+        rows.InsertRange(0, claimableRows);   // 可领取置顶（与主线/支线页同口径）
+        rows.AddRange(claimedRows);           // 已领取沉底
         title = hasCurrent ? current.Name : "成就";
         desc = hasCurrent
             ? current.Desc

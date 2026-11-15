@@ -79,6 +79,9 @@ public static class ChapterStoryBeats
         string[] bgs;
         switch (chapter)
         {
+            // 【2026-11-15】ch1 战后剑痕三选一挂 Chapter1Stele(森林.jpg)：原先走 default 不预热，
+            // 图只能等「打完 Boss→黑幕出现」那一帧首次同步解码，表现为卡一下。补进本章预热表。
+            case 1: bgs = new[] { StoryBackgrounds.Chapter1Stele }; break;
             case 2: bgs = new[] { StoryBackgrounds.GraveSeven }; break;
             case 3: bgs = new[] { StoryBackgrounds.MelissaCamp }; break;
             case 4: bgs = new[] { StoryBackgrounds.Windmill }; break;

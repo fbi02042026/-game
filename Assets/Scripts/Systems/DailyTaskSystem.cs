@@ -53,6 +53,10 @@ using System.Collections.Generic;
             // 0 = 跨会话登录补发 → 按「这笔最多升 1 级」重算，否则额度过期会把该升的经验吞在账上。
             int cap = data.stageLevelUpCapLevel > 0 ? data.stageLevelUpCapLevel : data.playerLevel + 1;
             LevelSystem.AddDirectExp(pending, cap);
+            // 【2026-11-14 主人拍板】「今日通关」是日常任务之一（SettleRows 里被 continue 跳过，
+            // 奖在这儿发），它的完成提示同样走左侧横幅；经验按实际发放值写，失败局 1/3 不虚报。
+            string clearTitle = QuestTable.TryDaily("daily_clear", out var clearRow) ? clearRow.title : null;
+            QuestDoneToast.Show(clearTitle, "经验 ×" + pending);
             Debug.Log("[DailyTask] settle: daily_clear " + (LastRunFailed ? "失败局1/3 " : "") + "回城补发经验 +" + pending);
         }
         LastRunFailed = false;   // 无论本局有无 pending，失败标记都要清，防止漏清污染下一局成功补发
@@ -77,36 +81,24 @@ using System.Collections.Generic;
             data.MarkTaskRewardClaimed(row.id, keyInt);
 
             // 发奖：天赋石（日常）/ 钻石（周常）+ 经验（2026-10-29 扩编，主人拍板「有些奖励可以给些经验」）
-            // 【2026-11-06 主人拍板】奖励明细汇总成一条中央 toast（排队播，不顶前）：经验 → 天赋石/钻石。
-            // 【2026-11-13 主人拍板】改成「第一行任务名 / 第二行奖励」放进同一个 toast；
-            // 字号沿用 GlobalToastUI 的 28，不另调（两行时底板自适应见 GlobalToastUI.CoPlay）。
-            // ResourceWallet 改 notify:false，避免它自带的单条 toast 顶掉汇总；经验照常走 LevelSystem。
-            var lines = new List<string>();
+            // 【2026-11-13 主人拍板「剧情后不要这一大段文字」】中央那条「完成任务XXX / 获得 …」两行汇总
+            // 已整段删净，奖励照发、任务栏/升级弹窗照常反馈；ResourceWallet 仍 notify:false，别让它自己再弹一条。
+            // 【2026-11-14 主人拍板】完成提示改由左侧滑入横幅承担（见下方 QuestDoneToast.Show）。
             if (row.rewardStones > 0)
             {
                 var type = daily ? ResourceWallet.ResourceType.TalentPoint : ResourceWallet.ResourceType.Diamond;
-                var result = ResourceWallet.Add(type,
-                    row.rewardStones, save: true, notify: false);
-                if (result.added > 0)
-                    lines.Add(ResourceWallet.DisplayName(type) + " +" + result.added);
-                if (result.overflow > 0)
-                    lines.Add(ResourceWallet.DisplayName(type) + "已满，溢出进邮箱");
+                ResourceWallet.Add(type, row.rewardStones, save: true, notify: false);
             }
             // 2026-11-12 主人拍板：其它日常任务按当前等级重算额度（单个任务最多升 1 级），
             // 多个任务累计可升好几级、弹窗逐个显示；不能用固定的关卡额度，否则主线通关后卡在满级之前。
             if (row.rewardExp > 0)
             {
                 LevelSystem.AddDirectExp(row.rewardExp, data.playerLevel + 1);
-                lines.Insert(0, "经验 +" + row.rewardExp);   // 经验置顶：汇总「经验 → 天赋石/钻石」
             }
 
-            // 【2026-11-13 主人拍板】日常任务不再另弹左侧「任务完成」横幅：任务名 + 奖励
-            // 都写进同一条中央 toast。原调用留档备回退：QuestDoneToast.Show();
-            // （主线任务完成的横幅在 MainQuestSystem.Complete，不属本次改动，原样保留。）
-            string toastMsg = string.IsNullOrEmpty(row.title) ? "任务完成" : row.title;
-            if (lines.Count > 0)
-                toastMsg += "\n获得 " + string.Join("  ", lines);
-            GlobalToastUI.ShowQueued(toastMsg);
+            // 【2026-11-14 主人拍板】任务提示统一走左侧滑入横幅「完成XX任务 / 获得XX奖励」，
+            // 任务名与奖励文案都取 quest.csv 同一行（title / reward_text），不另写死文案。
+            QuestDoneToast.Show(row.title, row.rewardText);
 
             Debug.Log("[DailyTask] settle: " + row.id + " +" + row.rewardStones + (daily ? " 石" : " 钻")
                 + (row.rewardExp > 0 ? " +" + row.rewardExp + " exp" : ""));

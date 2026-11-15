@@ -408,6 +408,18 @@ public class Hero : UnitBase
             return;
         }
 
+        // 【2026-11-14 主人「不要冲锋的时候还在攻击」】破阵冲锋期间行动权归冲锋协程：
+        // AI 全停 —— 不索敌、不转身、不出手、不写 rb.velocity（否则协程按帧摆位置、
+        // Rigidbody 又按速度推，两边抢同一个 transform，出现「边冲边砍还抖」）。
+        // 保持跑步动画只停决策；标记由 CareerSkillExecutor.IsCharging 心跳续期，协程强停后自动解除。
+        // ⚠ 放在摇杆判断之前：手动位移同样不能和冲锋抢位置。
+        if (CareerSkillExecutor.IsCharging)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            return;
+        }
+
         if (!_manualMove && TryHoldDuringAttack())
             return;
         // 手动移动时不做受击脚步硬直（继续走位；DAMAGED 动画照播，UnitAnimation 内部保证播完/被攻击打断）

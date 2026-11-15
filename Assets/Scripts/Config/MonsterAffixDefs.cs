@@ -53,15 +53,30 @@ public static class MonsterAffixDefs
     }
 
     // 【2026-11-12 主人拍板：按词条各加一项属性，只表定词缀怪生效】
-    // 每个词条只加自己那一项基础属性（精英/Boss 掷骰词缀 RollAndAttach 的属性一律不动）：
+    // 每个词条只加自己那一项基础属性（精英/Boss 掷骰词缀 RollAndAttach 走 RollAttrScale 折扣，见下）：
     //   铁壁 Bulwark → DefMul 1.5f：防御/魔防 ×1.5
     //   狂暴 Frenzy  → AtkMul 1.3f：攻击/魔攻 ×1.3
     //   暴击 Crit    → AtkMul 1.3f：攻击/魔攻 ×1.3
-    //   迅捷 Swift   → 只把移速从 ×1.6 提到 ×2.0（MoveSpeedMul），不另加别的属性
+    //   迅捷 Swift   → 移速 ×2.0 + HpMul 1.2f（2026-11-14 补：原来只有移速、血攻和普通怪一样，完全不难打）
     //   吸血 Leech   → HpMul 1.3f：生命 ×1.3
     //   荆棘 Thorns  → HpMul 1.3f：生命 ×1.3
     //   分裂 Split   → HpMul 1.4f：生命 ×1.4
-    // 消费点唯一 = MonsterAffix.Apply（仅 VisualTinted 表定词缀怪）；HpMul/AtkMul/DefMul 留空为 0 时视为 1。
+    // 消费点唯一 = MonsterAffix.Apply；HpMul/AtkMul/DefMul 留空为 0 时视为 1。
+    /// <summary>
+    /// 【2026-11-14 主人拍板「要让带词条的怪比普通怪难打」】精英/Boss 掷骰词缀的属性乘子折扣。
+    /// 按 <c>1 + (mul - 1) × 本值</c> 向 1 收敛：表定词缀怪（VisualTinted）不吃折扣、全额生效；
+    /// 掷骰词缀吃 0.6（比如 HpMul 1.3 → 1.18）。这些单位本身已经厚，避免叠过头。
+    /// </summary>
+    public const float RollAttrScale = 0.6f;
+
+    // 【2026-11-14 主人拍板「词条怪就要比普通硬」】表定词缀怪的整体强度档：
+    // 在各词条自己的 HpMul/AtkMul/DefMul 之上再整体乘一层（只有表定词缀怪 VisualTinted 吃，
+    // 精英/Boss 掷骰词缀不吃 —— 它们已按 RollAttrScale 向 1 收敛且自身够厚）。
+    // 【2026-11-15 口径】血 ×3 / 攻 ×2。基准 = Monster.Init 按「当前章/座/节 + 当前波」算完的
+    // attr（GetStatScale 当关倍率 × 表值），跟着当前关的小怪一起爬坡；不取第一章表值、不写死常量。
+    // 消费点唯一 = MonsterAffix.Apply；想调手感只改这两个常量。
+    public const float FixedAffixHpMul = 3f;
+    public const float FixedAffixAtkMul = 2f;
     public static readonly Def[] All =
     {
         // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：
@@ -81,9 +96,10 @@ public static class MonsterAffixDefs
                   StatDesc = "生命 +30%",
                   AtkSpeedMul = 1f,    MoveSpeedMul = 1f,   DamageTakenMul = 1f, ThornsRatio = 0.15f, HpMul = 1.3f },
         new Def { Id = MonsterAffixId.Swift,   Name = "迅捷", Tint = new Color(0.98f, 0.85f, 0.40f),
-                  // 2026-11-12 随 MoveSpeedMul 2.0f 同步文案
+                  // 2026-11-12 随 MoveSpeedMul 2.0f 同步文案；2026-11-14 补 HpMul（原来只有移速，血攻与普通怪无异）
                   Desc = "移动速度提升 100%",
-                  AtkSpeedMul = 1f,    MoveSpeedMul = 2.0f, DamageTakenMul = 1f },
+                  StatDesc = "生命 +20%",
+                  AtkSpeedMul = 1f,    MoveSpeedMul = 2.0f, DamageTakenMul = 1f, HpMul = 1.2f },
         // 【2026-11-05 主人拍板】吸血 12% -> 30%：链路验证全通（普攻/弹道/技能都走 TakeDamage 回调），
         // 但 ch2 怪一刀只回 1~2 点、血条动 ~3%，Boss 更是 0.4% —— 肉眼不可见，主人实测「从来没见过回血」。
         // 提到 30% 后怪一刀回 4~6 点（血条动 8%+）肉眼可辨；Boss 血厚回血占比天然低，属合理衰减。

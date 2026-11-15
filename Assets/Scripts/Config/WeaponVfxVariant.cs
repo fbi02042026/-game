@@ -98,11 +98,15 @@ public static class WeaponVfxVariant
     /// 我方法球专属套文件编号（2026-11-03 主人拍板，唯一出口）：
     /// 0=旧名 Base（vfx_ally_orb_fly / vfx_ally_orb_hit，未点名佣兵、主角与其他单位走这套）；
     /// 1=H014 伊芙（vfx_ally_orb_fly1 / vfx_ally_orb_hit1）；
-    /// 2=H013 莫娜（vfx_ally_orb_fly2 / vfx_ally_orb_hit2）。
-    /// 同一佣兵每次出手必得同一套；调用方不许自己 if mercId。
+    /// 2=H013 莫娜（vfx_ally_orb_fly2 / vfx_ally_orb_hit2）；
+    /// 3=玩家法师职业自带技能「大法球」career_orb（vfx_ally_orb_fly3 / vfx_ally_orb_hit3，2026-11-14 主人要求）。
+    /// 同一佣兵每次出手必得同一套；调用方不许自己 if mercId / if 技能。
+    /// skillId 只由技能弹链路透传（player_skills.csv 的 id），普攻套装与追踪弹传空走原逻辑。
     /// </summary>
-    public static int ResolveAllyOrb(UnitBase caster)
+    public static int ResolveAllyOrb(UnitBase caster, string skillId = null)
     {
+        // 技能维度优先于施法者：大法球是 Hero 专属职业技能，不会与 H014/H013 佣兵撞车。
+        if (skillId == "career_orb") return 3;
         if (caster is Mercenary merc && !string.IsNullOrEmpty(merc.mercId))
         {
             switch (merc.mercId)

@@ -70,6 +70,8 @@ public class ChapterSplashOverlay : MonoBehaviour
     }
 
     CanvasGroup _group;
+    /// <summary>黑底 Build 时的起始不透明度。淡出时三段字要归到这个基准，才能和黑底一起消失。</summary>
+    float _backdropAlpha = 1f;
     bool _isTutorial;
     bool _waitLoadingBeforeHold;
     /// <summary>Loading 期间的战斗章节卡：底要全不透明，否则会透出 Loading 的「加载中/百分比」。</summary>
@@ -143,6 +145,7 @@ public class ChapterSplashOverlay : MonoBehaviour
         // 例外（2026-09-26）：Loading 期间的战斗章节卡（_opaqueBackdrop）背后只有 LoadingUI，
         // 半透会让「加载中 x%」和章节文字两层同时可见，故这里用全不透明，演完渐隐再露出 Loading。
         bg.color = new Color(0f, 0f, 0f, _opaqueBackdrop ? 1f : 0.72f);
+        _backdropAlpha = bg.color.a;
         bg.raycastTarget = true;
         var bgRt = bg.rectTransform;
         bgRt.anchorMin = Vector2.zero;
@@ -359,6 +362,18 @@ public class ChapterSplashOverlay : MonoBehaviour
             t += Time.unscaledDeltaTime;
             if (t < 0.0001f) t += 0.016f;
             _group.alpha = 1f - Mathf.Clamp01(t / fadeSec);
+            // 黑底是半透的、字是不透明的：只靠 CanvasGroup 统一乘，两者起点不同，
+            // 视觉上字会比黑底消失得慢。淡出前 1/4 把三段字平滑压到黑底同一基准，
+            // 之后字与黑底的有效不透明度完全重合，同一帧一起归零。
+            float align = Mathf.Clamp01(t / (fadeSec * 0.25f));
+            for (int i = 0; i < _revealItems.Count; i++)
+            {
+                var item = _revealItems[i];
+                if (item.text == null) continue;
+                var c = item.text.color;
+                c.a = Mathf.Lerp(item.alpha, _backdropAlpha, align);
+                item.text.color = c;
+            }
             if (Clicked() && t > 0.2f) break;
             yield return null;
         }

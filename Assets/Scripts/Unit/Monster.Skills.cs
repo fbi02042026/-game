@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.UI;
 
 // 怪物单位 partial —— 2026-10-17 由 Monster.cs 纯位移拆出（无逻辑改动）
 // 职责：主动技能（充能/预警/精英跳跃/结算/弹道）、攻击风格（SwingStyle）、预警图元生成
@@ -18,6 +19,12 @@ public partial class Monster
     /// </summary>
     MonsterAttackStyle _baseAttackStyle = MonsterAttackStyle.Melee;
     bool _skillTelegraphing;
+    /// <summary>【只读】主动技能演出进行中（红圈聚力 → 精英蓄力跳 → 落地砸地结算，finally 里才清）。
+    /// 引导遗言靠它等精英落地再开口，避免气泡挂在半空、判死后尸体也悬空。</summary>
+    public bool IsSkillPerforming => _skillTelegraphing;
+    /// <summary>【只读】主动技能充能 0~1（Boss/精英头顶充能条的唯一数据源）。
+    /// 放招后归零、冷却期间不涨；不在 UI 侧另算一份。2026-11-14 主人「只有 boss 和精英有」。</summary>
+    public float SkillEnergy01 => Mathf.Clamp01(_skillEnergy);
     /// <summary>【2026-10-20 保险】演出协程冻场等待上限（真实秒）：连续冻结超过该时长视为冻场异常，
     /// 放弃本次技能演出并走 finally 清理标志，绝不让 _skillTelegraphing/_leaping 卡死成永久站桩。
     /// 正常对白冻场只有几秒，永不触发；正常路径行为零变化。</summary>
@@ -47,6 +54,166 @@ public partial class Monster
     // 2026-09-21：MONSTER_SKILL_PROJECTILE_SPEED_MUL 已迁 combat_tuning 表（运行时读），
     // 右值不再是编译期常量 → const 改 static readonly（仅此一处引用，行为不变）。
     static readonly float SkillProjectileSpeedMul = GameConfig.MONSTER_SKILL_PROJECTILE_SPEED_MUL;
+
+    // ==================== 头顶技能充能条（2026-11-14 主人「只放精英和 boss 头顶，不要放别处」）====================
+    // 只给 IsBossUnit / IsEliteWave 在怪头顶（世界空间、跟怪走）建条子；普通小怪连节点都不建，
+    // 屏幕 BossBar 或其它 UI 一律不挂。挂点/缩放补偿照抄 Monster.AffixLabel 与 MonsterHealthBar 的现成口径，
+    // 条子本体用系统自带 Texture2D.whiteTexture + 项目 EnsureChildBar 的 Filled Horizontal 做法，不造图、不改 prefab。
+    static Sprite _chargeWhiteSprite;
+    // 【2026-11-15】条子长度缩到原来的 2/3（只缩长边，厚度不变）。
+    const float SKILL_CHARGE_BAR_LEN_MUL = 2f / 3f;
+
+    /// <summary>
+    /// 【2026-11-15 全局口径】精英/Boss 头顶充能条「出场从零攒、开打才亮」的唯一判据。
+    /// hold 三件事：入场走位中（IsEnteringMap，所有玩法刷怪都走）、剧情前置暂停 / 对白冻场
+    /// （UnitsCanAct=false）、入场放行窗（AllowMonsterMapEnter）。走到交战位且解冻后才开始攒。
+    /// 普通小怪恒 false，攒槽节奏逐字不变。
+    /// </summary>
+    bool ShouldHoldSkillCharge(BattleManager bm, bool elite, bool boss)
+        => (elite || boss)
+        && (IsEnteringMap || (bm != null && (!bm.UnitsCanAct || bm.AllowMonsterMapEnter)));
+    GameObject _chargeRoot;
+    RectTransform _chargeRt;
+    Image _chargeFill;
+    float _chargeFlashT;
+    bool _chargeHidden;
+    bool _chargeSpent;
+    const float SKILL_CHARGE_FLASH_SEC = 0.25f;
+    static readonly Color SkillChargeColor = new Color(1f, 0.72f, 0.42f, 1f);
+
+    static Sprite SkillChargeWhite()
+    {
+        if (_chargeWhiteSprite != null) return _chargeWhiteSprite;
+        var tex = Texture2D.whiteTexture;   // 系统自带白图，不新增美术资源
+        _chargeWhiteSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height), new Vector2(0.5f, 0.5f), 1f);
+        return _chargeWhiteSprite;
+    }
+
+    /// <summary>Init 末尾调用：只有精英 / Boss 头顶挂条子；对象池复用的普通小怪把旧节点收掉。</summary>
+    void EnsureSkillChargeBar()
+    {
+        bool strong = _isBossUnit || _eliteWave;
+        if (!strong || _chargeRoot != null)
+        {
+            if (strong) ApplyChargeBarWidth();   // 对象池复用换怪：按新体型重算宽度，不串上一只
+            _chargeFlashT = 0f;
+            _chargeSpent = false;
+            SetSkillChargeVisual(false);
+            return;
+        }
+
+        var body = GetBodyTransform();
+        var go = new GameObject("SkillChargeBar", typeof(RectTransform), typeof(Canvas));
+        go.transform.SetParent(body, false);
+        var canvas = go.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        canvas.sortingOrder = GameConfig.SORT_VFX + 9;   // 与世界血条 +8 同层略高，避免被压
+        var rt = go.GetComponent<RectTransform>();
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = Vector2.zero;
+        var bgGo = new GameObject("Bg", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        bgGo.transform.SetParent(go.transform, false);
+        var bgRt = bgGo.GetComponent<RectTransform>();
+        bgRt.anchorMin = Vector2.zero;
+        bgRt.anchorMax = Vector2.one;
+        bgRt.offsetMin = Vector2.zero;
+        bgRt.offsetMax = Vector2.zero;
+        var bg = bgGo.GetComponent<Image>();
+        bg.sprite = SkillChargeWhite();
+        bg.color = new Color(0.06f, 0.06f, 0.09f, 0.85f);
+        bg.raycastTarget = false;
+
+        var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        fillGo.transform.SetParent(bgGo.transform, false);
+        var fRt = fillGo.GetComponent<RectTransform>();
+        fRt.anchorMin = Vector2.zero;
+        fRt.anchorMax = Vector2.one;
+        fRt.offsetMin = Vector2.zero;
+        fRt.offsetMax = Vector2.zero;
+        var fill = fillGo.GetComponent<Image>();
+        fill.sprite = SkillChargeWhite();                 // Filled 必须有 sprite，fillAmount 才生效
+        fill.type = Image.Type.Filled;
+        fill.fillMethod = Image.FillMethod.Horizontal;
+        fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        fill.fillAmount = 0f;
+        fill.color = SkillChargeColor;
+        fill.raycastTarget = false;
+
+        _chargeRoot = go;
+        _chargeRt = rt;
+        _chargeFill = fill;
+        ApplyChargeBarWidth();
+        _chargeFlashT = 0f;
+        _chargeSpent = false;
+        SetSkillChargeVisual(false);
+    }
+
+    /// <summary>条子宽度 = 单位头顶血条宽（现读派生，不写死尺寸），高度取其 10%。</summary>
+    void ApplyChargeBarWidth()
+    {
+        if (_chargeRt == null) return;
+        float w = Mathf.Max(0.16f, GetHpBarWorldWidth());
+        // 【2026-11-15】长度缩到 2/3；高度仍按未缩短的 w 取 10%，厚度不变。
+        _chargeRt.sizeDelta = new Vector2(w * SKILL_CHARGE_BAR_LEN_MUL, w * 0.10f);
+    }
+
+    void SetSkillChargeVisual(bool on)
+    {
+        if (_chargeRoot != null && _chargeRoot.activeSelf != on) _chargeRoot.SetActive(on);
+        _chargeHidden = !on;
+    }
+
+    /// <summary>
+    /// 每帧由 Monster.LateUpdate 驱动：头顶跟随 + 0→1 攒槽 → 满槽闪一下 → 整条消失 → 放招。
+    /// 放招与充能清零仍走 UseActiveSkill 原链路，这里不触发；冷却期间保持隐藏，重新攒才亮起。
+    /// </summary>
+    void SyncSkillChargeBar()
+    {
+        if (_chargeRoot == null || _chargeFill == null) return;
+        if (isDead || !(_isBossUnit || _eliteWave))
+        {
+            if (!_chargeHidden) SetSkillChargeVisual(false);
+            return;
+        }
+
+        var body = GetBodyTransform();
+        float rootAbs = Mathf.Max(0.01f, Mathf.Abs(body.lossyScale.y));
+        float fixX = body.lossyScale.x < 0f ? -1f : 1f;   // 防 Visual 镜像把条子翻反
+        _chargeRt.localScale = new Vector3(fixX / rootAbs, 1f / rootAbs, 1f / rootAbs);
+        GetFootprintBounds(out _, out _, out _, out float topY);
+        _chargeRt.position = new Vector3(body.position.x, topY + 0.12f, body.position.z);
+
+        float e = SkillEnergy01;
+        if (_chargeFlashT > 0f)
+        {
+            _chargeFlashT -= Time.unscaledDeltaTime;
+            _chargeFill.color = Color.Lerp(SkillChargeColor, Color.white,
+                Mathf.Clamp01(_chargeFlashT / SKILL_CHARGE_FLASH_SEC));
+            if (_chargeFlashT <= 0f) SetSkillChargeVisual(false);
+            return;
+        }
+        if (e <= 0.001f)
+        {
+            _chargeSpent = false;                        // 放招清零 / 冷却中：本轮结束，等下一轮
+            if (!_chargeHidden) SetSkillChargeVisual(false);
+            return;
+        }
+        if (_chargeSpent) return;                        // 已满过槽、条子收起中，等放招清零
+        if (e >= 0.999f)
+        {
+            _chargeSpent = true;
+            _chargeFlashT = SKILL_CHARGE_FLASH_SEC;
+            _chargeFill.fillAmount = 1f;
+            _chargeFill.color = Color.white;
+            if (_chargeHidden) SetSkillChargeVisual(true);
+            return;
+        }
+        if (_chargeHidden) SetSkillChargeVisual(true);
+        _chargeFill.color = SkillChargeColor;
+        _chargeFill.fillAmount = e;
+    }
 
     MonsterAttackStyle ResolveSwingStyle(UnitBase target)
     {
@@ -108,7 +275,10 @@ public partial class Monster
         // —— 远程风格不走红圈蓄力（主人报：远程怪也出红圈、原地站桩 2~3 秒像在攒槽，观感混乱），
         //     直接瞬发弹道（与普通远程怪同一条瞬发链路，弹道飞行本身就是反应窗口）；
         // 近战保持「红圈预警 → 蓄力压扁/跳砸 → 砸地结算」不变。
-        if ((_isBossUnit || _eliteWave) && !MonsterAttackStyleTable.IsRanged(_swingStyle))
+        // 【2026-11-14 主人「远程怪蓄力不要也走红圈，红圈是砸地专属的，远程 cd 好了直接释放」】
+        // 远程判定改用最终风格真源 _attackStyle（含魔法型强制 Ranged），不再用 _swingStyle 的表风格快照：
+        // 后者是 Init / Attack 时才同步的中间量，判「远程」应以最终风格为准（与弹幕技、索敌同口径）。
+        if ((_isBossUnit || _eliteWave) && !MonsterAttackStyleTable.IsRanged(_attackStyle))
         {
             StartCoroutine(CoSkillTelegraphThenCast(primaryTarget, damage, radius, kit, telegraph));
             return;
@@ -119,6 +289,13 @@ public partial class Monster
 
     IEnumerator CoSkillTelegraphThenCast(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit, float telegraphSec)
     {
+        // 【保险 2026-11-14】红圈是近战砸地专属：任何调用路径都不许远程进本协程蓄力读条，
+        // 直接走瞬发弹道（与 UseActiveSkill 的远程分流同一出口），保证「远程 cd 好了直接释放」。
+        if (MonsterAttackStyleTable.IsRanged(_attackStyle))
+        {
+            ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
+            yield break;
+        }
         _skillTelegraphing = true;
         // 【2026-10-17 主人拍板】只有精英加「蓄力压扁 → 高跳快落」演出；Boss 节奏一律不动。
         // 【2026-10-20 主人拍板「砸地与远程互斥」】本协程只接待近战：远程精英/Boss 在 UseActiveSkill
@@ -499,9 +676,10 @@ public partial class Monster
     //    弹体实时跟人、命中才结算。
     // 精英两技各 20s 冷却（GameConfig 可调）；Boss 扇形另走 BOSS_FAN_VOLLEY_COOLDOWN(40s)，2026-11-13 拍板。
     // 仅远程风格精英/Boss 携带，与主动技能/瞬移/跳跃互斥。
-    // 携带与解锁进程（2026-10-20 主人拍板，2026-11-13 拉长 Boss 散射间隔）：
-    // 远程精英随机二选一整场不变；远程 Boss 两种全带（恒带扇形散射，首发延到
-    // BOSS_FAN_VOLLEY_FIRST_DELAY、之后每 BOSS_FAN_VOLLEY_COOLDOWN 一次），
+    // 携带与解锁进程（2026-10-20 主人拍板，2026-11-13 拉长 Boss 散射间隔，2026-11-14 精英恒带散射）：
+    // 远程精英恒带扇形散射、追踪弹幕五五开，整场不变（保证至少放出一次散射，长 CD 防连放）；
+    // 远程 Boss 两种全带（恒带扇形散射，首发延到 BOSS_FAN_VOLLEY_FIRST_DELAY、
+    // 之后每 BOSS_FAN_VOLLEY_COOLDOWN 一次），
     // 追踪弹幕要血量降到二阶段线（BOSS_PHASE2_HP_RATIO = 70%，触发时伴随 Boss 变身演出）才解锁。
 
     /// <summary>弹幕单发伤害 = 普攻 raw × 80%（主人定）；暴击在命中时逐目标掷（与 ApplySkillDamage 同口径）。</summary>
@@ -528,22 +706,25 @@ public partial class Monster
             && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter)) return false;
         if (!GameConfig.IsInCombatViewport(target)) return false;
 
-        // 携带判定：精英只随机带一种（Init 已定），Boss 两种全带但按进程解锁（2026-10-20 主人拍板）——
+        // 携带判定：远程精英恒带扇形散射、追踪五五开（2026-11-14 改），Boss 两种全带按进程解锁——
         // Boss 扇形恒带、但 2026-11-13 起首发 8s、之后每 BOSS_FAN_VOLLEY_COOLDOWN(40s) 一次；
         // Boss 追踪要血量降到二阶段线（≤ BOSS_PHASE2_HP_RATIO = 70%）才开启；
-        // 精英带追踪不受阶段限制（它本来就只有这一种）。没带/没转好的不出手。
+        // 精英带追踪不受阶段限制（含被贴图编号误判成 _isBossUnit 的精英）。没带/没转好的不出手。
         bool fanReady = _fanVolleyOwned && _fanVolleyCd <= 0f;
         bool homingReady = _homingBarrageOwned && _homingBarrageCd <= 0f
-            && (!_isBossUnit || GetBossPhase() >= 2);
+            && (!_isBossUnit || _eliteWave || GetBossPhase() >= 2);
         if (!fanReady && !homingReady) return false;
 
         if (fanReady)
         {
             // 【2026-11-13 主人拍板】Boss 单独一档更长的 CD（20s→BOSS_FAN_VOLLEY_COOLDOWN），
             // 否则长时间 Boss 战里扇形散射显得一直在放；精英仍走 20s 不动。
-            _fanVolleyCd = _isBossUnit
+            // 【2026-11-14】只对「真 Boss」吃长 CD；精英即便被判成 _isBossUnit 也走 20s，
+            // 保证短精英战里至少能放出一次散射。
+            _fanVolleyCd = (_isBossUnit && !_eliteWave)
                 ? GameConfig.BOSS_FAN_VOLLEY_COOLDOWN
                 : GameConfig.MONSTER_FAN_VOLLEY_COOLDOWN;
+            Debug.Log($"[Monster.Skills] 扇形散射起手 elite={_eliteWave} boss={_isBossUnit} 下次CD={_fanVolleyCd:0.0}s");
             StartCoroutine(CoFanVolley(target));
             return true;
         }

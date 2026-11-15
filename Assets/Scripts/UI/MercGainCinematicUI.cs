@@ -29,8 +29,7 @@ public class MercGainCinematicUI : MonoBehaviour
     const float SlamSettle = 0.12f;    // 【登场③基准时长】落地一压一弹回正（×SlowMo）
     const float ZoomScale = 3f;        // 起手放大倍数（2026-10-27 主人拍板：放大 3 倍）
     const float SlowMo = 6f;           // 【2026-10-27 晚主人拍板】登场动效整体慢 3 倍后又加长一倍（各段时长 ×此值）
-    const float NameDelay = 0.15f;     // 立绘落定后名字延迟
-    const float NameRise = 0.3f;       // 名字上移淡入时长
+    const float NameRise = 0.15f;      // 名字上移淡入时长（落定即起跑，不再叠 0.15s 延迟 + 0.3s 二次淡入）
     const float AutoCloseAfter = 8f;   // 无点击兜底自动关（防卡流程）
 
     Transform _stand;
@@ -310,7 +309,7 @@ public class MercGainCinematicUI : MonoBehaviour
             anim.updateMode = AnimatorUpdateMode.UnscaledTime;
             // 【2026-11-03 主人拍板「按我的动画来」】动画期间代码不再每帧改写 Stand y
             // （旧 LateUpdate ×k 贴台已删），位置/缩放全程以预制体动画轨道为准。
-            yield return CoWaitEntranceDone(anim);
+            yield return CoWaitEntranceDone(anim, BgFadeIn);
             // chuchang 是非循环片段，播完停在末帧（落定 scale=1）；禁用 Animator 只是不再覆写属性，
             // 不是把画面冻在中途——最后一帧姿态即最终落点。
             anim.enabled = false;
@@ -321,8 +320,7 @@ public class MercGainCinematicUI : MonoBehaviour
             yield return StartCoroutine(CoPortraitEntrance());
         }
 
-        // ③ 名字从脚下淡入上移
-        yield return new WaitForSecondsRealtime(NameDelay);
+        // ③ 名字从脚下淡入上移（立绘落定即起跑，不再叠额外延迟与二次淡入）
         yield return StartCoroutine(CoNameIn());
 
         // ④ 等点击 / 超时（点击即 Close 直接销毁，协程随之结束，无需 _closing 标记）
@@ -336,24 +334,44 @@ public class MercGainCinematicUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 等 panl 上的出场动画播完（chuchang 非循环片段，normalizedTime ≥ 1 即结束）。
-    /// 12s 真实时间保护： Animator 被异常关掉/状态机卡死时不至于把整个演出卡死。
+    /// 等 panl 上的出场动画播完。
+    /// 【2026-11-14 修「名字比以前更慢」】改按出场片段的真实时长计时，不再看
+    /// 「当前状态 length &gt; 0 且 normalizedTime ≥ 1」：现版 lihui.controller 给 chuchang 挂了
+    /// exitTime 0.948（4.6s）自动过渡到 idle（单帧、0 长度片段），过渡完成后当前状态变成 idle、
+    /// length = 0 → 旧判据永不成立，只能白等 12s 保护超时，名字从 5.3s 被拖到 12.45s 才出现。
+    /// 现在取出场片段时长（chuchang 4.85s；idle 是 0 长度单帧，取不到就走最长片段）计时，
+    /// 主人以后改动画长度自动跟随，代码不写死秒数。
+    /// 12s 真实时间上限保留： Animator 被异常关掉/状态机卡死时不至于把整个演出卡死。
     /// 【2026-11-04 主人拍板「动画连续播完不冻住」】超时也不能把立绘冻在中途 4 倍姿态：
     /// 先把当前状态推到末帧（落定 scale=1）再退出，避免任何异常下出现「卡住 + 硬跳」。
+    /// 【2026-11-14 再修「名字还是慢」】Animator 从 Instantiate 起播，旧代码先花 BgFadeIn 0.25s
+    /// 再从 0 计满 dur，比动画落定多等 0.25s；elapsed = 动画已播的真实时间，等待按动画起点对齐。
+    /// 只改计时基准，按片段时长计时 / 12s 上限 / 推末帧三条逻辑一行不动。
     /// </summary>
-    IEnumerator CoWaitEntranceDone(Animator anim)
+    IEnumerator CoWaitEntranceDone(Animator anim, float elapsed)
     {
-        float guard = 0f;
-        while (guard < 12f)
+        float dur = 0f;
+        var cur = anim.GetCurrentAnimatorClipInfo(0);
+        if (cur != null && cur.Length > 0 && cur[0].clip != null) dur = cur[0].clip.length;
+        if (dur <= 0f)
         {
-            guard += Time.unscaledDeltaTime;
+            var ac = anim.runtimeAnimatorController;
+            if (ac != null)
+                foreach (var c in ac.animationClips)
+                    if (c != null && c.length > dur) dur = c.length;
+        }
+        if (dur <= 0f) dur = 12f;   // 取不到片段时长就只走上限保护
+
+        float t = 0f;
+        while (t + elapsed < dur && t < 12f)
+        {
+            t += Time.unscaledDeltaTime;
             if (!anim.isActiveAndEnabled) yield break;
-            var st = anim.GetCurrentAnimatorStateInfo(0);
-            if (st.length > 0f && st.normalizedTime >= 1f) yield break;
             yield return null;
         }
+
         var end = anim.GetCurrentAnimatorStateInfo(0);
-        if (end.length > 0f)
+        if (end.length > 0f && end.normalizedTime < 1f)
         {
             anim.Play(end.shortNameHash, 0, 1f);
             anim.Update(0f);

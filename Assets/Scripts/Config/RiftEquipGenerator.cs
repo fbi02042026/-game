@@ -84,7 +84,18 @@ public static class RiftEquipGenerator
         //   模板分档与品质对齐见 PickVisualTemplate（普通≤15 / 稀有≤25 / 传奇不限）；roll 下限 1.0 = 不低于模板标注。
         //   防具路径不变；引导也走模板锚定，但 roll 钉死 1.0（确定性），保证首抽 ≥ 初始武器（主人拍板）。
         int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
-        float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter)) * GameConfig.GetStageStatScale(stageIdx0);
+        // 【2026-11-13 根因修复·主人报「2-1 出 40 攻稀有弓」】
+        // 旧写法走 GetStageStatScale(stageIdx0) 单参版 = 批 B1 时代「固定 5 节」的行映射 {0,2,4,7,9}，
+        // 对 5/8/10 节混排的现网是错的：
+        //   第 1 章（5 节）第 3/4/5 节拿到 1.18/1.33/1.50，而 2026-11-11 主人拍板的章内缓坡是 1.06/1.11/1.18；
+        //   第 2 章（8 节）第 5~8 节全部被钳到尾档 1.50（GetStageStatScale 单参版对 idx≥5 直接返回行9）。
+        // 后果：稀有弓在 1-5 能到 8.09×3.6×0.88×1.50≈38.4（今天 Editor.log 实测 ch=1 档=RARE 最终=36.73），
+        // 玩家打完 1-5 带着这件进 2-1，看到的就是「2-1 的 40 攻稀有弓」。
+        // 正确出口 = 带章上下文的双参版（2026-11-03 方案A：8/10 节章按节数摊满 10 档，不再吃尾档），
+        // 节数真源一律走 GameConfig.StagesPerGrandOf（= ActProgressionDefs.SubsPerGrandOf）。
+        int subsPerGrand = GameConfig.StagesPerGrandOf(Mathf.Max(1, chapter));
+        float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter))
+                              * GameConfig.GetStageStatScale(stageIdx0, subsPerGrand);
         float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值
         // 【2026-10-19 主人拍板·方案A】模板锚定只适用于攻击类主属性（ATK / MAGIC_ATK）。
         // 根因：WEAPON_OFFHAND 主属性池 = 攻击:70|攻速:30，卷出「攻速」时旧代码照样把模板攻击值

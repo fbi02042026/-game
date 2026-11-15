@@ -895,14 +895,30 @@ public class PlayerJobSelectUI : MonoBehaviour
             const float Life = 0.8f;   // 飘字时长（秒）
             const float Rise = 30f;    // 上浮距离（像素）
             float baseY = rt != null ? rt.anchoredPosition.y : 0f;
+            // 【2026-11-15 主人拍板】扣费时机不前移、真源不动，但点按钮当帧要在顶条体力条上「看到有扣除」：
+            // 复用同一款飘字，挂到共享顶条的 体力Panel 上方（该模板 anchor(0.5,1)+pivot(0.5,0) 天然落在体力条顶边）。
+            // 只作用无限裂隙；顶条取不到时静默跳过，不建节点、不兜底、不报错。
+            GameObject barFloat = null;
+            if (AdventureUI.PendingEndlessRift)
+            {
+                var top = TownSharedChrome.CachedTopBar;
+                var bar = top != null ? FindDeep(top, "体力Panel") : null;
+                if (bar != null) barFloat = BuildStaminaCostFloat(cost, bar);
+            }
+            var barGroup = barFloat != null ? barFloat.GetComponent<CanvasGroup>() : null;
+            var barRt = barFloat != null ? (RectTransform)barFloat.transform : null;
+            float barBaseY = barRt != null ? barRt.anchoredPosition.y : 0f;
             for (float t = 0f; t < Life; t += Time.unscaledDeltaTime)
             {
                 float k = Mathf.Clamp01(t / Life);
                 if (rt != null) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, baseY + Rise * k);
                 if (group != null) group.alpha = 1f - k;
+                if (barRt != null) barRt.anchoredPosition = new Vector2(barRt.anchoredPosition.x, barBaseY + Rise * k);
+                if (barGroup != null) barGroup.alpha = 1f - k;
                 yield return null;
             }
             if (floatGo != null) Destroy(floatGo);
+            if (barFloat != null) Destroy(barFloat);
         }
         finally
         {
@@ -919,11 +935,12 @@ public class PlayerJobSelectUI : MonoBehaviour
     /// <summary>
     /// 在「进入裂隙」按钮顶边上方挂一个临时飘字（体力图标 + "-N"），纯运行时白模、用完即毁。
     /// 挂在按钮自身下面锚顶边，预制体 / 白模两种按钮布局都不用改坐标。
+    /// parent 非空时把同款飘字挂到共享顶条的「体力Panel」列；默认仍挂「进入裂隙」按钮。
     /// </summary>
-    GameObject BuildStaminaCostFloat(int cost)
+    GameObject BuildStaminaCostFloat(int cost, Transform parent = null)
     {
         if (_enterBtn == null) return null;
-        var btnRt = _enterBtn.transform as RectTransform;
+        var btnRt = (parent != null ? parent : _enterBtn.transform) as RectTransform;
         if (btnRt == null) return null;
 
         // 上次协程被打断可能留了残影，先清掉再建新的

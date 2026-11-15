@@ -133,7 +133,9 @@ public static class WeaponAffixSystem
         if (SpecialWeapons.IsTwilightStaff(inst))
         {
             // 2026-10-11 主人拍板：特殊武器也带稀有度前缀（「稀有·暮火之杖」），统一命名规则。
-            inst.equipName = SpecialWeapons.InstanceName;
+            // 2026-11-13 修：法师初始白杖与本模板共用 templateId，写死稀有名会让新号也显示「稀有·暮火之杖」；
+            // 改按实例品质加前缀（Common 无前缀 →「暮火之杖」，Rare →「稀有·暮火之杖」）。
+            inst.equipName = RarityPrefix(inst.rarity) + SpecialWeapons.DisplayName;
             return;
         }
 

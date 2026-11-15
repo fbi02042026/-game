@@ -156,6 +156,9 @@ public partial class BattleManager
     public float runAllyDamageTakenMul = 1f;
     /// <summary>正在走向 chuansongmen，放宽屏幕钳制</summary>
     public bool PortalWalkMode => _portalActive && !_stageCleared;
+    /// <summary>本关已清（Boss 死亡 → 战后剧情/胜利结算期间为 true，下一关 StartNewRun 复位）。
+    /// 【2026-11-14 主人报「战斗结束后就不要闪红了」】残血红边的对外判据，唯一读出口。</summary>
+    public bool StageCleared => _stageCleared;
     /// <summary>佣兵相对主角前后间距（世界单位）；近战前/远程后由 UnitCrowd 决定符号。</summary>
     public const float MERC_FRONT_SPACING = 0.55f;
     [System.Obsolete("Use MERC_FRONT_SPACING / UnitCrowd.GetMercDesiredCombatX")]
@@ -280,11 +283,12 @@ public partial class BattleManager
     public bool DropsEquipment => Mode != null && Mode.DropsEquipment;
     /// <summary>
     /// 难度属性倍率（2026-10-23 主人拍板）：活动副本（金币/徽记/卷轴）按难度 ×1.5 递增（1.0/1.5/2.25）；
-    /// 其余模式（主线/引导/无限裂隙）照旧走全局曲线（1.0/1.35/2.0）。无限裂隙不选难度，天然除外。
+    /// 其余模式（主线/引导/无限裂隙）走全局曲线 ——【2026-11-14 主人拍板「困难 +20-50% / 噩梦 +80-100%」】
+    /// 区间随章爬坡：第 1 章下沿（1.20 / 1.80）、第 8 章上沿（1.50 / 2.00）。无限裂隙不选难度，天然除外。
     /// </summary>
     public float DifficultyStatScale => IsActivityDungeon
         ? GameConfig.GetActivityDifficultyStatScale(BattleDifficulty)
-        : GameConfig.GetDifficultyStatScale(BattleDifficulty);
+        : GameConfig.GetDifficultyStatScale(BattleDifficulty, CurrentChapter);
     public float DifficultyGoldMul => GameConfig.GetDifficultyGoldMul(BattleDifficulty);
 
     #endregion

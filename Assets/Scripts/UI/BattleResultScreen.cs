@@ -310,6 +310,10 @@ public class BattleResultScreenUI : MonoBehaviour
     {
         _onDone = onDone;
         _holdUntilTap = holdUntilTap;
+        // 【2026-11-14 修误点】只有胜利演出需要「早期误点作废」；失败/复活选择/竞技场失败
+        // 走 CoPlay/PlayChoice/PlayArenaFailure，_victoryFlow=false 让 Skip 保持原行为零改动。
+        _victoryFlow = victory;
+        _blockEarlySkip = victory;
         // 【2026-11-12 主人拍板「下一关」】guard 在点击瞬间（本界面存活期）先跑；onNextStage 在淡出销毁后
         // 跑（ContinueToNextStageInPlace）；onRewardsShown 在奖励淡入完成点跑（见 CoPlayVictory 段三末尾）。
         _onNextStage = onNextStage;
@@ -810,9 +814,13 @@ public class BattleResultScreenUI : MonoBehaviour
 
         // 【2026-11-12 主人拍板「奖励展示完再弹升级窗」】奖励 Panel 淡入完成后回调
         //（FinishStageAfterPortalReached 传 LevelUpPopup.FlushPending）：升级窗(996)盖在本界面(985)上，
-        // 点黑幕逐级看完才露出本界面继续点确定/下一关；跳过（_skipped）不触发 → 升级窗回城照旧弹。
+        // 点黑幕逐级看完才露出本界面继续点确定/下一关。
+        // 【2026-11-14 修误点】奖励演完前的点任意处已在 Skip() 里作废，故此处 _skipped 恒为 false，
+        // 升级窗一定在本界面上弹出并看完，不会再退化成「跳过→回城后弹到冒险界面」。
         if (!_skipped)
             _onRewardsShown?.Invoke();
+        // 奖励演完 → 放开「点任意处跳过」（之后照旧可跳过收窗）；升级窗显示期间仍由 Skip() 挡住。
+        _blockEarlySkip = false;
 
         // 段四：等【确定】或点击任意处跳过（不自动收 —— 奖励要看清）
         while (!_confirmed && !_skipped)
@@ -1074,6 +1082,13 @@ public class BattleResultScreenUI : MonoBehaviour
         _choseGiveUp = false;
     }
 
+    /// <summary>结果界面创建即收掉还开着的战斗内怪物信息弹窗：它挂在 sort 1000 的 Canvas 上，
+    /// 压过本界面 985，且全屏透明点击拦截层会吞掉「确定/下一关」的点击。三个 Show 都经过本组件。</summary>
+    void Awake()
+    {
+        MonsterTipPanel.Hide();   // 幂等；不触发 onClose，未看过的怪下次进战斗照常提示
+    }
+
     void OnDestroy()
     {
         ShareService.ShareRewardGranted -= OnShareRewardGranted;   // 实例销毁必退订（防悬空事件）
@@ -1155,10 +1170,26 @@ public class BattleResultScreenUI : MonoBehaviour
         btn.onClick.AddListener(Skip);
     }
 
+    // —— 【2026-11-14 修「战斗结果刚弹出点抽奖 → 直接回冒险界面 + 升级窗跑到冒险界面」】——
+    // 根因：结果界面第一帧就把全屏 Dim / 胜负大图接了 Skip，演出刚开始的任意一次点击都会置
+    // _skipped → CoPlayVictory 各等待段立即结束 → onDone 直接回城；且段三末尾 onRewardsShown
+    // 因 _skipped 不触发 → 升级窗留到 TownSceneBootstrap 回城才弹。
+    // 修法（主人 2026-11-14 拍板「这一下误点作废」）：胜利界面奖励演完前不接收 Skip；
+    // 升级窗显示期间也不接收（防点黑幕误触）。失败/复活选择/竞技场失败三条路径零改动。
+    /// <summary>本次是否为胜利演出（只有胜利时间轴做上面两层加固）。</summary>
+    bool _victoryFlow;
+    /// <summary>胜利界面奖励 Panel 淡入完成前为 true：这期间点任意处不跳过。</summary>
+    bool _blockEarlySkip;
+
     /// <summary>点击跳过：只打断「未结束」的等待段，随后走缩短淡出。已结束后点击无效。</summary>
     public void Skip()
     {
         if (_finished) return;
+        if (_victoryFlow)
+        {
+            if (_blockEarlySkip) return;         // 结果刚弹出的误点：作废
+            if (LevelUpPopup.IsShowing) return;  // 升级窗显示期间：不跳过
+        }
         _skipped = true;
     }
 

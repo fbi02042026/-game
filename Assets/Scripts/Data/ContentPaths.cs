@@ -77,6 +77,8 @@ public static class ContentPaths
         public const string DailyLoginSpecial = "Data/Tables/daily_login_special";
         /// <summary>跑酷配表（run_track.csv）：地形 / 数值 / 7 种波次模板，加载器 RunTrackTable.cs。</summary>
         public const string RunTrack = "Data/Tables/run_track";
+        /// <summary>无限裂隙奖励分配表（CSV → .bytes，见 endless_reward.csv）。缺表时 EndlessRewardTable 回退公式行（= 当前拍板硬编码）。</summary>
+        public const string EndlessReward = "Data/Tables/endless_reward";
     }
 
     public static class Icons

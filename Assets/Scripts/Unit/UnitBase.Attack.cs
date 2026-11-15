@@ -285,15 +285,20 @@ public partial class UnitBase
         AttackVfxKit kit, VfxFaction faction, int facingDir, float releaseDelay,
         float speedMul = 1f, float scaleMul = 1.2f, bool dodgeOnMiss = true)
     {
+        // 前摇内目标可能死亡或被回收：出手前锁死落点与挂点，出弹不因目标失效被吞。
+        // 伤害结算由下方 onImpact 的 pendingTarget 存亡判断兜住。
+        Vector3 lockedHitPos = target.GetHitPosition();
+        Transform lockedHitTf = target.transform;
+
         if (releaseDelay > 0.001f)
             yield return new WaitForSeconds(releaseDelay);
 
-        if (this == null || isDead || target == null || target.isDead)
+        if (this == null || isDead)
             yield break;
 
         Vector3 firePos = GetFirePosition();
-        Vector3 hitPos = target.GetHitPosition();
-        Transform hitTf = target.transform;
+        Vector3 hitPos = lockedHitPos;
+        Transform hitTf = lockedHitTf;
         float pendingDamage = damage;
         bool pendingCrit = isCrit;
         bool pendingOpening = openingHit;

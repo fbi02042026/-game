@@ -796,7 +796,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
         if (e.IsStaff)
         {
             bool claimed = AdventureLogMileage.IsLevelClaimed(2);
-            bool can = AdventureLogMileage.CanClaimLevel(2);
+            // 【2026-11-14 主人「在里程商店买任何东西都要扣点，只扣里程点数」】杖行也扣可消费钱包：
+            // 标「需N点」即扣 N 点，钱包不足置灰点不了；累计点数（等级行）不动、消费不掉级。
+            bool can = AdventureLogMileage.CanClaimLevel(2)
+                       && AdventureLogMileage.Points >= AdventureLogMileage.LevelThresholds[1];
             // 2026-10-26 主人拍板：杖行只留武器名（稀有蓝），「Lv2里程奖励」那句字去掉；
             // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string staffHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
@@ -832,6 +835,10 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                             UIManager.Instance?.ShowToast("暂不可领取");
                         return;
                     }
+                    // 发货成功后才扣点（先发货后记账口径）；can 已保证钱包够，扣失败只报错不吞。
+                    // save:true 立即落盘 —— ClaimLevel 内部的 Save 在扣点之前，不补这次会丢扣点。
+                    if (!AdventureLogMileage.TrySpendPoints(AdventureLogMileage.LevelThresholds[1], save: true))
+                        Debug.LogError("[Phase3Panel] 里程商店杖行扣点失败（发货已成功）");
                     // 2026-11-12：统一由 ClaimLevel 弹「获得奖励」窗，不再 Toast
                     RefreshPanel();
                     _host?.RefreshAfterPhase3();
@@ -846,7 +853,9 @@ public class AdventureLogPhase3Panel : MonoBehaviour
             // 门槛微微不一样（盾 100 / 弓 120）；名字带稀有前缀（2026-10-26 主人点名），不再挂「里程奖励」价签
             var m = AdventureLogMileage.WeaponMilestones[e.WeaponIndex];
             bool claimed = AdventureLogMileage.IsWeaponMilestoneClaimed(m.GrantKey);
-            bool can = AdventureLogMileage.CanClaimWeaponMilestone(m);
+            // 同杖行口径（2026-11-14）：武器里程奖励也扣可消费钱包，累计点数不动。
+            bool can = AdventureLogMileage.CanClaimWeaponMilestone(m)
+                       && AdventureLogMileage.Points >= m.NeedPoints;
 
             // 2026-11-01 主人拍板：消耗点数挪到左边条上，按钮只放「购买」
             string rareHex = ColorUtility.ToHtmlStringRGB(RarityPalette.Rare);
@@ -883,6 +892,9 @@ public class AdventureLogPhase3Panel : MonoBehaviour
                             UIManager.Instance?.ShowToast("暂不可领取");
                         return;
                     }
+                    // 同杖行口径：发货成功后按行上「需N点」扣可消费钱包并立即落盘。
+                    if (!AdventureLogMileage.TrySpendPoints(AdventureLogMileage.WeaponMilestones[weaponIdx].NeedPoints, save: true))
+                        Debug.LogError("[Phase3Panel] 里程商店武器里程奖励扣点失败（发货已成功）");
                     // 2026-11-12：统一由 ClaimWeaponMilestone 弹「获得奖励」窗，不再 Toast
                     RefreshPanel();
                     _host?.RefreshAfterPhase3();

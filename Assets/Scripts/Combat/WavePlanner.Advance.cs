@@ -182,6 +182,23 @@ public partial class WavePlanner
             return;
 
         var wave = _waves[waveIdx];
+        // 【2026-11-15 主人拍板「只在精英或者 boss 出现的波次里才换 boss 背景音乐」】
+        // 本波是否刷出精英/Boss 的波级真源：Boss 本体波 / 波内 Boss / Boss 亲卫 /
+        // 精英追加额度 / 原型精英额度。命中才置状态并切到 Boss 曲；未命中不切歌
+        //（进关那次已经是普通战斗曲，GameBgm.Play 自带同曲 return，重复调也不会重启曲子）。
+        // 所有正式轨刷波路径（波清 / 流式叠刷 / 首领来袭 / 加速出兵）都汇到本出口，无第二入口。
+        bool strongWave = wave.isBossWave
+            || wave.bossCountInWave > 0
+            || wave.bossGuardCount > 0
+            || wave.eliteBonus > 0
+            || (wave.Archetype != null && wave.Archetype.elite > 0);
+        // 裂隙例外：11-14 已拍板「只有 BOSS 层整层响 boss 曲，精英层播 battle」，
+        // 它的曲目由进关一次性定死，不参与这里的波级切曲（竞技场无波次，不走本出口）。
+        if (strongWave && !bm.IsEndlessRift)
+        {
+            GameBgm.SetBattleStrongWave(true);
+            GameBgm.Play(GameBgm.Track.Boss);
+        }
         float heroX = UnitBase.GetCombatX(hero);
         try
         {

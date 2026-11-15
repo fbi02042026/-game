@@ -102,8 +102,8 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// 那把尺子完全不同，会把 map 顶飞。这里的数<b>就是</b> Pos Y / 中心 Y，直接写。
     /// </remarks>
     /// </summary>
-    const float MapCollapsedPosY = 250f;
-    const float MapExpandedPosY = 350f;
+    const float MapCollapsedPosY = 230f;
+    const float MapExpandedPosY = 330f;
     // 【2026-11-11 主人拍板】缩放不再写死绝对值：以预制体 map 的原始 localScale 为基准 × 倍率。
     // 预制体里 map 本来就是 1.4（与旧写死值一致），所以两态倍率都取 1；
     // 主人以后在预制体里调大调小，运行时两态会跟着一起变（位置 Y 仍按主人给的绝对值写）。
@@ -278,6 +278,12 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
 
     RectTransform _panel;
     Transform _draftRoot;
+    /// <summary>
+    /// 【2026-11-14】清场保留抽奖按钮期间临时挂在 DraftRoot 上的嵌套 Canvas
+    /// （overrideSorting 抬到战斗结果界面之上，见 <c>SetDraftAboveResultScreen</c>）。
+    /// null = 未抬层，按钮跟父级 965 走。
+    /// </summary>
+    Canvas _draftKeepCanvas;
     /// <summary>抽奖容器的 RectTransform —— 展示/收起时单独挪它。</summary>
     RectTransform _draftRt;
     /// <summary>背包内容容器 zhuangshi，展开时整体上移（真源）。</summary>
@@ -388,4 +394,11 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     public static bool IsLotteryOpen =>
         Instance != null && !Instance._liveMode && (Instance._expanded || Instance._animK > 0.001f);
 
+    /// <summary>
+    /// 【2026-11-15 修「战前 buff 挡住开始战斗」】进关阶段＝「开始战斗」按钮还亮着、玩家没点。
+    /// 真源就是 BeginLive 传入、DoContinue 点一次即清空的 _onFight，不新增状态、不另开出口；
+    /// 限 _liveMode 是只覆盖「开始战斗」这条（裂隙/引导局旧面板的「继续」判据恒 false，行为不变）。
+    /// </summary>
+    public static bool IsAwaitingStartFight =>
+        Instance != null && Instance._liveMode && Instance._onFight != null;
 }

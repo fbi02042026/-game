@@ -126,7 +126,8 @@ public partial class AdventureUI
     /// 选中的章整章通关（当前关号被钳到最后一个已通关）=已通关；
     /// 金币/徽记/卷轴副本每日各 2 次（2026-10-24 主人拍板「都是2次」），显示今日真值 x/2。
     /// 无限裂隙（2026-11-10）：显示 TriesLeft 真值 x/2，不再硬编码 "0" —— 显示 0 却还能进本就是这么来的。
-    /// 裂隙的次数只在打通一层时扣，见 EndlessRiftRules.ConsumeStageClear。
+    /// 裂隙的次数在【进本】时扣 1 次、通关不扣（2026-11-14 拍板「一次进本死亡再出来算一次」），
+    /// 见 EndlessRiftRules.TryConsumeEnter；ConsumeStageClear 恒返回 true 只为续层链保留。
     /// </summary>
     string FormatRemainChances(bool playable, bool main, bool activity)
     {

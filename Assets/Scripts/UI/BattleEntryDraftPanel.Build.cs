@@ -78,15 +78,24 @@ public partial class BattleEntryDraftPanel
             if (_backpackBtn != null) _backpackBtn.onClick.AddListener(OnBackpackClicked);
         }
 
-        // 预制体此刻存的是主人手调出来的<b>展开态</b>（面板 750 / zhuangshi 80 / DraftRoot -239）。
-        // 先按真值表拍回收起态，之后 Begin→SetExpanded(true) 才能从 0 平滑动到 1；
-        // 不拍这一步，第一次展开会先把面板从 750 抽回 600 再展开，看着就是「跳一下」。
-        SetDraftVisible(false);
-        // 【2026-11-09 主人拍板】map 不再跟着面板两态走：预制体已直接摆成战斗中的
-        // 常驻位置（中心Y 350 / scale 1.4）。这里只把面板 UI 拍回收起态，并一次性把 map
-        // 落到终态（初始化期、Loading 底下完成，玩家看不到任何位移）。
+        // 【2026-11-13 主人拍板「抽奖面板默认是打开的」】初始化态不再无条件拍回收起态。
+        // 常显实时抽玩法（判据与 Waves.cs / Settlement.cs 的 liveStartEarly 同口径）从 Prewarm
+        // 建出这一刻起就是展开态：面板 750 / zhuangshi +80 / DraftRoot -250，四个按钮与「继续」可见；
+        // 剧情窗 order=13000 仍在面板之上，播放顺序与层级一律不动。
+        // 引导局（10-08 开局不抽）、羁绊本（T8 全程无抽）、裂隙与四本资源副本（旧面板）仍默认收起，
+        // 由各自流程 Hide / Show 接管 —— 绝不让「默认打开」在这四类玩法里冒出抽奖按钮。
+        // ⚠ 只落显隐与几何，不动 _expanded / _animK / _liveMode：状态机仍由 BeginLive 唯一出口补齐
+        //   （同帧幂等再写一次 1f）。跳过 SetExpanded 是为守住 10-31「不走动画」拍板，
+        //   也避免 IsLotteryOpen 在 LiveMode 就绪前被误判成旧面板展开。
+        var bm = BattleManager.InstanceQuiet;
+        bool defaultOpen = bm != null
+            && !bm.IsTutorialRun && !bm.IsBondDungeon && !bm.IsEndlessRift && !bm.IsResourceDungeon;
+        if (bm == null)
+            Debug.LogError("[BattleEntryDraftPanel] Build 时拿不到 BattleManager，无法判定默认展开，按收起态落位");
+        SetDraftVisible(defaultOpen);
+        // 【2026-11-09 主人拍板】map 恒在常驻终态（中心Y 350 / scale 1.4），初始化期一次性落到终态。
         // 【2026-11-11 主人拍板 A】世界层 +0.85 抬升已删净，unitRoot 恒在 GROUND_Y。
-        ApplyPanelState(0f);
+        ApplyPanelState(defaultOpen ? 1f : 0f);
         ApplyMapState(1f);
     }
 

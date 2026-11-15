@@ -64,7 +64,12 @@ public partial class MercObtainPopupUI : MonoBehaviour
         }
     }
 
-    bool Fill(DraftCard card)
+    /// <summary>
+    /// 填内容。<paramref name="owned"/>=
+    /// 【2026-11-14 主人拍板】该佣兵是否已获得：未获得（佣兵池图鉴预览）立绘全黑，
+    /// 与佣兵池未获得列表卡同口径；已拥有/抽中/战斗头像/招募购买等入口走默认 true，外观不变。
+    /// </summary>
+    bool Fill(DraftCard card, bool owned = true)
     {
         if (_root == null)
         {
@@ -93,6 +98,10 @@ public partial class MercObtainPopupUI : MonoBehaviour
         {
             _icon.sprite = sp;                 // sp 为 null 时清掉，不留上一次的图
             _icon.enabled = sp != null;
+            // 【2026-11-14 主人拍板】未获得的佣兵打开详情，立绘也要全黑（与佣兵池未获得卡同口径：
+            // 纯黑 Color.black，不挂材质）。本弹窗 DDOL 单例复用，每次 Fill 显式重设，
+            // 已拥有一律复位纯白（预制体 authored 色就是 1,1,1,1），不残留上一次的黑色。
+            _icon.color = owned ? Color.white : Color.black;
             MercRarityFx.ApplyPortraitShine(_icon, hireId);   // 【2026-11-05】传奇佣兵立绘金色流光（DDOL 复用，每次 Fill 复位）
         }
 

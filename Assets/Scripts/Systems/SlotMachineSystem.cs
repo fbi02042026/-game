@@ -168,7 +168,7 @@ public static class SlotMachineSystem
     /// <summary>
     /// 抽中「金币」这一档给多少**局内金币**。
     /// 主人 2026-10-05 拍板：「抽中的金币是当局抽奖用的」—— 给的是局内能继续抽的钱，带不出裂隙。
-    /// 数额 = 当前这一抽的价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血一半，不会变成无限抽）。
+    /// 数额 = 当前这一抽的价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血 60%，不会变成无限抽）。
     /// 【2026-10-10】价改按已抽数走，所以这里也跟着走 <see cref="DrawPrice"/>（旧口径按关卡算的 Price 已删）。
     /// </summary>
     public static int GoldPrize()
@@ -676,6 +676,29 @@ public static class SlotMachineSystem
         if (data == null || data.talents == null) return 0;
         data.talents.TryGetValue("R_FUND", out int lv);
         return lv > 0 ? lv : 0;
+    }
+
+    /// <summary>
+    /// 【2026-11-14 主人拍板】右列天赋「敛财」(R_GOLD) 的等级：击杀掉币 +10%/级，满 5 级 +50%。
+    /// </summary>
+    public static int GoldTalentLevel()
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null || data.talents == null) return 0;
+        data.talents.TryGetValue("R_GOLD", out int lv);
+        return lv > 0 ? lv : 0;
+    }
+
+    /// <summary>
+    /// 击杀掉币加成（0~0.5）。数值真源 = talent_right.csv 的 R_GOLD optValues（10/20/30/40/50 百分点），
+    /// 本方法只做「百分点 → 比例」的换算，不写第二份数值。
+    /// 消费点唯一 = <c>BattleManager.OnMonsterDead</c> 的 killGold（普通/精英/Boss 三档一起放大）。
+    /// </summary>
+    public static float KillGoldBonus()
+    {
+        var node = TalentDefs.GetRightNodeById("R_GOLD");
+        if (node == null) return 0f;
+        return Mathf.Clamp01(node.EffectValue(GoldTalentLevel(), 0) / 100f);
     }
 
     /// <summary>【2026-11-09 主人拍板】抽奖**出货成功后**掷「再来一次」——

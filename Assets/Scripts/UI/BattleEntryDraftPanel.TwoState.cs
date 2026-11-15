@@ -172,8 +172,15 @@ public partial class BattleEntryDraftPanel
             _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, panelH);
 
         // 内容整体上移：zhuangshi 是唯一位移真源。
+        // 【2026-11-14 修「点下一关面板内容整组顶到面板上方、下半屏只剩黑底」】
+        // 旧写法 SetY 直接写 anchoredPosition.y —— 竖屏适配会把 zhuangshi 的锚点从 0.5 重锚成
+        // 贴顶/贴底（同 2026-10-05 DraftRoot 实测 amin.y 0.5→0），锚点一变，「中心往上 80」就变成
+        // 「面板顶再往上 80」→ CharacterBar / zhuangbei / SkillBar 整组被顶出面板，与「开始战斗」
+        // 按钮重叠，玩家看到上半屏挤成一团、下半屏只剩面板黑底、找不到开打按钮。
+        // 与 DraftRoot 同一把尺子：先定「离面板底边多少」的本地落点（0.5×面板高 + contentY），
+        // 再按当时真实锚点反算回 Pos Y。锚点本来就是 0.5 时算出的仍是 80，与旧行为逐像素一致。
         float contentY = Mathf.Lerp(ContentCollapsedY, ContentExpandedY, k);
-        SetY(_contentRt, contentY);
+        SetPivotLocalY(_contentRt, panelH * 0.5f + contentY, panelH);
 
         // 【2026-11-11 主人拍板「背包弹窗固定在屏幕中间就行」】覆盖 2026-10-05
         // 「GridContainer 与 zhuangshi 走同一个位移量」口径：网格背包不再随两态上移，

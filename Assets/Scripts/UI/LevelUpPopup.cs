@@ -39,6 +39,10 @@ public static class LevelUpPopup
 
     static GameObject _host;
 
+    /// <summary>当前是否有升级弹窗在显示（战斗结果界面用它挡住「点任意处跳过」，防点黑幕误触回城）。
+    /// 只读状态查询，不改弹出/关闭逻辑；Close() 里 _host 置 null 即刻返回 false。</summary>
+    public static bool IsShowing => _host != null;
+
     // —— 挂起账（2026-10-25 主人拍板「战斗结束回到冒险界面才触发」）——
     // 结算时刻战斗里不弹，只记账；Town 就绪（TownSceneBootstrap 收尾）统一吐出。
     // 【2026-11-12 主人拍板】一级一窗、逐个弹：每次升级按级拆成一条挂起，绝不合并成「4→7」一段。

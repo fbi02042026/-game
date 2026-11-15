@@ -57,6 +57,91 @@ public partial class BattleEntryDraftPanel
     }
 
     /// <summary>
+    /// 【2026-11-14 主人拍板「不收走 只是不能抽就行了」】战斗结束（关卡清场）不再收走抽奖按钮：
+    /// 4 个按钮保持显示、统一置灰不可抽（<c>_drawLocked</c> 走 Refresh 同一条置灰出口），面板不动显隐与高度。
+    /// <para>点击不会被穿透到战斗结果界面的全屏 Dim（那一下等于「跳过结算」）：DraftRoot 临时挂
+    /// overrideSorting 嵌套 Canvas 抬到结果界面之上，见 <see cref="SetDraftAboveResultScreen"/>。</para>
+    /// <para>只由 <c>BattleManager.StartStageClearRewardSequence</c> 在正式关清场时调用；
+    /// 剧情入口（第 1 章结局 / 战后剧情 / 战前剧情）仍走 <see cref="Hide"/>，防卡死口径不变。</para>
+    /// </summary>
+    public static void LockDrawKeepVisible()
+    {
+        var ui = Instance;
+        if (ui == null) return;
+        ui.LockDrawKeepVisibleInternal();
+    }
+
+    void LockDrawKeepVisibleInternal()
+    {
+        // 只有常显实时抽（正式关/金币本/活动本）才有这套按钮；旧面板路径（裂隙/引导局/羁绊本）
+        // 没有常显按钮可留，照旧收起（与改造前 Hide 等价，幂等）
+        if (!_liveMode) { Finish(); return; }
+        // 收尾同 Finish：手指引导、倒计时、「币够了没抽」气泡都不能留到结算画面上
+        StopContinueCountdown();
+        StopIdleGuide();
+        if (_liveDrawHintShown)
+        {
+            _liveDrawHintShown = false;
+            TutorialHintUI.Instance?.Hide();
+        }
+        _drawLocked = true;            // 置灰唯一开关：Refresh 里 on = !_drawLocked && ...
+        SetDraftVisible(true);
+        // SetDraftVisible 会连带点亮「开始战斗」，此刻早已开打 → 立刻收回（与 BeginLive 同口径）
+        if (_continueBtn != null) _continueBtn.gameObject.SetActive(false);
+        SetExpanded(true);             // 保持展开态（750），面板不收起、不位移
+        SetDraftAboveResultScreen(true);
+        RefreshLive();                 // 按 _drawLocked 重刷：四按钮统一置灰
+        LogState("LockDrawKeepVisible");
+    }
+
+    /// <summary>
+    /// 清场后保留的抽奖按钮必须压在「战斗结果」界面(<see cref="GameConfig.UiSort.BattleResult"/>=985)之上，
+    /// 否则两件事都会坏：① 结果界面全屏 Dim(0.55 黑) 把按钮压暗；② Dim 上挂着「点任意处跳过」的 Button，
+    /// 会抢走底部点击 —— 玩家点抽奖按钮变成跳过结算回城。
+    /// <para>做法与倒计时同一套（<c>EnsureCountdownText</c>）：给 DraftRoot 挂 overrideSorting 嵌套 Canvas
+    /// + GraphicRaycaster（铁律 10：每加一个 Canvas 必补 GraphicRaycaster）。按钮置灰后仍 raycastTarget=true，
+    /// 点击被它自己吃掉，不会落到下层 Dim。</para>
+    /// <para><paramref name="on"/>=false 时只把 <c>overrideSorting</c> 关掉，恢复「跟父级 965 走」的原始渲染路径；
+    /// 组件本身常驻（销毁会因 Raycaster 依赖失败，见方法内注释），关掉排序覆盖就不会盖住撤离确认窗 980 / 里程碑 970。</para>
+    /// </summary>
+    void SetDraftAboveResultScreen(bool on)
+    {
+        if (_draftRoot == null) return;
+        if (on)
+        {
+            if (_draftKeepCanvas == null)
+                _draftKeepCanvas = _draftRoot.GetComponent<Canvas>();
+            if (_draftKeepCanvas == null)
+            {
+                // 【2026-11-14 修「点下一关抽奖按钮整组不见」】AddComponent<Canvas>() 默认是
+                // ScreenSpaceOverlay —— 放在项目「全 UI 走 ScreenSpaceCamera」的层级里等于一个野根画布：
+                // 不继承父 CanvasScaler 的 720 逻辑宽度，子节点按屏幕真实像素解释 → 整组按钮渲染错位。
+                // 先取父级 Canvas（GetComponentInParent 含自身，所以从 parent 起），照抄同一套相机参数。
+                var parentCanvas = _draftRoot.parent != null
+                    ? _draftRoot.parent.GetComponentInParent<Canvas>() : null;
+                _draftKeepCanvas = _draftRoot.gameObject.AddComponent<Canvas>();
+                if (parentCanvas != null)
+                {
+                    _draftKeepCanvas.renderMode = parentCanvas.renderMode;
+                    _draftKeepCanvas.worldCamera = parentCanvas.worldCamera;
+                    _draftKeepCanvas.planeDistance = parentCanvas.planeDistance;
+                }
+                _draftRoot.gameObject.AddComponent<GraphicRaycaster>();
+            }
+            _draftKeepCanvas.overrideSorting = true;
+            _draftKeepCanvas.sortingOrder = GameConfig.UiSort.BattleResult + 1;
+            return;
+        }
+        if (_draftKeepCanvas == null) return;
+        // 【2026-11-14 铁证 Editor.log：「Can't remove Canvas because GraphicRaycaster (Script) depends on it」】
+        // 旧写法先 Destroy(Canvas) 再 Destroy(Raycaster)：同一帧内 Canvas 因依赖还没删的 Raycaster 删除失败，
+        // 而 _draftKeepCanvas 已被置 null → 这层 986 嵌套 Canvas 永久粘在 DraftRoot 上，再也拆不掉。
+        // 现口径：两个组件都常驻，只用 overrideSorting 开关排序（关掉即回到跟父级 965 走），
+        // 不再销毁任何组件 —— 撤离确认窗 980 / 里程碑 970 照样压得住。
+        _draftKeepCanvas.overrideSorting = false;
+    }
+
+    /// <summary>
     /// 【2026-11-10 主人拍板「只有抽奖面板收回，整个面板下移」】竞技场点「开始战斗」后调用：
     /// 整块面板一步落位回收起态（600 / 内容归位 / DraftRoot -400），<b>不隐藏抽奖按钮</b>——
     /// 与 Hide()/Finish() 的「彻底隐藏」区分开，按钮跟着面板一起下移。
@@ -114,6 +199,9 @@ public partial class BattleEntryDraftPanel
         _cdActive = false;
         _onPick = null;
         _onFight = onFight;
+        // 【2026-11-14】上一关清场抬过层（DraftRoot 986）→ 进新关先拆回父级 965，
+        // 否则战中的撤离确认窗(980)/里程碑(970) 会被抽奖按钮压住。
+        SetDraftAboveResultScreen(false);
         // 【2026-10-31】每场战斗进关重置「币够了没抽」引导：本场没抽过、还没弹过、计时归零
         _liveDrawnThisStage = false;
         _liveDrawHintShown = false;
@@ -182,18 +270,34 @@ public partial class BattleEntryDraftPanel
         }
     }
 
-    // 抽奖引导气泡「关卡闸门」：已通关主线小关数 < 该值才允许弹两条引导（第 4 关起全关）。
+    // 抽奖引导气泡「关卡闸门」：已通关主线小关数 < 该值才允许弹这条引导（第 4 关起全关）。
     // 口径真源唯一 = SaveSystem.Instance?.Data.clearedStages（只记主线 Normal 小关），用 Count 判定；
     // 不用 ChapterManager.currentChapter / CurrentSubIndex0 / 难度集合，也不自算累计。
     const int DrawHintEarlyStageLimit = 3;
 
+    /// <summary>
+    /// 【2026-11-14 主人拍板「这个弹窗只有前3关显示一次就行，不用点一次显示一次」】
+    /// 前 3 关窗口内**整局只弹一次**：真弹出来一次之后，进关 / 战斗中计时 / 裂隙旧面板三处全部不再弹。
+    /// <para>进程内一次性（static）：不写存档、不动 <c>SaveData</c> 结构。重启 App 若仍在前 3 关会再弹一次
+    /// （新手期重看一遍无害），通关 3 关后由 <see cref="DrawHintEarlyStageLimit"/> 永久挡住。</para>
+    /// <para>⚠ 只在「气泡真的显示出来」（<c>TutorialHintUI.IsVisible</c>）时置位：被章节卡 / 佣兵说话闸门
+    /// 挡回去的那一次不算用掉，仍留给 <c>TickLiveEntryDrawHintAfterSplash</c> / <c>TickLiveDrawHint</c>
+    /// 补弹 —— 补的仍是同一次，不是第二次。</para>
+    /// </summary>
+    static bool _drawHintShownOnce;
+
     // 系统未就绪静默不弹（不写 LogError：TickLiveDrawHint 每帧会调，避免刷屏）。
-    bool IsDrawHintStageAllowed()
+    // 三处弹出口（进关 / 战斗中 / 裂隙旧面板）共用这一个闸门，不另立第二套判定。
+    internal static bool IsDrawHintStageAllowed()
     {
+        if (_drawHintShownOnce) return false;
         var data = SaveSystem.Instance?.Data;
         if (data == null || data.clearedStages == null) return false;
         return data.clearedStages.Count < DrawHintEarlyStageLimit;
     }
+
+    /// <summary>气泡真显示出来后「用掉这一次」的唯一出口（裂隙旧面板在 BattleManager 侧调用）。</summary>
+    internal static void MarkDrawHintShownOnce() => _drawHintShownOnce = true;
 
     /// <summary>
     /// 🔴【2026-10-31 主人拍板「关卡战斗中如果玩家抽奖币够了 玩家没抽的时候要加上引导」】
@@ -257,6 +361,8 @@ public partial class BattleEntryDraftPanel
         // 竞技场不吃金币（四类按钮共用 5 次额度），文案不能写「抽奖币够了」，否则玩家会去找币
         hint.Show(DrawHintText(bm.IsArena), drawRt, 5f);
         hint.ApplyBattleTalkTextStyle();   // 框用主人给的，字与「战斗佣兵说话」同款
+        // 【2026-11-14】前 3 关只此一次：被佣兵说话闸门吞掉的那个不算用掉
+        if (hint.IsVisible) _drawHintShownOnce = true;
     }
 
     /// <summary>「币够了没抽」引导气泡文案唯一出口（前台小姐傲娇口吻，实用信息不丢）。</summary>
@@ -273,6 +379,13 @@ public partial class BattleEntryDraftPanel
     void ShowLiveEntryDrawHint()
     {
         if (!IsDrawHintStageAllowed()) return;
+        // 【2026-11-14 主人报「章节卡上演着抽奖气泡」】卡片还在屏上就不弹。
+        // 根因：2026-11-13 把 BeginLive 提到战斗协程开头（Waves.cs，与章节卡同一帧），本气泡随即在
+        // 章节卡 Hold 2.5s + Fade 1.5s 期间弹出来 —— 它指向的抽奖按钮还被不透明黑卡盖着，且 5s 自动收，
+        // 等卡片淡完面板露出来时气泡已经没了（等于白弹）。
+        // 口径「进关就提示」不变：卡片一消失由 LateUpdate 补弹一次（见 TickLiveEntryDrawHintAfterSplash）。
+        var splash = ChapterSplashOverlay.Current;
+        if (ChapterSplashOverlay.BattleSplashPending || (splash != null && !splash.IsFinished)) return;
         // 可抽与否的唯一真源 = Refresh 刷出来的 Btn.interactable（币够/免费额度/竞技场次数）
         bool anyClickable = false;
         for (int i = 0; i < _slots.Count; i++)
@@ -290,7 +403,23 @@ public partial class BattleEntryDraftPanel
         hint.Show(DrawHintText(bm != null && bm.IsArena), drawRt, 5f);
         hint.ApplyBattleTalkTextStyle();   // 框用主人给的，字与「战斗佣兵说话」同款
         // Show 内部被 BattleHeadTalkUI.IsShowing 闸门静默吞掉时不置位，开打后还能补弹
-        if (hint.IsVisible) _liveDrawHintShown = true;
+        if (hint.IsVisible)
+        {
+            _liveDrawHintShown = true;
+            _drawHintShownOnce = true;   // 【2026-11-14】前 3 关只此一次
+        }
+    }
+
+    /// <summary>
+    /// 【2026-11-14】进关气泡的「等卡片」补弹口：<c>_onFight != null</c> = 还在进关阶段（没点开始战斗），
+    /// 章节卡（<see cref="ChapterSplashOverlay.Current"/>）已销毁后调一次 <see cref="ShowLiveEntryDrawHint"/> 走同一套闸门。
+    /// 只补「卡片挡回的那一次」：<c>_liveDrawHintShown</c> 已置位就不再重复，绝不新增第二套文案/底框。
+    /// </summary>
+    void TickLiveEntryDrawHintAfterSplash()
+    {
+        if (_liveDrawHintShown || _onFight == null) return;
+        if (ChapterSplashOverlay.BattleSplashPending || ChapterSplashOverlay.Current != null) return;
+        ShowLiveEntryDrawHint();
     }
 
     static BattleEntryDraftPanel Ensure()
@@ -421,7 +550,7 @@ public partial class BattleEntryDraftPanel
     float MapScaleAt(float mul) => CaptureMapBaseScale() * mul;
 
     /// <summary>
-    /// map 的两态：<b>中心 Y = 250 → 350</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
+    /// map 的两态：<b>中心 Y = 230 → 330</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
     /// （原 2026-10-27 拍板恒 1.4；2026-11-11 改为基准派生，见 <c>MapScaleMulCollapsed</c>）。
     ///
     /// <para>读位置恒用 <c>anchoredPosition.y</c> —— 点锚点与拉伸锚点下它都是「中心相对父级中心的偏移」，
@@ -612,6 +741,8 @@ public partial class BattleEntryDraftPanel
         if (_liveMode)
         {
             TickLiveCooldown();
+            // 【2026-11-14】进关阶段（还没点「开始战斗」）章节卡一消失就补弹抽奖引导气泡
+            TickLiveEntryDrawHintAfterSplash();
             // 【2026-10-31】战斗内「抽奖币够了但没抽」引导（一场一次，开打后才计时）
             TickLiveDrawHint();
         }
@@ -710,6 +841,8 @@ public partial class BattleEntryDraftPanel
         _cdActive = false;
         SetDraftVisible(false);
         SetExpanded(false);
+        // 【2026-11-14】清场保留按钮时抬的层一并拆掉，恢复父级 965 的原始渲染路径
+        SetDraftAboveResultScreen(false);
         // 面板收了，概率弹窗也得跟着收 —— 不然战斗画面里会留一个孤儿弹窗
         DraftOddsPopupUI.Hide();
     }

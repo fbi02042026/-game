@@ -371,7 +371,8 @@ public partial class DialogueUI
     {
         EnsureLocationCaption();
         if (_locationCaption == null) return;
-        _locationCaption.text = title ?? "";
+        // 2026-11-14 主人报「字还有空位就换行」：同正文口径插零宽断行点（地点名/黑幕字幕/终幕字幕共用本出口）
+        _locationCaption.text = InsertCjkBreakHints(title ?? "");
         var c = _locationCaption.color;
         c.a = Mathf.Clamp01(alpha);
         _locationCaption.color = c;

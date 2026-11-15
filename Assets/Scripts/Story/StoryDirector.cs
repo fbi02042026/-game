@@ -196,9 +196,13 @@ public class StoryDirector : Singleton<StoryDirector>
     IEnumerator PlayRoutine(IList<StoryBeat> beats, Action onDone, Action<int> onChoice, bool hideFullDim)
     {
         IsPlaying = true;
-        bool battleStoryBgm = IsBattleScene();
-        if (battleStoryBgm)
-            GameBgm.BeginBattleStory();
+        // 【2026-11-14 主人拍板「主界面上的剧情也要播放剧情背景音乐」】
+        // 根因：此前只有战斗场景（IsBattleScene）才切剧情曲，城镇/主界面剧情播的时候大厅曲照播。
+        // 现在所有场景的剧情统一切 bgm_story，播完 EndBattleStory 自动按场景恢复原曲
+        // （城镇恢复大厅曲、战斗恢复战斗曲）。计数式 Begin/End 支持嵌套
+        // （AdventureUI.Interaction 大厅开场入口已手动 Begin/End，叠加不漏）。
+        bool battleStoryBgm = true;
+        GameBgm.BeginBattleStory();
         SpeechBubbleTalker.SetSuppressed(true);
         PauseGame();
         HideBattleSkillBar();
@@ -372,6 +376,7 @@ public class StoryDirector : Singleton<StoryDirector>
                 IsPlaying = false;
                 _play = null;
                 ResumeGame();
+                RestoreBattleSkillBar();
                 SpeechBubbleTalker.SetSuppressed(false);
                 if (battleStoryBgm)
                     GameBgm.EndBattleStory();

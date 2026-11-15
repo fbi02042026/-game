@@ -162,6 +162,80 @@ public static class UiBannerPopAnim
         rt.localScale = Vector3.one;
     }
 
+    /// <summary>
+    /// 「下一波来袭」专用横滑动效：左侧屏外滑入 → 中间段按基准速度 0.1 倍持续 1 秒 → 恢复基准速度滑出右侧屏外。
+    /// 全程不淡出、不做缩放颤动；Boss 与关卡开场横幅仍走 <see cref="CoPlayWaveIncoming"/>，互不影响。
+    /// <param name="targetWidth">目标宽（设计单位）；≤0 时维持原生尺寸。</param>
+    /// </summary>
+    public static IEnumerator CoPlayNextWaveSlide(Image image, CanvasGroup group, float targetWidth = 0f)
+    {
+        if (image == null || group == null)
+            yield break;
+
+        RectTransform rt = image.rectTransform;
+        image.preserveAspect = true;
+        image.SetNativeSize();
+        rt.localScale = Vector3.one;
+
+        Vector2 nativeSize = rt.sizeDelta;
+        Vector2 targetSize = nativeSize;
+        if (targetWidth > 0.0001f && nativeSize.x > 0f)
+            targetSize = nativeSize * (targetWidth / nativeSize.x);
+        rt.sizeDelta = targetSize;
+
+        Vector2 basePos = rt.anchoredPosition;
+        var canvas = image.GetComponentInParent<Canvas>();
+        var canvasRt = canvas != null ? canvas.transform as RectTransform : null;
+        float screenW = canvasRt != null ? canvasRt.rect.width : GameConfig.DESIGN_WIDTH;
+        if (screenW <= 0f) screenW = GameConfig.DESIGN_WIDTH;
+
+        float bannerW = targetSize.x;
+        float xLeft = -(screenW + bannerW) * 0.5f;   // 整张图刚好在左屏外
+        float xRight = (screenW + bannerW) * 0.5f;   // 整张图刚好在右屏外
+
+        const float SlideInDuration = 0.45f;
+        const float SlowSpeedRatio = 0.1f;
+        const float SlowDuration = 1f;
+        float speed = -xLeft / SlideInDuration;       // 设计单位/秒，全程基准速度
+
+        group.alpha = 1f;
+        rt.anchoredPosition = new Vector2(xLeft, basePos.y);
+
+        float t = 0f;
+        while (t < SlideInDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / SlideInDuration);
+            rt.anchoredPosition = new Vector2(Mathf.Lerp(xLeft, 0f, u), basePos.y);
+            yield return null;
+        }
+
+        float slowEndX = speed * SlowSpeedRatio * SlowDuration;
+        t = 0f;
+        while (t < SlowDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / SlowDuration);
+            rt.anchoredPosition = new Vector2(slowEndX * u, basePos.y);
+            yield return null;
+        }
+
+        float outDuration = Mathf.Max(0.01f, (xRight - slowEndX) / speed);
+        t = 0f;
+        while (t < outDuration)
+        {
+            t += Time.unscaledDeltaTime;
+            float u = Mathf.Clamp01(t / outDuration);
+            rt.anchoredPosition = new Vector2(Mathf.Lerp(slowEndX, xRight, u), basePos.y);
+            yield return null;
+        }
+
+        rt.anchoredPosition = new Vector2(xRight, basePos.y);
+        group.alpha = 0f;
+        rt.anchoredPosition = basePos;
+        rt.localScale = Vector3.one;
+    }
+
     static float EaseOutBack(float t, float overshoot)
     {
         float c1 = overshoot;

@@ -197,7 +197,11 @@ public class BattleWaveAnnounceUI : MonoBehaviour
         // 【2026-11-11 主人「下一波和首领来袭图片小10%」】再整体 ×0.9：1.584×0.9×0.9=1.28304（720→923.8）。
         // 【2026-11-12 主人「下一波和首领来袭缩小20%」】再整体 ×0.8：1.584×0.9×0.9×0.8=1.026432（720→739.0）。
         float bannerTargetWidth = GameConfig.DESIGN_WIDTH * (1.584f * 0.9f * 0.9f * 0.8f);
-        yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, bannerTargetWidth);
+        // 只有「下一波」走横滑动效；「首领来袭」与关卡开场横幅仍走原来的砸入/停留/淡出。
+        if (kind == Kind.NextWave)
+            yield return UiBannerPopAnim.CoPlayNextWaveSlide(_image, _group, bannerTargetWidth);
+        else
+            yield return UiBannerPopAnim.CoPlayWaveIncoming(_image, _group, bannerTargetWidth);
 
         _image.enabled = false;
         SetSubtitle(null);

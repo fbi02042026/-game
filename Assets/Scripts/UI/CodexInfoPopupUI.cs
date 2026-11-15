@@ -174,12 +174,13 @@ public class CodexInfoPopupUI : MonoBehaviour
         // 【2026-11-13 主人拍板】头部名字（top/Name）加描边：预制体名字色是浅黄绿、佣兵名还按稀有度
         // 染亮色（RarityPalette 亮档本就是「深色底上可读」的配色），羊皮纸浅底上看不清（截图反馈）。
         // 描边色走 RarityPalette.Outline（项目统一描线色）；只加组件，不动字号/框宽/位置。
-        // 阴影（Shadow）只往一侧偏、描边（Outline）四面包，浅字浅底用描边分隔更明显，故选描边。
-        if (topTitleText != null && topTitleText.GetComponent<Outline>() == null)
+        // 【2026-11-14 主人拍板「这个描边换成投影吧」】改单向右下投影（Shadow），不再四面包 Outline；
+        // 颜色/偏移沿用原值（RarityPalette.Outline / 1,-1），只换效果组件，字号/框宽/位置一律不动。
+        if (topTitleText != null && topTitleText.GetComponent<Shadow>() == null)
         {
-            var nameOutline = topTitleText.gameObject.AddComponent<Outline>();
-            nameOutline.effectColor = RarityPalette.Outline;
-            nameOutline.effectDistance = new Vector2(1f, -1f);
+            var nameShadow = topTitleText.gameObject.AddComponent<Shadow>();
+            nameShadow.effectColor = RarityPalette.Outline;
+            nameShadow.effectDistance = new Vector2(1f, -1f);
         }
         Wire();
         // 2026-10-31 主人报「怪物信息排版优化」时发现：本弹窗此前从未走 UICanvasSetup
@@ -745,8 +746,10 @@ public class CodexInfoPopupUI : MonoBehaviour
         // 2026-10-31 主人报「怪物信息排版优化」：Meta 与正文、描述与趣闻两段间距拉开
         // （6→12 / 16→24），正文行距 1→1.12 更透气；只动纵向间距与行距，不动宽度/字号。
         // 【2026-11-04 任务弹窗排版（主人拍板「统一左边界 / 进度不再单独一行 / 奖励贴紧说明 / 收掉空地」）】
-        // 任务类弹窗（主线/支线，_taskLayout）：说明独占上部；状态字与奖励行同一 y，
-        // 左对齐状态字、右对齐奖励图标，互不重叠；面板按内容收高。
+        // 【2026-11-15 主人报「文字被奖励图标压住」修正】原「状态字与奖励行同一 y」只在短状态字下成立，
+        // 长文案（「已完成，可在列表右侧领取奖励」15 字）会伸进右侧奖励图标区；改为状态字单独落在奖励行下方一行，
+        // 左对齐状态字、右对齐奖励图标都不变。任务类弹窗（主线/支线，_taskLayout）：说明 → 奖励行 → 状态字。
+        const float TaskLoreBelowReward = 10f; // 状态字与奖励行拆行后的间距（仅任务弹窗有奖励图标时生效）
         float loreGap = 24f;            // Desc 与 Lore 的间距（超长时自动压缩）
         float metaGap = 12f;            // Meta 与 Desc 的间距
         float rewardGapAbove = 10f;     // Desc 与奖励行间距
@@ -814,16 +817,20 @@ public class CodexInfoPopupUI : MonoBehaviour
             rewardH = _rewardRowRt.rect.height;
         }
         float rewardBlock = rewardH > 0f ? rewardGapAbove + rewardH + rewardGapBelow : 0f;
-        // 【2026-11-04】任务弹窗里说明与进度同一行，行高取两者较大者，Lore 不再额外占一段高度。
+        // 【2026-11-04】任务弹窗里说明与进度同一行，行高取两者较大者。
+        // 【2026-11-15】状态字拆到奖励行下方后要额外占「间距 + 自身行高」，need 同步计入，否则面板收高会压字。
         // 进度为空（推进条件已达成、无需显示 x/y）时按 0 高处理，避免空行把行高撑大。
         bool loreBlank = string.IsNullOrEmpty(loreText.text);
         if (task && loreBlank) loreH = 0f;
         float rowH = task ? Mathf.Max(descH, loreH) : descH;
+        // 只有「任务弹窗 + 有奖励图标 + 状态字非空」才拆行；无奖励任务与其余弹窗排版一字不变。
+        bool taskSplit = task && rewardH > 0f && !loreBlank;
+        float taskLoreExtra = taskSplit ? TaskLoreBelowReward + loreH : 0f;
 
         float avail = top - bottomLimit;
         // 2026-11-01 主人拍板「条的位置不够可以上下拉伸」：内容放不下先把面板上下加高
         //（上限近满屏，参考高 1280 留 100 边）；顶栏内容锚顶、关闭/解锁钮锚底，跟着边走不压字。
-        float need = task ? rowH + rewardBlock : rowH + rewardBlock + loreGap + loreH;
+        float need = task ? rowH + rewardBlock + taskLoreExtra : rowH + rewardBlock + loreGap + loreH;
         const float maxPanelH = 1180f;
         // 【2026-11-03 排版修复（主人报支线任务弹窗排版）】收高下限 560 写死 → 任务/世界类
         // 3 行内容收不满，底部空一大块。改按内容动态算：内容起点距顶边(-top) + 内容 need
@@ -853,7 +860,7 @@ public class CodexInfoPopupUI : MonoBehaviour
         }
         // 【2026-11-03 排版修复】top 头条跟随面板高度：头条锚在面板中心上方固定 291（按 720
         // 面板调的），面板收高后顶边升到 280 以上，头条字（高 50）骑出顶边框（截图实锤）。
-        // 改为永远保持「顶边下 69px」，与怪物信息弹窗（720 面板）观感一致；程序搭壳无 top 节点，判空跳过。
+        // 改为永远保持「顶边下 TopTitleInset px」（=69），与怪物信息弹窗（720 面板）观感一致；程序搭壳无 top 节点，判空跳过。
         if (root != null && _topNode == null)
             _topNode = FindDeep(root.transform, "top") as RectTransform;
         if (_topNode != null)
@@ -873,7 +880,9 @@ public class CodexInfoPopupUI : MonoBehaviour
                 loreH = loreText.preferredHeight;
                 if (task && loreBlank) loreH = 0f;
                 rowH = task ? Mathf.Max(descH, loreH) : descH;
-                need = task ? rowH + rewardBlock : rowH + rewardBlock + loreGap + loreH;
+                taskSplit = task && rewardH > 0f && !loreBlank;
+                taskLoreExtra = taskSplit ? TaskLoreBelowReward + loreH : 0f;
+                need = task ? rowH + rewardBlock + taskLoreExtra : rowH + rewardBlock + loreGap + loreH;
                 if (need <= avail) break;
             }
             if (!task && need > avail)
@@ -898,8 +907,12 @@ public class CodexInfoPopupUI : MonoBehaviour
             var hlg = _rewardRow.GetComponent<HorizontalLayoutGroup>();
             if (hlg != null) hlg.childAlignment = task ? TextAnchor.MiddleRight : TextAnchor.MiddleCenter;
         }
-        // 任务弹窗：状态字与奖励行同一 y，左对齐状态字、右对齐奖励图标，互不重叠
-        float loreY = task ? top - rowH - rewardGapAbove : top - descH - rewardBlock - loreGap;
+        // 【2026-11-15 主人报「文字被奖励图标压住」】任务弹窗状态字不再与奖励行同一 y：
+        // 有奖励图标时落在图标行底下方 TaskLoreBelowReward；无奖励图标时沿用原式，外观不变。
+        float loreY = task
+            ? (taskSplit ? top - rowH - rewardGapAbove - rewardH - TaskLoreBelowReward
+                         : top - rowH - rewardGapAbove)
+            : top - descH - rewardBlock - loreGap;
         loreRt.anchoredPosition = new Vector2(loreRt.anchoredPosition.x, loreY);
     }
 

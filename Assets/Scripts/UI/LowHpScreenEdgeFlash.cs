@@ -144,6 +144,17 @@ public class LowHpScreenEdgeFlash : MonoBehaviour
         // 2026-10-20 主人拍板：老虎机 / 关卡轮盘界面不显示残血红边，关掉后残血仍会恢复显示
         if (IsBlockedByPanel()) lowHp = false;
 
+        // 2026-11-14 主人报「剧情时不要闪红」：剧情只把 timeScale 置 0，Hero.Update 照跑
+        // （Update 不受 timeScale 影响），残血红边会在剧情对白底下继续脉冲。
+        // 剧情播放期间一律压掉；剧情收窗后若仍残血会自动恢复显示。
+        var story = StoryDirector.InstanceQuiet;
+        if (story != null && story.IsPlaying) lowHp = false;
+
+        // 2026-11-14 主人报「战斗结束后就不要闪红了」：本关已清（战后剧情/胜利结算/走向结算界面）
+        // 期间压掉残血红边，下一关 StartNewRun 复位 _stageCleared 后照常恢复。
+        var bm = BattleManager.InstanceQuiet;
+        if (bm != null && bm.StageCleared) lowHp = false;
+
         _want = lowHp;
         if (!_want)
         {

@@ -178,7 +178,7 @@ public partial class DialogueUI
             StopCoroutine(_typeCo);
             _typeCo = null;
         }
-        _fullLineText = full ?? "";
+        _fullLineText = InsertCjkBreakHints(full ?? "");
         _typeComplete = false;
         _typing = true;
         HideNextArrow();

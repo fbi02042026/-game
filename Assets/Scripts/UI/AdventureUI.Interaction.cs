@@ -776,7 +776,7 @@ public partial class AdventureUI
         // 兜底清掉中断存档（正常情况下启动阶段就已结算完毕）
         BattleStateSaver.ClearInterruptedSave();
 
-        // 无限裂隙：进本标记每次重设（防上次残留污染）；先查每日次数，再查体力（20/关）
+        // 无限裂隙：进本标记每次重设（防上次残留污染）；先查每日次数，再查体力（15/次）
         bool tutorialRun = !StoryProgress.TutorialDone
             && !StoryProgress.TutorialBattleCleared
             && StoryProgress.TutorialIntroDone;
@@ -852,7 +852,7 @@ public partial class AdventureUI
             AdventureUI.ResetPendingFlags();
             AdventureUI.PendingEndlessRift = endless;   // 裂隙标记在职业选择前已按 endless 立过（TryEnterBattle:749），这里重立防被 Reset 清掉
 
-            // 无限裂隙：次数 + 20 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
+            // 无限裂隙：进本 = 扣 1 次每日机会 + 15 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
             if (endless)
             {
                 if (!EndlessRiftRules.TryConsumeEnter())
@@ -904,13 +904,16 @@ public partial class AdventureUI
             GameSceneManager.Instance?.LoadBattleScene();
         }
 
-        // 【2026-10-18 主人拍板】无限裂隙不弹职业选择、不限制职业 —— 刷图玩法用当前职业直接进本；
-        // 职业三选一是引导局 / 正式关的仪式感，裂隙每次都弹一遍太拖节奏。
-        // 【2026-11-02 主人拍板】裂隙进本前先问「是否返回上回保存点继续」——
-        // 这个确认属于**进本入口**，不是死亡当场（死亡当场只有「返回」一条路，见 BattleManager.CanOfferRevive）；
+        // 【2026-11-14 主人拍板「无限裂隙还是要选职业」】作废 10-18「裂隙不弹职业选择」旧口径：
+        // 裂隙与主线一样先弹职业三选一，选完再问「是否返回上回保存点」，最后才扣体力进场景。
+        // ⚠ 顺序不可反：AskEndlessStartChoice 弹窗期间会把 PendingEndlessRift 置 false
+        //（EndlessReset.cs:107），若先问保存点，职业选择里的体力检查/飘字会误用主线的 5 点
+        //（裂隙实际 15 点，StaminaSystem.ENDLESS_RIFT_COST）。
+        // 【2026-11-02 主人拍板】保存点确认属于**进本入口**，不是死亡当场
+        //（死亡当场只有「返回」一条路，见 BattleManager.CanOfferRevive）；
         // 「从头开始」不再是本弹窗的选项，改由无限页右下角的重置徽章负责（每周 1 次）。
         if (endless)
-            AskEndlessStartChoice(EnterAfterJobSelect);
+            PlayerJobSelectUI.Show(() => AskEndlessStartChoice(EnterAfterJobSelect), opts);
         else
             PlayerJobSelectUI.Show(EnterAfterJobSelect, opts);
     }

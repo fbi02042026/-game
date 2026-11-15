@@ -240,13 +240,22 @@ public partial class WavePlanner
                 if (availableSprites.Count == 0)
                     availableSprites = nonBossSprites;
             }
+            // 【2026-11-14 主人拍板「词条怪不要一群一群出现」】普通随机选怪排除表定词条怪编号：
+            // 词条怪只能从配额槽（InitAffixQuota → affixQuotaInWave）出，否则随机抽到词条精灵
+            // 的怪也会在 Monster.Init 挂表定词缀 → 配额之外满屏词条。排除后池空则回退原池，不吞怪。
+            if (_affixSpritePool.Count > 0)
+            {
+                var withoutAffix = availableSprites.Where(s => !_affixSpritePool.Contains(s)).ToList();
+                if (withoutAffix.Count > 0)
+                    availableSprites = withoutAffix;
+            }
         }
         if (!wantBoss && availableSprites.Count == 0)
             availableSprites.Add(1);
 
         if (wantBoss)
         {
-            // 优先真 Boss 行（sprite 11/12）；避免高阶小怪 isBoss 误抢模板
+            // 优先 Boss 段行（sprite >= BOSS_SPRITE_START，含 10 号 xiaoboss）；避免高阶小怪 isBoss 误抢模板
             var trueBosses = pool.Where(m => m.isBoss && m.spriteIndex >= GameConfig.BOSS_SPRITE_START).ToList();
             if (trueBosses.Count > 0)
                 template = trueBosses[Random.Range(0, trueBosses.Count)];
@@ -289,20 +298,39 @@ public partial class WavePlanner
         _affixSpritePool.Clear();
         for (int i = 0; i < _waves.Count; i++)
             if (_waves[i] != null) _waves[i].affixQuotaInWave = 0;
-        if (bm == null || !bm.IsFormalMainRun) return;
+        // 【2026-11-15 主人口径「让裂隙也刷表定词条怪」】正式主线关与无限裂隙都建词条池；
+        // 引导 / 活动副本 / 支线岛 / 竞技场仍不建（保持原样）。
+        if (bm == null || (!bm.IsFormalMainRun && !bm.IsEndlessRift)) return;
         if (ConfigManager.Instance == null) return;
         GameConfig.AffixQuotaRange(stageIdx, out int qMin, out int qMax);
-        if (qMax <= 0) return;
 
+        // 【2026-11-14 主人拍板「词条怪不要一群一群出现」】编号池先建：
+        // 普通随机选怪要靠它排除词条精灵（哪怕本关配额为 0，随机抽到词条编号也不许挂词缀），
+        // 否则配额之外又冒出一堆词条怪 → 满屏词条、没有特殊性。
         var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
         if (pool == null || pool.Count == 0) return;
         var indices = ConfigManager.Instance.GetAvailableSpriteIndices(CurrentChapter, stageIdx, false);
-        var affixSprites = pool.Where(m => !m.isBoss && !string.IsNullOrEmpty(m.tableAffix) && indices.Contains(m.spriteIndex))
+        // 【2026-11-15 19:2x 主人拍板】主线词条池不再受 availableSprites 的 stageMax=2 限制：
+        // 第 2 关起就有 3 号词条怪穿插，之后每两关多一种（3 → 3/5 → 3/5/6 → 3/4/5/6），
+        // 否则第 2 关 indices=[1,2] 会把词条池判空、直接 return，整关一只词条怪都出不来。
+        // 裂隙仍走原 indices 口径（层号映射进 0..4 输入域），一字不动。
+        bool endlessPool = bm != null && bm.IsEndlessRift;
+        int affixMax = GameConfig.AffixSpriteMaxForStage(stageIdx);
+        var affixSprites = pool.Where(m => !m.isBoss && !string.IsNullOrEmpty(m.tableAffix)
+            && (endlessPool ? indices.Contains(m.spriteIndex) : m.spriteIndex <= affixMax))
             .Select(m => m.spriteIndex).Distinct().OrderBy(s => s).ToList();
         if (affixSprites.Count == 0) return;
         _affixSpritePool.AddRange(affixSprites);
 
-        int quota = UnityEngine.Random.Range(qMin, qMax + 1);
+        // 【2026-11-15 主人口径「前面少后面多 越往后普通怪越少」】裂隙按绝对层数比例投放，
+        // 不能套主线 AffixQuotaRange(关序号)——裂隙层号映射到 0..4 的输入域，前 18 层恒 0 配额。
+        // 裂隙的公式 / 按层比例 / 每波上限一字不动；主线每波上限改由 AffixWaveCapForStage 按关递增
+        // （19:2x 新口径「数量由少变多」），11-14「词条怪只能从配额槽出」的排除逻辑保持不变。
+        bool endlessQuotaMode = bm.IsEndlessRift;
+        if (!endlessQuotaMode && qMax <= 0) return;   // 主线本关无配额：只建池供排除用，不摊配额
+
+        int quota;
+        float ratio;
         var spawnable = new List<int>();
         int totalNormal = 0;
         for (int i = 0; i < _waves.Count; i++)
@@ -313,9 +341,21 @@ public partial class WavePlanner
             if (i != 0) spawnable.Add(i);   // 【2026-11-13 v5】开场波纯普通怪，特殊怪集中在 Gate 之后
         }
         if (spawnable.Count == 0) return;
-        quota = Mathf.Clamp(quota, 0, Mathf.Max(0, Mathf.FloorToInt(totalNormal * GameConfig.AFFIX_QUOTA_RATIO)));   // 2026-11-12 主人拍板：封顶 = 本关正常波总怪数 × 5%，取代旧 totalNormal/3；波数压缩后自动跟着降
+        if (endlessQuotaMode)
+        {
+            ratio = GameConfig.EndlessAffixRatio(bm.EndlessRiftStage);
+            quota = Mathf.Clamp(Mathf.RoundToInt(totalNormal * ratio), 0, totalNormal);
+        }
+        else
+        {
+            ratio = GameConfig.AFFIX_QUOTA_RATIO;
+            quota = UnityEngine.Random.Range(qMin, qMax + 1);
+            quota = Mathf.Clamp(quota, 0, Mathf.Max(0, Mathf.FloorToInt(totalNormal * ratio)));   // 2026-11-12 拍板：封顶 = 本关正常波总怪数 × AFFIX_QUOTA_RATIO（11-15 改 5%→25%）；波数压缩后自动跟着降
+        }
 
-        // 按怪数占比加权摊到波（大数随机法），再修整差额
+        // 按怪数占比加权摊到波（大数随机法），再修整差额。
+        // 主线每波上限按关递增 1→2→3（11-15 19:2x 拍板「数量由少变多」，覆盖 11-14 恒 1）；
+        // 裂隙每波上限 = 该波怪数 × 当层比例，否则深层占比会被封死，兑现不了「越往后普通怪越少」。
         var perWaveQuota = new Dictionary<int, int>();
         int assigned = 0;
         foreach (int wi in spawnable)
@@ -323,7 +363,7 @@ public partial class WavePlanner
             float exact = (float)_waves[wi].monsterCount * quota / totalNormal;
             int n = Mathf.FloorToInt(exact);
             if (UnityEngine.Random.value < exact - n) n++;
-            n = Mathf.Min(n, _waves[wi].monsterCount);
+            n = Mathf.Min(n, WaveAffixCap(wi, endlessQuotaMode, ratio, stageIdx));
             perWaveQuota[wi] = n;
             assigned += n;
         }
@@ -331,12 +371,25 @@ public partial class WavePlanner
         while (assigned != quota && guard-- > 0)
         {
             int wi = spawnable[UnityEngine.Random.Range(0, spawnable.Count)];
-            if (assigned < quota && perWaveQuota[wi] < _waves[wi].monsterCount) { perWaveQuota[wi]++; assigned++; }
+            int cap = WaveAffixCap(wi, endlessQuotaMode, ratio, stageIdx);
+            if (assigned < quota && perWaveQuota[wi] < cap) { perWaveQuota[wi]++; assigned++; }
             else if (assigned > quota && perWaveQuota[wi] > 0) { perWaveQuota[wi]--; assigned--; }
         }
         foreach (var kv in perWaveQuota)
             if (kv.Value > 0) _waves[kv.Key].affixQuotaInWave = kv.Value;
-        GamePerf.Log($"[WavePlanner] 词条怪配额 ch{CurrentChapter} 第{stageIdx + 1}关 quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");
+        GamePerf.Log($"[WavePlanner] 词条怪配额 {(endlessQuotaMode ? "裂隙第" + bm.EndlessRiftStage + "层 比例" + ratio : "ch" + CurrentChapter + " 第" + (stageIdx + 1) + "关")} quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");
+    }
+
+    /// <summary>单波词条怪名额上限：主线按关递增（11-15 19:2x 拍板「数量由少变多」，覆盖 11-14 恒 1）；
+    /// 裂隙按该波怪数 × 当层比例撑开，一字不动。</summary>
+    int WaveAffixCap(int waveIndex, bool endlessQuotaMode, float ratio, int stageIdx)
+    {
+        if (!endlessQuotaMode)
+            return GameConfig.AffixWaveCapForStage(stageIdx,
+                _waves[waveIndex] != null ? _waves[waveIndex].monsterCount : 1);
+        var w = _waves[waveIndex];
+        int n = w != null ? w.monsterCount : 0;
+        return Mathf.Min(n, Mathf.Max(1, Mathf.CeilToInt(n * ratio)));
     }
 
     /// <summary>

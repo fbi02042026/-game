@@ -53,7 +53,9 @@ public static class AffixMonsterNoticeUI
     /// 要整体上下微调只动这一个数（每 −1 上移 1，每 +1 下移 1）。
     /// </summary>
     const float NoticeTopOffset = 340f;
-    static readonly Color SlotBg = new Color(0.10f, 0.08f, 0.06f, 0.95f);
+    // 【2026-11-15 主人拍板「半透改成70%」】百分比 = 不透明度 alpha（同 11-15 战前剧情背景 70% 口径）。
+    // 只动 alpha，RGB 与槽位几何一字未改。
+    static readonly Color SlotBg = new Color(0.10f, 0.08f, 0.06f, 0.70f);
     static readonly Color YellowBang = new Color(1f, 0.84f, 0.10f);
 
     /// <summary>
@@ -224,5 +226,27 @@ public static class AffixMonsterNoticeUI
             if (e.Slot != null) Object.Destroy(e.Slot);
             _entries.RemoveAt(i);
         }
+    }
+
+    /// <summary>
+    /// 换关清零（2026-11-14 主人报「怪物信息也带到了下一关」）：
+    /// 根因是重置只靠「场景切换后 _canvas 变伪空」这条路 —— <c>ContinueToNextStageInPlace</c>
+    /// 是原地换关不切场景，_canvas 还活着 → <c>EnsureCanvas</c> 第一行直接 return，
+    /// 上一关的图标栈与两张去重表全套跟着进下一关。
+    /// 现口径：<c>BattleManager.LoadStage</c>（唯一进关出口）每关开头调本方法，
+    /// 上层怪已随 ClearAllMonsters 清掉，图标/去重/弹窗都该归零。
+    /// </summary>
+    public static void ResetForNewStage()
+    {
+        for (int i = 0; i < _entries.Count; i++)
+        {
+            var e = _entries[i];
+            if (e != null && e.Slot != null) Object.Destroy(e.Slot);
+        }
+        _entries.Clear();
+        _shownThisScene.Clear();
+        _shownMonsterIds.Clear();
+        // 还开着的怪物信息弹窗（共用组件）一并收起，不让它飘进新关
+        MonsterTipPanel.Hide();
     }
 }

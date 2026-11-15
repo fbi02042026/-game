@@ -35,8 +35,11 @@ public static class GameBgm
 
     const string ResRoot = "Audio/BGM/";
     const float DefaultFade = 0.85f;
-    /// <summary>BGM 目标响度档；GameSting 胜负曲同用此档（2026-10-31 接入胜负曲，同值单一出口）。</summary>
-    public const float DefaultVolume = 0.72f;
+    /// <summary>BGM 目标响度档；GameSting 胜负曲同用此档（2026-10-31 接入胜负曲，同值单一出口）。
+    /// 【2026-11-14 主人报「背景音乐声音有点大、点击音效听不见」】0.72 → 0.50（-3.2dB）。
+    /// 实测素材 mean：bgm_town -14.4dB / bgm_battle -12.5dB，0.72 档下与 UI 点击音只差约 3dB 峰值，
+    /// 点击音被完全掩蔽；降档后两者拉开约 16dB。胜负曲随此档同降，不另开第二档。</summary>
+    public const float DefaultVolume = 0.5f;
 
     static readonly Dictionary<Track, string> Paths = new Dictionary<Track, string>
     {
@@ -61,6 +64,8 @@ public static class GameBgm
     static Coroutine _endStoryCo;
     static bool _loadingMuted;
     static bool _cutsceneMuted;
+    /// <summary>【2026-11-15】当前战斗是否已刷出精英/Boss 波，Boss/精英关选曲的唯一真源。</summary>
+    static bool _battleStrongWave;
     static Coroutine _fadeCo;
     static BgmRunner _runner;
     static readonly Dictionary<Track, AudioClip> _cache = new Dictionary<Track, AudioClip>();
@@ -90,14 +95,28 @@ public static class GameBgm
         Play(Track.Login);
     }
 
+    /// <summary>
+    /// 【2026-11-15 主人拍板「只在精英或者 boss 出现的波次里才换 boss 背景音乐」】
+    /// 波级选曲状态：进关清 false，刷到精英/Boss 波置 true。
+    /// 所有按关卡类型选曲的出口（进关 / 场景猜测 / 复活恢复 / 音乐开关恢复）都走 TrackForStage，
+    /// 由这一个状态决定 Boss/精英关此刻该播哪首，不再整关从第一波就铺 boss 曲。
+    /// </summary>
+    public static void SetBattleStrongWave(bool on)
+    {
+        _battleStrongWave = on;
+    }
+
     /// <summary>按关卡类型选曲：战斗/首领/功能关。
-    /// 【2026-10-31 主人拍板】精英关与首领关共用 bgm_boss（新曲「boss战」）；普通关用 bgm_battle。</summary>
+    /// 【2026-10-31 主人拍板】精英关与首领关共用 bgm_boss（新曲「boss战」）；普通关用 bgm_battle。
+    /// 【2026-11-15 主人拍板】Boss/精英关不再整关播 boss 曲：只有已刷出精英/Boss 波
+    /// （_battleStrongWave=true）才用 Boss，其余时候与普通关一样用 bgm_battle。
+    /// 状态由波刷出单一出口写、进关清零，别在别处另设开关。</summary>
     public static Track TrackForStage(StageType type)
     {
         switch (type)
         {
-            case StageType.Boss: return Track.Boss;
-            case StageType.Elite: return Track.Boss;
+            case StageType.Boss:
+            case StageType.Elite: return _battleStrongWave ? Track.Boss : Track.Battle;
             case StageType.Rest: return Track.Special;
             default: return Track.Battle;
         }
@@ -204,6 +223,11 @@ public static class GameBgm
         yield return new WaitForSecondsRealtime(0.28f);
         _endStoryCo = null;
         if (_storyHold > 0 || _loadingMuted) yield break;
+        // 【2026-11-14 主人报「从剧情回来后胜利音乐和战斗音乐重叠了」】战后剧情收窗时这边定了
+        // 0.28 秒后恢复战斗曲，但结果界面常在这窗口内弹出 → GameSting.PlayBattleResult 已停 BGM
+        // 接管情绪；0.28 秒一到再把战斗曲铺回去 = 胜利曲叠战斗曲。jingle 在播就不恢复，
+        // 后续交给结果界面收窗 / 场景切换的既有流程。
+        if (GameSting.IsPlaying) yield break;
         Track want = _restoreAfterStory;
         _restoreAfterStory = Track.None;
         if (want == Track.None || want == Track.Story)
@@ -431,6 +455,37 @@ public static class GameBgm
     static void EnsureHost()
     {
         if (_runner != null) return;
+        // 【2026-11-14 主人报「大厅的和战斗背景音乐重叠了」】运行中重编译会触发 Domain Reload：
+        // static 字段全部清回 null，但 DontDestroyOnLoad 的 "GameBgm" 宿主 GameObject 不会被销毁、
+        // 旧曲还在响。旧 EnsureHost 这时直接 new 一个新宿主 → 两个宿主各播一首 = 大厅曲叠战斗曲。
+        // 先接管现成宿主（连同它的两个 AudioSource），只有真的找不到才新建。
+        // 【2026-11-14 补】接管时把**所有**残留宿主收敛成一个：只取一个的话，之前已经叠出来的
+        // 第二份宿主会继续响（主人报「还是重叠」就是这个残留）。
+        var existingHosts = Object.FindObjectsOfType<BgmRunner>();
+        BgmRunner existing = null;
+        for (int i = 0; i < existingHosts.Length; i++)
+        {
+            if (existingHosts[i] == null) continue;
+            if (existing == null) { existing = existingHosts[i]; continue; }
+            Object.Destroy(existingHosts[i].gameObject);   // 多出来的 = 上一次遗留，整份销毁
+        }
+        if (existing != null)
+        {
+            _runner = existing;
+            var arr = existing.GetComponents<AudioSource>();
+            _a = arr.Length > 0 && arr[0] != null ? arr[0] : existing.gameObject.AddComponent<AudioSource>();
+            _b = arr.Length > 1 && arr[1] != null ? arr[1] : existing.gameObject.AddComponent<AudioSource>();
+            // resetVolume:false —— 接管时不能把正在响的音量清零，留给下次 Play 的 CrossFade 平滑接走
+            SetupSource(_a, resetVolume: false);
+            SetupSource(_b, resetVolume: false);
+            // 谁在响谁就是当前声道；另一个强停，避免残留声道继续出声
+            _active = (_b.isPlaying && _b.volume > _a.volume) ? _b : _a;
+            var idle = _active == _a ? _b : _a;
+            idle.Stop();
+            idle.clip = null;
+            idle.volume = 0f;
+            return;
+        }
         var go = new GameObject("GameBgm");
         Object.DontDestroyOnLoad(go);
         _runner = go.AddComponent<BgmRunner>();
@@ -441,13 +496,14 @@ public static class GameBgm
         _active = _a;
     }
 
-    static void SetupSource(AudioSource s)
+    static void SetupSource(AudioSource s, bool resetVolume = true)
     {
+        if (s == null) return;
         s.playOnAwake = false;
         s.loop = true;
         s.spatialBlend = 0f;
-        s.volume = 0f;
         s.priority = 0;
+        if (resetVolume) s.volume = 0f;
     }
 
     sealed class BgmRunner : MonoBehaviour { }

@@ -32,7 +32,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 }
             }
         }
-        MercObtainPopupUI.ShowFromEntry(hireId, def.AssetId, level, star, showReplace, onReplace);
+        // 【2026-11-14 主人拍板】未获得的佣兵点开详情，立绘也要全黑（与列表卡同口径）；
+        // 已拥有与否的唯一真源 = SaveData.IsMercUnlocked（与「进阶」钮显隐同一判据）。
+        bool owned = data != null && data.IsMercUnlocked(hireId);
+        MercObtainPopupUI.ShowFromEntry(hireId, def.AssetId, level, star, showReplace, onReplace, owned);
     }
 
     // ============================================================

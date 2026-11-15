@@ -17,7 +17,10 @@ public partial class DialogueUI : MonoBehaviour
     public static DialogueUI Instance { get; private set; }
 
     public bool IsVisible => gameObject.activeSelf;
-    public string CurrentLine => dialogueText != null ? dialogueText.text : "";
+    /// <summary>当前完整台词（供探针/文案匹配用）。正文里插的零宽断行点会被剥掉，保证 Contains 关键词匹配不受影响。</summary>
+    public string CurrentLine => dialogueText != null
+        ? dialogueText.text.Replace(CjkBreakHint.ToString(), string.Empty)
+        : "";
     public bool HasChoicesVisible => _choicesVisible;
     /// <summary>打字机是否已播完当前句（情报问答等要等结束后再出选项）。</summary>
     public bool IsTypeComplete => _typeComplete;
@@ -110,6 +113,34 @@ public partial class DialogueUI : MonoBehaviour
     /// 【2026-11-01 主人拍板「再大两号」】24→36（下一个 12 的整倍，两档 6px 步进）。
     /// 【2026-11-08】36→30。注意：30 不是 12 的整倍，点阵字体锐利度不如 24/36。</summary>
     const int DialogueBodyFontSize = 30;
+
+    // —— 中文断行【2026-11-14 主人报「字还有空位就换行」】——
+    // UGUI 旧版 Text 只在空白处断行：中文整句没有空格就被当成一整个「词」，
+    // 塞不进当前行就在前面的空格处（如「Boss 」后）整体断行，留下大片空白。
+    // 修法：正文唯一入口 BeginTyping 在汉字/收尾标点后插零宽空格 U+200B 作合法断行点
+    // （fusion-pixel.ttf 含该字形、宽为 0，实测不占位；即使字体不支持也只是无效果，不会变丑）。
+    const char CjkBreakHint = '\u200B';
+    /// <summary>收尾禁则标点：断行点不插在它前面（避免标点被顶到行首），插在它后面合法。</summary>
+    const string CjkClosePunct = "，。！？；：、）】」』》〉”’…—%~％·";
+
+    /// <summary>在可安全断行的汉字/标点后插入零宽空格，让旧版 Text 能逐字换行。</summary>
+    static string InsertCjkBreakHints(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return s;
+        var sb = new System.Text.StringBuilder(s.Length + 16);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            sb.Append(c);
+            if (c == '\n') continue;
+            bool breakable = (c >= 0x4E00 && c <= 0x9FFF) || CjkClosePunct.IndexOf(c) >= 0;
+            if (!breakable) continue;
+            // 下一个字符是收尾标点时不插（标点不能起行），由标点之后的插入点负责断行
+            if (i + 1 < s.Length && s[i + 1] != '\n' && CjkClosePunct.IndexOf(s[i + 1]) >= 0) continue;
+            sb.Append(CjkBreakHint);
+        }
+        return sb.ToString();
+    }
     const float LocBlackInDur = 0.55f;
     const float LocHoldDur = 2.0f;
     const float LocTextFadeDur = 1.1f;

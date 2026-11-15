@@ -14,6 +14,11 @@ public partial class BattleManager
     /// </summary>
     bool _reviveUsedThisStage;
 
+    /// <summary>本关是否已「成功复活过」。与 _reviveUsedThisStage 严格区分：后者在弹选择窗时就置位，
+    /// 点【返回】放弃复活同样是 true，不能拿它判定「复活后再次阵亡」。
+    /// 只用于一条路径：复活后再次阵亡 → 再弹一次失败界面（不带复活钮，2026-11-15）。关卡开始时重置。</summary>
+    bool _revivedThisStage;
+
     /// <summary>复活选择窗是否开着（2026-10-25 广告版守卫）：广告是异步回调，
     /// 玩家可能先点【返回】收窗、之后回调才回来 —— 回调凭本标志判定战斗还在待抉择，防诈尸复活。</summary>
     bool _reviveChoiceOpen;
@@ -161,6 +166,8 @@ public partial class BattleManager
         isInBattle = true;
         BattleUI.Instance?.UpdateCharacterSlots();   // 槽亮回来 + 压暗/护符图标收掉
         BattleUI.Instance?.ForceRefreshLiveBars();
+        // 复活流程走完（钻石/广告已扣）：之后本关再次阵亡要走「二次失败界面」分支。
+        _revivedThisStage = true;
     }
 
     /// <summary>
@@ -289,7 +296,16 @@ public partial class BattleManager
                 });
                 return;
             }
-            TriggerLegacyFlow(isDeath: true);   // 不再二次播失败结果界面（2026-11-05 主人拍板，见上）
+            // 【2026-11-15】本关成功复活过之后的再次阵亡：再弹一次失败界面（不带复活钮、
+            // 唯一【返回】出口），点返回才回城。账务在 TriggerLegacyFlow 内当场全部做完，
+            // 只把最后一句 LoadTownScene 延后到 onReturn，防停在界面时杀进程丢本局金币。
+            if (_revivedThisStage)
+            {
+                TriggerLegacyFlow(isDeath: true, deferSceneLoad: true);
+                BattleResultScreen.ShowArenaFailure(() => GameSceneManager.Instance?.LoadTownScene());
+            }
+            else
+                TriggerLegacyFlow(isDeath: true);   // 不再二次播失败结果界面（2026-11-05 主人拍板，见上）
         }
         else
             TriggerLegacyFlow(isDeath: true);
@@ -440,8 +456,10 @@ public partial class BattleManager
     /// 死亡 / 撤离结算：构筑（装备/技能/佣兵）一律清空；
     /// 金币与材料/附魔石等资源一律保留 —— 死亡也保留本局赚到的金币，并按金币产出天赋石。
     /// </summary>
-    void TriggerLegacyFlow(bool isDeath)
+    void TriggerLegacyFlow(bool isDeath, bool deferSceneLoad = false)
     {
+        // deferSceneLoad：仅「复活后二次阵亡」分支传 true —— 账务全部当场做完，
+        // 只把最后一句 LoadTownScene 延后到玩家点【返回】。其余所有旧路径走默认 false，行为逐字不变。
         // 【2026-11-12 主人拍板】失败/撤离局标记：回城 DailyTaskSystem.Settle 据此把「每日通关任务经验」
         // 压到约 1/3（成功局不进本方法，照发全额）。引导局重进战斗 / 竞技场判负走各自分支不进本方法，不受影响。
         DailyTaskSystem.LastRunFailed = true;
@@ -486,6 +504,7 @@ public partial class BattleManager
         // 【2026-11-08 主人拍板「中途撤离按失败结算」】阵亡与主动撤离都不弹战斗结算界面，
         // 直接清临时雇佣、回城；金币/天赋石/清档规则两条路完全同口径，经济不因撤离改变。
         MercHireSession.ClearHired();
+        if (deferSceneLoad) return;   // 账务到此全部落盘，回城延后到失败界面 onReturn
         GameSceneManager.Instance?.LoadTownScene();
     }
 

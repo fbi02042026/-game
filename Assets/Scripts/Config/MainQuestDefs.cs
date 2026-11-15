@@ -43,6 +43,9 @@ public struct MainQuestDef
     public int rewardStones;
     /// <summary>完成时发放的金币（2026-11-01 主人拍板：主线每条都给点奖励，哪怕几十金币）。</summary>
     public int rewardGold;
+    /// <summary>【2026-11-15 主人拍板「主线任务要给经验」】领取时发放的玩家经验，真源 = quest.csv 的 reward_exp 列（按章 = 该章普通关卡经验的一半）。
+    /// 与通关关卡经验叠加、不抵扣；0 = 不发。领取出口 QuestRewardClaim.ClaimMain。</summary>
+    public int rewardExp;
     /// <summary>
     /// 【2026-11-05 建议修】任务自身难度（0=普通 / 1=困难 / 2=噩梦）。
     /// 现有任务定义没有难度字段，进度判定也只查普通 clearedStages → **隐含难度=0**；
@@ -134,6 +137,7 @@ public static class MainQuestDefs
                 param = r.param,
                 rewardStones = r.rewardStones,
                 rewardGold = r.rewardGold,
+                rewardExp = r.rewardExp,   // 2026-11-15 主线任务经验：迁表时曾被丢掉，现补回（领取时发放）
                 difficulty = r.difficulty
             });
         }

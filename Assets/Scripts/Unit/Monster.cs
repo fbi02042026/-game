@@ -22,7 +22,8 @@ public partial class Monster : UnitBase
     Transform _bodyRoot;
     /// <summary>
     /// 【2026-11-10 空中单位浮空】脚下阴影的「贴地基线」（本地 y）。
-    /// 首次 ApplyAirHoverOffset 时记录（NaN = 未记录），之后每次按 基线 - hover/lossyScale 补偿，
+    /// 首次 ApplyAirHoverOffset 时记录（NaN = 未记录），之后每次按
+    /// 基线 − 本体上抬的世界位移 ÷ 阴影父链缩放 补偿（2026-11-15 修正口径），
     /// 保证池化复用多次 Init 不累积偏移。NaN 判定用 float.IsNaN。
     /// </summary>
     float _airShadowBaseY = float.NaN;
@@ -155,8 +156,11 @@ public partial class Monster : UnitBase
         if (!isDead && _canUseActiveSkill)
         {
             _skillCooldown -= Time.deltaTime;
-            if (_skillCooldown <= 0f)
-                _skillEnergy = Mathf.Min(1f, _skillEnergy + Time.deltaTime * 0.28f);
+        // 【2026-11-15 全局口径】精英/Boss：入场走位 / 剧情前置暂停 / 对白冻场期间不攒槽，头顶充能条不亮；
+        // 走到交战位、UnitsCanAct 且不在入场放行窗后才开始攒，条子随攒槽自然出现。其它单位逐字不变。
+        bool holdSkillCharge = ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit);
+        if (_skillCooldown <= 0f && !holdSkillCharge)
+            _skillEnergy = Mathf.Min(1f, _skillEnergy + Time.deltaTime * 0.28f);
         }
         base.Update();
     }
@@ -240,6 +244,7 @@ public partial class Monster : UnitBase
     /// <summary>叠怪数字等仍用旧 Sprite 血条时才需要；现用 MonsterHealthBar 时可忽略。</summary>
     protected void LateUpdate()
     {
+        SyncSkillChargeBar();   // 【2026-11-14】头顶充能条：只给精英/Boss，普通小怪无节点
         if (_stackLabelRoot != null && _stackLabelRoot.gameObject.activeSelf)
             RefreshStackLabelLayout();
 

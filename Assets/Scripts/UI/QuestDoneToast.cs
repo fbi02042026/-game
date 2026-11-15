@@ -3,10 +3,14 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// 「任务完成」左侧滑入横幅（2026-11-04 主人需求：任务完成提示仿新邮件模式，
-/// 从屏幕左外滑入到左侧停靠位，停留后向左滑出）。【2026-11-12 主人拍板】横幅只写
-/// 「任务完成」，不展示具体任务名。多个任务连续完成时排队逐条播，
-/// 同时最多显示一条。纯代码插值（无 DOTween），用 Time.unscaledDeltaTime，不受暂停/时间缩放影响。
+/// 任务完成左侧滑入横幅（2026-11-04 主人需求：任务完成提示仿新邮件模式，
+/// 从屏幕左外滑入到左侧停靠位，停留后向左滑出）。
+/// 【2026-11-14 主人拍板「把任务相关的都放到左边弹出的toast：完成XX任务 / 获得XX奖励」】
+/// 文案两行：第一行「完成XX任务」（XX = quest.csv 的 title），第二行「获得XX奖励」
+/// （reward_text，只在该任务真有奖励时给）；无奖励的任务只显示第一行。
+/// 本条覆盖 2026-11-12「横幅只写任务完成、不展示具体任务名」的旧口径。
+/// 多个任务连续完成时排队逐条播，同时最多显示一条。
+/// 纯代码插值（无 DOTween），用 Time.unscaledDeltaTime，不受暂停/时间缩放影响。
 ///
 /// ⚠ Canvas 初始化刻意不走 UICanvasSetup.ApplyPopup（原因同 NewMailToast.cs 类注释：
 /// Apply 会跑 UiLayoutStretch.ApplyVerticalSplit，把「居中但明显偏侧」的直接子节点重锚到
@@ -25,7 +29,7 @@ public class QuestDoneToast : MonoBehaviour
     const float MarginLeft = 0f;        // 左缘贴住屏幕左缘（与邮件提示右缘贴右缘对称）
     const float YPos = 320f;            // 与邮件提示同款「距顶边」基准（见 PlayNext）
     const int SortOrder = 950;
-    const float ToastScale = 1.3f;      // 整体等比放大（与邮件提示 10-31 拍板同口径）
+    const float ToastScale = 1.0f;      // 整体等比缩放。【2026-11-15 主人拍板「缩到 1.0」】任务横幅不放大；邮件提示仍 1.3（10-31 拍板值），不动
     const int MaxQueue = 4;             // 排队上限防刷屏（任务通知低频，超出直接丢弃）
 
     /// <summary>底框颜色：深褐色 + 半透明（与邮件提示同款，视觉统一）。</summary>
@@ -45,12 +49,26 @@ public class QuestDoneToast : MonoBehaviour
     float _xOff;     // 屏外左侧（pivot 左缘对齐：-自身放大后宽 = 完全出屏左）
     float _yFinal;
 
-    /// <summary>弹一条「任务完成」；正在显示时排队（上限 4，超出丢弃）。
-    /// 【2026-11-12 主人拍板】不写具体任务名，所有任务共用同一句。</summary>
-    public static void Show()
+    /// <summary>弹一条任务完成横幅：第一行「完成XX任务」，第二行「获得XX奖励」（奖励为空则只一行）。
+    /// 【2026-11-14 主人拍板】任务相关提示统一走这条左侧横幅；正在显示时排队（上限 4，超出丢弃）。</summary>
+    public static void Show(string questTitle, string rewardText)
     {
         if (Queue.Count >= MaxQueue) return;   // 刷屏保护：直接丢弃
-        Queue.Enqueue("任务完成");
+
+        string msg;
+        if (string.IsNullOrEmpty(questTitle))
+        {
+            Debug.LogError("[QuestDoneToast] 任务名为空（quest.csv 的 title 缺失），横幅退化为「任务完成」");
+            msg = "任务完成";
+        }
+        else
+        {
+            msg = "完成" + questTitle + "任务";
+            if (!string.IsNullOrEmpty(rewardText))
+                msg += "\n获得" + rewardText;
+        }
+
+        Queue.Enqueue(msg);
         if (_inst == null) EnsureInstance();
         if (_inst == null) return;             // 相机未就绪等场景下静默跳过，不崩（队列留待下次）
         if (_inst._phase == Phase.Done) _inst.PlayNext();

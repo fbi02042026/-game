@@ -113,6 +113,20 @@ public partial class TutorialDirector
             }
             if (elite == null || elite.isDead) yield break;
 
+            // 【2026-11-14 修「精英聚力跳滞空期血条到底，遗言挂在半空、判死后尸体也悬空」】
+            // 血条到底那一刻精英可能正跳在半空；TalkBlock 会冻场，而 CoEliteLeapArc 冻场时原地悬停
+            // 不推进，头顶气泡（BattleHeadTalkUI 跟说话人坐标）就跟着停在半空。
+            // 先在未冻场的状态下等整套主动技能演出落地再开口；超时放行，绝不卡流程。
+            float settleT = 0f;
+            while (settleT < 5f && elite != null && !elite.isDead && elite.IsSkillPerforming)
+            {
+                settleT += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (elite == null || elite.isDead) yield break;
+            if (settleT >= 5f && elite.IsSkillPerforming)
+                Debug.LogWarning("[Tutorial] 等精英聚力跳落地超时，遗言照常播出");
+
             yield return TalkBlock(bm, headTalk,
                 new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
                 new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));

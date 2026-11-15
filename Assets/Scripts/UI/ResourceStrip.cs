@@ -50,8 +50,8 @@ public static class ResourceStrip
     /// <summary>挂在条根上的数字轮询：真源 ResourceWallet，变了才写（与体力 HUD 轮询同口径）。</summary>
     class Host : MonoBehaviour
     {
-        public Text goldText, diaText, talentText;
-        long _gold = -1, _dia = -1, _talent = -1;
+        public Text goldText, diaText, talentText, staminaText;
+        long _gold = -1, _dia = -1, _talent = -1, _staminaVal = -1;
 
         void Update()
         {
@@ -63,6 +63,13 @@ public static class ResourceStrip
             if (d != _dia && diaText != null) { diaText.text = GuildHallUI.FormatResource(d); _dia = d; }
             long t = ResourceWallet.Get(data, ResourceWallet.ResourceType.TalentPoint);
             if (t != _talent && talentText != null) { talentText.text = GuildHallUI.FormatResource(t); _talent = t; }
+
+            // 【2026-11-14 修「进裂隙扣体力，资源条要重进界面才变」】体力数字并入本条统一轮询：
+            // 原来只靠 GuildHallUI 单例的事件刷新 / 0.5s 协程写，进本切界面那一刻单例这条链失效就没人写，
+            // 只剩重进界面 Awake 的 RefreshAllHud 补刷。这里与金币/钻石/天赋石同口径（真源变了才写），
+            // 真源仍是 SaveData.stamina；格式沿用 RefreshStamina 的 cur.ToString()（不套 FormatResource）。
+            long s = ResourceWallet.Get(data, ResourceWallet.ResourceType.Stamina);
+            if (s != _staminaVal && staminaText != null) { staminaText.text = s.ToString(); _staminaVal = s; }
 
             // 【2026-10-25 主人要求「每个界面的位置都统一」；2026-10-26 改为整条世界对齐】
             // 借用期间 TopBar 的几何仍由 SafeAreaFitter 实时管辖（旋转/分屏/刘海变化会动），
@@ -122,6 +129,13 @@ public static class ResourceStrip
             }
             // 体力列被主人从 prefab 删掉时不报错：显隐与对齐都静默跳过（摆件归主人管）
         }
+
+        // 【2026-11-14】把当前 TopBar 的体力数字绑给条内轮询（幂等，每次注册都重绑）：
+        // 场景重建后 _host 是新的，不能复用 _stamina 静态缓存；体力列仍归 TopBar、不迁。
+        // 节点缺失时静默不绑，与上面「删了静默跳过」同口径（不兜底、不报错）。
+        var staminaPanelNow = FindDirectChild(topBar, "体力Panel");
+        if (_host != null && staminaPanelNow != null)
+            _host.staminaText = FindDeep(staminaPanelNow, "体力Text")?.GetComponent<Text>();
 
         if (_gold == null)
         {

@@ -12,12 +12,43 @@ public static class BackpackGridVisual
     const string LayerName = "ItemOverlayLayer";
     const float IconPad = 2f;
 
-    /// <summary>碎片视觉 X 偏移真源（2026-11-11 主人指令：背包里的碎片整体往右 3）：
-    /// 覆盖三条路径 —— 本命碎片道具格（item_frag_ 框体+头像）、角色页本命碎片展示位
-    /// （主人的 yongbingsuipian 预制体卡）、日志碎片展示位；数量角标/锁标不跟。</summary>
+    /// <summary>碎片视觉 X 偏移真源（2026-11-11 主人指令：背包里的碎片整体往右 3）。
+    /// 2026-11-15 起只覆盖角色页本命碎片展示位卡（OwnerFragCard，仍挂在 Overlay 宿主下）；
+    /// 单格道具/展示位图标已改用主人预制体里摆好的 Icon 节点，位置真源归预制体，
+    /// 不允许任何代码偏移再写到那个节点上。数量角标/锁标不跟。</summary>
     const float FragmentOffsetX = 3f;
     const string LockOverlayName = "LockedOverlay";
     const string LockIconName = "LockIcon";
+
+    /// <summary>单格图标复用预制体 Icon 时的原值快照：下次刷新原样还原，绝不破坏主人摆好的节点。</summary>
+    struct BoundCellIcon
+    {
+        public Image img;
+        public Sprite sprite;
+        public bool enabled, raycast, active;
+        public Color color;
+        public Vector3 scale;
+        public Material material;
+    }
+    /// <summary>按 Overlay 层分组保存借用记录：城镇 / 战斗两个界面各自独立，刷新时只还原自己的格子。</summary>
+    class CellIconBindings
+    {
+        public readonly List<BoundCellIcon> Icons = new List<BoundCellIcon>();
+        public readonly List<GameObject> Children = new List<GameObject>();
+    }
+    static readonly Dictionary<Transform, CellIconBindings> _bindings =
+        new Dictionary<Transform, CellIconBindings>();
+
+    static CellIconBindings BindingsFor(Transform owner)
+    {
+        CellIconBindings b;
+        if (!_bindings.TryGetValue(owner, out b))
+        {
+            b = new CellIconBindings();
+            _bindings[owner] = b;
+        }
+        return b;
+    }
 
     /// <summary>
     /// 【2026-11-05 根治】展示位图标相对格子的缩放真源：全项目只此一处。
@@ -131,6 +162,8 @@ public static class BackpackGridVisual
     {
         if (gridContainer == null) return;
         var layer = EnsureLayer(gridContainer);
+        ResetBoundCellIcons(layer);
+        var bound = BindingsFor(layer);
         ClearLayer(layer);
 
         if (items == null) return;
@@ -184,7 +217,6 @@ public static class BackpackGridVisual
             bool hasIcon = false;
             // 【2026-10-24 编译修复】iconImg 提到 if 块外声明：走碎片预制体路径（ownerFragCard）时没有图标 Image，interactive 段只对图标路径生效
             Image iconImg = null;
-            bool isFragItem = isItem && !string.IsNullOrEmpty(MercStarDefs.HireIdOfFragmentItem(p.item.defId));
             bool ownerFragCard = p.IsDisplay && !string.IsNullOrEmpty(p.displayFragHireId)
                 && TryAddOwnerFragmentCard(go.transform, rt, p.displayFragHireId, iconScale);
 
@@ -196,26 +228,60 @@ public static class BackpackGridVisual
                 else { EquipIcons.Resolve(p.equip); sprite = p.equip.icon; }
 
                 hasIcon = sprite != null;
-                // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
-                var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-                iconGo.transform.SetParent(go.transform, false);
-                var iconRt = iconGo.GetComponent<RectTransform>();
-                var img = iconGo.GetComponent<Image>();
-                iconImg = img;
-                img.sprite = sprite;
-                img.raycastTarget = false;
-                img.type = Image.Type.Simple;
-                img.enabled = true;
-                PlaceIconInHost(rt, iconRt, img, sprite, p.h, isItem ? null : p.equip, iconScale);
 
-                // 碎片整体往右 3（2026-11-11 主人指令，偏移真源见 FragmentOffsetX）：
-                // 本命碎片道具 / 日志碎片展示位；头像是 Icon 子节点一起动，数量角标不跟
-                if (isFragItem || p.displayIconKind == DisplayIconKind.LogFragment)
-                    iconGo.transform.localPosition += Vector3.right * FragmentOffsetX;
+                // 【2026-11-15 主人拍板】单格图标一律塞进预制体里摆好的 Icon 节点：
+                // 代码不再 new Icon、不再写任何坐标/尺寸（位置真源 = 预制体）；
+                // 多格装备仍走 Overlay 跨格占位，口径一字未动。
+                Image cellIcon = (p.w == 1 && p.h == 1 && canUseCells)
+                    ? FindCellIcon(cellAt(p.x, p.y)) : null;
+                Image img;
+                Transform iconParent;
+                if (cellIcon != null)
+                {
+                    bound.Icons.Add(new BoundCellIcon
+                    {
+                        img = cellIcon,
+                        sprite = cellIcon.sprite,
+                        enabled = cellIcon.enabled,
+                        raycast = cellIcon.raycastTarget,
+                        active = cellIcon.gameObject.activeSelf,
+                        color = cellIcon.color,
+                        scale = cellIcon.rectTransform.localScale,
+                        material = cellIcon.material
+                    });
+                    cellIcon.sprite = sprite;
+                    cellIcon.enabled = true;
+                    cellIcon.raycastTarget = false;
+                    cellIcon.gameObject.SetActive(true);   // Refresh 开头的 GridCellUI.Clear() 会关掉它
+                    // 缩放真源仍是 ResolveIconScale（主人拍板的碎片放大 / 盾牌 -20%），其余几何一字不写
+                    cellIcon.rectTransform.localScale = Vector3.one *
+                        (ShouldShrinkShieldIcon(isItem ? null : p.equip) ? 0.8f : 1f) * iconScale;
+                    img = cellIcon;
+                    iconParent = cellIcon.transform;
+                }
+                else
+                {
+                    if (p.w == 1 && p.h == 1 && canUseCells)
+                        Debug.LogError("[BackpackGridVisual] 格子缺 Icon 节点，单格图标仍走 Overlay：cell=(" + p.x + "," + p.y + ")");
+                    // 图标画在子节点上，宿主只负责跨格占位；多格时子节点按宽等比后垂直居中
+                    var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                    iconGo.transform.SetParent(go.transform, false);
+                    var iconRt = iconGo.GetComponent<RectTransform>();
+                    var newImg = iconGo.GetComponent<Image>();
+                    newImg.sprite = sprite;
+                    newImg.raycastTarget = false;
+                    newImg.type = Image.Type.Simple;
+                    newImg.enabled = true;
+                    PlaceIconInHost(rt, iconRt, newImg, sprite, p.h, isItem ? null : p.equip, iconScale);
+                    img = newImg;
+                    iconParent = iconGo.transform;
+                }
+                iconImg = img;
 
                 // 2026-10-22 主人拍板（施工单 T2）：本命碎片格（item_frag_ 前缀）在框体图标上叠佣兵头像，
                 // 只加子节点不改任何几何；头图取不到按纪律 LogError 不兜底
-                if (isItem) AddMercFragHeadOverlay(iconGo.transform, p.item.defId);
+                if (isItem) AddMercFragHeadOverlay(iconParent, p.item.defId,
+                    cellIcon != null ? bound.Children : null);
 
                 if (isItem || p.IsDisplay)
                 {
@@ -312,7 +378,7 @@ public static class BackpackGridVisual
     /// MercPortraitSprites.GetHead 头像 Image（铺满图标区、preserveAspect、不接射线，
     /// 点击仍落在宿主上走使用/丢弃浮层）。非碎片道具直接返回。
     /// </summary>
-    static void AddMercFragHeadOverlay(Transform iconParent, string defId)
+    static void AddMercFragHeadOverlay(Transform iconParent, string defId, List<GameObject> runtimeChildren = null)
     {
         string hireId = MercStarDefs.HireIdOfFragmentItem(defId);
         if (string.IsNullOrEmpty(hireId)) return;
@@ -326,6 +392,8 @@ public static class BackpackGridVisual
 
         var go = new GameObject("MercHead", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         go.transform.SetParent(iconParent, false);
+        // 复用预制体 Icon 时这层是挂在持久节点上的，登记好让下次刷新连同它一起销毁
+        if (runtimeChildren != null) runtimeChildren.Add(go);
         var rt = (RectTransform)go.transform;
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -410,6 +478,50 @@ public static class BackpackGridVisual
             if (local.y < minY) minY = local.y;
             if (local.y > maxY) maxY = local.y;
         }
+    }
+
+    /// <summary>把上次刷新时借用过的预制体 Icon 原样还原（含挂上去的头像层），再交给 ClearLayer 清 Overlay。</summary>
+    static void ResetBoundCellIcons(Transform owner)
+    {
+        CellIconBindings bound;
+        if (!_bindings.TryGetValue(owner, out bound)) return;
+
+        for (int i = 0; i < bound.Children.Count; i++)
+        {
+            var child = bound.Children[i];
+            if (child != null) UnityEngine.Object.Destroy(child);
+        }
+        bound.Children.Clear();
+
+        for (int i = 0; i < bound.Icons.Count; i++)
+        {
+            var b = bound.Icons[i];
+            if (b.img == null) continue;   // 场景切换后引用已销毁，跳过即可
+            b.img.sprite = b.sprite;
+            b.img.enabled = b.enabled;
+            b.img.raycastTarget = b.raycast;
+            b.img.color = b.color;
+            b.img.material = b.material;
+            b.img.rectTransform.localScale = b.scale;
+            b.img.gameObject.SetActive(b.active);
+        }
+        bound.Icons.Clear();
+    }
+
+    /// <summary>
+    /// 取主人预制体格子里摆好的图标槽位：城镇 CharacterUI 叫 Icon，战斗 BattleUI 叫 ItemIcon，
+    /// 与 GridCellUI.itemIcon 的绑定口径一致（不按别的节点名猜图）。取不到返回 null 由调用方 LogError。
+    /// </summary>
+    static Image FindCellIcon(RectTransform cellRoot)
+    {
+        if (cellRoot == null) return null;
+        var imgs = cellRoot.GetComponentsInChildren<Image>(true);
+        for (int i = 0; i < imgs.Length; i++)
+        {
+            string n = imgs[i].gameObject.name;
+            if (n == "Icon" || n == "ItemIcon") return imgs[i];
+        }
+        return null;
     }
 
     /// <summary>

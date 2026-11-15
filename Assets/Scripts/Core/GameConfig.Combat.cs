@@ -144,11 +144,12 @@ public static partial class GameConfig
     public const float MONSTER_ANCHOR_SCALE_FACTOR = 1f;
     /// <summary>
     /// 【2026-11-10 主人拍板「空中单位要和阴影有一段空隙 不用太大 能看出来就行」】
-    /// 空中怪（monster_stats.airUnit=1）身体相对移动根的上抬高度（世界单位），
+    /// 空中怪（monster_stats.airUnit=1）身体相对移动根的上抬高度（本体 local 单位），
     /// 脚下阴影由 Monster.Init.ApplyAirHoverOffset 反向补偿留在地面。
     /// 只影响视觉（本体 localPosition），移动/判定仍走 _bodyRoot。量级参考：怪根 scale≈2.6~4.5、阴影宽≈0.9。
+    /// 【2026-11-15 主人口径「浮空的距离减一半」】0.3 → 0.15。
     /// </summary>
-    public const float MONSTER_AIR_HOVER = 0.3f;
+    public const float MONSTER_AIR_HOVER = 0.15f;
     // 2026-09-21：精英/Boss 体型倍率已迁 combat_tuning 表（可运行时调）。
     // 【2026-10-10 主人拍板】精英 1.3 → 2.0（「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6 保持 Boss > 精英。
     public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 2.0f);
@@ -173,21 +174,34 @@ public static partial class GameConfig
     public const float BOSS_ATTACK_MUL = 0.6f;
     public const float BOSS_HP_MUL = 2.0f;
     /// <summary>
-    /// 【2026-11-05 主人拍板「词条怪出现后每关都时不时出现 越往后越多」】
-    /// 正式主线关每关词条怪配额档（关序 0 基）：x-1/x-2=0、x-3=1~2、x-4=2、
-    /// x-5/x-6=3~4、x-7 及以后=5~6。真源只此一处；消费点唯一 = WavePlanner.InitAffixQuota
-    /// （铺波时按各波怪数加权摊到 WaveData.affixQuotaInWave，刷怪时波内安全槽强制插入）。
+    /// 【2026-11-15 19:2x 主人拍板「只有每章第一关是前两个小怪，后面的关卡都要有词条怪做穿插，
+    /// 搭配和数量由少变多」】正式主线关每关词条怪配额档（章内关序 0 基）：
+    ///   第 1 关 = 0（只有 1/2 号普通小怪，1 近 1 远）；
+    ///   第 2 关起 1~2 / 1~2 / 2~3 … 第 9~10 关 5~6，逐关递增。
+    /// 真源只此一处；消费点唯一 = WavePlanner.InitAffixQuota。旧「x-1/x-2=0、x-3 才登场」由本次覆盖。
     /// </summary>
     public static void AffixQuotaRange(int stageIdx, out int min, out int max)
     {
-        if (stageIdx <= 1) { min = 0; max = 0; }
-        else if (stageIdx == 2) { min = 1; max = 2; }
-        else if (stageIdx == 3) { min = 2; max = 2; }
-        else if (stageIdx <= 5) { min = 3; max = 4; }
-        else { min = 5; max = 6; }
+        if (stageIdx <= 0) { min = 0; max = 0; }
+        else
+        {
+            min = Mathf.Min(5, 1 + (stageIdx - 1) / 2);   // 1,1,2,2,3,3,4,4,5
+            max = Mathf.Min(6, min + 1);                    // 2,2,3,3,4,4,5,5,6
+        }
     }
-    /// <summary>2026-11-12 主人拍板：每关词条怪上限 = 本关正常波总怪数 × 5%，取代旧 totalNormal/3 封顶；波数压缩后自动跟着降。</summary>
-    public const float AFFIX_QUOTA_RATIO = 0.05f;
+    /// <summary>主线每关词条怪编号池上限：第 2 关 3 号，之后每两关 +1，封顶 6（3~6 为词条段）。
+    /// 搭配由少变多：3 → 3/5 → 3/5/6 → 末关 3/4/5/6（4 号 minWave=9 只在末节入池）。</summary>
+    public static int AffixSpriteMaxForStage(int stageIdx)
+        => Mathf.Min(6, 3 + Mathf.Max(0, stageIdx - 1) / 2);
+    /// <summary>主线每波词条怪上限：第 2~4 关 1 只 / 第 5~7 关 2 只 / 第 8~10 关 3 只。
+    /// 波数固定 2~3，靠它让「数量由少变多」兑现；11-14「每波恒 1」由本次口径覆盖。裂隙不吃这里。</summary>
+    public static int AffixWaveCapForStage(int stageIdx, int waveMonsterCount)
+        => Mathf.Min(waveMonsterCount, Mathf.Clamp(1 + Mathf.Max(0, stageIdx - 1) / 3, 1, 3));
+    /// <summary>2026-11-12 主人拍板：每关词条怪上限 = 本关正常波总怪数 × 比例。
+    /// 【2026-11-15 改】5% → 25%：5% 会把 AffixQuotaRange 的递增曲线压成恒 1 只（本关总怪数 28~100，
+    /// 5% 只有 1~5 只），「数量由少变多」兑现不了；25% 下封顶 ≥ qMax(6)，配额完全由曲线决定，
+    /// 实际投放仍受 AffixWaveCapForStage 每波上限约束，不会满屏词条。</summary>
+    public const float AFFIX_QUOTA_RATIO = 0.25f;
     /// <summary>引导关精英固定精灵编号（1 Forest 第 7 号 = 树精）。主人 2026-10-10 反馈精英不许是蘑菇，表可调。</summary>
     public static int TUTORIAL_ELITE_SPRITE_ID => Mathf.RoundToInt(CombatTuningTable.Get("TUTORIAL_ELITE_SPRITE_ID", 7f));
     public const float MONSTER_BASE_SCALE = 4.125f;
@@ -790,12 +804,14 @@ public static partial class GameConfig
 
     // ===== 【2026-10-31 B2 落地】篇内多座大关的爬坡 =====
     /// <summary>
-    /// 每多打一座大关，怪物属性额外 +2%（1 + 0.02×(大关-1)，封顶 ×1.60）。
+    /// 每多打一座大关，怪物属性额外 +6%（1 + 0.06×(大关-1)，封顶 ×1.60）。
     /// 为什么需要：B2 后一篇有 10~20 座大关，章倍率只按「篇」变，
     /// 若不加这层，同篇 20 座大关的怪数值完全一样（体检报告 F1/F2 的「同质化」问题会放大 20 倍）。
+    /// 【2026-11-14 主人拍板 0.02 → 0.06】主人报「2-1 难度跟 1-1 差不多」：+2%/座体感为零，
+    /// 提到 +6%/座（第 2 座 ×1.06、第 5 座 ×1.24、第 10 座 ×1.54）。
     /// 想调手感只改这两个常量；设 GRAND_STAT_STEP=0 即恢复「篇内全平」的旧口径。
     /// </summary>
-    public const float GRAND_STAT_STEP = 0.02f;
+    public const float GRAND_STAT_STEP = 0.06f;
     /// <summary>大关爬坡封顶（防止第 20 座大关叠到离谱）。</summary>
     public const float GRAND_STAT_MAX = 1.60f;
 
@@ -840,6 +856,34 @@ public static partial class GameConfig
              * GetStageStatScale(stageIndex0Based, subs)
              * GetGrandWallBonus(gameChapter, grandIndex1Based, stageIndex0Based);
     }
+
+    // ===== 【2026-11-14 主人拍板「属性分维度爬坡 + 数个小高潮，不要一马平川」】=====
+    // 正式主线关<b>逐关属性轮动偏差层</b>：叠在既有 章×座×节 曲线之上，让每一关都有
+    // 「某一项明显涨了」的体感，而不是三项一起匀速爬：
+    //   血 = 奇数关（第2/4关）+6% —— 肉度隔关涨，打得变久；
+    //   攻 = 精英关 +10%（小高潮①）、末节 Boss 关 +8%（高潮②），其余关回落 —— 尖峰之间有呼吸；
+    //   防 = 精英关 +5%、Boss 关 +6%。
+    // 篇级大高潮不在这里（座5 半程墙 / 座10 章末墙 +10% 已有 GetGrandWallBonus）。
+    // 唯一消费方 = Monster.Init 写 attr 三处（血/攻/防）；裂隙 / 副本 / 支线岛 / 引导不吃。
+    /// <summary>血偏差：奇数关 +6%（0 基 idx 1/3/5…）。</summary>
+    public const float STAGE_DEV_HP_ODD = 0.06f;
+    /// <summary>攻偏差：精英关 +10%（小高潮①）。</summary>
+    public const float STAGE_DEV_ATK_ELITE = 0.10f;
+    /// <summary>攻偏差：末节 Boss 关 +8%（高潮②）。</summary>
+    public const float STAGE_DEV_ATK_FINAL = 0.08f;
+    /// <summary>防偏差：精英关 +5%。</summary>
+    public const float STAGE_DEV_DEF_ELITE = 0.05f;
+    /// <summary>防偏差：末节 Boss 关 +6%。</summary>
+    public const float STAGE_DEV_DEF_FINAL = 0.06f;
+
+    public static float GetStageStatDevHp(int stageIdx0Based)
+        => Mathf.Max(0, stageIdx0Based) % 2 == 1 ? 1f + STAGE_DEV_HP_ODD : 1f;
+
+    public static float GetStageStatDevAtk(bool eliteStage, bool finalStage)
+        => 1f + (eliteStage ? STAGE_DEV_ATK_ELITE : 0f) + (finalStage ? STAGE_DEV_ATK_FINAL : 0f);
+
+    public static float GetStageStatDevDef(bool eliteStage, bool finalStage)
+        => 1f + (eliteStage ? STAGE_DEV_DEF_ELITE : 0f) + (finalStage ? STAGE_DEV_DEF_FINAL : 0f);
     // ===== 【2026-11-13 主人拍板「按章节的平均值加系数、必须比初始武器好」】装备攻击三档区间 =====
     /// <summary>档位系数下限（×本章普通怪平均 baseAttack）。真源 combat_tuning 表 EQUIP_ATK_TIER_*，缺表回退此处默认。</summary>
     public static float EquipAtkTierLo(string rarityId) =>
@@ -1108,14 +1152,20 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 难度属性倍率（怪物血/攻/防）。2026-09-17：噩梦 1.8 → **2.0**（地狱删除后噩梦就是顶档）。
-    /// 防"无限难"的红线：只调这一个数，不新增乘区；怪物抗性封顶 50%。
+    /// 难度属性倍率（怪物血/攻/防）。
+    /// 【2026-11-14 主人拍板「困难在普通难度加20-50% 噩梦加80-100%」】区间<b>随章爬坡</b>：
+    /// 第 1 章吃区间下沿（刚开档不劝退）、第 8 章吃上沿，第 9 章起按尾档续。
+    /// 困难 1.20→1.50（+20%→+50%）；噩梦 1.80→2.00（+80%→+100%）。
+    /// 防"无限难"的红线不变：只调这一个乘区，不新增；怪物抗性封顶 50%。
+    /// 唯一消费方 = BattleManager.State.DifficultyStatScale（活动副本走 GetActivityDifficultyStatScale 独立表，不动）。
     /// </summary>
-    public static float GetDifficultyStatScale(int diff)
+    public static float GetDifficultyStatScale(int diff, int chapter = 1)
     {
-        if (diff >= 2) return 2.0f;
-        if (diff == 1) return 1.35f;
-        return 1f;
+        if (diff <= 0) return 1f;
+        int ch = Mathf.Clamp(Mathf.Max(1, chapter), 1, 8);
+        float t = (ch - 1) / 7f;
+        if (diff == 1) return Mathf.Lerp(1.20f, 1.50f, t);   // 困难 +20% → +50%
+        return Mathf.Lerp(1.80f, 2.00f, t);                  // 噩梦 +80% → +100%
     }
 
     /// <summary>
@@ -1226,17 +1276,62 @@ public static partial class GameConfig
     public const int   CAREER_ORB_HITS     = 9;   // 法师
 
     public const float CAREER_SKILL_KNOCKBACK = 1.6f;   // 职业技命中的强击退距离（普通怪），精英/Boss 仍免退
-    public const float CAREER_CHARGE_DIST = 3.2f;       // 冲锋最大横移距离（只动 X，不动 lane 的 Y）
-    public const float CAREER_CHARGE_DURATION = 0.12f;  // 冲锋时长：越短越快
-    public const float CAREER_CHARGE_STOP_GAP = 0.8f;   // 停在目标身前，避免穿模
+    // 【2026-11-14 主人「距离可以再长点」】5.0 → 7.0（上限，仍受 CAMERA 视野约束，冲出屏外由镜头跟随兜）
+    public const float CAREER_CHARGE_DIST = 7.0f;       // 冲锋最大横移距离（只动 X，不动 lane 的 Y）
+    public const float CAREER_CHARGE_DURATION = 0.12f;  // ⚠ 2026-11-14 起停用（改按 CAREER_CHARGE_SPEED_MUL 反推时长），常量保留不删
+    public const float CAREER_CHARGE_STOP_GAP = 0.8f;   // ⚠ 2026-11-14 起不再使用：冲锋改为越过目标继续冲（见 CAREER_CHARGE_OVERSHOOT），常量保留不删
+    // 【2026-11-14 主人拍板「冲目标往前迅速冲一段距离，不是冲到怪物跟前就不动了」】
+    // 冲锋终点 = 目标位置 + 这段越过量：贴着目标起手也要冲出一段，冲过它再停。
+    // 【2026-11-14 主人「往前冲的距离短」】1.4 → 2.4，贴身出手也冲出 3.3 左右。
+    // 【2026-11-14 主人「距离可以再长点」】2.4 → 3.2。
+    public const float CAREER_CHARGE_OVERSHOOT = 3.2f;
+    // 【2026-11-14 主人报「冲撞速度太快了，比走快 40%」】旧值是按固定 0.12 秒冲 3.2 距离算的
+    // （= 走速的 27 倍，看着像瞬移）。改成按移速倍率反推时长：dur = dist / (当前移速 × 本倍率)。
+    // 【2026-11-14 主人「速度可以再快点」】1.4 → 1.9。
+    // 【2026-11-15 主人「速度再快 30%」】1.9 × 1.3 = 2.47；dur = dist / (当前移速 × 本倍率)，只改这一处。
+    public const float CAREER_CHARGE_SPEED_MUL = 2.47f;
+    // 【2026-11-14 主人拍板「撞到敌人时要顿一下，把敌人撞开再继续往前」】分段破阵冲锋的节奏参数。
+    // 顿帧只停英雄自己的位移、不碰 timeScale（10-20 已砍掉全场慢放，主人嫌「一卡一卡」）。
+    public const float CAREER_CHARGE_HITSTOP = 0.10f;        // 每次撞到敌人的停顿秒数
+    public const int   CAREER_CHARGE_HITSTOP_MAX = 4;        // 整段冲锋最多顿几次（多了拖沓，其余一路冲过去）
+    public const float CAREER_CHARGE_CONTACT_GAP = 0.35f;    // 停在敌人身前这么远就顿（不穿进身体里）
+    public const float CAREER_CHARGE_BURST_RADIUS = 1.2f;    // 单次撞击的横向爆开半径（一簇怪，不是整条路线）
+    // 【2026-11-15 主人「尘土这个特效在玩家冲锋的时候加到脚后面」】脚后偏移（世界单位，只动 X、Y 恒用 FootY）。
+    public const float CAREER_CHARGE_DUST_BACK = 0.4f;
+    // 【2026-11-15 主人「盾在小 10% 再往下 20 / 尘土小一半往上 10」】
+    // 设计像素 → 世界：正交相机全高 2*orthoSize 对应 DESIGN_HEIGHT 个设计像素（1px = 0.0084375 世界）。
+    // 缩放走倍率、prefab 原值不动；尺寸真源仍是 prefab，本处只承担「再小多少」这一份口径。
+    public const float CAREER_CHARGE_SHIELD_SCALE_MUL = 0.9f;
+    public const float CAREER_CHARGE_SHIELD_DROP_WORLD = 20f * (2f * GameConfig.CAMERA_ORTHO_SIZE / GameConfig.DESIGN_HEIGHT);
+    public const float CAREER_CHARGE_DUST_SCALE_MUL = 0.5f;
+    public const float CAREER_CHARGE_DUST_UP_WORLD = 10f * (2f * GameConfig.CAMERA_ORTHO_SIZE / GameConfig.DESIGN_HEIGHT);
+    // 【2026-11-14 主人报「没看到剑盾的冲撞」】剑盾是近战，攒满 8 次普攻时目标早已贴身，
+    // 旧算法 reach = |到目标 X| - STOP_GAP 只剩 0.1（Editor.log 实测 dist=0.10）→ 原地不动、看不出冲锋。
+    // 给一个最小冲锋量：贴身时也至少冲出 1.6，让突进 + 落点刀光看得见；上限仍受 CAREER_CHARGE_DIST 约束。
+    public const float CAREER_CHARGE_MIN_DIST = 1.6f;
 
     public const float CAREER_SCATTER_ANGLE_STEP = 9f;  // 每条箭道的角度间隔（度）
     public const float CAREER_SCATTER_RANGE = 9f;       // 箭道飞行距离上限
     public const float CAREER_SCATTER_HIT_RADIUS = 1.4f;
     public const int   CAREER_SCATTER_MAX_HITS_PER_ENEMY = 2;
 
-    public const float CAREER_ORB_SCALE_MUL = 3.5f;     // 法球放大倍数（飞行体 + 命中特效同倍）
+    // 【2026-11-14 主人「我是对比原来普通的法球的比例」】倍数指相对普通法球的视觉比例，
+    // 不是直接乘在 3 号素材上：普通法球运行时 scaleMul=1 / prefab localScale=1，从未改过大小；
+    // 3 号素材自身更大（fly3 主粒子 startSize 1.4，Base 1）。
+    // 【2026-11-14 主人「改成2吧」】3.5 → 1.75 → 2（飞行 1.4×2≈2.8 倍普通法球）。
+    // 只作用职业技能大法球（仅 CoOrb 读本常量）；普攻法球不吃本常量，不受影响。
+    public const float CAREER_ORB_SCALE_MUL = 2f;       // 法球放大倍数（飞行体）
+    // 【2026-11-15 主人「法球爆炸后的烟雾有点大 小20%吧」】只缩命中的爆炸烟云，
+    // 飞行体仍按 CAREER_ORB_SCALE_MUL=2 放大不变；1 = 与飞行体同倍，0.8 = 小 20%。
+    // 仅 CoOrb 的 impactScaleMul 读本常量，其它技能 / 佣兵法球命中特效不受影响。
+    public const float CAREER_ORB_IMPACT_SCALE_MUL = 0.8f;
+    // 【2026-11-14 主人「要往前飞一段距离后爆炸」】落点从「最近目标身上」改为沿朝向固定前飞这么远再自爆；
+    // 取值沿用本技能无目标时的既有兜底 8f（散射箭 CAREER_SCATTER_RANGE 9f 同尺度），想调只改这里。
+    public const float CAREER_ORB_FLIGHT_DIST = 8f;
     public const float CAREER_ORB_SPEED_MUL = 0.55f;    // 大法球慢速飞行，压迫感
+    // 【2026-11-14 主人「法师的大法球技能发射点再往前点」】只作用于大法球起手点，
+    // 不动全局 firePointOffset（英雄普攻/散射箭共用，改了会一起挪）。想再调直接改这个值。
+    public const float CAREER_ORB_FIRE_FORWARD = 0.8f;  // 沿当前朝向额外前移的世界单位
 
     // ---- 受击后退（2026-11-05 主人拍板：普通怪受击小退；精英/Boss 免击退；它们打玩家/俇兵把人打退）----
     public const float KNOCKBACK_MONSTER = 0.35f; // 普通怪受击退移（世界单位）

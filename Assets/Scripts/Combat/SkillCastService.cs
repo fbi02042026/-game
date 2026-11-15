@@ -132,6 +132,16 @@ public sealed class SkillCastService
 
         Vector3 vfxPos = healTarget != null ? healTarget.GetHitPosition() : hero.GetHitPosition();
         Transform vfxAttach = healTarget != null ? healTarget.transform : hero.transform;
+        // 星落是定点大范围 AOE：特效落在伤害一侧（最近敌人，与上方索敌闸同口径），不钉在施法者身上
+        if (realId == "starfall")
+        {
+            UnitBase starfallTarget = hero.FindNearestEnemy();
+            if (starfallTarget != null)
+            {
+                vfxPos = starfallTarget.GetHitPosition();
+                vfxAttach = null;
+            }
+        }
         // VFX 仍走别名：SkillRegistry 是按 SO 装配的 ally_* id 索引特效的，换成真 id 会丢特效。
         // 移动判定 AOE（MoveAoe）：VFX 由 MoveAoeExecutor 挂在移动锚点上随行，不在这里钉在施法者身上
         if (realId != "holy_barrier" && skill.skillType != SkillSystem.SkillType.MoveAoe)

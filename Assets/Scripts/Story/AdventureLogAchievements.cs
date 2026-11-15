@@ -173,7 +173,7 @@ public static class AdventureLogAchievements
             default:
                 if (IsCompleted(id)) return "已完成";
                 if (IsClaimed(id)) return "已领取";
-                return "进行中";
+                return "0/1";
         }
     }
 

@@ -57,6 +57,9 @@ public static class StoryBackgrounds
     /// <summary>酒馆底图的 Resources 路径（真源与 InformantQuizDirector.TavernBackgroundPath 同值，改一边记得另一边）。</summary>
     public const string TavernPath = "UI/Art/Tavern/酒馆_0007_图层-4";
 
+    /// <summary>第 1 章 1-5 Boss 后剑痕三选一：暮影森林里被藤蔓覆盖的石碑。背景图 = Assets/Resources/Story/Backgrounds/森林.jpg（主人 2026-11-13 放入，与 N2~N7 / 四结局背景同目录、走标准加载路径）。</summary>
+    public const string Chapter1Stele = "森林";
+
     /// <summary>快节奏场景：地名大字显示时间 ×此系数（2026-10-14 主人拍板：会长办公室/公会大厅的地名大字时间减 30%）。</summary>
     public const float FastTextTimeScale = 0.7f;
 
@@ -92,12 +95,15 @@ public static class StoryBackgrounds
         if (id == Island06) return "王座间";
         if (id == Island07) return "深渊口";
         if (id == Island08) return "黑曜祭坛";
+        if (id == Chapter1Stele) return "暮影森林";
         if (id == Tavern) return "酒馆";
         return "";
     }
 
     public static Sprite Get(string id)
     {
+        // 第 1 章石碑背景（森林.jpg）现在就在 Story/Backgrounds 目录，走下面标准加载即可，无需特殊分支。
+
         // 酒馆底图不在 Story/Backgrounds 目录：按路径直读（见 Tavern 字段注释，不复制资源）。
         if (id == Tavern)
         {

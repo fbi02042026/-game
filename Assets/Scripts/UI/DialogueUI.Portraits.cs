@@ -182,7 +182,7 @@ public partial class DialogueUI
             if (choiceButtons != null && i < choiceButtons.Length && choiceButtons[i] != null)
                 choiceButtons[i].gameObject.SetActive(on);
             if (on && choiceTexts != null && i < choiceTexts.Length && choiceTexts[i] != null)
-                choiceTexts[i].text = labels[i];
+                choiceTexts[i].text = InsertCjkBreakHints(labels[i]);
         }
     }
 

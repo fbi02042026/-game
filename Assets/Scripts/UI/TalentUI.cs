@@ -250,10 +250,23 @@ public partial class TalentUI : MonoBehaviour
         // 记下当时人物等级（持久化），入口红点灭；以后升级跨过**更高**门槛才重新亮。
         // 必须在 RefreshAll 之前写，RefreshRight 按同一口径算红点；行内红色「新」字不受影响（仍走 IsNewlyOpen）。
         var sd = SaveSystem.Instance?.Data;
-        if (sd != null && sd.talentNewSeenLevel < LevelSystem.CurrentLevel)
+        if (sd != null)
         {
-            sd.talentNewSeenLevel = LevelSystem.CurrentLevel;
-            SaveSystem.Instance.Save();
+            bool seenChanged = false;
+            if (sd.talentNewSeenLevel < LevelSystem.CurrentLevel)
+            {
+                sd.talentNewSeenLevel = LevelSystem.CurrentLevel;
+                seenChanged = true;
+            }
+            // 【2026-11-14 主人拍板「打开天赋界面后不用在按钮上再显示红点」】把当前全部可升级节点记为已读，
+            // 红点只对之后新出现的可升级节点亮（判定见 TalentSystem.HasUnseenUpgradeableRight）。
+            string nowUpgradeable = TalentSystem.CollectUpgradeableRightIds(sd);
+            if (!string.Equals(sd.talentUpgradeSeenIds, nowUpgradeable))
+            {
+                sd.talentUpgradeSeenIds = nowUpgradeable;
+                seenChanged = true;
+            }
+            if (seenChanged) SaveSystem.Instance.Save();
         }
         RefreshAll();
     }

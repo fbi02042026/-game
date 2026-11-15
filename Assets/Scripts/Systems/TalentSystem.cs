@@ -114,13 +114,58 @@ public static class TalentSystem
     const string RightUnlockHint = "升级了！右侧有新的天赋可以解锁";
 
     /// <summary>
-    /// 天赋入口红点 = 还有「新开通未点」且**门槛等级高于已看等级**的右列节点。
-    /// 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】打开天赋页即记已看（见 TalentUI.Show），
-    /// 红点灭；人物升级再跨过新门槛才重新亮。判定唯一口径 = TalentDefs.EntryDotShouldLight。
+    /// 天赋入口红点（**唯一出口**，「天赋图标」与「角色入口」两个 key 一起刷）：
+    /// ① 还有「新开通未点」且**门槛等级高于已看等级**的右列节点
+    ///    （2026-11-11 口径：打开天赋页即记已看，见 TalentUI.Show；人物升级跨新门槛才再亮）；
+    /// ② 【2026-11-14 主人拍板】还有「能升级但未读」的右列节点
+    ///    （判定 = HasUnseenUpgradeableRight，打开天赋页记已读 id 表即灭）。
+    /// 两级引导共用同一状态：主界面「角色」按钮 → 角色界面「天赋」图标，打开天赋页一起灭。
     /// </summary>
-    static void RefreshTalentEntryRedDot(SaveData data)
+    public static void RefreshTalentEntryRedDot(SaveData data)
     {
-        RedDot.Set(RedDot.Talent, data != null && TalentDefs.EntryDotShouldLight(data.talents, data.talentNewSeenLevel));
+        bool on = data != null
+            && (TalentDefs.EntryDotShouldLight(data.talents, data.talentNewSeenLevel)
+                || HasUnseenUpgradeableRight(data));
+        RedDot.Set(RedDot.Talent, on);
+        RedDot.Set(RedDot.Character, on);
+    }
+
+    /// <summary>
+    /// 当前**可升级**（已解锁 / 未满级 / 等级上限够 / 天赋石够）的右列节点 id，逗号分隔；空串 = 无。
+    /// 判定复用 <see cref="CanUpgradeRightNode"/>（唯一口径，不抄第二份）。
+    /// 打开天赋页时由 TalentUI.Show 写入 SaveData.talentUpgradeSeenIds。
+    /// </summary>
+    public static string CollectUpgradeableRightIds(SaveData data)
+    {
+        if (data == null) return "";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var n = TalentDefs.RightNodes[i];
+            if (n == null || string.IsNullOrEmpty(n.id)) continue;
+            if (!CanUpgradeRightNode(n.id, out _)) continue;
+            if (sb.Length > 0) sb.Append(',');
+            sb.Append(n.id);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// 是否存在「可升级但不在已读表」的右列节点（红点条件 ②）。
+    /// 已读表 = SaveData.talentUpgradeSeenIds（打开天赋页时记下当时全部可升级节点）。
+    /// </summary>
+    public static bool HasUnseenUpgradeableRight(SaveData data)
+    {
+        if (data == null) return false;
+        string seen = "," + (data.talentUpgradeSeenIds ?? "") + ",";
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var n = TalentDefs.RightNodes[i];
+            if (n == null || string.IsNullOrEmpty(n.id)) continue;
+            if (!CanUpgradeRightNode(n.id, out _)) continue;
+            if (!seen.Contains("," + n.id + ",")) return true;
+        }
+        return false;
     }
 
     /// <summary>

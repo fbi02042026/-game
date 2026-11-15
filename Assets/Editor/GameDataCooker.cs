@@ -51,6 +51,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookChapterRoute();
         CookChapterStatScale();
         CookCombatTuning();
+        CookEndlessReward();
         CookMonsterUnlockTier();
         CookStageSpawn();
         CookStageDrop();
@@ -163,6 +164,12 @@ public class GameDataCooker : IPreprocessBuildWithReport
     static void CookCombatTuning()
     {
         CookTableFromSource(ContentPaths.Source.Tables + "/combat_tuning.csv", null, "combat_tuning");
+    }
+
+    /// <summary>无限裂隙奖励分配表（endless_reward）。2026-11-14 主人拍板：改表即改数值，缺表回退公式行。</summary>
+    static void CookEndlessReward()
+    {
+        CookTableFromSource(ContentPaths.Source.Tables + "/endless_reward.csv", null, "endless_reward");
     }
 
     static void CookMonsterUnlockTier()

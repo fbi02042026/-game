@@ -17,6 +17,20 @@ public class BattleBossHpBar : MonoBehaviour
     float _fullWidth;
     float _fullHeight;
     Monster _bound;
+
+    // 双层血条：上层红条先掉血，下层偏白条停顿后匀速追上，露出「刚扣掉的那段」。
+    // 延迟层是「血条」的运行时克隆，几何继承美术摆放、不写死尺寸、不改预制体；上色方式见 EnsureDelayLayer。
+    RectTransform _delayRt;
+    float _targetRatio;      // 真实血量比例（= 红条当前值）
+    float _delayRatio;       // 延迟层当前比例
+    float _delayHold;        // 掉血后的停顿倒计时（秒）
+    bool _delayCycleActive;  // 本轮延迟周期已启动（含停顿与追赶）：连续伤害不反复重启，避免延迟层冻住
+    const float BOSS_HP_DELAY_HOLD = 0.6f;     // 停顿时长（0.35 太短，战斗里白段一闪而过看不出延迟）
+    const float BOSS_HP_CHASE_SPEED = 0.35f;   // 追赶速度：每秒收拢的比例（1=整条）
+    // 下层要「跟上层形状一样、只是白色」：上层贴图是红填充+金边斜角，UGUI tint 乘性染不白，
+    // 也不许新增图片/换图/动 prefab → 运行时把同一张 sprite 的像素 RGB 洗成白、alpha 原样保留，
+    // 生成白色 sprite 给延迟层，斜角/金边轮廓与红条逐像素一致。做法见 MakeWhiteSprite。
+    static readonly Color BossHpDelayColor = new Color(0.95f, 0.96f, 0.98f, 1f);
     // 【2026-10-18 主人拍板】绑定目标集：Boss + 场上全部存活精英，血条显示 ∑当前血/∑最大血；
     // _bound 只当名牌目标用（取血量上限最高的一只）
     readonly List<Monster> _boundList = new List<Monster>();
@@ -94,7 +108,7 @@ public class BattleBossHpBar : MonoBehaviour
         _inst._introPlaying = true;
         _inst._introT = 0f;
         _inst._introRatio = 0f;
-        _inst.SetRatio(0f);
+        _inst.SetRatio(0f, true);
         _inst.UpdateAffixText();
     }
 
@@ -133,6 +147,7 @@ public class BattleBossHpBar : MonoBehaviour
         EnsureLeftAligned(_fillRt);
         _fullWidth = Mathf.Max(1f, _fillRt.sizeDelta.x);
         _fullHeight = _fillRt.sizeDelta.y;
+        EnsureDelayLayer();
 
         // 【2026-10-16 血条「显示了却看不见」根因】AutoGameInitializer 给 TopBar/ProgressBar/QuestPanel/
         // BackpackPanel 等顶部 HUD 挂了 overrideSorting=100 的嵌套 Canvas、map=SORT_MAPROOT，
@@ -263,7 +278,7 @@ public class BattleBossHpBar : MonoBehaviour
             _introT += Time.unscaledDeltaTime;
             float k = Mathf.Clamp01(_introT / BOSS_INTRO_FILL_TIME);
             _introRatio = k;
-            SetRatio(k);
+            SetRatio(k, true);
             if (k >= 1f)
             {
                 _introPlaying = false;
@@ -276,6 +291,7 @@ public class BattleBossHpBar : MonoBehaviour
         }
 
         SyncRatioFromBound();
+        TickDelayChase();
     }
 
     public void Refresh()
@@ -293,7 +309,7 @@ public class BattleBossHpBar : MonoBehaviour
             {
                 _introPlaying = false;
                 _deathZeroHold = BOSS_DEATH_ZERO_HOLD;
-                SetRatio(0f);
+                SetRatio(0f, true);
                 _lastLoggedPick = null;
                 return;   // _bound/_boundList 先留着（名牌不闪没），由 LateUpdate 倒计时后收起
             }
@@ -411,10 +427,139 @@ public class BattleBossHpBar : MonoBehaviour
         SetRatio(Mathf.Clamp01(cur / max));
     }
 
-    void SetRatio(float hp01)
+    /// <summary>
+    /// 扣血唯一出口。snapDelay=true 用于入场填充 / 死亡归零这类瞬时切换（两层同步）；
+    /// 实时掉血走 false：只动红条，延迟层由 TickDelayChase 停顿后追上。
+    /// </summary>
+    void SetRatio(float hp01, bool snapDelay = false)
     {
         hp01 = Mathf.Clamp01(hp01);
         _fillRt.sizeDelta = new Vector2(_fullWidth * hp01, _fullHeight);
+        if (hp01 < _targetRatio - 0.0001f && !_delayCycleActive)
+        {
+            // 从贴齐状态首次掉血才起停顿；本轮停顿/追赶中的后续伤害只降目标
+            _delayHold = BOSS_HP_DELAY_HOLD;
+            _delayCycleActive = true;
+        }
+        _targetRatio = hp01;
+        if (snapDelay)
+        {
+            _delayRatio = hp01;
+            _delayHold = 0f;
+            _delayCycleActive = false;
+            ApplyDelayWidth();
+        }
+    }
+
+    /// <summary>建延迟层：克隆「血条」取美术摆好的几何，排到红条之前（先画＝下层），换成同形状纯白贴图。</summary>
+    void EnsureDelayLayer()
+    {
+        _delayRt = null;
+        _targetRatio = 1f;
+        _delayRatio = 1f;
+        _delayHold = 0f;
+        _delayCycleActive = false;
+
+        var go = Instantiate(_fillRt.gameObject, _fillRt.parent);
+        go.name = "BossHpDelayFill";   // 不叫「血条」，避免 BattleSideHud 按名绑定时撞上
+        var rt = go.transform as RectTransform;
+        rt.SetSiblingIndex(_fillRt.GetSiblingIndex());   // 挤到红条前面，红条缩短时露出这一段
+        // 几何逐项取自真值节点（不写死数值）：无论编辑器里怎么摆，延迟层都跟红条完全重合
+        rt.anchorMin = _fillRt.anchorMin;
+        rt.anchorMax = _fillRt.anchorMax;
+        rt.pivot = _fillRt.pivot;
+        rt.anchoredPosition = _fillRt.anchoredPosition;
+        rt.localScale = _fillRt.localScale;
+        rt.sizeDelta = new Vector2(_fullWidth, _fullHeight);
+        var img = go.GetComponent<Image>();
+        var white = MakeWhiteSprite(_fillImg != null ? _fillImg.sprite : null);
+        if (white != null) img.sprite = white;
+        else Debug.LogError("[BattleBossHpBar] 血条 sprite 为空，延迟层拿不到同形状白色贴图（不补图、不兜底）");
+        img.color = BossHpDelayColor;
+        img.raycastTarget = false;
+        _delayRt = rt;
+    }
+
+    static Sprite _whiteSprite;
+    static Sprite _whiteSpriteSrc;
+
+    /// <summary>
+    /// 把「血条」贴图洗成纯白：只改 RGB、alpha 原样保留 → 斜角/金边轮廓与红条逐像素一致，
+    /// 只是颜色白。UGUI tint 是乘性的，红贴图叠任何色都染不白，所以必须换贴图本身。
+    /// 贴图 isReadable=0 取不到像素 → 先 Blit 到 sRGB RT 再 ReadPixels 拿可读副本（项目既有做法）。
+    /// 不新增图片资源、不换图、不动 prefab/meta；按源 sprite 缓存，避免重复 Blit。
+    /// </summary>
+    static Sprite MakeWhiteSprite(Sprite src)
+    {
+        if (src == null) return null;
+        if (_whiteSprite != null && _whiteSpriteSrc == src) return _whiteSprite;
+        var tex = src.texture;
+        if (tex == null) return null;
+
+        int w = tex.width, h = tex.height;
+        var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+        var prevActive = RenderTexture.active;
+        try
+        {
+            Graphics.Blit(tex, rt);
+            RenderTexture.active = rt;
+            var copy = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            copy.ReadPixels(new Rect(0, 0, w, h), 0, 0);
+            copy.Apply(false, false);
+
+            var px = copy.GetPixels32();
+            for (int i = 0; i < px.Length; i++)
+            {
+                if (px[i].a == 0) continue;   // 透明背景跳过，否则斜角外会露出白方块
+                px[i].r = 255; px[i].g = 255; px[i].b = 255;
+            }
+            copy.SetPixels32(px);
+            copy.filterMode = FilterMode.Bilinear;
+            copy.wrapMode = TextureWrapMode.Clamp;
+            copy.Apply(false, true);
+
+            // rect / pixelsPerUnit 继承源 sprite（该图 spriteBorder 全 0，Sliced 与红条同样退化整图拉伸）
+            var made = Sprite.Create(copy, src.rect, new Vector2(0.5f, 0.5f), src.pixelsPerUnit);
+            _whiteSpriteSrc = src;
+            _whiteSprite = made;
+            return made;
+        }
+        finally
+        {
+            RenderTexture.active = prevActive;
+            RenderTexture.ReleaseTemporary(rt);
+        }
+    }
+
+    void ApplyDelayWidth()
+    {
+        if (_delayRt != null)
+            _delayRt.sizeDelta = new Vector2(_fullWidth * _delayRatio, _fullHeight);
+    }
+
+    /// <summary>延迟追赶：掉血后停顿 BOSS_HP_DELAY_HOLD 秒，再按固定速度向真实血量收拢。</summary>
+    void TickDelayChase()
+    {
+        if (_delayRt == null) return;
+        if (_delayRatio <= _targetRatio + 0.0001f)
+        {
+            // 满血 / 回血 / 换目标：延迟层立刻贴齐，不留上一场的残影
+            if (!Mathf.Approximately(_delayRatio, _targetRatio))
+            {
+                _delayRatio = _targetRatio;
+                ApplyDelayWidth();
+            }
+            _delayHold = 0f;
+            _delayCycleActive = false;
+            return;
+        }
+        if (_delayHold > 0f)
+        {
+            _delayHold -= Time.unscaledDeltaTime;
+            return;
+        }
+        _delayRatio = Mathf.MoveTowards(_delayRatio, _targetRatio, BOSS_HP_CHASE_SPEED * Time.unscaledDeltaTime);
+        ApplyDelayWidth();
     }
 
     void ApplyVisibility()

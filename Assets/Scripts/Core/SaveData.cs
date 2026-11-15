@@ -114,6 +114,13 @@ public class SaveData
     /// 新开通批次点亮（人物升级跨过新门槛才重新亮）；判定唯一口径 = TalentDefs.EntryDotShouldLight。
     /// </summary>
     public int talentNewSeenLevel = 0;
+    /// <summary>
+    /// 【2026-11-14 主人拍板「能升级天赋时角色入口和天赋图标亮红点，打开天赋页后不再在按钮上显示」】
+    /// 已读的可升级节点 id（逗号分隔，如 "R_F1,R_F2"）：打开天赋页时记下当时**全部可升级**节点。
+    /// 红点只对「可升级但 id 不在本表」的节点亮（新攒够天赋石 / 新到等级上限的节点才再亮）。
+    /// 判定唯一口径 = TalentSystem.HasUnseenUpgradeableRight，写入口 = TalentUI.Show。
+    /// </summary>
+    public string talentUpgradeSeenIds = "";
     public bool worldTabSeen = false; // 2026-11-12 世界页红点：打开即记已看，红点灭
     public int diamond = 0;
     public int enchantStones = 0;   // 附魔石

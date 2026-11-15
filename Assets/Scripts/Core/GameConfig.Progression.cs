@@ -30,6 +30,12 @@ public static partial class GameConfig
     public const float MERC_LAG_ENTER_DIST = 3.0f;       // 距玩家 > 此距离开始掉队追赶加速
     public const float MERC_LAG_EXIT_DIST = 2.0f;        // 距玩家 <= 此距离结束追赶（滞回，防在阈值上来回抖）
     public const float MERC_LAG_SPEED_MUL = 1.5f;        // 掉队追赶倍率
+    /// <summary>
+    /// 【2026-11-14 主人报「抽中的佣兵点开始后出来得太慢」】屏外左侧走入段的移速倍率。
+    /// 起点 = 相机左边缘外 + 编队位，走一轮约 9 个世界单位；按 1.0 倍（0.96/秒）要 9 秒多。
+    /// 只加速这一小段，到点即恢复正常移速/交还 AI（10-31「从左侧入场、不许瞬现」的口径不变）。
+    /// </summary>
+    public const float MERC_ENTER_SPEED_MUL = 3.5f;
 
     // 【2026-10-20 主人拍板】牧师「站住等自动奶」的最长定身时长：
     // 施法失败（蓝不够回蓝慢 / merc_skills 表缺耗蓝 fail closed）时 CooldownRemain 一直 <= 0，

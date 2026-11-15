@@ -165,6 +165,14 @@ public class BuffHudUI : MonoBehaviour
             Instance.gameObject.SetActive(false);
             return;
         }
+        // 【2026-11-15 修「战前 buff 挡住开始战斗」】进关阶段「开始战斗」还亮着：
+        // 战意/剧情加成已进 tempBuffs，buff 牌位置横穿按钮区域且画在上层 → 整条先收起来。
+        // 点「开始战斗」后 _onFight 清空（Refresh.cs DoContinue），下一拍自动恢复；其它模式判据恒 false。
+        if (BattleEntryDraftPanel.IsAwaitingStartFight)
+        {
+            Instance.gameObject.SetActive(false);
+            return;
+        }
         Instance.gameObject.SetActive(true);
         Instance._timer += Time.unscaledDeltaTime;
         if (Instance._timer < RefreshInterval) return;

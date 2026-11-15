@@ -86,6 +86,17 @@ public class GlobalToastUI : MonoBehaviour
             _heldForce = force;
             return;
         }
+        // 【2026-11-14 主人报「这个字怎么在这出来了」】进关氛围横幅（BattleAmbienceBanner）
+        // 展示期间 toast 攥住，横幅淡出销毁时经 OnTextBannerFinished 放出 ——
+        // toast 底板(anchor 0.55)与横幅文字(正中略偏上)同位，同时显示会两组字叠在一起。
+        // 与主人 2026-11-13 拍板「一进战斗不要直接出现 toast，要前面有铺垫」同口径；
+        // force（物品变动）也攥住，只延迟不吞，横幅收掉后照常看到。
+        if (BattleAmbienceBanner.IsTextBannerShowing)
+        {
+            _heldMsg = msg;
+            _heldForce = force;
+            return;
+        }
         Ensure().Play(msg);
     }
 
@@ -119,6 +130,8 @@ public class GlobalToastUI : MonoBehaviour
     static void PlayNextQueued()
     {
         if (BattleLoadingOverlay.IsShowing) return;   // 队列原样留着，遮罩收掉后再播
+        // 【2026-11-14】进关氛围横幅展示期间不起播，队列留着（横幅销毁时 OnTextBannerFinished 接播）
+        if (BattleAmbienceBanner.IsTextBannerShowing) return;
         if (_queued.Count == 0) return;
         Ensure().Play(_queued.Dequeue());
     }
@@ -165,6 +178,25 @@ public class GlobalToastUI : MonoBehaviour
         // 新冲刷顶掉旧冲刷（旧协程还没放的 held 沿原「本次不放」语义丢弃；队列是静态的，不丢）
         if (_flushCo != null) inst.StopCoroutine(_flushCo);
         _flushCo = inst.StartCoroutine(CoFlushAfterIntro(msg, force, hasHeld));
+    }
+
+    /// <summary>
+    /// 【2026-11-14】进关氛围横幅（BattleAmbienceBanner）淡出销毁时调：
+    /// 放出横幅期间被攥住的 toast，并接播横幅期间入队的汇总 toast。
+    /// 直接 Show，不走 CoFlushAfterIntro 的章节卡等待（横幅本身就是铺垫的最后一环）。
+    /// </summary>
+    public static void OnTextBannerFinished()
+    {
+        if (_heldMsg != null)
+        {
+            var msg = _heldMsg;
+            var force = _heldForce;
+            _heldMsg = null;
+            _heldForce = false;
+            Show(msg, force);
+        }
+        if (_queued.Count > 0 && (_instance == null || _instance._co == null))
+            PlayNextQueued();
     }
 
     /// <summary>

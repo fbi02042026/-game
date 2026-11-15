@@ -220,6 +220,16 @@ public static class MailSystem
 
             var sp = !string.IsNullOrEmpty(att.iconOverride) ? Resources.Load<Sprite>(att.iconOverride) : null;
             var entry = new RewardPopupUI.Entry(sp, $"{AttachmentPopupName(att)} ×{att.amount}");
+            // 【2026-11-14 主人拍板「获得奖励弹窗获得传奇佣兵的名字应该跟稀有度走」】
+            // 佣兵本体条目名字按花名册稀有度上色（RarityPalette 唯一色表，FillCell 的 nameColor 分支自带黑描边），
+            // 与邮件详情格（MailDetailUI 2026-11-08 口径）、装备条目同一套；查不到花名册 LogError 不上色（fail closed）。
+            if (att.type == "merc")
+            {
+                if (!string.IsNullOrEmpty(att.hireId) && MercRosterDefs.TryGetByHireId(att.hireId, out var mdef))
+                    entry.nameColor = RarityPalette.Get(mdef.Rarity);
+                else
+                    Debug.LogError("[Mail] 佣兵附件条目上色：花名册查不到 hireId=" + att.hireId);
+            }
             // 2026-11-11 主人报「装备图标框不能换成金的吗」：装备附件条目按模板稀有度上色（传奇=橙金），
             // 与邮件详情格同口径；模板查不到 LogError 不上色（fail closed）。
             if (att.type == "equip")

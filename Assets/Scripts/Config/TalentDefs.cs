@@ -552,6 +552,13 @@ public static class TalentDefs
         // （【2026-10-10】发进局内钱包 currentGold，不再发抽奖币）。
         list.Add(HNode(15, "R_FUND", "初始资金", RightNodeType.Attr, 40, 3, "",
             new[] { 20, 45, 80 }, AttrKind.Custom, new[] { 80f, 160f, 240f }, "fund", "初始资金"));
+        // 【2026-11-14 主人拍板】R_GOLD「敛财」—— 击杀掉币 +10%/级，满 5 级 +50%。
+        // 与「初始资金」同档（左列 40 级解锁），两者一起构成抽奖币的经济线：
+        // 初始资金 = 每局开局的启动币，敛财 = 打怪过程中的进账。
+        // kind=Custom 不走属性系统，由 SlotMachineSystem.KillGoldBonus 按等级读；
+        // 消费点唯一 = BattleManager.OnMonsterDead 的 killGold（普通/精英/Boss 三档一起放大）。
+        list.Add(HNode(16, "R_GOLD", "敛财", RightNodeType.Attr, 40, 5, "",
+            new[] { 10, 25, 45, 75, 120 }, AttrKind.Custom, new[] { 10f, 20f, 30f, 40f, 50f }, "gold", "敛财"));
         return list.ToArray();
     }
 

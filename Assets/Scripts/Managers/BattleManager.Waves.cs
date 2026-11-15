@@ -171,11 +171,23 @@ public partial class BattleManager
         // 「点下一关」是原地换关不切场景 → 胜利曲还在响、新关 BGM 又起 = 两首叠在一起。
         // 进关是唯一出口，这里统一停一次（幂等，没在播时什么都不做），再切 BGM。
         GameSting.Stop();
+        // 【2026-11-15 主人拍板「只在精英或者 boss 出现的波次里才换 boss 背景音乐」】
+        // 进关先把波级选曲状态清零，必须放在下面所有切曲分支之前：
+        // 不清会带着上一关的残留，让新关第一波小怪就响 boss 曲。
+        GameBgm.SetBattleStrongWave(false);
         // 【2026-11-14 主人拍板「只有 BOSS 响 boss 曲」】裂隙精英层不再共用 bgm_boss：
         // 全局 TrackForStage(Elite) = Boss 的口径给主线/活动本留着，这里只给裂隙单独分流，
         // 于是第 2 层（现为普通层）与第 5/15 层（精英）都播 bgm_battle，只有 10/20/30 层播 boss 曲。
         if (IsEndlessRift)
-            GameBgm.Play(stage.type == StageType.Boss ? GameBgm.Track.Boss : GameBgm.Track.Battle);
+        {
+            // 【保留 11-14「只有 BOSS 层整层响 boss 曲」】裂隙曲目在进关一次性定死，不参与波级切曲；
+            // 状态同步置位，保证静音/场景恢复（GuessTrackFromScene → TrackForStage）也按整层曲走，
+            // 否则会把整层 boss 曲换成普通曲。裂隙 OffersRevive=false（11-02「死亡只能返回」），
+            // 没有复活恢复这条路径，别按复活去理解这里。
+            bool bossLayer = stage.type == StageType.Boss;
+            GameBgm.SetBattleStrongWave(bossLayer);
+            GameBgm.Play(bossLayer ? GameBgm.Track.Boss : GameBgm.Track.Battle);
+        }
         else if (IsArena)
             GameBgm.Play(GameBgm.Track.Boss);
         else
@@ -253,6 +265,7 @@ public partial class BattleManager
             _battleIntroFinished = false;
             _battleStartTime = Time.unscaledTime;
             _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
+            _revivedThisStage = false;      // 【2026-11-15】二次失败界面标记，同样随关卡开始重置
             EnsureMonsterPrefabReady();
             Analytics.StageStart(CurrentChapter, stage.stageIndex); // 埋点：关卡开始
 
@@ -349,6 +362,7 @@ public partial class BattleManager
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
         _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
+        _revivedThisStage = false;      // 【2026-11-15】二次失败界面标记，同样随关卡开始重置
         // 【2026-10-19 主人拍板】「击败」累计计数跨关卡不重置（原 ResetCombo 已删），新一局才在 StartNewRun 归零
         BattleSideHud.Instance?.SetWaveCountdown(false, 0f, false);
     }
@@ -478,6 +492,22 @@ public partial class BattleManager
         if (liveStartEarly)
         {
             _preBattleStoryPlaying = true;
+            // 【2026-11-14 修「手机端一进战斗自动开战 / 抽奖与开始战斗按钮点不动」】
+            // 本协程由 AutoGameInitializer.Awake 同步 StartNewRun 启动，第 0 帧可能抢在 BattleUI.Awake 之前；
+            // 真机脚本执行顺序与编辑器不同，此时 EnterLiveStart → Ensure() 拿不到宿主返回 null，
+            // 防卡死分支会直接 onFight() 开打（首波自动刷出），且面板组件没建出来 → Build() 没跑，
+            // 预制体里的四个抽奖按钮 /「开始战斗」都没有 onClick，看得见却点不动。
+            // 等宿主就绪再开面板；章节卡要等 Loading 关闭才 Show，多等一两帧不影响揭幕时序。
+            // 超时不吞：打 Error 后仍走原路径，保留既有防卡死口径。
+            float uiGuard = 0f;
+            while ((BattleUI.Instance == null || !BattleUI.Instance.gameObject.activeInHierarchy)
+                   && uiGuard < 3f)
+            {
+                uiGuard += Time.unscaledDeltaTime > 0.0001f ? Time.unscaledDeltaTime : 0.016f;
+                yield return null;
+            }
+            if (BattleUI.Instance == null)
+                Debug.LogError("[BattleManager] 进关面板宿主 3 秒未就绪，抽奖面板可能挂载失败");
             EnterLiveStartPhase();
         }
 

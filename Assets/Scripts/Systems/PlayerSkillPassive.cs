@@ -222,6 +222,9 @@ public static class PlayerSkillPassive
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         if (BattleLootMode.Active) return;
+        // 【2026-11-14 主人「不要冲锋的时候还在攻击」】冲锋期间英雄行动权归冲锋协程，
+        // 4 槽技能的自动释放一并停（普攻同口径，见 Hero.AIUpdate）。
+        if (CareerSkillExecutor.IsCharging) return;
         // 全局间隔没到：直接返回，省掉每帧的 FindReadySkillSlot 遍历（早退闸）
         if (!bm.IsPlayerSkillGcdReady) return;
         // 槽序即释放优先级：多个技能同时就绪时取最靠前的那个（且已满足触发条件）。

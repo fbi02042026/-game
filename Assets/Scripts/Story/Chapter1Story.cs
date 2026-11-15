@@ -27,8 +27,10 @@ public static class Chapter1Story
         var beats = new List<StoryBeat>
         {
             // 【2026-10-18 主人报「剧情没有背景」】这段原先整段没挂 .Bg，露出底下战斗场景；
-            // 复用 abyss_choice（裂隙石台）顶上，后续台词与选完选项后的剧情自动沿用同一张。
-            StoryDirector.Narration("击败 Boss 后，你在地上发现一道新鲜的剑痕。").Bg(StoryBackgrounds.AbyssChoice),
+            // 当时复用第 7 章 abyss_choice（裂隙深渊悬空石台）顶上，与第 1 章暮影森林石碑剑痕对不上。
+            // 【2026-11-13 修】改挂 Chapter1Stele（Assets/Resources/Story/Backgrounds/森林.jpg，
+            // 与 N2~N7 / 四结局背景同目录、走标准加载），后续台词与选完选项后的剧情自动沿用同一张。
+            StoryDirector.Narration("击败 Boss 后，你在地上发现一道新鲜的剑痕。").Bg(StoryBackgrounds.Chapter1Stele),
             StoryDirector.Solo("你",
                 "有人比我早到一步。这剑痕……有点眼熟。",
                 StoryPortraits.Player),
@@ -94,6 +96,33 @@ public static class Chapter1Story
         onDone?.Invoke();
     }
 
+    /// <summary>
+    /// 【2026-11-15】回城这段原本是写死的两句，每次打完都读到同一段。
+    /// 改成台词池：同一条「别深究」的信息换几种说法，外加几句闲聊，随机取且避开上一句
+    /// （口径同 LoadingFlavorText.Next / SpeechBubbleTalker.PickPokeLine）。
+    /// 下标 0 = 原文，逐字保留；只存内存、重启清零，人设仍是前台小姐的御姐傲娇口吻。
+    /// </summary>
+    static readonly string[][] ReturnTownLines =
+    {
+        new[] { "裂隙内偶尔会出现其他小队的痕迹，不要过度调查。那是其他部门的工作。", "你没有接话。那个名字在喉咙里滚了一圈，又被你咽了回去。" },
+        new[] { "这类痕迹每个月都有几桩，归档的事不用你操心。", "她把文件翻过一页，话题也就跟着翻过去了。" },
+        new[] { "别人的行程，本小姐不方便多说。你也别打听。", "你点了下头，把那道剑痕记在心里，没记在本子上。" },
+        new[] { "又是剑痕？……森林里砍枝子的人多了去了。", "她说得轻巧，可擦桌子的手停了半秒。" },
+        new[] { "别把每一道痕都当成线索，累的可是你自己。", "大厅的钟响了一下，谁也没再提那个名字。" },
+        new[] { "那类卷宗归别的部门，本小姐这里只管登记。", "你把话咽回去，转身看了看门口的光。" },
+        new[] { "问那么多做什么，今天的委托还没交呢。", "她推过来一张新的委托单，正好盖住了桌角那道拓印。" },
+        new[] { "有些事知道了也没用，哼，本小姐是替你省事。", "你没接话，只把剑鞘往身后正了正。" },
+    };
+    static int _lastReturnTownIdx = -1;
+
+    static string[] PickReturnTownLines()
+    {
+        int idx = UnityEngine.Random.Range(0, ReturnTownLines.Length);
+        if (idx == _lastReturnTownIdx) idx = (idx + 1) % ReturnTownLines.Length;
+        _lastReturnTownIdx = idx;
+        return ReturnTownLines[idx];
+    }
+
     public static void PlayReturnTown(Action onDone)
     {
         if (StoryProgress.GetChoice(1) == null)
@@ -101,13 +130,14 @@ public static class Chapter1Story
             onDone?.Invoke();
             return;
         }
+        var lines = PickReturnTownLines();
         var beats = new List<StoryBeat>
         {
             StoryDirector.Solo("赛琳",
-                "裂隙内偶尔会出现其他小队的痕迹，不要过度调查。那是其他部门的工作。",
+                lines[0],
                 StoryPortraits.Receptionist)
                 .Bg(StoryBackgrounds.GuildHall),
-            StoryDirector.Narration("你没有接话。那个名字在喉咙里滚了一圈，又被你咽了回去。")
+            StoryDirector.Narration(lines[1])
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }

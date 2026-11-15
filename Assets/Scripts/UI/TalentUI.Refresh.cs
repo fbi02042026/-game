@@ -116,11 +116,10 @@ public partial class TalentUI
         for (int i = 0; i < _rightViews.Count; i++)
             RefreshOneRightNode(_rightViews[i], talents, playerLv);
 
-        // 【2026-11-11 主人拍板「打开界面后红点就可以消失了」】入口红点唯一口径 = EntryDotShouldLight：
-        // 只对门槛等级高于「已看等级」（打开天赋页时记录，见 Show）的新批次点亮。
+        // 【2026-11-11 打开后灭】+【2026-11-14 能升级也亮、角色入口同步】：
+        // 入口红点统一收口到 TalentSystem.RefreshTalentEntryRedDot（天赋 + 角色两个 key 一起刷）。
         var dotData = SaveSystem.Instance?.Data;
-        RedDot.Set(RedDot.Talent, dotData != null
-            && TalentDefs.EntryDotShouldLight(dotData.talents, dotData.talentNewSeenLevel));
+        TalentSystem.RefreshTalentEntryRedDot(dotData);
 
         if (rightTipText != null)
             rightTipText.text = "消耗天赋石解锁/升级天赋（分批开放）";

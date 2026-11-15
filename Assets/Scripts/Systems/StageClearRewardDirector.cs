@@ -908,6 +908,46 @@ public class StageClearRewardDirector : MonoBehaviour
     {
         _running = true;
         var bm = BattleManager.Instance;
+
+        // 【2026-11-15 主人口径「不是每一层都开宝箱 只有每5和每10是开宝箱」
+        //   +「打完直接开 然后弹 toast 然后接着就下一层 不要耽误过多时间」】
+        // 无限裂隙唯一结算出口：开箱动画 / 逐枚飞币 / 飞钻 / 0.35s 等待全部跳过，
+        // 入账从演出里原样搬到此处（一分不丢），直接进结算 → 一条 toast → 续层。
+        // 【2026-11-14 主人拍板「打完获得宝箱后不用进传送门了 进下层」】不开门、不等玩家走进去。
+        // 只有 5 的倍数层（精英 5/15/25… + BOSS 10/20/30…）把宝箱直接呈打开态；普通层连箱子都不出现。
+        if (bm != null && bm.IsEndlessRift)
+        {
+            // ⚠ 局部变量名不能与下面演出段里的 goldDrop / bossDiamond 同名：
+            // C# 局部声明空间覆盖整个方法块，前后重名会报 CS0136（快速通道是内层块，同样受约束）。
+            int fastGold = Mathf.Max(0, bonusGold);
+            if (fastGold > 0) bm.GrantRunGold(fastGold);           // 原 CoFlyCoin 逐枚入账之和
+            int scrapGold = ScrapRewardEquips(rewards);            // 原宝箱装备折金，内部走 GrantRunGold
+            int fastDiamond = GameConfig.EndlessBossDiamond(bm.EndlessRiftStage);
+            if (stageType == StageType.Boss && fastDiamond > 0)
+            {
+                ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, fastDiamond, save: false, notify: false);
+                SaveSystem.Instance?.Save();
+                UIManager.Instance?.ShowToast($"Boss宝箱 钻石 +{fastDiamond}", true);   // 原 CoFlyDiamond 末尾那条，跨局货币不并进金币
+            }
+            bm.EndlessChestChainGold = fastGold + scrapGold;       // 结算只出一条「获得奖励金币 +N」
+            if (GameConfig.IsEndlessChestStage(bm.EndlessRiftStage) && _boxRoot != null)
+            {
+                ApplyBoxVisual(ResolveBoxTier(stageType));
+                _boxRoot.gameObject.SetActive(true);
+                _boxRoot.position = _boxScenePos;
+                SnapBoxRootToGround();
+                if (_boxAnim != null) _boxAnim.enabled = false;     // 不播 open1/open2，直接呈打开态
+                if (_closeSr != null) _closeSr.enabled = false;
+                if (_openSr != null) _openSr.enabled = true;
+            }
+            else
+                HideBoxVisual();                                    // 普通层不出现宝箱，也不残留上层的箱体
+            RunDraftDirector.Instance?.NoteStageProgress();         // 原演出段末尾的局内构筑落档，跳过演出也不能跳
+            bm.FinishStageAfterPortalReached();
+            _running = false;
+            yield break;
+        }
+
         if (bm != null) bm.UnitsCanAct = false;
 
         ClearBoxTier tier = ResolveBoxTier(stageType);
@@ -985,10 +1025,15 @@ public class StageClearRewardDirector : MonoBehaviour
         spawn.y = UnitBase.GROUND_Y;
         ScrapRewardEquips(rewards);
 
-        // —— Boss 宝箱 +10 钻（2026-10-23 主人拍板）：蓝色钻石从箱口弹出向上飘，直接入钱包 ——
-        if (stageType == StageType.Boss && BossChestDiamond > 0)
+        // —— Boss 宝箱钻石（2026-10-23 主人拍板 +10 钻）：蓝色钻石从箱口弹出向上飘，直接入钱包 ——
+        // 【2026-11-14 主人拍板「每隔10层奖励有个提升」】裂隙按档递增：10 层 10、20 层 15、30 层 20…；
+        // 主线 / 活动本 Boss 关维持固定 10（EndlessBossDiamond 只对裂隙 10 的倍数层有意义）。
+        int bossDiamond = BossChestDiamond;
+        if (bm != null && bm.IsEndlessRift)
+            bossDiamond = GameConfig.EndlessBossDiamond(bm.EndlessRiftStage);
+        if (stageType == StageType.Boss && bossDiamond > 0)
         {
-            yield return StartCoroutine(CoFlyDiamond(spawn, BossChestDiamond));
+            yield return StartCoroutine(CoFlyDiamond(spawn, bossDiamond));
         }
 
         yield return new WaitForSecondsRealtime(0.35f);
@@ -1013,6 +1058,7 @@ public class StageClearRewardDirector : MonoBehaviour
         // 是否整条删除待主人拍板，奴家先不动别的（铁律 9：改过没问题的不许再私自改）。
 
         // —— 传送门 ——
+        // 无限裂隙已在 CoReward 开头的快速通道结算完毕（零演出、直接续层），不会走到这里。
         // 【2026-10-11 主人拍板】门改用主人新加的预制体 Resources/VFX/other/world/chuansongmen，
         // 挂 BattleUI 下（门是 UI 节点，但 PortalGate 会把它钉在世界坐标上）。
         // 播放顺序：先「传送」节点 → 0.3s 后 door + SpinPortalBlue 一起出来。
@@ -1033,20 +1079,22 @@ public class StageClearRewardDirector : MonoBehaviour
         _running = false;
     }
 
-    /// <summary>宝箱掉落装备直接折金：装备已并入「类型三选一」的装备方向，不再单独挑。</summary>
-    void ScrapRewardEquips(List<EquipInstance> rewards)
+    /// <summary>宝箱掉落装备直接折金：装备已并入「类型三选一」的装备方向，不再单独挑。
+    /// 【2026-11-15】返回折金总额，供裂隙并入「获得奖励金币 +N」一条提示；折金不再单独弹 toast。
+    /// 宝箱链现仅无限裂隙在走（其它模式 2026-10-31 已整体下线），改动不波及其它玩法。</summary>
+    int ScrapRewardEquips(List<EquipInstance> rewards)
     {
-        if (rewards == null || rewards.Count == 0) return;
+        if (rewards == null || rewards.Count == 0) return 0;
         var bm = BattleManager.Instance;
-        if (bm == null) return;
+        if (bm == null) return 0;
 
         int total = 0;
         for (int i = 0; i < rewards.Count; i++)
             total += ScrapGold(rewards[i]);
-        if (total <= 0) return;
+        if (total <= 0) return 0;
 
         bm.GrantRunGold(total);   // 2026-10-18：走进账唯一出口（结算「金币」栏同账）
-        UIManager.Instance?.ShowToast($"宝箱装备折算 金币 +{total}", true);   // 2026-10-06 主人拍板：装备折金（消失+获得）force 弹；【2026-10-18 双钱包拆分】折金进「本局获得金币」
+        return total;
     }
 
     /// <summary>

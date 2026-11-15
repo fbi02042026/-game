@@ -78,7 +78,7 @@ public static class TalentIcons
             case "游侠":                                                // 远魔
             case "法师":
             case "牧师":   return Load(TalentRoot + "远魔专精.png");
-            case "背包扩容":  return Load(TalentRoot + "敛财.png");
+            case "背包扩容":  return Load(TalentRoot + "背包+1.png");   // 2026-11-14：敛财图让给金币节点「敛财」，背包用专属图
             case "技能槽 IV": return Load(TalentRoot + "扩容.png");
             case "双修解锁":  return Load(TalentRoot + "快速休整.png");
             case "精英猎手":  return Load(TalentRoot + "天赋共鸣.png");
@@ -88,6 +88,9 @@ public static class TalentIcons
             // 2026-09-29：进关抽奖相关两个新节点。幸运提升有同名图会走 default；
             // 初始资金暂时复用「点金之手」，等主人出专属图再换。
             case "初始资金":  return Load(TalentRoot + "点金之手.png");
+            // 【2026-11-14 主人拍板】新增「敛财」（击杀掉币 +10%/级）—— 语义就是聚敛财富，直接用同名的敛财图。
+            // 同批把「背包扩容」从敛财.png 换到它本来该用的背包+1.png：敛财图让给金币节点，背包节点不再图文不符。
+            case "敛财":      return Load(TalentRoot + "敛财.png");
             // 利刃 / 体魄 / 精准 / 迅捷 / 疾行 / 凝神：图标与节点同名，走下边 default 直取。
 
             default:

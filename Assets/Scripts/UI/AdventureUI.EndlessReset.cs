@@ -98,8 +98,8 @@ public partial class AdventureUI
         int catchUp = canJump ? EndlessRiftRules.CatchUpDraws(startStage, bestStart) : 0;
         if (canJump)
             body += $"\n\n生涯最高出生点：第 {EndlessRiftRules.BestCheckpoint(data)} 层。" +
-                    $"直达第 {bestStart} 层可跳过中间 {bestStart - startStage} 层，" +
-                    $"这些层的免费抽 {catchUp} 次会一次性自动抽完。\n" +
+                    $"直达第 {bestStart} 层可跳过中间 {bestStart - startStage} 层。\n" +
+                    (catchUp > 0 ? $"跳过的层免费抽 {catchUp} 次会一次性自动抽完。\n" : "") +
                     "不想进入请点弹窗外空白处关闭。";
 
         // 弹窗期间先把进本标记放下：玩家点暗底/取消时不会把 true 带进下一次进本。
@@ -149,7 +149,7 @@ public partial class AdventureUI
         string body =
             $"直接跳到生涯最高出生点：从第 {bestStart} 层开始。\n" +
             $"跳过第 {startStage}～{bestStart - 1} 层，共 {skipped} 层。\n" +
-            $"这些层本该获得的免费抽 {catchUp} 次，进本第一层会一次性自动抽完。\n" +
+            (catchUp > 0 ? $"这些层的免费抽 {catchUp} 次，进本第一层会一次性自动抽完。\n" : "") +
             "跳过的层不补发首通奖励与宝箱金币（想要那些奖励就逐层打）。\n" +
             "本轮保存点不会因此后退。";
 

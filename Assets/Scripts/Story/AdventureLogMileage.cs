@@ -25,7 +25,8 @@ public static class AdventureLogMileage
     public static readonly LevelReward[] LevelRewards =
     {
         new LevelReward { Label = "见习记载", Gold = 0 },
-        new LevelReward { Label = "森林行者", Gold = 50, Diamond = 0 },   // 原 Diamond = 1
+        // 【2026-11-14 主人报「购买暮火之杖还给金币，这个时候不要给金币」】Lv2 只发杖，不发金币。
+        new LevelReward { Label = "森林行者", Gold = 0, Diamond = 0 },   // 原 Diamond = 1
         // 【2026-10-17 主人拍板】强化石暂无用途 → 原 Lv3 的附魔石×3 改成天赋石×3（1:1 换资源名，数量不动）
         new LevelReward { Label = "探索者", Gold = 100, TalentPoint = 3 },
         new LevelReward { Label = "裂隙行者", Gold = 200, Diamond = 0 },  // 原 Diamond = 3
@@ -181,8 +182,12 @@ public static class AdventureLogMileage
                 {
                     UIManager.Instance?.ShowToast($"法师初始武器已替换：{SpecialWeapons.InstanceName}");
                     // 告知窗关掉后再弹通用「获得奖励」窗，两个模态不叠加（2026-11-12 主人拍板）
-                    RewardPopupUI.ShowClaimRewards(reward.Gold, 0, reward.TalentPoint, reward.Diamond,
-                        new string[] { SpecialWeapons.InstanceName });
+                    // 【2026-11-14 主人报「而且没有图标」】改走商店购买出口带装备图标；
+                    // ShowClaimRewards 的 extras 是纯文字（icon 恒 null），格子只会是空框。
+                    var tpl = SpecialWeapons.EnsureTwilightTemplate();
+                    var icon = tpl != null ? tpl.icon : null;
+                    if (icon == null) Debug.LogError("[Mileage] 暮火之杖图标缺失（iconFileName=New_Weapon_03）");
+                    RewardPopupUI.ShowClaimGoods(icon, SpecialWeapons.InstanceName);
                 });
         }
         else if (notify)
@@ -368,7 +373,11 @@ public static class AdventureLogMileage
         // 【2026-11-13 主人拍板】每次实际获得里程点数都弹 toast（Plain 原样文案）。
         // 唯一入账出口在此弹：图鉴遇怪/结识佣兵/成就/世界/主线/支线及未来新增来源全覆盖；
         // 防重复（sourceKey 已发过直接 return 0）天然保证不双弹。
-        UIManager.Instance?.ShowToast($"里程点数 +{points}");
+        // 【2026-11-14 主人拍板「战斗里不要弹这个」】战斗场景内只入账、不弹 toast ——
+        // 引导战怪物出场（Monster.Init → MarkMonsterSeen）等战斗中来源全被这一处挡住；
+        // 点数照发，回城也不补弹（主人只要求别在战斗里冒出来）。
+        if (!GameSceneGate.IsBattle)
+            UIManager.Instance?.ShowToast($"里程点数 +{points}");
         if (save) SaveSystem.Instance.Save();
         RedDot.RefreshCommon();
         return points;

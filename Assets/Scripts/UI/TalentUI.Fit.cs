@@ -15,6 +15,12 @@ using UnityEngine;
 // 【2026-11-12 主人拍板「天赋界面再大5%」】FitScaleFactor 由 0.8 调为 0.84（= 0.8 × 1.05），
 // 两种屏等效再整体放大 5%（有效宽 720×0.8 → 720×0.84，含高同比例），其余口径不变。
 //
+// 【2026-11-14 主人拍板「天赋界面能不能左右再宽点」】只加宽不加高：新增 FitWidthBoost = 1.10，
+// 只乘 sizeDelta.x；高度、localScale、字号一概不动。Panel 底图 m_Type=1(Sliced 九宫格) 横向拉伸
+// 不变形（不违铁律5）；Columns 拉伸锚 → 左右列按半宽 → Content(0,1)-(1,1) → 行(Build.cs x 0→1
+// 拉伸锚) 逐级自动跟随，内容真的变宽。有效宽：标准屏 700×1.10×0.84≈647；瘦屏 720×0.84×1.10≈665
+// （逻辑宽恒 720，两侧各留约 27），不会再挡底部入口（高度未变）。
+//
 // 为什么只动 Panel 两笔就够：TitleBar / ResourceRow 锚 (0.5,1) 钉顶、Footer 锚 (0.5,0) 钉底、
 // Columns 是 (0,0)-(1,1) 上下拉伸锚 —— 拉高 Panel 后两列滚动区自动变长、多露几行，
 // 子节点坐标一概不碰（铁律 32）。
@@ -24,6 +30,7 @@ public partial class TalentUI
     const float FitPanelH = 1100f;      // 同上，设计高
     const float FitVerticalMargin = 90f; // 上下留白 = 9:16 原生留白 (1280-1100)/2
     const float FitScaleFactor = 0.84f; // 【2026-11-11 缩20%→0.8】【2026-11-12 再大5%→0.84】整体缩放（手机挡住底部五入口）
+    const float FitWidthBoost = 1.10f;  // 【2026-11-14 主人拍板「左右再宽点」】只加宽：sizeDelta.x × 1.10，高度不变
 
     void ApplyFit()
     {
@@ -38,18 +45,19 @@ public partial class TalentUI
 
         if (!UiLayoutStretch.IsThinnerScreen())
         {
-            // 9:16 标准屏：设计值 × 0.84（同时兼作瘦屏态退出的复位，幂等）
+            // 9:16 标准屏：设计值 × 0.84，宽度再乘 FitWidthBoost（同时兼作瘦屏态退出的复位，幂等）
             panel.localScale = Vector3.one * FitScaleFactor;
-            panel.sizeDelta = new Vector2(FitPanelW, FitPanelH);
+            panel.sizeDelta = new Vector2(FitPanelW * FitWidthBoost, FitPanelH);
             return;
         }
 
         float logicalH = UiLayoutStretch.ResolveUiLogicalHeight();
         float s = GameConfig.DESIGN_WIDTH / FitPanelW;              // 宽度比（不含缩小系数）
         float targetH = Mathf.Max(FitPanelH, logicalH - FitVerticalMargin * 2f);
-        // localScale = s × 0.84：有效宽 = 700 × s × 0.84 = 720 × 0.84；sizeDelta.y 仍按 s 反算，
-        // 有效高 = (targetH / s) × s × 0.84 = targetH × 0.84 —— 整体（含高）为设计值的 84%
+        // localScale = s × 0.84；sizeDelta = (700×1.10, targetH/s)：
+        // 有效宽 = 700×1.10 × s × 0.84 = 720×0.84×1.10 ≈ 665；sizeDelta.y 仍按 s 反算，
+        // 有效高 = (targetH / s) × s × 0.84 = targetH × 0.84 —— 宽度加宽10%，高度仍为设计值的84%
         panel.localScale = new Vector3(s, s, 1f) * FitScaleFactor;
-        panel.sizeDelta = new Vector2(FitPanelW, targetH / s);
+        panel.sizeDelta = new Vector2(FitPanelW * FitWidthBoost, targetH / s);
     }
 }

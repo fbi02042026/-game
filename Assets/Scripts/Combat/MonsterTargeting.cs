@@ -4,6 +4,7 @@ using UnityEngine;
 /// <summary>
 /// 怪物索敌策略（2026-10-14 主人拍板）：把「谁近打谁」升级成三种目标偏好——
 /// 近战按距离、远程先打脆皮职业、一部分怪挑血少的收割。
+/// 【2026-11-15 口径】特殊偏好只给带词条的怪；无词条的普通小怪恒「按范围/距离」。
 /// 评分制：每种策略折算成一个 float 分数，分越小越优先；平手一律比距离。
 /// 只改「选谁当目标」，不动移动/并道/攻击闸门那套链路。
 /// </summary>
@@ -81,11 +82,13 @@ public static class MonsterTargeting
     }
 
     /// <summary>
-    /// 出场时抽一次策略：默认近战=按距离、远程=先打脆皮；
-    /// 另有 <see cref="GameConfig.MONSTER_LOW_HP_TARGET_RATIO"/> 比例的怪被抽成「挑血少的打」（远近通吃）。
+    /// 出场时抽一次策略：无词条的普通小怪恒按范围（谁近打谁）；
+    /// 带词条的怪仍按 <see cref="GameConfig.MONSTER_LOW_HP_TARGET_RATIO"/> 比例抽「挑血少的打」，
+    /// 其余远程=先打脆皮、近战=按距离。Boss 入场后的定时轮换在 Monster.AI，不在这里。
     /// </summary>
-    public static MonsterTargetingPolicy RollPolicy(bool isRanged)
+    public static MonsterTargetingPolicy RollPolicy(bool isRanged, bool hasAffix)
     {
+        if (!hasAffix) return MonsterTargetingPolicy.Distance;
         if (Random.value < GameConfig.MONSTER_LOW_HP_TARGET_RATIO)
             return MonsterTargetingPolicy.LowHp;
         return isRanged ? MonsterTargetingPolicy.SquishyJob : MonsterTargetingPolicy.Distance;

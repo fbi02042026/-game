@@ -286,8 +286,11 @@ public static class LevelSystem
     /// 等玩家真打完一关（AddStageClearExp → FlushDeferredIntoQueue）再跟着结算一起弹。
     /// 经验照发、等级照涨，只把演出推迟。
     /// 可选参数 capLevel = 升级到的绝对等级上限：回城补发每日通关任务传本次通关额度，其它日常任务传 playerLevel + 1（单个最多升 1 级）；0 = 不限制。
+    /// 可选参数 showLevelUpNow【2026-11-15 主人拍板「点一次如果升级就立即弹升级然后再接着点下一个」】：
+    /// true = 升级演出当场弹（仍按 QueueForTown 拆成一级一窗，连升逐条弹、不合并），只给玩家主动领取的主线任务奖励用；
+    /// false（默认）= 日常 / 回城补发原行为一字不变，继续攒在延后账等打完一关才弹。
     /// </summary>
-    public static void AddDirectExp(int exp, int capLevel = 0)
+    public static void AddDirectExp(int exp, int capLevel = 0, bool showLevelUpNow = false)
     {
         if (exp <= 0) return;
 
@@ -332,7 +335,17 @@ public static class LevelSystem
         // 【2026-11-12 主人拍板】只记账不弹：日常任务经验是登录/城镇瞬间结算的，
         // 入待弹队列会被进镇那次 FlushPending 弹成「一登录就升级」；
         // 攒到打完一关（AddStageClearExp → FlushDeferredIntoQueue）再弹。
-        LevelUpPopup.DeferUntilBattle(before, Mathf.Max(1, data.playerLevel));
+        // 【2026-11-15 主人拍板】主线任务领奖是玩家主动点的，升级要当场看见：走正式待弹队列并立即弹，
+        // 仍由 QueueForTown 拆成一级一窗（连升逐条弹，绝不合并成「4→7」一段）；已有窗在显示时由点黑幕续弹。
+        if (showLevelUpNow)
+        {
+            LevelUpPopup.QueueForTown(before, Mathf.Max(1, data.playerLevel));
+            LevelUpPopup.FlushPending();
+        }
+        else
+        {
+            LevelUpPopup.DeferUntilBattle(before, Mathf.Max(1, data.playerLevel));
+        }
         return;
     }
 
