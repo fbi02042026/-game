@@ -138,8 +138,57 @@ public static class StaminaSystem
             sys.Save();
     }
 
+    // ── 进本体力预扣（2026-11-15 主人拍板「冒险界面点进战斗那帧，顶条数字当场减」）──
+    // 只服务冒险页经 PlayerJobSelectUI 进本的主线 / 活动副本；裂隙仍走 EndlessRiftRules 自己那套
+    //（含每日次数与保存点确认的退还），两套标志互斥，互不读写。
+    // 预扣 = 点按钮当帧就把真源扣掉（ResourceWallet 顺带刷新顶条数字并落盘）；
+    // 成功进本由对应 TrySpendFor* 消费标志跳过二次扣费；取消 / 中断由 RefundEnterPrecharge 幂等退回。
+    static bool _enterPrecharged;
+    static int _enterPrechargeCost;
+    static long _enterPrechargeLastUtc;
+
+    /// <summary>点进战斗按钮当帧预扣本次进本体力（幂等）。金额由调用方按玩法真实消耗传入。</summary>
+    public static bool PrechargeForEnter(int cost)
+    {
+        if (_enterPrecharged) return true;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null || cost <= 0) return false;
+        _enterPrechargeLastUtc = data.lastStaminaUtc;
+        if (!TrySpend(cost)) return false;
+        _enterPrechargeCost = cost;
+        _enterPrecharged = true;
+        return true;
+    }
+
+    /// <summary>本次进本被放弃 / 中断：原样退回预扣体力与恢复时钟（幂等、静默）。</summary>
+    public static void RefundEnterPrecharge()
+    {
+        if (!_enterPrecharged) return;
+        int cost = _enterPrechargeCost;
+        long lastUtc = _enterPrechargeLastUtc;
+        _enterPrecharged = false;
+        _enterPrechargeCost = 0;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        // Add 内部已刷 HUD；notify/overflowToMail 全关 → 退还静默，不弹「获得体力」、不发邮件
+        ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, cost,
+            save: false, notify: false, overflowToMail: false);
+        data.lastStaminaUtc = lastUtc;
+        SaveSystem.Instance?.Save();
+    }
+
+    /// <summary>进本扣费出口消费预扣标志：金额对得上就跳过二次扣费，返回 true。</summary>
+    static bool ConsumeEnterPrecharge(int cost)
+    {
+        if (!_enterPrecharged || _enterPrechargeCost != cost) return false;
+        _enterPrecharged = false;
+        _enterPrechargeCost = 0;
+        return true;
+    }
+
     public static bool TrySpendForAdventure()
     {
+        if (ConsumeEnterPrecharge(ADVENTURE_COST)) return true;   // 按钮当帧已预扣，跳过二次扣费
         return TrySpend(ADVENTURE_COST);
     }
 
@@ -152,7 +201,9 @@ public static class StaminaSystem
     /// <summary>进活动副本（金币/徽记/卷轴）扣体力（2026-10-24 主人拍板：金币/徽记 10/次、卷轴 15/次）。</summary>
     public static bool TrySpendForActivityDungeon(ActivityDungeonKind kind)
     {
-        return TrySpend(ActivityDungeonRules.EntryStaminaCost(kind));
+        int cost = ActivityDungeonRules.EntryStaminaCost(kind);
+        if (ConsumeEnterPrecharge(cost)) return true;   // 按钮当帧已预扣，跳过二次扣费
+        return TrySpend(cost);
     }
 
     // ── 体力药水（2026-10-18 主人拍板：药水改道具入背包，使用时才恢复；超出上限先确认、多余作废）──

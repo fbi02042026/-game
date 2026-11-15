@@ -46,6 +46,9 @@ public partial class AdventureUI
     Text _endlessResetLbl;
     Image _endlessResetIcon;
 
+    /// <summary>【2026-11-15】本次裂隙进本流程被放弃：退回「进入裂隙」按钮当帧预扣的体力（幂等）。</summary>
+    static void RefundPendingStamina() => EndlessRiftRules.RefundPrechargedStamina();
+
     /// <summary>
     /// 【2026-11-02 主人拍板】进裂隙前的「是否返回上回保存点继续」确认。
     /// <para>主人原话：「无限点击进入关卡弹出提示返回上回保存点继续 问玩家是否继续」——
@@ -133,7 +136,8 @@ public partial class AdventureUI
                     PreviewRiftSlideTo(bestStart);
                     ConfirmEndlessJump(startStage, bestStart, catchUp, proceed);
                 })
-                : null);
+                : (Action)RefundPendingStamina,   // 非「直达」时副按钮 = 退出，退还预扣体力
+            onDimDismiss: RefundPendingStamina);   // 点暗底同样是放弃本次进本
     }
 
     /// <summary>
@@ -173,7 +177,8 @@ public partial class AdventureUI
                 // 返回上层选择：层数牌滑回真实起始层窗口（滑出去要仪式感、滑回来要快）
                 RestoreRiftPreview();
                 AskEndlessStartChoice(proceed);
-            });   // 点暗底不走这里 —— RefreshRiftPage 的「弹窗已关 → 预览失效」对账兜底
+            },
+            onDimDismiss: RefundPendingStamina);   // 点暗底 = 放弃本次进本 → 退还预扣体力；预览失效仍由 RefreshRiftPage 对账
     }
 
     /// <summary>建/取重置徽章，并按当前状态刷文案与可点状态。每次刷新详情面板调一次（幂等）。</summary>

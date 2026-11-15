@@ -32,6 +32,8 @@ public static class StaminaConfirmPopup
     /// 比如裂隙进本时的「继续第 N 层 / 从头开始」。
     /// </summary>
     static Action _onCancel;
+    /// <summary>【2026-11-15】点暗底放弃时的可选回调（仅裂隙进本确认用，默认 null = 老语义只关窗）。</summary>
+    static Action _onDimDismiss;
 
     // 单按钮告知模式的几何快照（第一次切单按钮前从预制体捕获，切回双按钮时原样还原）
     static RectTransform _okRt;
@@ -68,6 +70,7 @@ public static class StaminaConfirmPopup
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onConfirm;
         _onCancel = null;           // 普通确认框：副按钮仍是「取消」语义（只关窗）
+        _onDimDismiss = null;
         _okGray = false;            // 每次开窗还原置灰钩子（竞技场商店按当次余额重新决定）
         ApplyOkGray();
         _rootPanel.SetActive(true);
@@ -90,7 +93,7 @@ public static class StaminaConfirmPopup
     /// <param name="okLabel">主按钮（右侧）文案，如「继续第 11 层」。</param>
     /// <param name="cancelLabel">副按钮（左侧）文案，如「暂不进入」。</param>
     public static void ShowChoice(string title, string body, string okLabel, string cancelLabel,
-        Action onOk, Action onCancel)
+        Action onOk, Action onCancel, Action onDimDismiss = null)
     {
         Ensure();
         if (_rootPanel == null)
@@ -109,6 +112,7 @@ public static class StaminaConfirmPopup
         ApplyUnifiedTextStyle(_title, _body);
         _onOk = onOk;
         _onCancel = onCancel;
+        _onDimDismiss = onDimDismiss;
         _okGray = false;
         ApplyOkGray();
         _rootPanel.SetActive(true);
@@ -168,6 +172,7 @@ public static class StaminaConfirmPopup
         ApplyUnifiedTextStyle(_title, _body);   // 2026-10-24 统一排版（先设行距再算底框自适应）
         _onOk = onClose;
         _onCancel = null;           // 告知窗没有副按钮语义
+        _onDimDismiss = null;
         _okGray = false;            // 告知窗无置灰语义，开窗强制还原（防上次商店置灰残留）
         ApplyOkGray();
         _rootPanel.SetActive(true);
@@ -303,11 +308,13 @@ public static class StaminaConfirmPopup
         ApplySingleButton(false);   // 收窗即还原，下次撤离/体力确认仍是双按钮
         _onOk = null;
         _onCancel = null;
+        _onDimDismiss = null;
     }
 
     /// <summary>
-    /// 弹窗当前是否开着。点暗底走 <see cref="Close"/> 不带任何回调，外部流程（如裂隙进本确认的
-    /// 「直达预览」）没法在暗底路径上收尾 —— 只能靠轮询这个状态做对账（弹窗已关 = 预览失效）。
+    /// 弹窗当前是否开着。点暗底默认只关窗；【2026-11-15】ShowChoice 可另给 onDimDismiss，
+    /// 让裂隙进本这类「点外面就是放弃」的流程在暗底路径上也能收尾（不带时行为与原来完全一致）。
+    /// 「直达预览」的弹窗已关对账仍走这里。
     /// </summary>
     public static bool IsOpen => _rootPanel != null && _rootPanel.activeSelf;
 
@@ -371,8 +378,16 @@ public static class StaminaConfirmPopup
         if (_dimBtn != null)
         {
             _dimBtn.onClick.RemoveAllListeners();
-            _dimBtn.onClick.AddListener(Close);   // 暗底 = 放弃（不触发 onCancel）
+            _dimBtn.onClick.AddListener(OnDimClicked);   // 暗底 = 放弃（不触发 onCancel）
         }
+    }
+
+    /// <summary>【2026-11-15】点暗底 = 放弃：先取出回调（Close 会清掉它），关窗，再单次通知外部收尾。</summary>
+    static void OnDimClicked()
+    {
+        var act = _onDimDismiss;
+        Close();
+        act?.Invoke();
     }
 
     static void OnOkClicked()

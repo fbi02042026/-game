@@ -837,13 +837,15 @@ public partial class AdventureUI
 
         TutorialHintUI.Ensure().Hide();
 
+        // 【2026-11-15】把本次真实消耗传给职业弹窗：点进战斗按钮当帧就真扣体力，顶条数字当场变。
         var opts = tutorialRun
             ? new PlayerJobSelectUI.Options
             {
                 TutorialForceSwordFirst = true,
-                RequireSwordShield = true
+                RequireSwordShield = true,
+                EnterStaminaCost = enterCost
             }
-            : default;
+            : new PlayerJobSelectUI.Options { EnterStaminaCost = enterCost };
 
         // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
         void EnterAfterJobSelect()
@@ -867,7 +869,10 @@ public partial class AdventureUI
                 // 活动副本（金币/徽记/卷轴/礼物，2026-10-24 主人拍板「都是2次」+ 卷轴 15 体力）：
                 // 每日次数 + 体力一起扣（TryConsumeEnter 内含提示），成功后标记进本
                 if (!ActivityDungeonRules.TryConsumeEnter(actKind))
+                {
+                    StaminaSystem.RefundEnterPrecharge();   // 次数落空：退回按钮当帧预扣的体力（幂等）
                     return;
+                }
                 // 活动副本章节上下文取固定题材章，不跟冒险页选中章，否则 Loading 背景/章节卡会误用主线第 N 章
                 int actChapter = ActivityDungeonRules.SceneChapter(actKind);
                 AdventureUI.PendingBattleChapter = actChapter;

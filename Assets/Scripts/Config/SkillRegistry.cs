@@ -18,7 +18,7 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
     // 佣兵横扫千军 SK003 复用玩家重斩大下劈特效，尺寸缩小到 0.8
     public const float MercHeavyCleaveScale = 0.8f;
     public const float StarfallVfxScale = 4f; // 星落像素特效放大倍率（prefab 序列值 1.5，伤害半径 9 需更大覆盖）
-    public const float HeavyCleaveVfxScale = 5f; // 重斩像素特效放大倍率，与星落同口径（prefab 序列值不动）
+    public const float HeavyCleaveVfxScale = 4f; // 重斩像素特效放大倍率，与星落同口径（prefab 序列值不动）
 
     public const string MonsterEliteMeleeSkillId = "mon_slam_multi";
     public const string MonsterEliteRangedSkillId = "mon_magic_burst";

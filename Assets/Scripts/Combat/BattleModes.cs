@@ -882,11 +882,52 @@ public static class EndlessRiftRules
         return Mathf.Max(0, GameConfig.ENDLESS_DAILY_TRIES - (data?.endlessRiftTriesToday ?? 0));
     }
 
+    // 【2026-11-15 主人拍板「顶条数字当场 -15，进战斗按钮也扣费」】裂隙体力扣费前移到职业弹窗
+    // 「进入裂隙」按钮当帧：只预扣体力，每日次数仍在 TryConsumeEnter 真正进本时扣，取消不占次数。
+    // 预扣后所有「不进本」出口（关职业窗 / 保存点确认点退出 / 点暗底）统一走 Refund 这一条退还出口；
+    // 成功进本由 TryConsumeEnter 消费掉预扣标志，绝不重复扣。
+    static bool _staminaPrecharged;
+    static long _prechargeLastUtc;
+    public static bool IsStaminaPrecharged => _staminaPrecharged;
+
+    /// <summary>点「进入裂隙」当帧预扣 15 体力（次数不动）。幂等；次数用完 / 体力不足返回 false。</summary>
+    public static bool PrechargeStamina()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (_staminaPrecharged) return true;
+        EnsureDay(data);
+        if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
+        {
+            GlobalToastUI.Show($"今天的裂隙挑战次数已用完（{GameConfig.ENDLESS_DAILY_TRIES}/{GameConfig.ENDLESS_DAILY_TRIES}）", true);
+            return false;
+        }
+        _prechargeLastUtc = data.lastStaminaUtc;
+        if (!StaminaSystem.TrySpendForEndlessRift()) return false;   // 真源扣了，ResourceWallet 顺带刷新顶条数字
+        _staminaPrecharged = true;
+        return true;
+    }
+
+    /// <summary>本次进本流程被放弃：把预扣的 15 点原样退还（体力与恢复时钟都还原）。幂等。</summary>
+    public static void RefundPrechargedStamina()
+    {
+        if (!_staminaPrecharged) return;
+        _staminaPrecharged = false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return;
+        // Add 内部已刷 HUD；notify/overflowToMail 全关 → 退还静默，不弹「获得体力」、不发邮件
+        ResourceWallet.Add(ResourceWallet.ResourceType.Stamina,
+            StaminaSystem.ENDLESS_RIFT_COST, save: false, notify: false, overflowToMail: false);
+        data.lastStaminaUtc = _prechargeLastUtc;
+        SaveSystem.Instance?.Save();
+    }
+
     /// <summary>
     /// 进本：扣 1 次每日机会 + 15 体力，然后落盘标记。
     /// 【2026-11-14 主人拍板「一次进本死亡再出来算一次」】次数改在**进本**时扣（原来每打通一层扣 1 次，
     /// 一次进本最多连打 2 层就被强制回城，根本摸不到第 10 层记录点）。通关不再扣，一直续层到死。
     /// 次数为 0 或体力不足都返回 false 并弹对应提示（体力不足时次数不扣，避免白扣一次）。
+    /// 【2026-11-15】按钮当帧已预扣体力时这里只消费标志、不再二次扣费；次数照扣。
     /// </summary>
     public static bool TryConsumeEnter()
     {
@@ -895,10 +936,14 @@ public static class EndlessRiftRules
         EnsureDay(data);
         if (data.endlessRiftTriesToday >= GameConfig.ENDLESS_DAILY_TRIES)
         {
+            RefundPrechargedStamina();   // 预扣落空：退回去，别让玩家白扣 15 点
             GlobalToastUI.Show($"今天的裂隙挑战次数已用完（{GameConfig.ENDLESS_DAILY_TRIES}/{GameConfig.ENDLESS_DAILY_TRIES}）", true);
             return false;
         }
-        if (!StaminaSystem.TrySpendForEndlessRift())
+        // 按钮当帧已预扣 → 这里只消费标志、跳过二次扣费；次数照扣
+        if (_staminaPrecharged)
+            _staminaPrecharged = false;
+        else if (!StaminaSystem.TrySpendForEndlessRift())
             return false;   // 体力不足：ResourceWallet.TrySpend 内已弹「体力不足」
         data.endlessRiftTriesToday++;
         // 虚拟排行榜的闲置衰减锚点（2026-10-24）：只有真实进本才写，隔了几天没玩排名会回落

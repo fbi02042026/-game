@@ -29,6 +29,10 @@ public class PlayerJobSelectUI : MonoBehaviour
         public string EnterLabel;
         /// <summary>true = 免体力入口（对战走「对战次数」）：跳过体力检查与体力飘字，选完直接回调。</summary>
         public bool StaminaFree;
+        /// <summary>【2026-11-15】本次进本体力真实消耗（冒险页按玩法传：主线 5 / 活动副本 10 或 15）。
+        /// 非 0 时点按钮当帧就真扣体力，顶条数字跟着真源立刻变；进本由 StaminaSystem 的扣费出口
+        /// 消费预扣标志跳过二次扣费，取消 / 中断由 RefundEnterPrecharge 幂等退还。0 = 不预扣。</summary>
+        public int EnterStaminaCost;
     }
 
     struct CardBind
@@ -126,6 +130,9 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     void Open(Action onEnterRift, Options opts)
     {
+        // 【2026-11-15】上次进本流程若中断（没走到消费标志），预扣的体力在这里对账退还，幂等。
+        EndlessRiftRules.RefundPrechargedStamina();
+        StaminaSystem.RefundEnterPrecharge();
         _onEnterRift = onEnterRift;
         _opts = opts;
         _selected = null;
@@ -215,6 +222,13 @@ public class PlayerJobSelectUI : MonoBehaviour
 
     public void Hide()
     {
+        // 【2026-11-15】取消路径（回调还没交出去）把按钮当帧预扣的体力退回去；
+        // 成功路径 CoFloatStaminaThenEnter 已先摘 _onEnterRift 再 Hide，不会误退。
+        if (_onEnterRift != null)
+        {
+            EndlessRiftRules.RefundPrechargedStamina();
+            StaminaSystem.RefundEnterPrecharge();
+        }
         IsOpen = false;
         if (_opts.TutorialForceSwordFirst)
         {
@@ -872,6 +886,21 @@ public class PlayerJobSelectUI : MonoBehaviour
                 "体力不足，" + StaminaSystem.FormatCountdown(StaminaSystem.SecondsToNextPoint) + " 后回复 1 点");
             return;
         }
+
+        // 【2026-11-15 主人拍板「顶条数字当场 -15，进战斗按钮也扣费」】只作用无限裂隙：
+        // 点按钮这一帧就真扣 15 体力（真源写盘 + 顶条数字跟着变），每日次数仍在真正进本时扣；
+        // 之后保存点确认选退出 / 点暗底 / 中途关窗，统一由 EndlessRiftRules.RefundPrechargedStamina 退还。
+        // 主线 / 活动副本 / 引导局 / 竞技场（StaminaFree 已提前 return）一律不走裂隙这条。
+        if (AdventureUI.PendingEndlessRift && !EndlessRiftRules.PrechargeStamina())
+            return;
+
+        // 【2026-11-15 主人拍板「冒险界面点进战斗那帧，顶条数字当场减」】主线 / 活动副本同口径：
+        // 按钮当帧按本次真实消耗真扣体力（不再等 0.8 秒飘字跑完才在回调里扣，那时冒险页已经收走）。
+        // 成功进本由 TrySpendForAdventure / TrySpendForActivityDungeon 消费标志、绝不重复扣；取消退还。
+        // 裂隙走上面 EndlessRiftRules 那条（含每日次数与保存点确认退还），两者互斥。
+        if (!AdventureUI.PendingEndlessRift && _opts.EnterStaminaCost > 0
+            && !StaminaSystem.PrechargeForEnter(_opts.EnterStaminaCost))
+            return;
 
         PlayerJobId job = _selected.Value;
         if (_opts.TutorialForceSwordFirst)

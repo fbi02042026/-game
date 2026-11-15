@@ -227,12 +227,15 @@ public class Hero : UnitBase
 
     public void RecalcAttr()
     {
+        // 【2026-11-15 主人拍板】重算前留一份旧上限：换上加体力的装备后要把涨出来的血一起补上。
+        float maxHpBefore = attr.GetAttr(AttrType.MaxHp);
+
         var bag = BattleBagSystem.Instance;
         if (bag == null)
         {
             Debug.LogWarning("[Hero] RecalcAttr: BattleBagSystem 为空，仅重算基础属性");
             attr.RecalcAllAttr(null);
-            currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+            SyncCurrentHpOnMaxHpChange(maxHpBefore);
             return;
         }
 
@@ -254,12 +257,25 @@ public class Hero : UnitBase
             float mul = swordSpd > 0.01f ? kindSpd / swordSpd : 1f;
             attr.SetAttr(AttrType.AttackSpeed, Mathf.Max(0.2f, attr.GetAttr(AttrType.AttackSpeed) * mul));
         }
-        currentHp = Mathf.Min(currentHp, attr.GetAttr(AttrType.MaxHp));
+        SyncCurrentHpOnMaxHpChange(maxHpBefore);
 
         // 属性重算后同步外观（通关穿装 / 战前遗产等路径未必都走 EquipItem）
         if (costumeManager == null)
             costumeManager = GetComponent<HeroCostumeManager>();
         costumeManager?.RefreshCostume();
+    }
+
+    /// <summary>
+    /// 【2026-11-15 主人拍板】属性重算后同步当前血：上限涨多少就把这部分血补上
+    ///（获得加体力的装备 / 天赋 / 赐福 / 强化都走这一个出口）；上限下降仍只钳上限、不回血。
+    /// 死亡单位不补，避免绕过复活流程；不飘字、不计入治疗统计。
+    /// </summary>
+    void SyncCurrentHpOnMaxHpChange(float maxHpBefore)
+    {
+        float maxHp = attr.GetAttr(AttrType.MaxHp);
+        if (currentHp > 0f && maxHp > maxHpBefore)
+            currentHp += maxHp - maxHpBefore;
+        currentHp = Mathf.Min(currentHp, maxHp);
     }
 
     protected override void Update()

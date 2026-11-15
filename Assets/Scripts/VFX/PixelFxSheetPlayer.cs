@@ -56,7 +56,7 @@ public class PixelFxSheetPlayer : MonoBehaviour
     [System.Serializable] class SheetJson { public FrameEntry[] frames; public SheetMeta meta; }
     [System.Serializable] class FrameEntry { public int duration; }
     [System.Serializable] class SheetMeta { public PixelfxMeta pixelfx; }
-    [System.Serializable] class PixelfxMeta { public int fps; public bool loop; public int frames; public int[] frameSize; public int[] pivot; public int columns; public int footTrimPx; }
+    [System.Serializable] class PixelfxMeta { public int fps; public bool loop; public int frames; public int[] frameSize; public int[] pivot; public int columns; public int footTrimPx; public bool topDownRows; }
 
     void Awake()
     {
@@ -124,11 +124,16 @@ public class PixelFxSheetPlayer : MonoBehaviour
             pivot = new Vector2(px.pivot[0] / (float)fw, 1f - px.pivot[1] / (float)fh);
 
         _frames = new Sprite[count];
+        // pixelfx sheet 是左上原点、行从上往下（第 0 帧在 PNG 顶行），而 Sprite.Create 的 rect 是左下原点；
+        // 上面 pivot 已按 1-y/h 翻过一次，这里必须同口径翻行号，否则整段按行倒放。
+        // topDownRows 由 sheet 元数据声明，未配的 sheet 恒按原行序，行为不变。
+        int rows = Mathf.Max(1, Mathf.CeilToInt((float)tex.height / fh));
         for (int i = 0; i < count; i++)
         {
             int col = i % cols;
             int row = i / cols;
-            var rect = new Rect(col * fw, row * fh, fw, fh);
+            int y = px.topDownRows ? (rows - 1 - row) * fh : row * fh;
+            var rect = new Rect(col * fw, y, fw, fh);
             _frames[i] = Sprite.Create(sheetTex, rect, pivot, 100f, 0u, SpriteMeshType.FullRect);
         }
 

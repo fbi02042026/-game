@@ -169,7 +169,7 @@ public static class ResourceAdRewards
 
             case ClaimKind.Free:
                 data.adStaminaClaimCount++;
-                GrantStamina(data, $"今日免费体力补给 {data.adStaminaClaimCount}/{StaminaFreePerDay}（体力 +{{added}}）");
+                GrantStamina(data, $"今日免费体力补给 {data.adStaminaClaimCount}/{StaminaFreePerDay}（体力 +{{added}}）", floatGain: false);   // 【2026-11-15 主人】免费档只弹 toast，不加号上方飘字
                 break;
 
             case ClaimKind.Diamond:
@@ -192,11 +192,11 @@ public static class ResourceAdRewards
         Analytics.AdSlotClick("stamina", true); // 埋点：体力补给位点击（成功发奖）
     }
 
-    /// <summary>体力入账唯一出口（added>0 弹飘字；文案里 {added} 占位替换实际数量）。</summary>
-    static void GrantStamina(SaveData data, string toastTemplate)
+    /// <summary>体力入账唯一出口（added>0 弹飘字，免费档 floatGain:false 只弹 toast；文案里 {added} 占位替换实际数量）。【2026-11-15 主人口径】</summary>
+    static void GrantStamina(SaveData data, string toastTemplate, bool floatGain = true)
     {
         var r = ResourceWallet.Add(ResourceWallet.ResourceType.Stamina, StaminaPerAd, save: true, notify: false);
-        if (r.added > 0)
+        if (floatGain && r.added > 0)
             GuildHallUI.FloatStaminaGain((int)r.added);   // 体力加号上方弹「体力+XX」飘字（2026-10-20 主人要求）
         UIManager.Instance?.ShowToast(r.added > 0
             ? toastTemplate.Replace("{added}", r.added.ToString())
