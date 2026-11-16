@@ -41,6 +41,12 @@ public class MercGainCinematicUI : MonoBehaviour
     Coroutine _co;
     System.Action _onClosed;
 
+    /// <summary>【2026-11-16 主人需求】正在播「获得佣兵」展示界面（全屏演出）。
+    /// 城镇轮询的箭头提示（MercSwapHint 指酒馆那条）要等这场演出关掉、玩家真回到主界面再弹：
+    /// 演出层 11500 会把 600 的气泡整个盖住，气泡 5 秒照跑完、标记照写 → 提示等于被吞掉。
+    /// </summary>
+    public static bool IsShowing { get; private set; }
+
     /// <summary>播一场获得佣兵演出；关闭（点击 / 超时）后回调 onClosed。预制体缺失时直接回调不阻塞流程。
     /// subtitle 非空时在名字下方显示副标题（引导入队用「已加入小队」；领取场景不传）。
     /// 【2026-10-20 主人拍板】默认发放的 3 白（路加/马库斯/米娅）**永远不弹演出**——他们开局就在队，
@@ -68,6 +74,7 @@ public class MercGainCinematicUI : MonoBehaviour
     void Play(string hireId, System.Action onClosed, string subtitle = null)
     {
         _onClosed = onClosed;
+        IsShowing = true;
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
             UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.MercGainCinematic);
@@ -500,7 +507,14 @@ public class MercGainCinematicUI : MonoBehaviour
     {
         var cb = _onClosed;
         _onClosed = null;
+        IsShowing = false;
         Destroy(gameObject);
         cb?.Invoke();
+    }
+
+    /// <summary>场景卸载 / 异常销毁也要把状态位放干净：残留 true 会让酒馆提示永久不弹。</summary>
+    void OnDestroy()
+    {
+        IsShowing = false;
     }
 }

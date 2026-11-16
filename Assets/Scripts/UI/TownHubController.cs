@@ -62,10 +62,23 @@ public class TownHubController : MonoBehaviour
             _tavern.MarkWelcomeBack();
         _wasLandladyBanned = banned;
         RefreshTavernNavBannedVisual(banned);
+        // 【2026-11-16】弹窗占屏时收掉会浮到弹窗上的外层换人气泡（①③），回滚标记防吞
+        if (MercSwapHint.PopupOnScreen()) MercSwapHint.DismissOuterOnPopup(rollback: true);
         // 【2026-11-09】首次可升星：进镇预热收起后持续轮询（复用 0.25s 节流，已弹过直接短路）。
         // 不限制当前停在哪个功能页——只要底栏酒馆菜单可见，由 MercStarReadyHint 自行判定。
         if (_warmupDone && _nav != null && _nav.tavernButton != null)
             MercStarReadyHint.TryShow(_nav.tavernButton.transform as RectTransform);
+        // 【2026-11-16 主人需求】获得佣兵后的换人指引，三条各只在自己那一页弹：
+        // 主界面（Guild）→ 指底部酒馆；酒馆页 → 指「佣兵队列」入口卡；队列弹窗里 → 指那张没上阵的卡。
+        // 不按页派发的话，气泡会在酒馆页/队列里也指底栏酒馆按钮，玩家根本没到那一步。
+        // （与上面同一节流；几条气泡互相礼让，MercSwapHint 内部判 TutorialHintUI.IsVisible。）
+        if (_warmupDone && _nav != null && _nav.tavernButton != null)
+        {
+            if (_current == MainNavTab.Guild)
+                MercSwapHint.TryShowTavernIcon(_nav.tavernButton.transform as RectTransform);
+            else if (_current == MainNavTab.Tavern && _tavern != null && _tavern.questButton != null)
+                MercSwapHint.TryShowTavernQueue(_tavern.questButton.transform as RectTransform);
+        }
     }
 
     void RefreshTavernNavBannedVisual(bool banned)

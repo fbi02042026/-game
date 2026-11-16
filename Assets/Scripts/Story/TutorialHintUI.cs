@@ -88,11 +88,36 @@ public class TutorialHintUI : MonoBehaviour
     Sprite _bannerSpriteOverride;
     /// <summary>横幅 Image 当前挂的是不是 override（还原默认底框用）。</summary>
     bool _bannerSpriteApplied;
+    /// <summary>
+    /// 【2026-11-16 主人需求】一次性抬层：非 0 时下一次 Show 把画布层级抬到不低于该值
+    /// （气泡要指 TownPopup 900 及以上的弹窗内控件时用 —— 软引导默认 600，会被弹窗整个盖住看不见）。
+    /// Hide 时与 SetBannerSpriteOnce 同款一次性清空；0 = 不抬层，其余引导零影响。
+    /// </summary>
+    int _sortBoostOnce;
+    /// <summary>
+    /// 【2026-11-16 主人需求】一次性「点击任意处立即收掉」：只给收尾那条对话小提示用。
+    /// Hide 时清空，其余引导零影响；短时武装门限防弹窗关闭那一下的残余点击误关。
+    /// </summary>
+    bool _tapToHideOnce;
+    float _tapHideArmAt;
 
     /// <summary>设置一次性自定义底框：下一次 Show 生效，Hide 后还原默认引导底框。</summary>
     public void SetBannerSpriteOnce(Sprite sp)
     {
         _bannerSpriteOverride = sp;
+    }
+
+    /// <summary>一次性抬层：下一次 Show 生效（0 = 取消），Hide 后自动清空，其余引导不受影响。</summary>
+    public void SetSortOrderOnce(int sortingOrder)
+    {
+        _sortBoostOnce = sortingOrder;
+    }
+
+    /// <summary>一次性「点击任意处立即收掉」：下一次 Show 生效，Hide 后自动清空。on=false = 取消。</summary>
+    public void SetTapToHideOnce(bool on = true)
+    {
+        _tapToHideOnce = on;
+        _tapHideArmAt = Time.unscaledTime + 0.25f;   // 武装门限：防弹窗关闭那一下的残余点击把刚弹出的提示秒关
     }
 
     // ── 单次排版覆盖（【2026-11-11 主人拍板】只调「拖动改顺序」这一条引导，全局常量一字不动）──
@@ -103,6 +128,11 @@ public class TutorialHintUI : MonoBehaviour
         public float PadX;
         public float PadY;
         public float LineSpacing;
+        /// <summary>【2026-11-16】本条气泡底框宽（0 = 用全局 BubbleBannerWidth 400）。
+        /// 只放宽「气泡要指屏幕边上的控件」这种场景：400 宽居中尖角必然被夹进屏内、指偏。</summary>
+        public float BubbleWidth;
+        /// <summary>【2026-11-16】本条气泡底框高（0 = 用全局 BubbleBannerHeight 192）。</summary>
+        public float BubbleHeight;
     }
 
     HintLayout? _activeLayout;
@@ -116,6 +146,11 @@ public class TutorialHintUI : MonoBehaviour
     float CurPadX => UseLayoutOverride ? _activeLayout.Value.PadX : BannerPadX;
     float CurPadY => UseLayoutOverride ? _activeLayout.Value.PadY : BannerPadY;
     float CurLineSpacing => UseLayoutOverride ? _activeLayout.Value.LineSpacing : HintLineSpacing;
+    /// <summary>本条气泡底框尺寸：没传 override 就是全局 400×192（主人 2026-11-09 统一口径，一字不动）。</summary>
+    float CurBubbleWidth => _activeLayout.HasValue && _activeLayout.Value.BubbleWidth > 0f
+        ? _activeLayout.Value.BubbleWidth : BubbleBannerWidth;
+    float CurBubbleHeight => _activeLayout.HasValue && _activeLayout.Value.BubbleHeight > 0f
+        ? _activeLayout.Value.BubbleHeight : BubbleBannerHeight;
 
     /// <summary>Show 时按 override 换底框；没有 override 但上次挂过 override → 还原默认底框。</summary>
     void ApplyBannerSpriteForShow()
@@ -495,6 +530,13 @@ public class TutorialHintUI : MonoBehaviour
         _hard = hard && highlight != null;
         hard = _hard;
         ApplySortForHighlight(highlight, hard);
+        // 【2026-11-16】一次性抬层：气泡要指 900 层弹窗里的控件时，默认 600 会被整个盖住。
+        if (_sortBoostOnce > 0)
+        {
+            var boostCanvas = GetComponent<Canvas>();
+            if (boostCanvas != null)
+                boostCanvas.sortingOrder = Mathf.Max(boostCanvas.sortingOrder, _sortBoostOnce);
+        }
         _group.alpha = 1f;
         _group.blocksRaycasts = hard;
         _group.interactable = hard;
@@ -562,6 +604,8 @@ public class TutorialHintUI : MonoBehaviour
         _activeLayout = null;           // 【2026-11-11】先清覆盖：ApplyDefaultTextStyle 按无覆盖态还原行距
         ApplyDefaultTextStyle();        // 【2026-11-08 方案 A】一次性字样式到此为止（自动隐藏也走这里）
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
+        _sortBoostOnce = 0;             // 【2026-11-16】一次性抬层同上：Hide 即还原默认层级
+        _tapToHideOnce = false;         // 【2026-11-16】一次性点击收掉同上：Hide 即失效
         if (_group != null)
         {
             _group.alpha = 0f;
@@ -645,12 +689,26 @@ public class TutorialHintUI : MonoBehaviour
             btn.onClick.Invoke();
     }
 
+    /// <summary>点任意处（鼠标左键 / 首指触摸按下），与 FirstRunGuide.ScreenTapped 同款裸输入。</summary>
+    static bool ScreenTapped()
+    {
+        if (Input.GetMouseButtonDown(0)) return true;
+        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began) return true;
+        return false;
+    }
+
     void Update()
     {
         if (_group == null || _group.alpha < 0.01f) return;
         if (!_hard)
             ForceClearBlockers();
         if (_hideAt > 0f && Time.unscaledTime >= _hideAt)
+        {
+            Hide();
+            return;
+        }
+        // 【2026-11-16】一次性点击收掉：只给收尾对话提示用；武装门限内不响应，防残余误触
+        if (_tapToHideOnce && Time.unscaledTime >= _tapHideArmAt && ScreenTapped())
         {
             Hide();
             return;
@@ -808,8 +866,8 @@ public class TutorialHintUI : MonoBehaviour
         float x = 0f;
         if (_bannerSpriteOverride != null)
         {
-            width = BubbleBannerWidth;
-            bannerH = BubbleBannerHeight;
+            width = CurBubbleWidth;
+            bannerH = CurBubbleHeight;
             if (target.HasValue)
                 x = Mathf.Clamp(target.Value.x,
                                 root.rect.xMin + width * 0.5f + 8f,
@@ -825,7 +883,10 @@ public class TutorialHintUI : MonoBehaviour
         if (_label != null)
         {
             var lrt = _label.rectTransform;
-            float lift = _bannerSpriteOverride != null ? BubbleTextLift : 0f;
+            // 【2026-11-16】窄气泡（单条覆盖 250×120）里 20px 会顶到上边框 → 按气泡高度等比缩放；
+            // 默认 192 高时系数正好 1，四条 400×192 气泡的观感一个像素不动。
+            float lift = _bannerSpriteOverride != null
+                ? BubbleTextLift * (bannerH / BubbleBannerHeight) : 0f;
             lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
             lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
         }

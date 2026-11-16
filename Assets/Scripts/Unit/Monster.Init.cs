@@ -302,26 +302,24 @@ public partial class Monster
         // Boss 原先只有血量 TTK 加成，攻击没有 —— 补上，否则后期 Boss 打人比自家远程杂兵还轻
         float atkTtkMul = bossUnit ? GameConfig.BOSS_TTK_ATK_MUL : 1f;
         // 2026-09-26 主人拍板：怪物只分物理 / 魔法，攻击与防御二选一、不混搭。
-        // 魔法型（掷骰命中 magicChance）→ 物攻/物防置 0，攻击与防御全部走 MagicAttack / MagicDefense；
+        // 魔法型 → 物攻/物防置 0，攻击与防御全部走 MagicAttack / MagicDefense；
         // 物理型 → 魔攻/魔防置 0，只走 Attack / Defense。
-        // 判定走 MonsterAttackTypeResolver。
-        // 2026-09-28 主人纠正：只有 **精英 / Boss** 才掷骰换攻击方式（stage_spawn.csv 关卡级
-        //   magicChance 优先，含 Boss 0.5；未配才回退单怪级）。普通小怪**不掷骰**，表里写什么
-        //   就是什么：近战就是近战、弓就是弓（丢物理子弹，黄色小球那套），法师（Ranged）才丢魔法球。
-        //   —— 之前所有怪都掷骰，美术上明明是近战的小蘑菇被判成魔法型后跑去丢法球。
+        // 【2026-11-16 主人拍板「就按数据表的设定来，不要那个随机远程近战的设定了」】
+        // 掷骰整体停用：精英/Boss 与普通小怪同一条判定 —— 魔法型 = 表里 style 就是法师(Ranged)；
+        // Melee 纯近战、Bow 物理远程，两者恒物理。stage_spawn 与单怪级的 magicChance 不再参与判定
+        // （两列保留、数据不删；以后要恢复随机只需改 MonsterAttackTypeResolver 一处）。
+        // ⚠ 下面两个变量另有多处消费（关卡类型判定、章级攻击减免都在用），与技能判定无关，别一起删。
         int gChapter = BattleManager.Instance != null ? BattleManager.Instance.CurrentChapter : monsterChapter;
         StageType gStageType = BattleManager.Instance != null && BattleManager.Instance.currentStage != null
             ? BattleManager.Instance.currentStage.type : StageType.Normal;
-        bool isMagicType = (eliteWave || _isBossUnit)
-            ? MonsterAttackTypeResolver.IsMagicMonster(
-                monsterChapter, Mathf.Max(1, effectiveSpriteIndex), gChapter, gStageType)
-            : MonsterAttackTypeResolver.IsMagicMonster(monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
+        bool isMagicType = MonsterAttackTypeResolver.IsMagicMonster(
+            monsterChapter, Mathf.Max(1, effectiveSpriteIndex));
         _isMagicType = isMagicType;
 
         // 【2026-11-11 主人拍板】精英 / Boss 血量 = 本章第 1 只小怪 baseHp × 类型/角色倍数：
         //   精英 法系 ×10 / 物理 ×15；Boss 法系 ×12 / 物理 ×18（11-11 主人拍板：8 章物理/法系 Boss 统一降 40%）。
         //   章基准 = monster_stats 该章 spriteIndex=1 的普通怪（ch1 26.7 / ch2 30.0 / ch3 35.3 …），
-        //   按当前素材章 monsterChapter 取；法系/物理 = 上面 isMagicType 同一次掷骰的结果，不重掷。
+        //   按当前素材章 monsterChapter 取；法系/物理 = 上面 isMagicType（2026-11-16 起只认表内 style=Ranged，不再掷骰）。
         //   作用域：活动副本 + 主线正式关 + 支线岛；无限裂隙 / 竞技场 / 终章 / 引导沿用旧链路。
         //   主人拍板「继续叠现有倍率链」→ 基准×倍数后仍乘 hpScale / waveMul / hpGlobalMul / bossHpMul，
         //   并补回 bossStatMul（章末大 Boss 独立档）。11-10 的「活动副本 ×3」由本口径取代，不再叠加。
@@ -539,6 +537,10 @@ public partial class Monster
             ? (strong ? 0f : (rangedSkill ? 0.88f : 0f))
             : 0f;
         _skillCooldown = _canUseActiveSkill && !strong ? (rangedSkill ? 0f : 3f) : 0f;
+        // 【2026-11-16 主人拍板】精英/Boss 的技能改血量触发：首档 = 满血 - STEP（默认 80% 血触发第一发），
+        // 之后每触发一次再降一档。普通小怪不走血量触发，这个值只是为了复用/换关时干净。
+        _nextSkillHpRatio = 1f - GameConfig.MONSTER_HP_SKILL_STEP;
+        _hpSkillCharging = false;   // 池复用/换关：上一次的攒槽窗口不能带过来
 
         // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开，避免开打瞬间齐射。
         // 携带规则：远程 Boss 两种全带（追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；

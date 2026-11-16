@@ -81,7 +81,10 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
             PlayHitSfx(victim, isCrit);
 
         // 我方单位不做受击击退，避免「往后顿」手感发飘
-        if (GameConfig.COMBAT_JUICE_KNOCKBACK && !victim.isAlly)
+        // 【2026-11-16 主人「精英和boss不会被普攻击退」】juice 这 0.06 的视觉推挤同样免掉：
+        // 只有普通怪吃；Boss / 精英（含贴图编号越界被误判成 _isBossUnit 的）原地不动。
+        if (GameConfig.COMBAT_JUICE_KNOCKBACK && !victim.isAlly
+            && !(victim is Monster mv && (mv.IsBossUnit || mv.IsEliteWave)))
         {
             float kb = GameConfig.COMBAT_KNOCKBACK_NORMAL;
             if (isCrit)

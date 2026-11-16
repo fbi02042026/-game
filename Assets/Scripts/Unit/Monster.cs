@@ -156,11 +156,29 @@ public partial class Monster : UnitBase
         if (!isDead && _canUseActiveSkill)
         {
             _skillCooldown -= Time.deltaTime;
-        // 【2026-11-15 全局口径】精英/Boss：入场走位 / 剧情前置暂停 / 对白冻场期间不攒槽，头顶充能条不亮；
-        // 走到交战位、UnitsCanAct 且不在入场放行窗后才开始攒，条子随攒槽自然出现。其它单位逐字不变。
-        bool holdSkillCharge = ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit);
-        if (_skillCooldown <= 0f && !holdSkillCharge)
-            _skillEnergy = Mathf.Min(1f, _skillEnergy + Time.deltaTime * 0.28f);
+            // 【2026-11-16 主人拍板】精英/Boss 不再按时间攒槽：改由血量档位触发（UpdateHpTriggeredSkill）。
+            // 满足「满血进场不放、掉 20% 放一次、放完走 CD、CD 后等下一次掉血」；
+            // 普通小怪（含远程 0.88 起步槽）仍按时间攒，逐字不变。
+            if (_isBossUnit || _eliteWave)
+            {
+                // 【2026-11-16 主人「血量触发 → 走 CD → 再等血量触发，攒槽期间停手、要有进度条」】
+                // 没在攒槽就看血量档位（到点启动一次）；正在攒就把槽涨上去（头顶条在这一段可见）。
+                if (_hpSkillCharging) AdvanceHpSkillCharge(Time.deltaTime);
+                else UpdateHpTriggeredSkill();
+            }
+            else
+            {
+                // 【2026-11-15 全局口径】普通小怪：入场走位 / 剧情前置暂停 / 对白冻场期间不攒槽，
+                // 走到交战位、UnitsCanAct 且不在入场放行窗后才开始攒。精英/Boss 已改走血量触发，不经过这里。
+                bool holdSkillCharge = ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit);
+                if (_skillCooldown <= 0f && !holdSkillCharge)
+                    _skillEnergy = Mathf.Min(1f, _skillEnergy + Time.deltaTime * (1f / 3f));   // 【2026-11-16 主人】与血量触发同节奏：3 秒攒满
+            }
+            // 【2026-11-16 主人「条和圈时间一致了，但 boss 还会卡一会才砸地」】
+            // 槽/圈满当帧就砸：Attack 只在 AI 判定「够得着」时才被调用，玩家一直跑时
+            // Boss 会先追人、圈满还悬着 —— 这里不等贴身，满即落。
+            // 内部只认已铺圈的近战精英/Boss，远程与普通小怪（_hpChargeDisc 恒 null）原样走 Attack。
+            if (_skillEnergy >= 0.999f) TryReleaseChargedSkill();
         }
         base.Update();
     }
@@ -171,6 +189,15 @@ public partial class Monster : UnitBase
         if (BattleManager.Instance != null
             && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter))
             return;
+
+        // 【2026-11-16 主人拍板「攒槽期间还是停手」】精英/Boss 的血量触发攒槽窗口内不出手：
+        // 从启动攒槽到槽满这一段，玩家能看头顶进度条、也能安心输出；槽满当帧就转去放招，不拖。
+        // 只认 _hpSkillCharging（只有精英/Boss 会置位），普通小怪与普攻充能口径逐字不变。
+        if ((_isBossUnit || _eliteWave) && _hpSkillCharging && _skillEnergy < 0.99f)
+        {
+            attackCd = 0.2f;   // 留一点重试间隔，避免每帧重新冲进 Attack
+            return;
+        }
 
         _swingStyle = ResolveSwingStyle(target);
 
@@ -184,7 +211,9 @@ public partial class Monster : UnitBase
 
         base.Attack(target);
         // 技能冷却中不靠普攻充能，避免刚放完技能立刻叠满
-        if (_canUseActiveSkill && _skillCooldown <= 0f)
+        // 【2026-11-16 主人拍板】精英/Boss 只认血量触发，普攻不再充能 —— 否则打 7 下就自己攒满，
+        // 又变回「按时间/按出手攒槽」的老口径。普通小怪逐字不变。
+        if (_canUseActiveSkill && _skillCooldown <= 0f && !(_isBossUnit || _eliteWave))
             _skillEnergy = Mathf.Min(1f, _skillEnergy + 0.15f);
     }
 

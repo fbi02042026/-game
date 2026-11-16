@@ -245,6 +245,8 @@ public partial class UnitBase
         _isDying = false;
         holdAtDeathDoor = false;
         _knockbackBusy = false;   // 【2026-11-06】击退协程可能被回收（SetActive(false)）中途打断，标志卡死 → 回池复用后永不击退，必须复位
+        _pushHoldUntil = 0f;      // 【2026-11-16】顶推锁同理：回池复用不能带着上一局的到期时刻
+        _deathKnockbackGen++;     // 【2026-11-16】作废旧死亡击退协程：回池复用后不得再写本体位置（连续劈死多只防串位）
         attackCd = 0;
         target = null;
         OnDead = null;
@@ -257,12 +259,34 @@ public partial class UnitBase
 
     // ============================================================
     // 受击后退（2026-11-05 主人拍板三层规则，Docs/《战斗趣味升级_pixelfx特效与打击反馈》）：
-    // ① 普通怪受击（我方打的）→ 小退；② 精英/Boss 受击→ 纹丝不动（体型重量感）；
+    // ① 普通怪 / 精英受击（我方打的）→ 小退；② 真 Boss 受击→ 纹丝不动（体型重量感）（2026-11-16 主人把精英从免退名单里摘出）；
     // ③ 精英/Boss 命中玩家/俇兵→ 明显击退。普通怪打玩家/俇兵不退（主人未授权）。
     // 位移走 transform + rb.position 短促补间（只写 transform 会被物理回写吃掉，见 KnockbackCo 内注释）：不碰 rb.velocity（不打断移动 AI）、不碰攻击动画锁；同一单位 KNOCKBACK_RETRIGGER_INTERVAL(0.8s) 内不重复击退——留出走回来继续攻击的时间（2026-11-06 主人反馈「被击退后原地不动」）；死亡单位不退。
     // ============================================================
     protected bool _knockbackBusy;   // 【2026-11-06】改 protected：Monster 是 UnitBase 子类，Monster.AI 击退窗口要读它判不写速度
     float _lastKnockbackAt;
+    float _pushHoldUntil;            // 【2026-11-16】顶推锁到期时刻（PushAlongX 续期，到期在 UnitBase.Update 里交还 AI）
+    int _deathKnockbackGen;          // 【2026-11-16】死亡击退协程代次；ResetForReuse 递增 → 旧协程自动退出，防回池复用串位
+
+    /// <summary>
+    /// 【2026-11-16 主人「玩家能推着精英往后退一段距离」】冲锋顶推：本帧沿 X 平移 deltaX，
+    /// 并在 holdSeconds 内锁住 AI 写速度/追击（复用 <see cref="_knockbackBusy"/> 同一条通道，AI 侧一行不改）。
+    /// 只做位移，不结算伤害；「谁能被推」（小怪击飞 / 精英顶退 / 真 Boss 推不动）由调用方 CareerSkillExecutor 判。
+    /// deltaX=0 时只续锁不移动 —— 用来在结算伤害前先占住锁，避免同一帧被击退协程弹飞。
+    /// </summary>
+    public void PushAlongX(float deltaX, float holdSeconds = 0.15f)
+    {
+        if (isDead) return;
+        _pushHoldUntil = Mathf.Max(_pushHoldUntil, Time.time + Mathf.Max(0.02f, holdSeconds));
+        _knockbackBusy = true;
+        // 清掉 AI 上一步留下的水平速度：不清的话物理每步还在按旧速度积分，会和顶推互相抵消。
+        if (rb != null) rb.velocity = new Vector2(0f, rb.velocity.y);
+        if (Mathf.Abs(deltaX) < 0.0001f) return;
+        if (rb != null)
+            rb.position = rb.position + new Vector2(deltaX, 0f);
+        else
+            transform.position = transform.position + new Vector3(deltaX, 0f, 0f);
+    }
 
     void ApplyHitKnockback(UnitBase source, float distOverride = -1f)
     {
@@ -271,7 +295,11 @@ public partial class UnitBase
         float dist;
         if (this is Monster victim)
         {
-            if (victim.IsBossUnit || victim.IsEliteWave) return;   // ② 精英/Boss 免击退
+            // 【2026-11-16 主人拍板「精英和boss不会被普攻击退」】免退范围从「真 Boss」扩到「Boss + 精英」：
+            // IsBossUnit || IsEliteWave（含贴图编号 ≥ BOSS_SPRITE_START 被误判成 _isBossUnit 的精英）。
+            // 精英仍可被职业技冲锋顶退 —— 那条走 PushAlongX 位移，不经过这里。
+            // 只影响位移：TakeDamage 已在前面扣完血，这里早退从不拦伤害。
+            if (victim.IsBossUnit || victim.IsEliteWave) return;   // ② Boss / 精英 免普攻击退
             if (!source.isAlly) return;                            // 怪只吃我方的击退
             dist = GameConfig.KNOCKBACK_MONSTER;
         }
@@ -353,6 +381,45 @@ public partial class UnitBase
             yield return null;
         }
         _knockbackBusy = false;
+    }
+
+    /// <summary>
+    /// 【2026-11-16 主人「被重斩劈死的怪要有击退效果」】致死击退（仅重斩调用）。
+    /// 现有 ApplyHitKnockback 在 TakeDamage 内先于 Die 起，但 Die() 会 rb.velocity=0 抹掉击退，
+    /// juice 的推挤又是"推出去再弹回"→ 死怪几乎看不到位移。这里单开一条"位置直推"通道：
+    /// 只推普通怪的 body（逻辑体，rb 在此），在死亡动画期间推完，不碰 rb.velocity/AI 锁；
+    /// 精英/Boss 免退沿用全局规则；用 generation 计数防止回池复用后旧协程串位。
+    /// </summary>
+    public void ApplyDeathKnockback(float dir, float dist)
+    {
+        Monster mon = this as Monster;
+        if (mon == null || mon.IsBossUnit || mon.IsEliteWave) return;
+        Transform body = mon.GetBodyTransform();
+        if (body == null || Mathf.Abs(dir) < 0.001f || dist <= 0f) return;
+        int gen = ++_deathKnockbackGen;
+        StartCoroutine(DeathKnockbackCo(gen, body, dir, dist));
+    }
+
+    System.Collections.IEnumerator DeathKnockbackCo(int gen, Transform body, float dir, float dist)
+    {
+        float dur = GameConfig.KNOCKBACK_DURATION;
+        Vector3 start = body.position;
+        Vector3 end = start + Vector3.right * (dir * dist);
+        float t = 0f;
+        while (t < dur)
+        {
+            if (gen != _deathKnockbackGen) yield break;   // 已回池复用 → 旧协程立即退出，绝不写新怪的位置
+            t += Time.deltaTime;
+            Vector3 p = Vector3.Lerp(start, end, Mathf.Clamp01(t / dur));
+            body.position = p;
+            if (rb != null) { rb.position = new Vector2(p.x, rb.position.y); rb.velocity = Vector2.zero; }
+            yield return null;
+        }
+        if (gen == _deathKnockbackGen)
+        {
+            body.position = end;
+            if (rb != null) { rb.position = new Vector2(end.x, rb.position.y); rb.velocity = Vector2.zero; }
+        }
     }
 
     public System.Action<UnitBase, float, bool> OnAttack;

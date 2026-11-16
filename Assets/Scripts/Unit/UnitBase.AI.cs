@@ -9,6 +9,14 @@ public partial class UnitBase
 
     protected virtual void Update()
     {
+        // 【2026-11-16】顶推锁到期：把 _knockbackBusy 交还 AI。
+        // 只认 _pushHoldUntil>0 的情况（真击退协程自己清 busy，不被这里误伤）；
+        // 顶推若被 StopAllCoroutines / 切关打断没人续期，也靠这一行自愈，不会永久钉住。
+        if (_pushHoldUntil > 0f && Time.time >= _pushHoldUntil)
+        {
+            _pushHoldUntil = 0f;
+            _knockbackBusy = false;
+        }
         if (isDead) return;
         attackCd -= Time.deltaTime;
         if (IsStunned)

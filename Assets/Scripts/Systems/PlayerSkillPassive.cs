@@ -35,6 +35,7 @@ public static class PlayerSkillPassive
         public float hpRatio;       // HpBelow 用：血量比例阈值
         public int monsterCount;    // NearbyMonstersAtLeast 用：怪物数量（2026-11-08 起统一 = 1）
         public float radius;        // NearbyMonstersAtLeast 用：半径（世界单位）
+        public float centerOffsetY; // NearbyMonstersAtLeast 用：判定圆心相对英雄的 Y 偏移（世界单位，负=往下）；默认 0
 
         public bool IsSatisfied()
         {
@@ -63,7 +64,7 @@ public static class PlayerSkillPassive
                     // 触发与伤害链同尺 —— 半径内且 GameConfig.IsInCombatViewport 为真才算数。
                     // 旧 OR（HasEliteOrBossOnField）不做视口过滤，会绕过本规则；且其判定已被
                     // CountNearbyMonsters>=1 完全覆盖（精英/Boss 也在 monsters 列表里）→ 整段删除，不留第二出口。
-                    return CountNearbyMonsters(radius) >= monsterCount;
+                    return CountNearbyMonsters(radius, centerOffsetY) >= monsterCount;
                 default:
                     return true;
             }
@@ -102,8 +103,16 @@ public static class PlayerSkillPassive
     /// 怪还在屏外就满足触发；更关键的是重斩 aoeRadius 只有 4.5，触发半径 9 > 伤害半径 4.5，
     /// 远处那只怪根本劈不到，白进 25 秒 CD。收到 3 与风龙卷/星落同口径：怪进镜头才放，
     /// 且 3 &lt; 4.5 保证触发时 AOE 覆盖得到目标。其余技能半径不动。
+    /// 【2026-11-16 主人「范围判定有点远 减少30% 再往下20」】3 → 2.1（减30%）。
     /// </summary>
-    const float HeavyCleaveTriggerRadius = 3f;
+    const float HeavyCleaveTriggerRadius = 2.1f;
+
+    /// <summary>
+    /// 【2026-11-16】重斩触发圆心相对英雄的下移量（世界单位，负=往下）。
+    /// 主人「再往下20」按 20 像素 ≈ 0.17 世界单位。
+    /// 只作用于重斩的触发判定（见 CountNearbyMonsters），其余技能 centerOffsetY 默认 0，行为不变。
+    /// </summary>
+    const float HeavyCleaveCenterOffsetY = -0.17f;
 
     /// <summary>
     /// 各玩家技能触发条件（按 skillId，与 player_skills.csv 的 useHint 对应）。
@@ -116,7 +125,7 @@ public static class PlayerSkillPassive
     /// 未在表里的技能（如装备附带技）走 Always，保持旧行为。
     /// 🔴 2026-11-08 主人拍板「不用写身边有几个释放，机制全部改成身边有怪在范围内释放」：
     ///    NearbyMonstersAtLeast 的 monsterCount 一律 = 1，不再数怪的数量；
-    ///    半径按各技能原值（NearbyRadius=9；重斩/风龙卷/星落=3，怪进镜头才放 —— 2026-11-08 口径，重斩 11-10 补齐）。
+    ///    半径按各技能原值（NearbyRadius=9；重斩=2.1（11-16 减30%）、风龙卷/星落=3，怪进镜头才放 —— 2026-11-08 口径，重斩 11-10 补齐）。
     ///    血线两技保持血线，改成「有怪就放」会满血空放治疗/护盾，且推翻 10-20 拍板。
     /// 2026-11-10：原 2026-10-21 加的「精英/Boss 进入半径即满足」OR 整段删除 ——
     ///    它不做视口过滤，会绕过「怪必须在镜头里」；且其判定已被 CountNearbyMonsters>=1 完全覆盖。
@@ -133,7 +142,7 @@ public static class PlayerSkillPassive
         ["gale_stance"]     = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = NearbyRadius },
         // 2026-11-05 新技；2026-11-08 起统一「范围内有怪就放」，半径仍各自保留
         // 2026-11-10：半径 9 → 3，修「怪还没看见就空放」（见 HeavyCleaveTriggerRadius）
-        ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = HeavyCleaveTriggerRadius },
+        ["heavy_cleave"]    = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = HeavyCleaveTriggerRadius, centerOffsetY = HeavyCleaveCenterOffsetY },
         ["whirlwind"]       = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = WhirlwindTriggerRadius },
         ["starfall"]        = new Trigger { kind = TriggerKind.NearbyMonstersAtLeast, monsterCount = 1, radius = StarfallTriggerRadius },
         // 2026-11-13 职业自带技能走独立攒槽通道，不经 FindReadySkillSlot；登记 Always 只为
@@ -196,13 +205,14 @@ public static class PlayerSkillPassive
         return t.IsSatisfied();
     }
 
-    static int CountNearbyMonsters(float radius)
+    static int CountNearbyMonsters(float radius, float centerOffsetY = 0f)
     {
         var bm = BattleManager.Instance;
         var hero = Hero.Instance;
         if (bm == null || hero == null || bm.monsters == null) return 0;
         int n = 0;
-        Vector2 self = hero.transform.position;
+        // 【2026-11-16】圆心偏移：默认 0，只有重斩传负值（往下），其余技能行为不变。
+        Vector2 self = (Vector2)hero.transform.position + new Vector2(0f, centerOffsetY);
         for (int i = 0; i < bm.monsters.Count; i++)
         {
             var m = bm.monsters[i];

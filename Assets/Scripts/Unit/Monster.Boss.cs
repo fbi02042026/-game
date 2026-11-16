@@ -26,7 +26,9 @@ public partial class Monster
         // 血量跨过 70% 那一刻若正在放技能预警（_skillTelegraphing=true），标志已被置 true
         // 但协程没启动 → 二阶段切换永久丢失。改为：本轮起不了手就不置位，
         // 由 Monster.Update 每帧重查（与 TryBeginEnrage 同口径），预警结束的下一帧补起手。
-        if (_skillTelegraphing || _bossPhaseShiftBusy) return;
+        // 【2026-11-16】只拦「地上已经铺着攒槽红圈」的攒槽（近战 Boss）：这时插狂暴砸地会两套圈叠在一起。
+        // 远程 Boss / 没技能的 Boss 不建圈（_hpChargeDisc 恒 null），阶段切换逐字不变，不会被攒槽拖住。
+        if (_skillTelegraphing || _bossPhaseShiftBusy || _hpChargeDisc != null) return;
         _bossPhase2Started = true;
         StartCoroutine(CoBossPhaseShift());
     }
@@ -112,12 +114,32 @@ public partial class Monster
             BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), false, GetVfxFacingDir());
     }
 
-    /// <summary>狂暴：只把攻击间隔 ÷倍率（即攻速 ×倍率），不动伤害/属性缩放。</summary>
+    /// <summary>
+    /// 【2026-11-16 主人「boss 血量越少 CD 越短、攻击越快，就是狂暴状态的数值」】
+    /// 从 BOSS_ENRAGE_HP_RATIO 血线开始，随血量线性加速：血线处 = 原速（1.0），
+    /// 血量见底 = BOSS_ENRAGE_ATK_SPEED_MUL（默认 1.5）倍速；血线以上不变。
+    /// 复用原有狂暴数值与章节/总开关闸（BOSS_ENRAGE_ENABLED、BOSS_ENRAGE_MIN_CHAPTER），不另起一套。
+    /// </summary>
+    float HpScaledAttackSpeedMul()
+    {
+        if (!_isBossUnit || attr == null) return 1f;
+        if (!GameConfig.BOSS_ENRAGE_ENABLED) return 1f;
+        if (_chapter < GameConfig.BOSS_ENRAGE_MIN_CHAPTER) return 1f;
+        float maxHp = attr.GetAttr(AttrType.MaxHp);
+        if (maxHp < 1f) return 1f;
+        float hp01 = Mathf.Clamp01(currentHp / maxHp);
+        float startRatio = Mathf.Max(0.01f, GameConfig.BOSS_ENRAGE_HP_RATIO);
+        if (hp01 >= startRatio) return 1f;
+        float t = 1f - hp01 / startRatio;          // 血线处 0 → 血空 1
+        return Mathf.Lerp(1f, GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL, t);
+    }
+
+    /// <summary>狂暴：攻击间隔随时血量缩短（原「过线一次性 ×1.5」改为连续曲线，见 HpScaledAttackSpeedMul）。</summary>
     protected override float GetAttackCooldown()
     {
         float cd = base.GetAttackCooldown();
-        if (_enraged)
-            cd /= GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL;
+        float mul = HpScaledAttackSpeedMul();
+        if (mul > 1.0001f) cd /= mul;
         return cd;
     }
 }

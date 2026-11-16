@@ -76,12 +76,12 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
 
     /// <summary>
     /// 场景 map 的两态参数：
-    /// 默认（面板收起）在 <b>250</b>；面板展开后在 <b>350</b>。
+    /// 默认（面板收起）在 <b>220</b>；面板展开后在 <b>320</b>。
     /// 缩放两态恒为 <b>1.4</b>（2026-10-27 主人拍板「改成放大到1.4倍」：
     /// map 不再按 1.13→1 两态缩放，收起/展开都按 1.4 倍显示，只动位置不动缩放）。
     ///
     /// <remarks>
-    /// <b>250 / 350 是「中心 Y」这一把尺子</b>（父级本地坐标，原点在父级中心），也就是
+    /// <b>220 / 320 是「中心 Y」这一把尺子</b>（父级本地坐标，原点在父级中心），也就是
     /// Inspector 里的 <b>Pos Y</b>（点锚点）与 <c>anchoredPosition.y</c>（拉伸锚点）——
     /// 两种锚点下 <c>anchoredPosition.y</c> 的含义<b>完全一致</b>：
     /// <para>· 点锚点（预制体里就是这样：<c>anchor (0.5,0.5) / pivot (0.5,0.5) / Pos Y 361</c>）：
@@ -102,8 +102,8 @@ public partial class BattleEntryDraftPanel : MonoBehaviour
     /// 那把尺子完全不同，会把 map 顶飞。这里的数<b>就是</b> Pos Y / 中心 Y，直接写。
     /// </remarks>
     /// </summary>
-    const float MapCollapsedPosY = 230f;
-    const float MapExpandedPosY = 330f;
+    const float MapCollapsedPosY = 220f;
+    const float MapExpandedPosY = 320f;
     // 【2026-11-11 主人拍板】缩放不再写死绝对值：以预制体 map 的原始 localScale 为基准 × 倍率。
     // 预制体里 map 本来就是 1.4（与旧写死值一致），所以两态倍率都取 1；
     // 主人以后在预制体里调大调小，运行时两态会跟着一起变（位置 Y 仍按主人给的绝对值写）。

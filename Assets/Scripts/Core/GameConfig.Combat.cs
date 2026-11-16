@@ -238,6 +238,13 @@ public static partial class GameConfig
     public const float MONSTER_NORMAL_RANGED_RANGE_MUL = 0.8f;
     /// <summary>普通（非精英/非Boss）远程小怪的技能伤害折扣：技能只是为了看得到子弹，不该秒人</summary>
     public static float MONSTER_NORMAL_SKILL_DAMAGE_MUL => CombatTuningTable.Get("MONSTER_NORMAL_SKILL_DAMAGE_MUL", 0.55f);
+    /// <summary>
+    /// 【2026-11-16 主人拍板「不要一上来就攒槽，用血量触发」】精英 / Boss 的主动技能改为血量档位触发：
+    /// 血量每下降这么一档触发一次（0.2 = 每掉 20% 一次，满血进场不放，一场最多 4 次）；
+    /// 触发后照常走 _skillCooldown，CD 期间继续掉血不补放，CD 结束若血量还压在下一档之下再补一次。
+    /// 普通小怪仍按时间攒槽（0.28/s），不受本常量影响。
+    /// </summary>
+    public const float MONSTER_HP_SKILL_STEP = 0.2f;
     /// <summary>怪物普攻弹道速度倍率（勿随意改快）</summary>
     public const float MONSTER_BASIC_PROJECTILE_SPEED_MUL = 0.196f;
     /// <summary>怪物技能弹道速度倍率（勿随意改快）</summary>
@@ -1276,26 +1283,38 @@ public static partial class GameConfig
     public const int   CAREER_ORB_HITS     = 9;   // 法师
 
     public const float CAREER_SKILL_KNOCKBACK = 1.6f;   // 职业技命中的强击退距离（普通怪），精英/Boss 仍免退
+    // 【2026-11-16 主人「让小怪被击飞的距离再大一点」】只放大剑盾破阵冲锋撞开的那一档：
+    // 1.6 → 2.4（+50%）；散射箭 / 法球仍读 CAREER_SKILL_KNOCKBACK，不受影响。
+    // 击退时长固定 KNOCKBACK_DURATION(0.09s)，改这里只改推出去多远、不拖慢节奏；精英/Boss 照旧免退。
+    public const float CAREER_CHARGE_KNOCKBACK = 2.4f;
     // 【2026-11-14 主人「距离可以再长点」】5.0 → 7.0（上限，仍受 CAMERA 视野约束，冲出屏外由镜头跟随兜）
-    public const float CAREER_CHARGE_DIST = 7.0f;       // 冲锋最大横移距离（只动 X，不动 lane 的 Y）
+    public const float CAREER_CHARGE_DIST = 4.67f;      // 冲锋最大横移距离（只动 X，不动 lane 的 Y）【2026-11-16 主人「距离缩短三分之一」】7.0 × 2/3 = 4.667
     public const float CAREER_CHARGE_DURATION = 0.12f;  // ⚠ 2026-11-14 起停用（改按 CAREER_CHARGE_SPEED_MUL 反推时长），常量保留不删
     public const float CAREER_CHARGE_STOP_GAP = 0.8f;   // ⚠ 2026-11-14 起不再使用：冲锋改为越过目标继续冲（见 CAREER_CHARGE_OVERSHOOT），常量保留不删
     // 【2026-11-14 主人拍板「冲目标往前迅速冲一段距离，不是冲到怪物跟前就不动了」】
     // 冲锋终点 = 目标位置 + 这段越过量：贴着目标起手也要冲出一段，冲过它再停。
     // 【2026-11-14 主人「往前冲的距离短」】1.4 → 2.4，贴身出手也冲出 3.3 左右。
     // 【2026-11-14 主人「距离可以再长点」】2.4 → 3.2。
-    public const float CAREER_CHARGE_OVERSHOOT = 3.2f;
+    public const float CAREER_CHARGE_OVERSHOOT = 2.13f;   // 【2026-11-16 主人「距离缩短三分之一」】3.2 × 2/3 = 2.133（越过量同步缩短，冲锋总长才真的少三分之一）
     // 【2026-11-14 主人报「冲撞速度太快了，比走快 40%」】旧值是按固定 0.12 秒冲 3.2 距离算的
     // （= 走速的 27 倍，看着像瞬移）。改成按移速倍率反推时长：dur = dist / (当前移速 × 本倍率)。
     // 【2026-11-14 主人「速度可以再快点」】1.4 → 1.9。
     // 【2026-11-15 主人「速度再快 30%」】1.9 × 1.3 = 2.47；dur = dist / (当前移速 × 本倍率)，只改这一处。
-    public const float CAREER_CHARGE_SPEED_MUL = 2.47f;
+    public const float CAREER_CHARGE_SPEED_MUL = 2.72f;   // 【2026-11-16 主人「速度快 10%」】2.47 × 1.1 = 2.717；仍只改这一处（dur = dist / 移速×本倍率）
     // 【2026-11-14 主人拍板「撞到敌人时要顿一下，把敌人撞开再继续往前」】分段破阵冲锋的节奏参数。
     // 顿帧只停英雄自己的位移、不碰 timeScale（10-20 已砍掉全场慢放，主人嫌「一卡一卡」）。
     public const float CAREER_CHARGE_HITSTOP = 0.10f;        // 每次撞到敌人的停顿秒数
     public const int   CAREER_CHARGE_HITSTOP_MAX = 4;        // 整段冲锋最多顿几次（多了拖沓，其余一路冲过去）
     public const float CAREER_CHARGE_CONTACT_GAP = 0.35f;    // 停在敌人身前这么远就顿（不穿进身体里）
-    public const float CAREER_CHARGE_BURST_RADIUS = 1.2f;    // 单次撞击的横向爆开半径（一簇怪，不是整条路线）
+    // 【2026-11-16 主人「玩家能推着精英往后退一段距离，但退 Boss 推不动，玩家也只是在 Boss 跟前，保持推的状态一段时间」】
+    // 真 Boss：冲锋到它身前 CONTACT_GAP 就停住 + 保持顶住状态这么久，不穿过它（MarkCharging 心跳 0.6s 盖得住）。
+    public const float CAREER_CHARGE_BOSS_PIN = 0.35f;
+    public const float CAREER_CHARGE_BURST_RADIUS = 1.2f;    // ⚠ 2026-11-16 起停用：撞击判定改矩形，尺寸由盾的世界大小推导（见 CAREER_CHARGE_HIT_RANGE_MUL），常量保留不删
+    // 【2026-11-16 主人「让剑盾的冲锋伤害范围再小一半，应该是盾的一半大小的范围」】
+    // 判定框 = 盾的世界尺寸 × 本倍率（0.5 = shield_block 148×104 帧 / 100ppu × 预制体 3.6 × 0.9 缩放
+    // -> 盾 4.795 × 3.370，一半即 2.40 × 1.69 的矩形），撞击点居中、横纵各取一半作半径。
+    // 想再收/再放只改这一个倍率，不要另写第二份尺寸数值。
+    public const float CAREER_CHARGE_HIT_RANGE_MUL = 0.5f;
     // 【2026-11-15 主人「尘土这个特效在玩家冲锋的时候加到脚后面」】脚后偏移（世界单位，只动 X、Y 恒用 FootY）。
     public const float CAREER_CHARGE_DUST_BACK = 0.4f;
     // 【2026-11-15 主人「盾在小 10% 再往下 20 / 尘土小一半往上 10」】
@@ -1308,7 +1327,7 @@ public static partial class GameConfig
     // 【2026-11-14 主人报「没看到剑盾的冲撞」】剑盾是近战，攒满 8 次普攻时目标早已贴身，
     // 旧算法 reach = |到目标 X| - STOP_GAP 只剩 0.1（Editor.log 实测 dist=0.10）→ 原地不动、看不出冲锋。
     // 给一个最小冲锋量：贴身时也至少冲出 1.6，让突进 + 落点刀光看得见；上限仍受 CAREER_CHARGE_DIST 约束。
-    public const float CAREER_CHARGE_MIN_DIST = 1.6f;
+    public const float CAREER_CHARGE_MIN_DIST = 1.07f;  // 【2026-11-16 主人「距离缩短三分之一」】1.6 × 2/3 = 1.067（贴身兜底同比缩，免得缩小后最小量反超总长）
 
     public const float CAREER_SCATTER_ANGLE_STEP = 9f;  // 每条箭道的角度间隔（度）
     public const float CAREER_SCATTER_RANGE = 9f;       // 箭道飞行距离上限
@@ -1339,4 +1358,9 @@ public static partial class GameConfig
     public const float KNOCKBACK_RETRIGGER_INTERVAL = 0.8f; // 同一单位两次击退的最小间隔（2026-11-06）：留出「走回来再交手」的时间；原 0.15s 时连续受击的怪会被钉在击退落点，永远够不着攻击距离
     /// <summary>击退位移时长（秒）。距离不变、时间越短退得越快；2026-11-07 主人「被击退的速度要快一点」0.15→0.09。</summary>
     public const float KNOCKBACK_DURATION = 0.09f;
+
+    // 【2026-11-16 主人「被重斩劈死的怪要有击退效果」】重斩致死那一刀的击退距离（世界单位）。
+    // 走独立"位置直推"通道（见 UnitBase.Damage.ApplyDeathKnockback），避开 Die() 的 rb.velocity 清零；
+    // 精英/Boss 免退沿用全局规则。用职业技强击退同档，保证肉眼可见。
+    public const float HEAVY_CLEAVE_DEATH_KNOCKBACK = 1.6f;
 }

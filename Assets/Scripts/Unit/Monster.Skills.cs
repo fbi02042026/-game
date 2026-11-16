@@ -11,6 +11,20 @@ public partial class Monster
     private bool _canUseActiveSkill;
     private float _skillEnergy = 0f;
     private float _skillCooldown = 0f;
+    /// <summary>【2026-11-16】精英 / Boss 下一次血量触发的血量比例：Init 置 1-STEP，每触发一次降一档。
+    /// 血量跌破它 → 启动一次「攒槽」（不是立刻放招）；降到 0 以下自然停止，不会再触发。</summary>
+    private float _nextSkillHpRatio = 1f;
+    /// <summary>【2026-11-16】本次血量触发的攒槽进行中：true 时槽从 0 涨到 1（头顶进度条可见）、普攻停手。</summary>
+    private bool _hpSkillCharging;
+    // 【2026-11-16 主人「近战 boss 攒槽和红圈应该是同步的，不要攒槽完了还再来一遍红圈」】
+    // 近战 Boss 攒槽期间就铺好的地面双圈（浅色范围圈 + 深色进度圈）：进度圈由 _skillEnergy 驱动、
+    // 与头顶条同一个进度，槽满当帧直接拿这两个圈结算，不再补第二遍 4 秒红圈。
+    // 远程 Boss / 精英不建（仍走原「攒完再红圈」链路），字段保持 null。
+    GameObject _hpChargeDisc;
+    GameObject _hpChargeProgress;
+    Vector3 _hpChargeBaseScale = Vector3.one;
+    Vector3 _hpChargeCenter;
+    float _hpChargeRadius;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
     /// <summary>
     /// 【2026-11-05 主人拍板「近战 boss 不要出现闪现」】Init 时表给的原始攻击风格（掷骰前），终身不变。
@@ -25,6 +39,117 @@ public partial class Monster
     /// <summary>【只读】主动技能充能 0~1（Boss/精英头顶充能条的唯一数据源）。
     /// 放招后归零、冷却期间不涨；不在 UI 侧另算一份。2026-11-14 主人「只有 boss 和精英有」。</summary>
     public float SkillEnergy01 => Mathf.Clamp01(_skillEnergy);
+
+    /// <summary>
+    /// 【2026-11-16 主人拍板「不要一上来就走攒槽，血量触发 → 走 CD → 再等血量触发；攒槽期间停手、要有进度条」】
+    /// 精英 / Boss 的技能上台分两步（普通小怪不走这里，仍是按时间攒槽）：
+    /// ① 本方法每帧查血量档位：跌破 _nextSkillHpRatio 且 CD 已好 → 启动一次攒槽（槽归零、档位下移）；
+    /// ② AdvanceHpSkillCharge 把槽按 0.28/s 涨到满，期间普攻停手（见 Monster.Attack），
+    ///    满了由 Attack / 弹幕的既有闸门释放，放完清槽 + 走 _skillCooldown，再回到 ①。
+    /// 入场走位 / 剧情冻场期间不启动也不涨槽（沿用 ShouldHoldSkillCharge 同一道闸）。
+    /// </summary>
+    void UpdateHpTriggeredSkill()
+    {
+        if (_hpSkillCharging) return;        // 正在攒，别重复启动
+        // 【2026-11-16】Boss 二阶段切换自己就有一套 4 秒红圈：等它砸完再启动攒槽，
+        // 否则两套圈会叠在地上同一个位置（玩家看到的就是「红圈来两遍」）。
+        if (_bossPhaseShiftBusy) return;
+        if (_skillCooldown > 0f) return;     // CD 中：等 CD 走完再看血量
+        if (ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit)) return;
+        if (attr == null) return;
+        float maxHp = attr.GetAttr(AttrType.MaxHp);
+        if (maxHp < 1f) return;
+        if (currentHp / maxHp > _nextSkillHpRatio) return;
+        _hpSkillCharging = true;
+        _skillEnergy = 0f;                   // 从头攒，头顶进度条从空开始涨
+        _nextSkillHpRatio -= GameConfig.MONSTER_HP_SKILL_STEP;
+        // 【2026-11-16】红圈不在这里铺：攒槽有两条来源（血量触发 / 按时间），统一交给 SyncSkillChargeBar
+        // 「槽一涨就铺」，避免走另一条来源时不铺圈、条和圈又变成前后两遍。
+    }
+
+    /// <summary>
+    /// 【2026-11-16】血量触发的攒槽推进：3 秒涨到满（主人 11-16「进度条时间改成 3 秒」）；
+    /// 冻场 / 入场走位期间暂停（墙钟照走、条子不涨）。
+    /// 攒满后本方法自然空转，等释放闸门把槽清掉、_hpSkillCharging 复位。
+    /// </summary>
+    void AdvanceHpSkillCharge(float dt)
+    {
+        if (!_hpSkillCharging || _skillEnergy >= 1f) return;
+        if (ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit)) return;
+        _skillEnergy = Mathf.Min(1f, _skillEnergy + dt * (1f / 3f));   // 【2026-11-16 主人】3 秒攒满（原 0.28/s≈3.57s）
+        // 【2026-11-16】进度圈跟槽走（与头顶条同一个数）：圈涨满＝槽满＝当帧砸，一次预警只走一遍
+        if (_hpChargeProgress != null)
+        {
+            float grow = Mathf.Clamp01(_skillEnergy);
+            _hpChargeProgress.transform.localScale =
+                new Vector3(_hpChargeBaseScale.x * grow, _hpChargeBaseScale.y * grow, 1f);
+        }
+    }
+
+    /// <summary>
+    /// 【2026-11-16 主人「近战 boss 攒槽和红圈应该是同步的，不要攒槽完了还再来一遍红圈」】
+    /// 近战 Boss 攒槽启动时就把双圈铺出去：圆心取当时主目标位置（与旧「预警开始锁圆心」同口径，
+    /// 攒槽期跑出圈就是真躲开），进度圈交给 AdvanceHpSkillCharge 按槽驱动。
+    /// 只有近战 Boss 建圈 —— 远程 Boss / 精英不建，保持原链路。
+    /// </summary>
+    void StartHpChargeTelegraph()
+    {
+        ClearHpChargeTelegraph();
+        // 没技能（不放招）就别铺圈，否则槽满没人接、圈会常驻在地上
+        if (!(_isBossUnit || _eliteWave) || !_canUseActiveSkill || string.IsNullOrEmpty(_skillId)) return;
+        if (MonsterAttackStyleTable.IsRanged(_attackStyle)) return;
+        Vector3 center = target != null
+            ? new Vector3(target.transform.position.x, GROUND_Y + 0.02f, target.transform.position.z)
+            : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
+        _hpChargeCenter = center;
+        _hpChargeRadius = ResolveSkillRadius(SkillRegistry.Instance?.GetActiveSkill(_skillId));
+        _hpChargeBaseScale = CreateTelegraphPair(center, _hpChargeRadius,
+            out _hpChargeDisc, out _hpChargeProgress);
+    }
+
+    /// <summary>【2026-11-16】收掉攒槽预铺的双圈：死亡 / 对象池复用 / 转交给释放协程前统一走这里。</summary>
+    void ClearHpChargeTelegraph()
+    {
+        if (_hpChargeDisc != null) { Destroy(_hpChargeDisc); _hpChargeDisc = null; }
+        if (_hpChargeProgress != null) { Destroy(_hpChargeProgress); _hpChargeProgress = null; }
+        _hpChargeRadius = 0f;
+    }
+
+    /// <summary>
+    /// 红圈半径唯一出口（原先散在 UseActiveSkill 内）：表 aoeRadius 作基准，按精英 / Boss 分类夹上下限，
+    /// Boss 二阶段再放大 —— 攒槽预铺圈与正式释放必须同一口径，否则圈与判定对不上。
+    /// </summary>
+    float ResolveSkillRadius(SkillSystem.ActiveSkill skill)
+    {
+        float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
+        radius = _isBossUnit
+            ? Mathf.Max(radius, GameConfig.TELEGRAPH_BOSS_RADIUS)
+            : Mathf.Min(radius, GameConfig.TELEGRAPH_ELITE_RADIUS);
+        if (_isBossUnit && GetBossPhase() >= 2) radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
+        return radius;
+    }
+
+    /// <summary>
+    /// 【2026-11-16 主人「进度条和红圈时间一致了，但 boss 还会卡一会才砸地」】
+    /// 槽/圈满了就直接砸，不再等 AI 把 Boss 走到攻击距离里才调 Attack()：
+    /// Attack 只在 Monster.AI 判定「够得着 + 攻击 CD 到 + 不在普攻动作锁」时才会被调用，
+    /// 玩家一直跑的时候 Boss 会先追人、圈满还悬着不肯落 —— 看起来就是「卡一会才砸」。
+    /// 只对「地上已经铺着攒槽红圈」的近战精英 / Boss 生效（远程与普通小怪 _hpChargeDisc 恒 null，走原链路）。
+    /// 冻场 / 入场放行窗与 Attack 同闸：原地等，解冻才砸，不在对白里越权出手。
+    /// </summary>
+    void TryReleaseChargedSkill()
+    {
+        if (_hpChargeDisc == null) return;                 // 没铺圈（远程 / 普通小怪）：不接管
+        if (_skillTelegraphing) return;                    // 已在演出中
+        if (!_canUseActiveSkill || string.IsNullOrEmpty(_skillId)) return;
+        if (BattleManager.Instance != null
+            && (!BattleManager.Instance.UnitsCanAct || BattleManager.Instance.AllowMonsterMapEnter))
+            return;
+        var primary = target;
+        _swingStyle = ResolveSwingStyle(primary);
+        UseActiveSkill(primary);
+        attackCd = GetAttackCooldown();
+    }
     /// <summary>【2026-10-20 保险】演出协程冻场等待上限（真实秒）：连续冻结超过该时长视为冻场异常，
     /// 放弃本次技能演出并走 finally 清理标志，绝不让 _skillTelegraphing/_leaping 卡死成永久站桩。
     /// 正常对白冻场只有几秒，永不触发；正常路径行为零变化。</summary>
@@ -92,6 +217,7 @@ public partial class Monster
     /// <summary>Init 末尾调用：只有精英 / Boss 头顶挂条子；对象池复用的普通小怪把旧节点收掉。</summary>
     void EnsureSkillChargeBar()
     {
+        ClearHpChargeTelegraph();   // 【2026-11-16】对象池复用 / 重进关：上一轮的攒槽圈不许留到新关
         bool strong = _isBossUnit || _eliteWave;
         if (!strong || _chargeRoot != null)
         {
@@ -171,6 +297,7 @@ public partial class Monster
     /// </summary>
     void SyncSkillChargeBar()
     {
+        if (isDead) ClearHpChargeTelegraph();   // 【2026-11-16】攒槽半路死掉：地面红圈一并收掉，不留常驻（放在早退之前）
         if (_chargeRoot == null || _chargeFill == null) return;
         if (isDead || !(_isBossUnit || _eliteWave))
         {
@@ -186,6 +313,12 @@ public partial class Monster
         _chargeRt.position = new Vector3(body.position.x, topY + 0.12f, body.position.z);
 
         float e = SkillEnergy01;
+        // 【2026-11-16 主人「不要先走一遍进度条再走红圈」】近战精英/Boss：槽一开始涨就把地面红圈铺出去，
+        // 进度圈由 AdvanceHpSkillCharge 按同一个 _skillEnergy 驱动 —— 条涨完＝圈涨满＝当帧砸，只走一遍。
+        // 挂在这里而不是血量触发处：攒槽有两个来源（血量触发 / 按时间），这里两条都能覆盖。
+        if (!MonsterAttackStyleTable.IsRanged(_attackStyle)
+            && e > 0.001f && e < 0.999f && _hpChargeDisc == null)
+            StartHpChargeTelegraph();
         if (_chargeFlashT > 0f)
         {
             _chargeFlashT -= Time.unscaledDeltaTime;
@@ -197,6 +330,7 @@ public partial class Monster
         if (e <= 0.001f)
         {
             _chargeSpent = false;                        // 放招清零 / 冷却中：本轮结束，等下一轮
+            ClearHpChargeTelegraph();                    // 【2026-11-16】槽被清零却没走释放协程（被打断等）：圈一并收掉
             if (!_chargeHidden) SetSkillChargeVisual(false);
             return;
         }
@@ -234,6 +368,7 @@ public partial class Monster
     void UseActiveSkill(UnitBase primaryTarget)
     {
         _skillEnergy = 0f;
+        _hpSkillCharging = false;   // 【2026-11-16】大招放完，本次血量触发的攒槽结束，回到「等下一次掉血」
         _skillCooldown = (_isBossUnit || _eliteWave) ? 2.5f + 3f : 5f;
         // Attack() 已 ResolveSwingStyle；此处复用（Boss _swingStyle = 表 style，全程一种攻击方式）
 
@@ -242,19 +377,14 @@ public partial class Monster
         float extra = skill != null ? skill.baseDamage : 0f;
         float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
         float damage = (GetMainAttackStat() * mult + extra) * tier;
-        float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
         // 【2026-11-09 主人拍板】红圈分类：精英小一点 / Boss 大一点；精英 3 秒、Boss 4 秒。
         // 表里的 aoeRadius 仍作基准，只按分类夹上下限，不另起一套数值。
+        // 【2026-11-16】半径口径收进 ResolveSkillRadius（攒槽预铺圈与这里必须同值）。
+        float radius = ResolveSkillRadius(skill);
         float telegraph = _isBossUnit ? GameConfig.TELEGRAPH_BOSS_SEC : GameConfig.TELEGRAPH_ELITE_SEC;
-        radius = _isBossUnit
-            ? Mathf.Max(radius, GameConfig.TELEGRAPH_BOSS_RADIUS)
-            : Mathf.Min(radius, GameConfig.TELEGRAPH_ELITE_RADIUS);
 
         if (_isBossUnit && GetBossPhase() >= 2)
-        {
             damage *= GameConfig.BOSS_PHASE2_DAMAGE_MUL;
-            radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
-        }
 
         AttackVfxKit kit = MonsterAttackStyleTable.GetVfxKit(_isBossUnit ? _swingStyle : _attackStyle);
 
@@ -306,13 +436,31 @@ public partial class Monster
             ? new Vector3(primaryTarget.transform.position.x, GROUND_Y + 0.02f, primaryTarget.transform.position.z)
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
 
-        // 【2026-10-19 主人拍板「圆心锁定+统一红圈」】精英/Boss 预警一律画目标点红圈（取消脚下扇形）：
-        // 伤害圆心 = 本红圈位置，预警期跑出圈即真躲开 —— 演出与判定同位（修复「躲了照样挨打」）。
-        // 【2026-11-09 主人拍板】双圈：浅色范围圈第一秒就亮（完整范围），
-        // 深色进度圈从中心缩放 0 线性放大到跟范围一样大，用时＝预警时长。
+        // 【2026-11-16 主人「近战 boss 攒槽和红圈应该是同步的，不要攒槽完了还再来一遍红圈」】
+        // 近战 Boss 攒槽期间已经把双圈铺出去了（StartHpChargeTelegraph）：这里直接接管那两个圈，
+        // 圆心 / 半径用攒槽起点锁定的值，跳过下面整段等待 —— 槽满当帧就砸，整场预警只走一遍。
+        bool preCharged = _hpChargeDisc != null || _hpChargeProgress != null;
         GameObject disc = null;
         GameObject progressDisc = null;
-        Vector3 baseScale = CreateTelegraphPair(center, radius, out disc, out progressDisc);
+        Vector3 baseScale = Vector3.one;
+        if (preCharged)
+        {
+            disc = _hpChargeDisc;
+            progressDisc = _hpChargeProgress;
+            baseScale = _hpChargeBaseScale;
+            if (_hpChargeRadius > 0.01f) radius = _hpChargeRadius;
+            center = _hpChargeCenter;
+            _hpChargeDisc = null;      // 交给本协程 finally 统一销毁，避免两条路径各 Destroy 一次
+            _hpChargeProgress = null;
+        }
+        else
+        {
+            // 【2026-10-19 主人拍板「圆心锁定+统一红圈」】精英/Boss 预警一律画目标点红圈（取消脚下扇形）：
+            // 伤害圆心 = 本红圈位置，预警期跑出圈即真躲开 —— 演出与判定同位（修复「躲了照样挨打」）。
+            // 【2026-11-09 主人拍板】双圈：浅色范围圈第一秒就亮（完整范围），
+            // 深色进度圈从中心缩放 0 线性放大到跟范围一样大，用时＝预警时长。
+            baseScale = CreateTelegraphPair(center, radius, out disc, out progressDisc);
+        }
         // 【2026-10-16】冻场（UnitsCanAct=false）期间不计时，红圈原地等，解冻才继续；砸下瞬间出波纹扩散。
         // 蓄力底账：身体缩放（精英 ×2.0 根缩放含在内）与玩家影子 —— 任何退出路径都在 finally 里还原
         Vector3 bodyScale0 = MoveRoot.localScale;
@@ -327,7 +475,9 @@ public partial class Monster
         float frozenReal = 0f;   // 【保险】连续冻场真实时间累计
         try
         {
-            while (t < warn || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct))
+            // 攒槽已同步铺圈：本次不进等待段（槽满当帧直接砸），红圈不再补第二遍
+            while (!preCharged
+                   && (t < warn || (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)))
             {
                 if (isDead || this == null) yield break;   // 收尾统一走 finally
                 // 冻场不倒数（红圈原地等待），解冻才继续计时
@@ -361,6 +511,23 @@ public partial class Monster
                     MoveRoot.localScale = new Vector3(bodyScale0.x, bodyScale0.y * sq, bodyScale0.z);
                 }
                 yield return null;
+            }
+            // 【2026-11-16】精英的「蓄力压扁」原本在下面那段等待循环里逐帧做；攒槽期已接管跳过等待，
+            // 这里补一小段压扁再起跳 —— 蓄力观感保留，但不再多等一遍红圈。
+            if (preCharged && eliteLeap && MoveRoot != null)
+            {
+                const float squashSec = 0.15f;
+                float st = 0f;
+                while (st < squashSec)
+                {
+                    if (isDead || this == null) yield break;
+                    if (BattleManager.Instance == null || BattleManager.Instance.UnitsCanAct)
+                        st += Time.deltaTime;
+                    float k = Mathf.Clamp01(st / squashSec);
+                    MoveRoot.localScale = new Vector3(bodyScale0.x,
+                        bodyScale0.y * Mathf.Lerp(1f, GameConfig.ELITE_LEAP_SQUASH, k), bodyScale0.z);
+                    yield return null;
+                }
             }
             if (disc != null) { Destroy(disc); disc = null; }
             if (progressDisc != null) { Destroy(progressDisc); progressDisc = null; }
@@ -698,6 +865,9 @@ public partial class Monster
     {
         if (!MonsterAttackStyleTable.IsRanged(_attackStyle)) return false;
         if (!_isBossUnit && !_eliteWave) return false;
+        // 【2026-11-16 主人拍板「精英BOSS应该攒槽完了再放技能」】弹幕技与主动技能共用头顶同一条槽：
+        // 槽没满一律不放。此前只判 CD，远程精英进射程 1.2s 就先甩散射，头顶槽才三分之一。
+        if (_skillEnergy < 0.99f) return false;
         if (target == null || target.isDead) return false;
         if (!IsInBasicAttackRange(target)) return false;
         if (_teleporting || _skillTelegraphing || _leaping || _bossPhaseShiftBusy) return false;
@@ -714,6 +884,9 @@ public partial class Monster
         bool homingReady = _homingBarrageOwned && _homingBarrageCd <= 0f
             && (!_isBossUnit || _eliteWave || GetBossPhase() >= 2);
         if (!fanReady && !homingReady) return false;
+        // 【2026-11-16 主人拍板】放出去就吃槽：与 UseActiveSkill 同口径清零，头顶条随之收起重攒。
+        _skillEnergy = 0f;
+        _hpSkillCharging = false;   // 弹幕也算大招：放完同样结束本次攒槽，等下一次掉血
 
         if (fanReady)
         {

@@ -110,6 +110,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
                 -(startY + row * rowPitch + halfH));
             FillTemplateCard(card, orderedIds[i], def, hasDef, owned);
             if (owned) _ownedCards.Add(card);
+            if (owned) _ownedCardRects[orderedIds[i]] = crt;   // 【2026-11-16】换人箭头气泡指卡用
             else _lockedCards.Add(card);
         }
     /// <summary>取一张列表卡：复用池里有就拿出来（内容随后由 FillTemplateCard 全量重填），没有才克隆模板。</summary>

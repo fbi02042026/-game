@@ -150,7 +150,7 @@ public static class StoryPortraitPresenter
         if (ctx.NormalizeSize && StoryPortraitLayout.TryGetContentFit(portraitId, out var fit))
         {
             float rawH = sp.rect.height;
-            float k = StoryPortraitLayout.PortraitTargetCharHeightPx / Mathf.Max(1f, rawH * fit.charHeightFrac);
+            float k = StoryPortraitLayout.GetTargetCharHeightPx(portraitId) / Mathf.Max(1f, rawH * fit.charHeightFrac);
             w *= k;
             h *= k;
             img.rectTransform.sizeDelta = new Vector2(w, h);

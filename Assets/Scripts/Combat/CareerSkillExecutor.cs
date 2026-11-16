@@ -104,8 +104,15 @@ public static class CareerSkillExecutor
         float toTarget = target != null
             ? Mathf.Abs(target.transform.position.x - start.x)
             : GameConfig.CAREER_CHARGE_DIST * 0.5f;
+        // 【2026-11-16 主人报「只剩 Boss 一个时冲过去血没减」】根因是上限把终点截在目标之前：
+        // toTarget 一旦超过 (CAREER_CHARGE_DIST - OVERSHOOT)，终点就停在目标前面，目标既不在走廊里
+        // （CollectChargeVictims 用 end 截走廊）、也不在落点判定框里 —— 全程一次都碰不到。
+        // 口径改为「上限只限制越过目标后的额外量」：cap 取 max(原上限, toTarget + CONTACT_GAP)，
+        // 目标再远也保证冲到它身前 CONTACT_GAP；目标近时行为与旧版一字不差。
+        float reachCap = Mathf.Max(GameConfig.CAREER_CHARGE_DIST,
+            toTarget + GameConfig.CAREER_CHARGE_CONTACT_GAP);
         float dist = Mathf.Clamp(toTarget + GameConfig.CAREER_CHARGE_OVERSHOOT,
-            GameConfig.CAREER_CHARGE_MIN_DIST, GameConfig.CAREER_CHARGE_DIST);
+            GameConfig.CAREER_CHARGE_MIN_DIST, reachCap);
         // 只横移、不碰 Y：竖屏 lane 由 BattleLaneBounds 管，改 Y 会让单位脱离所在行。
         Vector3 end = start + new Vector3(dir * dist, 0f, 0f);
 
@@ -132,21 +139,39 @@ public static class CareerSkillExecutor
         // 【2026-11-15 主人「盾再往下 20」】贴脚公式不变，只在其上叠 20 设计像素下移（换算真源在 GameConfig）。
         float shieldY = hero.FootY + MeasureShieldFootOffset(chargeShield) - ShieldFootTrimWorld(chargeShield)
             - GameConfig.CAREER_CHARGE_SHIELD_DROP_WORLD;
+        // 【2026-11-16 主人「伤害范围再小一半，应该是盾的一半大小的范围」】撞击判定框尺寸从盾的实例量出来
+        // （含预制体缩放 3.6 与 SpawnChargeShield 叠的 0.9 倍率），不再用写死的半径。
+        // 范围 = 盾世界尺寸 × CAREER_CHARGE_HIT_RANGE_MUL，再横纵各取一半当半径 → 撞一下只打盾前后那一小块。
+        MeasureShieldWorldSize(chargeShield, out float shieldWorldW, out float shieldWorldH);
+        // 盾没加载出来（缺 prefab，SpawnChargeShield 已 LogError）时退回旧的固定半径，不让技能变成零伤害；
+        // 正常路径一律按盾的实例尺寸走，不写第二份数值。
+        bool shieldMeasured = shieldWorldW > 0.01f && shieldWorldH > 0.01f;
+        float hitHalfW = shieldMeasured
+            ? shieldWorldW * GameConfig.CAREER_CHARGE_HIT_RANGE_MUL * 0.5f
+            : GameConfig.CAREER_CHARGE_BURST_RADIUS;
+        float hitHalfH = shieldMeasured
+            ? shieldWorldH * GameConfig.CAREER_CHARGE_HIT_RANGE_MUL * 0.5f
+            : GameConfig.CAREER_CHARGE_BURST_RADIUS;
         // 【2026-11-15 主人「尘土这个特效在玩家冲锋的时候加到脚后面」】与半盾同口径：独立世界对象、
         // 每帧同步到脚后、冲锋结束立刻销毁；不往撞击点补任何刀光。
         GameObject chargeDust = SpawnChargeDust(hero, faceDir);
         float dustXOffset = -faceDir * GameConfig.CAREER_CHARGE_DUST_BACK;
 
-        var victims = CollectChargeVictims(hero, skill, start, end);
+        var victims = CollectChargeVictims(hero, start, end, hitHalfH);
         float baseDamage = BuildDamage(hero, skill);
         var alreadyHit = new HashSet<UnitBase>();
 
         Debug.Log($"[CareerSkill] 破阵冲锋 演出开始 dist={dist:0.00} 路线怪={victims.Count} 顿帧上限={GameConfig.CAREER_CHARGE_HITSTOP_MAX}");
 
-        // 【2026-11-14 主人拍板「撞到敌人时要顿一下，把敌人撞开再继续往前」】逐簇推进：
-        // 冲到这一簇跟前 → 停 0.10s（只停英雄位移，不动 timeScale）→ 小半径爆开这一簇 → 接着冲下一簇。
+        // 【2026-11-16 主人「玩家能推着精英往后退一段距离，但退 Boss 推不动，玩家也只是在 Boss 跟前，保持推的状态一段时间」】
+        // 逐簇推进分三种收场：
+        //  · 小怪      → 老口径：顿一下 + 范围内弹开（击飞，距离读 CAREER_CHARGE_KNOCKBACK）；
+        //  · 精英      → 不弹飞：先占住顶推锁再结算伤害，随后一路被英雄顶着后退（pushed 名单）；
+        //  · 真 Boss   → 推不动：推到它身前 CONTACT_GAP 就停住，保持顶住 CAREER_CHARGE_BOSS_PIN 秒后收招，绝不穿过它。
         Vector3 cursor = start;
         int stops = 0;
+        bool pinnedByBoss = false;
+        var pushed = new List<UnitBase>();   // 正被顶着的精英：后续每一段滑行都带着它们同量后退
         for (int i = 0; i < victims.Count; i++)
         {
             var m = victims[i];
@@ -156,33 +181,69 @@ public static class CareerSkillExecutor
             if (seg <= 0.05f) continue;                                  // 已在身后，不回头
             Vector3 contact = cursor + Vector3.right * dir
                 * Mathf.Max(0f, seg - GameConfig.CAREER_CHARGE_CONTACT_GAP);
-            yield return CoChargeSlide(hero, cursor, contact, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset);
+            yield return CoChargeSlide(hero, cursor, contact, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed);
             cursor = contact;
 
+            // 顿帧 / 顶住期间也保持「冲锋中」标记（防 0.6s 心跳过期）
+            MarkCharging();
+
+            // —— 真 Boss：推不动，停在跟前「原地冲锋」直到这段冲程本应走完，盾/尘土全程不消失 ——
+            if (IsTrueBoss(m))
+            {
+                BurstChargeHit(hero, skill, cursor, baseDamage, alreadyHit, hitHalfW, hitHalfH);   // 照常掉血
+                // 【2026-11-16 主人「冲锋那个盾不要一碰到 boss 就消失了，应该是原地冲锋直到时间到了」】
+                // 剩余冲程按当前冲锋速度折算成时间：人顶着 Boss 不再前进，但冲锋状态 / 半盾 / 脚后尘土
+                // 全部保持，等于把这段路"原地跑完"再收招；不足 BOSS_PIN 时按下限兜住，不会一碰就散。
+                float restX = Mathf.Max(0f, (end.x - cursor.x) * dir);
+                float hold = Mathf.Max(GameConfig.CAREER_CHARGE_BOSS_PIN,
+                    restX / Mathf.Max(0.1f, chargeSpeed));
+                float held = 0f;
+                while (held < hold)
+                {
+                    held += Time.deltaTime;
+                    MarkCharging();
+                    SyncFollow(chargeShield, hero, shieldY);
+                    SyncFollow(chargeDust, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
+                    yield return null;
+                }
+                pinnedByBoss = true;
+                break;                                                                              // 不冲过去、不补落点爆
+            }
+
+            // 精英：先占住顶推锁（deltaX=0 只锁不推）→ 下面这次伤害结算里的击退会被挡掉，
+            // 表现是「被推着后退」而不是「被弹飞」；伤害本身照常结算、照常掉血。
+            if (m is Monster em && em.IsEliteWave)
+            {
+                m.PushAlongX(0f, 0.2f);
+                pushed.Add(m);
+            }
+
             // 顿一下：只暂停自己的位移，全场时间照走（10-20 砍掉的全场慢放不再复活）
-            MarkCharging();   // 顿帧期间也保持「冲锋中」标记（防 0.6s 心跳过期）
             yield return new WaitForSeconds(GameConfig.CAREER_CHARGE_HITSTOP);
 
             // 撞开这一簇：范围内每只怪各自朝背离撞击点的方向弹开 = 「往四周撞」
             // 【2026-11-14 主人拍板「冲撞的时候不要出现刀光的特效」】这里原本补一发 PlaySlash，已删；
             // 冲锋的观感只由半盾承担，不要再往撞击点补任何刀光。
-            BurstChargeHit(hero, skill, cursor, baseDamage, alreadyHit);
+            BurstChargeHit(hero, skill, cursor, baseDamage, alreadyHit, hitHalfW, hitHalfH);
             stops++;
         }
 
-        // 冲完剩余距离（顿帧用完 / 后面没怪的部分一路冲到位）
-        float rest = (end.x - cursor.x) * dir;
-        if (rest > 0.02f)
-            yield return CoChargeSlide(hero, cursor, end, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset);
-        else
+        if (!pinnedByBoss)
         {
-            GameConfig.SetWorldPosition(hero.transform, end);
-            SyncFollow(chargeShield, hero, shieldY);
-            SyncFollow(chargeDust, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
-        }
+            // 冲完剩余距离（顿帧用完 / 后面没怪的部分一路冲到位），顶着的精英一路跟着后退
+            float rest = (end.x - cursor.x) * dir;
+            if (rest > 0.02f)
+                yield return CoChargeSlide(hero, cursor, end, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed);
+            else
+            {
+                GameConfig.SetWorldPosition(hero.transform, end);
+                SyncFollow(chargeShield, hero, shieldY);
+                SyncFollow(chargeDust, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
+            }
 
-        // 落点收尾：只结算伤害，不补刀光（主人 2026-11-14「冲撞的时候不要出现刀光的特效」）
-        BurstChargeHit(hero, skill, end, baseDamage, alreadyHit);
+            // 落点收尾：只结算伤害，不补刀光（主人 2026-11-14「冲撞的时候不要出现刀光的特效」）
+            BurstChargeHit(hero, skill, end, baseDamage, alreadyHit, hitHalfW, hitHalfH);
+        }
 
         // 冲锋结束：半盾立刻消失（主人口径「冲锋完就消失」）；脚后尘土同批销毁；行动权交还 AI
         ReleaseChargeShield(chargeShield);
@@ -303,26 +364,56 @@ public static class CareerSkillExecutor
     /// follow = 要跟着走的特效（半盾），每帧只同步 X —— Y 用 <paramref name="fixedY"/> 锁死
     ///（2026-11-14 主人「护盾只是跟着玩家往前走不要上下移动」），玩家并道时盾不跟着上下飘。
     /// dustFollow = 脚后尘土（2026-11-15），Y 恒用 FootY、X 再叠 dustXOffset；两者共用同一同步出口。
+    /// pushUnits = 【2026-11-16 主人「玩家能推着精英往后退一段距离」】被英雄顶着的精英：
+    /// 英雄这一帧前进多少，它们就同量后退多少，间距恒为 CONTACT_GAP —— 表现是「推着走」而不是「弹飞」。
     /// </summary>
     static IEnumerator CoChargeSlide(Hero hero, Vector3 from, Vector3 to, float speed,
                                      GameObject follow = null, float fixedY = 0f,
-                                     GameObject dustFollow = null, float dustXOffset = 0f)
+                                     GameObject dustFollow = null, float dustXOffset = 0f,
+                                     List<UnitBase> pushUnits = null)
     {
         float dur = Mathf.Max(0.02f, Mathf.Abs(to.x - from.x) / Mathf.Max(0.1f, speed));
         float t = 0f;
         while (t < dur)
         {
             t += Time.deltaTime;
-            GameConfig.SetWorldPosition(hero.transform, Vector3.Lerp(from, to, Mathf.Clamp01(t / dur)));
+            float prevX = hero.transform.position.x;
+            Vector3 next = Vector3.Lerp(from, to, Mathf.Clamp01(t / dur));
+            GameConfig.SetWorldPosition(hero.transform, next);
+            PushChargeUnits(pushUnits, next.x - prevX);
             MarkCharging();   // 心跳：即使协程被强停，标记最多残留一小段
             SyncFollow(follow, hero, fixedY);
             SyncFollow(dustFollow, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
             yield return null;
         }
+        float tailX = hero.transform.position.x;
         GameConfig.SetWorldPosition(hero.transform, to);
+        PushChargeUnits(pushUnits, to.x - tailX);   // 收尾那一帧的位移也补推，精英不会落后一抖
         SyncFollow(follow, hero, fixedY);
         SyncFollow(dustFollow, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
     }
+
+    /// <summary>
+    /// 【2026-11-16】把被顶着的精英按英雄本帧位移同量后移（每帧续 0.15s 顶推锁，AI 不抢位置）。
+    /// 死亡/回收的自动跳过；空名单直接返回，普通冲锋（没顶到精英）行为一字不变。
+    /// </summary>
+    static void PushChargeUnits(List<UnitBase> units, float deltaX)
+    {
+        if (units == null || units.Count == 0 || Mathf.Abs(deltaX) < 0.0001f) return;
+        for (int i = 0; i < units.Count; i++)
+        {
+            var u = units[i];
+            if (u == null || u.isDead) continue;
+            u.PushAlongX(deltaX, 0.15f);
+        }
+    }
+
+    /// <summary>
+    /// 「真 Boss」口径，与 Monster.Skills.cs 的长 CD 判定同一份：
+    /// 贴图编号 ≥ BOSS_SPRITE_START 被误判成 _isBossUnit 的精英（IsEliteWave=true）不算，仍按精英处理。
+    /// </summary>
+    static bool IsTrueBoss(UnitBase u)
+        => u is Monster mon && mon.IsBossUnit && !mon.IsEliteWave;
 
     /// <summary>
     /// 【2026-11-14 主人「护盾只是跟着玩家往前走不要上下移动」】半盾只跟 X；
@@ -379,15 +470,33 @@ public static class CareerSkillExecutor
     }
 
     /// <summary>
-    /// 收集冲锋走廊里的怪（按 X 由近到远，上限读配表 aoeMaxTargets）。
-    /// 纵向（lane）容差用配表 aoeRadius —— 与终点圆形 AOE 的纵向打击面一致，不写第二份数值。
+    /// 量半盾特效的世界尺寸（含预制体缩放与 SpawnChargeShield 叠的倍率），供撞击判定框使用。
+    /// 取不到（prefab 缺 SpriteRenderer / 帧未加载）时返回 0，由调用方下限兜住；
+    /// 缺资源本身已在 SpawnChargeShield 里 LogError，这里不再重复报。
     /// </summary>
-    static List<UnitBase> CollectChargeVictims(Hero hero, SkillSystem.ActiveSkill skill, Vector3 from, Vector3 to)
+    static void MeasureShieldWorldSize(GameObject go, out float width, out float height)
+    {
+        width = 0f; height = 0f;
+        if (go == null) return;
+        var sr = go.GetComponentInChildren<SpriteRenderer>(true);
+        if (sr == null || sr.sprite == null) return;
+        width = sr.bounds.size.x;
+        height = sr.bounds.size.y;
+    }
+
+    /// <summary>
+    /// 收集冲锋走廊里的怪（按 X 由近到远）。
+    /// 纵向（lane）容差 = 撞击判定框的半高（与 BurstChargeHit 同一份口径），不写第二份数值。
+    /// 【2026-11-16 主人报「只剩 Boss 一个时冲过去血没减」】删掉旧版按配表 aoeMaxTargets 的截断：
+    /// 那会把走廊里第 4 只起的怪（Boss 固定占本波最后名额、永远站最远）整体丢掉，
+    /// 导致 Boss 既不被当撞击点、落点也补不到。分段次数本身已由 HITSTOP_MAX 限制，不会拖沓。
+    /// </summary>
+    static List<UnitBase> CollectChargeVictims(Hero hero, Vector3 from, Vector3 to, float laneTol)
     {
         var list = new List<UnitBase>();
         var bm = BattleManager.Instance;
         if (bm == null || bm.monsters == null || hero == null) return list;
-        float laneTol = Mathf.Max(0.1f, skill.aoeRadius);
+        float lane = Mathf.Max(0.1f, laneTol);
         float xMin = Mathf.Min(from.x, to.x);
         float xMax = Mathf.Max(from.x, to.x);
         for (int i = 0; i < bm.monsters.Count; i++)
@@ -397,28 +506,26 @@ public static class CareerSkillExecutor
             if (!GameConfig.IsInCombatViewport(m)) continue;
             Vector3 p = m.transform.position;
             if (p.x < xMin || p.x > xMax) continue;          // 只认路线本身
-            if (Mathf.Abs(p.y - from.y) > laneTol) continue; // 只撞同一行附近的怪
+            if (Mathf.Abs(p.y - from.y) > lane) continue;    // 只撞判定框盖得住的那几行
             list.Add(m);
         }
         list.Sort((a, b) => Mathf.Abs(a.transform.position.x - from.x)
             .CompareTo(Mathf.Abs(b.transform.position.x - from.x)));
-        if (skill.aoeMaxTargets > 0 && list.Count > skill.aoeMaxTargets)
-            list.RemoveRange(skill.aoeMaxTargets, list.Count - skill.aoeMaxTargets);
         return list;
     }
 
     /// <summary>
-    /// 单次撞击爆开：以 center 为中心、CAREER_CHARGE_BURST_RADIUS 内的怪全部结算。
+    /// 单次撞击爆开：以 center 为中心的矩形框（半宽 halfW / 半高 halfH）内的怪全部结算，
+    /// 尺寸来自半盾的世界大小（2026-11-16 主人「应该是盾的一半大小的范围」），不再用写死半径 + 整列容差。
     /// 击退方向交给 <see cref="HitOne"/> 的老口径「从 center 往外推」—— 左的半边往左、右的半边往右，
     /// 就是主人要的「往四周撞」。alreadyHit 防同一只怪被相邻两次撞击重复打。
+    /// skill 参数保留以维持调用形状，判定不再读它的 aoeRadius / aoeMaxTargets。
     /// </summary>
     static void BurstChargeHit(Hero hero, SkillSystem.ActiveSkill skill, Vector3 center,
-        float baseDamage, HashSet<UnitBase> alreadyHit)
+        float baseDamage, HashSet<UnitBase> alreadyHit, float halfW, float halfH)
     {
         var bm = BattleManager.Instance;
         if (bm == null || bm.monsters == null || hero == null) return;
-        float radius = GameConfig.CAREER_CHARGE_BURST_RADIUS;
-        float laneTol = Mathf.Max(0.1f, skill.aoeRadius);
         for (int i = 0; i < bm.monsters.Count; i++)
         {
             var m = bm.monsters[i];
@@ -426,10 +533,10 @@ public static class CareerSkillExecutor
             if (alreadyHit.Contains(m)) continue;
             if (!GameConfig.IsInCombatViewport(m)) continue;
             Vector3 p = m.transform.position;
-            if (Mathf.Abs(p.x - center.x) > radius) continue;
-            if (Mathf.Abs(p.y - center.y) > laneTol) continue;
+            if (Mathf.Abs(p.x - center.x) > halfW) continue;
+            if (Mathf.Abs(p.y - center.y) > halfH) continue;
             alreadyHit.Add(m);   // 先标记：TakeDamage 可能触发连锁，避免本次内重复
-            HitOne(hero, m, baseDamage, center, GameConfig.CAREER_SKILL_KNOCKBACK);
+            HitOne(hero, m, baseDamage, center, GameConfig.CAREER_CHARGE_KNOCKBACK);
         }
     }
 

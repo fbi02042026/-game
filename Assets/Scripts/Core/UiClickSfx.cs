@@ -33,7 +33,8 @@ public sealed class UiClickSfx : MonoBehaviour
     // 【2026-11-14 主人报「点击音效听不见」】0.4 → 1.0。
     // 素材（SoundPack01/Rise03.aif）本身偏轻：mean -26.7dB / 峰值 -4.8dB，再叠 0.4 只剩 -34.7dB，
     // 落在 bgm_town(-14.4dB) 的掩蔽区里。素材不重导，这里给满音量，靠 GameBgm.DefaultVolume 降档拉开层次。
-    const float Volume = 1.0f;
+    // 【2026-11-16 主人「点击音效声音减一点」】1.0 -> 0.7（约 -3dB）；比 2026-11-14 听不见的 0.4 档仍高。
+    const float Volume = 0.7f;
 
     /// <summary>抬起点相对按下点的最大允许偏移（屏高百分比）。超过即判为滑动 / 拖拽，不播点击音。</summary>
     const float TapSlopRatio = 0.02f;

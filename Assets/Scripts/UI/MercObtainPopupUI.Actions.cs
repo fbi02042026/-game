@@ -231,6 +231,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         ApplyAscendGlow(false);                // 【2026-10-24】关窗摘发光材质、停呼吸动效、缩放还原（下次 Fill 重评）
         ApplyGuideNode(false);                 // 【2026-10-25】关窗藏指引、停浮动、位置还原（下次 Fill 重评）
         if (_root != null) _root.SetActive(false);
+        MercSwapHint.DismissReplaceIfVisible();   // 【2026-11-16】关窗即收第④条气泡，别让它浮在队列界面上
         var cb = _onClosed;
         _onClosed = null;
         cb?.Invoke();

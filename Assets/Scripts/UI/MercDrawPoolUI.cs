@@ -16,6 +16,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     readonly List<GameObject> _poolSlots = new List<GameObject>();
     RectTransform _ownedContent;
     readonly List<GameObject> _ownedCards = new List<GameObject>();
+    /// <summary>【2026-11-16】已获得列表卡按 hireId 索引（MercSwapHint 要指到某张卡上，不靠节点名字反查）。</summary>
+    readonly Dictionary<string, RectTransform> _ownedCardRects = new Dictionary<string, RectTransform>();
     readonly List<GameObject> _lockedCards = new List<GameObject>();
     /// <summary>
     /// 【2026-10-23 主人拍板】列表卡复用池：刷新时不再 Destroy 几十张卡再重建，
@@ -155,6 +157,12 @@ public partial class MercDrawPoolUI : MonoBehaviour
         // 金币/钻石两列（全局唯一 ResourceStrip，开窗借来、关窗归还主界面；升阶嵌套见 RefreshForAscendClosed）。
         if (_root != null)
             ResourceStrip.Show(_root.transform, ResourceStrip.Mode.GoldDia);
+
+        // 【2026-11-16】开窗先收掉可能占屏的外层气泡（主界面「去酒馆」/酒馆页「进队列」），
+        // 否则 TutorialHintUI.IsVisible 被占，第②条指卡气泡会被 TryShow 挡掉（主人报「队列里没提示」）。
+        MercSwapHint.DismissOuterOnPopup(rollback: false);   // 玩家已进队列=③使命完成，标记保持，关窗不再弹
+        // 【2026-11-16 主人需求】队列里「点替换可以把谁换下来」箭头气泡：等一帧让卡布局量准再指。
+        StartCoroutine(CoSwapHintAfterLayout());
     }
 
     void ReloadPicked()
@@ -180,6 +188,27 @@ public partial class MercDrawPoolUI : MonoBehaviour
         ExitSwapSelecting();   // 替换点选态跟窗口一起收
         ResourceStrip.Release();   // 【2026-10-24】资源条归还主界面顶条（与 Open 的 Show 成对）
         if (_root != null) _root.SetActive(false);
+    }
+
+    // ============================================================
+    // 队列内换人箭头提示（2026-11-16 主人需求）
+    // ============================================================
+
+    /// <summary>取某张「已获得」列表卡的 RectTransform（MercSwapHint 指卡用）。
+    /// 索引每次 RefreshOwned 重填；卡没建出来 / 不在已获得段返回 null。
+    public RectTransform GetOwnedCardRect(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return null;
+        return _ownedCardRects.TryGetValue(hireId, out var rt) && rt != null ? rt : null;
+    }
+
+    /// <summary>开窗后等一帧（卡 RectTransform 才量得准）再试一次换人箭头气泡；关窗则作罢。
+    /// 一次性标记由 MercSwapHint 自己管，这里重复调用无副作用。</summary>
+    System.Collections.IEnumerator CoSwapHintAfterLayout()
+    {
+        yield return null;
+        if (!IsOpen) yield break;
+        MercSwapHint.TryShowRosterCard(this);
     }
 
     // ============================================================
@@ -354,6 +383,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     void RefreshOwned()
     {
         RecycleCards(_ownedCards, _ownedCardPool);
+        _ownedCardRects.Clear();   // 【2026-11-16】索引跟着本轮重建的卡走，旧卡已回收
         var data = SaveSystem.Instance?.Data;
         var content = _masterContent != null ? _masterContent : _ownedContent;
 

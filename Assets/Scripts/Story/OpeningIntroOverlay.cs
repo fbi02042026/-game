@@ -28,9 +28,10 @@ public class OpeningIntroOverlay : MonoBehaviour
     int _prevTargetFps;
     int _prevVSync;
 
-    // 黑屏优化：后台预热的播放器（APIOnly 不渲染），Show 时整体接管
+    // 黑屏优化：后台预热的播放器（预热即用 RenderTexture 最终配置），Show 时整体接管
     static VideoPlayer _prewarmPlayer;
     static GameObject _prewarmRoot;
+    static RenderTexture _prewarmRt;
 
     /// <summary>
     /// 预热已就绪或根本没在预热（老玩家不播片头 / 路径不合法没建播放器 / 已被 Show 接管）→ true。
@@ -51,9 +52,14 @@ public class OpeningIntroOverlay : MonoBehaviour
         if (!pathOk) return;
         _prewarmRoot = new GameObject("OpeningIntroPrewarm");
         DontDestroyOnLoad(_prewarmRoot);
+        // 预热即按最终配置建 RenderTexture：Show 接管后 renderMode/targetTexture 都不再变，
+        // prepared 因此保持有效，RunRoutine 无需重新 Prepare（重复 Prepare 正是黑屏几秒的根因）。
+        var rt = new RenderTexture(720, 1280, 0, RenderTextureFormat.ARGB32);
+        rt.Create();
         var player = _prewarmRoot.AddComponent<VideoPlayer>();
         player.playOnAwake = false;
-        player.renderMode = VideoRenderMode.APIOnly;
+        player.renderMode = VideoRenderMode.RenderTexture;
+        player.targetTexture = rt;
         player.source = VideoSource.Url;
         player.url = videoPath;
         player.isLooping = false;
@@ -61,6 +67,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         player.Stop();
         player.Prepare();
         _prewarmPlayer = player;
+        _prewarmRt = rt;
     }
 
     public static OpeningIntroOverlay Show(string videoPath)
@@ -90,18 +97,22 @@ public class OpeningIntroOverlay : MonoBehaviour
 
         // 接管预热播放器；URL 对不上就废弃预热走老路
         VideoPlayer adopted = _prewarmPlayer;
+        RenderTexture adoptedRt = _prewarmRt;
         _prewarmPlayer = null;
         _prewarmRoot = null;
+        _prewarmRt = null;
         if (adopted != null && adopted.url != videoPath)
         {
             Destroy(adopted.gameObject);
+            if (adoptedRt != null) { adoptedRt.Release(); Destroy(adoptedRt); }
             adopted = null;
+            adoptedRt = null;
         }
 
         GameObject root = adopted != null ? adopted.gameObject : new GameObject("OpeningIntroOverlay");
         root.name = "OpeningIntroOverlay";
         var driver = root.AddComponent<OpeningIntroOverlay>();
-        driver.Build(videoPath, adopted);
+        driver.Build(videoPath, adopted, adoptedRt);
         driver.BeginCutsceneMute();
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
@@ -121,7 +132,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         GameBgm.UnmuteAfterCutscene(0.55f);
     }
 
-    void Build(string videoPath, VideoPlayer adopted)
+    void Build(string videoPath, VideoPlayer adopted, RenderTexture adoptedRt)
     {
         if (Instance != null && Instance != this)
         {
@@ -166,25 +177,33 @@ public class OpeningIntroOverlay : MonoBehaviour
         _aspectFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
         _aspectFitter.aspectRatio = 9f / 16f;
 
-        RecreateRenderTexture(720, 1280);
-
-        if (adopted != null)
+        if (adoptedRt != null)
         {
-            // 复用后台已 Prepare 的播放器，只把渲染目标接上
+            // 接管预热播放器和它已 Prepare 好的 RT：不再改 renderMode/targetTexture，prepared 保持有效。
+            _renderTexture = adoptedRt;
+            if (_rawImage != null) _rawImage.texture = _renderTexture;
             _videoPlayer = adopted;
-            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
-            _videoPlayer.targetTexture = _renderTexture;
         }
         else
         {
-            _videoPlayer = gameObject.AddComponent<VideoPlayer>();
-            _videoPlayer.playOnAwake = false;
-            _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
-            _videoPlayer.targetTexture = _renderTexture;
-            _videoPlayer.source = VideoSource.Url;
-            _videoPlayer.url = videoPath;
-            _videoPlayer.isLooping = false;
-            _videoPlayer.skipOnDrop = true;
+            RecreateRenderTexture(720, 1280);
+            if (adopted != null)
+            {
+                _videoPlayer = adopted;
+                _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+                _videoPlayer.targetTexture = _renderTexture;
+            }
+            else
+            {
+                _videoPlayer = gameObject.AddComponent<VideoPlayer>();
+                _videoPlayer.playOnAwake = false;
+                _videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+                _videoPlayer.targetTexture = _renderTexture;
+                _videoPlayer.source = VideoSource.Url;
+                _videoPlayer.url = videoPath;
+                _videoPlayer.isLooping = false;
+                _videoPlayer.skipOnDrop = true;
+            }
         }
 
         _videoAudio = gameObject.AddComponent<AudioSource>();
@@ -203,7 +222,8 @@ public class OpeningIntroOverlay : MonoBehaviour
     IEnumerator RunRoutine()
     {
         IsFinished = false;
-        _videoPlayer.Prepare();
+        // 复用预热播放器时它已是最终配置且 prepared，别再 Prepare（重复 Prepare 会重新解码 → 黑屏几秒）。
+        if (!_videoPlayer.isPrepared) _videoPlayer.Prepare();
         float prepareT = 0f;
         while (!_videoPlayer.isPrepared && prepareT < 10f && !_skipRequested)
         {

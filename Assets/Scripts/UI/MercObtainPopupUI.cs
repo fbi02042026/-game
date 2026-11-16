@@ -50,6 +50,12 @@ public partial class MercObtainPopupUI : MonoBehaviour
     Vector2 _keepBasePos;
     /// <summary>右下「替换」按钮（预制体自带节点 Panel/tihaunButton，主人摆的；仅佣兵池未入队详情入口显示）。</summary>
     Button _replaceBtn;
+    /// <summary>【2026-11-16】换人引导气泡④指「替换」钮用：仅在替换钮显示时返回其 Rect（只读，不新建节点）。</summary>
+    public RectTransform ReplaceButtonRect =>
+        _replaceBtn != null && _replaceBtn.gameObject.activeInHierarchy
+            ? _replaceBtn.transform as RectTransform : null;
+    /// <summary>【2026-11-16】详情弹窗是否开着（引导气泡派发判据）。</summary>
+    public bool IsOpen => _root != null && _root.activeSelf;
     /// <summary>「进阶」按钮（2026-10-22 主人拍板：预制体自带节点 Panel/进阶，主人摆的；
     /// 已拥有的佣兵才显示，点击开 MercAscendUI）。节点没 Button 组件时运行时补，几何不动。</summary>
     Button _ascendBtn;
@@ -179,6 +185,20 @@ public partial class MercObtainPopupUI : MonoBehaviour
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
+        // 【2026-11-16】带「替换」钮的详情：先收掉第②条指卡气泡（玩家已点卡=使命完成），
+        // 等一帧让替换钮布局量准，再弹第④条指钮气泡。
+        if (showReplace)
+        {
+            MercSwapHint.DismissOuterOnPopup(rollback: false);
+            ui.StartCoroutine(ui.CoSwapHintAfterOpen());
+        }
+    }
+
+    /// <summary>详情开窗后一帧派发换人引导④（只此一处，零新增 UI）。</summary>
+    System.Collections.IEnumerator CoSwapHintAfterOpen()
+    {
+        yield return null;
+        MercSwapHint.TryShowReplaceButton(this);
     }
 
     /// <summary>

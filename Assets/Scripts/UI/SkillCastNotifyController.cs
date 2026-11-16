@@ -39,8 +39,8 @@ public class SkillCastNotifyController : MonoBehaviour
     /// <summary>多条堆叠时每往下一格的垂直间距。</summary>
     const float EntrySpacing = 80f;
 
-    /// <summary>整条在模板原位基础上统一上移的偏移【2026-10-29 主人拍板：我方/敌人条都再往上移 20】。</summary>
-    const float YLiftUp = 20f;
+    /// <summary>整条在模板原位基础上统一上移的偏移【2026-10-29 主人拍板：我方/敌人条都再往上移 20；2026-11-16 再各上移 30 → 20+30=50，左右同一条】。</summary>
+    const float YLiftUp = 50f;
 
     /// <summary>我方侧 / 敌人侧各自最多同时显示的条目数。</summary>
     const int MaxEntries = 5;

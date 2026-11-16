@@ -458,6 +458,14 @@ public class SaveData
     public bool arenaUnlockToastShown = false;
     /// <summary>【2026-11-09】首次「可升星」箭头气泡已弹（酒馆图标上方，账号全局一次，记档防重弹）。</summary>
     public bool mercStarReadyHintShown = false;
+    /// <summary>【2026-11-16 主人需求】「可以去酒馆换佣兵上阵」箭头气泡已弹（账号全局一次，记档防重弹）。</summary>
+    public bool mercSwapHintTavernShown = false;
+    /// <summary>【2026-11-16 主人需求】佣兵队列里「点击替换可以把谁换下来」箭头气泡已弹（账号全局一次，记档防重弹）。</summary>
+    public bool mercSwapHintCardShown = false;
+    /// <summary>【2026-11-16 主人需求】酒馆页「点这里进佣兵队列／换人上阵」箭头气泡已弹（账号全局一次，记档防重弹）。</summary>
+    public bool mercSwapHintQueueShown = false;
+    /// <summary>【2026-11-16 主人需求】佣兵详情弹窗「点这里替换上阵」箭头气泡已弹（账号全局一次，记档防重弹）。</summary>
+    public bool mercSwapHintReplaceShown = false;
     /// <summary>【2026-11-09】首次点进无限裂隙的玩法说明已弹（账号全局一次，记档防重弹）。</summary>
     public bool endlessRiftIntroShown = false;
     /// <summary>

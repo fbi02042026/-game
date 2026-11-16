@@ -145,8 +145,23 @@ public static class StoryPortraitLayout
         public float belowFrac;
     }
 
-    /// <summary>归一化后角色统一像素高（设计基准 1280 屏）。取独眼实测 968 —— 情报商原尺寸不动，其余向他看齐。</summary>
-    public const float PortraitTargetCharHeightPx = 968f;
+    /// <summary>归一化后角色统一像素高（设计基准 1280 屏）。11-04 取独眼实测 968；【2026-11-16 主人拍板「剧情立绘统一放大 10%」】968 → 1064.8。</summary>
+    public const float PortraitTargetCharHeightPx = 1064.8f;
+
+    /// <summary>
+    /// 【2026-11-16 主人「除了引导的前台小姐和会长」】引导坐姿两图（guildmaster_sitting / receptionist_sitting）
+    /// 保持放大前的 968 审定值不放大；其余剧情立绘走放大后的 <see cref="PortraitTargetCharHeightPx"/>（1064.8）。
+    /// 判定与 GetClipHeightFrac / GetStandingLiftPx 同源：DeskPortraitBottomOffsetPx 名单。
+    /// </summary>
+    public const float DeskPortraitTargetCharHeightPx = 968f;
+
+    /// <summary>查某个立绘的归一化目标高：坐姿两图 968，其余 1064.8。</summary>
+    public static float GetTargetCharHeightPx(string portraitId)
+    {
+        if (!string.IsNullOrEmpty(portraitId) && DeskPortraitBottomOffsetPx.ContainsKey(portraitId))
+            return DeskPortraitTargetCharHeightPx;
+        return PortraitTargetCharHeightPx;
+    }
 
     /// <summary>脚底对齐基准：角色脚底距图底的统一像素 = 独眼实测 42px。</summary>
     public const float PortraitFootBaselinePx = 42f;
@@ -232,6 +247,7 @@ public static class StoryPortraitLayout
         { "receptionist", new PortraitContentFit { charHeightFrac = 1149f / 1345f, belowFrac = 26f / 1345f } },  // 站姿实测 y[170..1319]（Art portrait_receptionist）
         { "guildmaster_sitting", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },   // 579×522 坐姿整图（引导期）
         { "receptionist_sitting", new PortraitContentFit { charHeightFrac = 1f, belowFrac = 0f } },  // 496×456 坐姿整图（引导期）
+        { "H003", new PortraitContentFit { charHeightFrac = 1131f / 1345f, belowFrac = 47f / 1345f } },   // 2026-11-16 Tuck H003: normalized from MercStand 1131/47; was skipped -> +17% size
     };
 
     /// <summary>

@@ -245,11 +245,21 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         }
 
         int vfxDir = caster.GetVfxFacingDir();
+        // 【2026-11-16 主人「被重斩劈死的怪要有击退效果」】只对重斩这一刀加致死击退，其余 AOE 技能行为不变。
+        // 运行时 skillId 是 ally_* 别名 → 先求真 id 再比（与触发条件表同口径）。
+        bool deathKb = PlayerSkillDefs.ResolveRealSkillId(skill.skillId) == "heavy_cleave";
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
             enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
+            // 这一刀打死的才击退；方向从 AOE 落点往外推，落点重合时回退施法者朝向。
+            if (deathKb && enemy.isDead)
+            {
+                float kbDir = Mathf.Sign(enemy.transform.position.x - center.x);
+                if (Mathf.Abs(kbDir) < 0.5f) kbDir = caster.GetVfxFacingDir();
+                enemy.ApplyDeathKnockback(kbDir, GameConfig.HEAVY_CLEAVE_DEATH_KNOCKBACK);
+            }
         }
     }
 
