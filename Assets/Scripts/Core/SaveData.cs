@@ -274,12 +274,16 @@ public class SaveData
     public int arenaFreshWinsLeft = 0;
     /// <summary>低积分保底剩余必赢场次（积分掉到 LowScorePityAt 及以下时置为 LowScorePityWins，赢一场 -1；2026-10-29 晚主人拍板「积分到多少让玩家赢几次」）</summary>
     public int arenaLowPityLeft = 0;
+    /// <summary>【2026-11-16】竞技场「次数用完时指向看广告加号」引导是否已弹过（账号一次，清档归零）。</summary>
+    public bool arenaAdHintShown = false;
     /// <summary>对战记录（新→旧，条数上限 ArenaRules.BattleRecordMax，超出裁尾；2026-10-29 晚主人拍板新增）</summary>
     public List<ArenaBattleRecord> arenaBattleRecords = new List<ArenaBattleRecord>();
     /// <summary>排行榜机器人名单（BotCount 个，JsonUtility 直接序列化，无需 HashSet 双写）</summary>
     public List<ArenaBotEntry> arenaBots = new List<ArenaBotEntry>();
 
-    // === 竞技场商店（2026-10-30 积分版：积分 = arenaPoints 直接消费，🔴 禁新增第二货币字段）===
+    // === 竞技场商店（2026-11-16 主人拍板拆双积分：赛季分 arenaPoints 只管排名、每赛季清零；商店分 arenaShopPoints 跨赛季累计、不清零，商店只认后者）===
+    /// <summary>竞技场商店点（2026-11-16 拆双积分新增）：跨赛季累计、不随赛季清零，商店唯一货币；赢一场 +WinBasePoints，输不扣；老档从 0 起步。</summary>
+    public int arenaShopPoints = 0;
     /// <summary>弓购买记录：已购 = 模板 id（ArenaShopGoods.BowId，买断制一次性）；"" = 未购。
     /// 发放本体进 legacyEquipPool（冠军武器邮件口径），这里只记「买过」供货架变灰与出战换装判定。</summary>
     public string arenaShopBowId = "";

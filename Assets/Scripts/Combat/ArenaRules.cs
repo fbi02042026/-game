@@ -1186,6 +1186,9 @@ public static class ArenaRules
             // 原「连赢数 × StreakBonusStep 封顶 StreakBonusCap」叠加已删，连胜计数只留熔断门用）。
             pts = WinBasePoints;
 
+            // 【2026-11-16 主人拍板】商店分单独发放：赢一场 +WinBasePoints，跨赛季累计不清零；输不扣（只扣赛季分）。
+            data.arenaShopPoints += WinBasePoints;
+
             // 换位制退役（2026-10-30 20:00 主人拍板「名次按积分」）：不再 RemoveAt/Insert 换位，
             // 名次统一由积分落账后的 RepositionByPoints 按分重排（上下方目标同口径）。
 
@@ -1312,6 +1315,21 @@ public static class ArenaRules
         if (data.arenaPoints < amount) return false;   // 守卫：不足不扣，禁负数
         data.arenaPoints -= amount;
         RepositionByPoints(data, 0);
+        SaveSystem.Instance?.Save();
+        FireChanged();
+        return true;
+    }
+
+    /// <summary>
+    /// 【2026-11-16 主人拍板】竞技场商店分扣费（商店唯一扣费出口）：
+    /// 余额不足返回 false（调用方弹「商店分不足」），守卫禁负数；只扣 arenaShopPoints，
+    /// 🔴 不碰 arenaPoints、不调 RepositionByPoints —— 买东西绝不影响排名。
+    /// </summary>
+    public static bool TrySpendShopPoints(SaveData data, int amount)
+    {
+        if (data == null || amount <= 0) return false;
+        if (data.arenaShopPoints < amount) return false;   // 守卫：不足不扣，禁负数
+        data.arenaShopPoints -= amount;
         SaveSystem.Instance?.Save();
         FireChanged();
         return true;

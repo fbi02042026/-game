@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 // 冒险界面 partial —— 无限裂隙「出生点」头像指示（2026-11-02 主人拍板）
 //
@@ -180,4 +181,59 @@ public partial class AdventureUI
         _riftPreviewStart = 0;
         RefreshRiftPage();   // 编号/排行榜/箭头一把刷回真实状态
     }
+
+    // ────────────────────────────────────────────────────
+    // 【2026-11-16 主人拍板】裂隙「每十层」Boss 钻石角标
+    // 层号是 10 的倍数（与 Boss 钻石奖励/金色编号同一判定）时，宝箱右上角挂一颗钻石。
+    // 走代码动态建（不动 prefab 排版）：角标挂在「宝箱」节点下、尺寸/位置按宝箱 rect 现算，
+    // 运行时克隆的第 5 槽也一并覆盖。图标走 CommonIconSprites 路径加载，缺图 LogError 不兜底。
+    // ────────────────────────────────────────────────────
+    /// <summary>钻石角标相对宝箱尺寸的比例（主人：「钻石大小是宝箱的一半左右」）。</summary>
+    const float RiftBossDiamondBadgeSizeRatio = 0.5f;
+    /// <summary>钻石与宝箱右上角之间的净间距（主人：「可以稍微有点距离」）。</summary>
+    const float RiftBossDiamondBadgeGap = 4f;
+    const string RiftBossDiamondBadgeName = "Boss钻石角标";
+
+    /// <summary>
+    /// 幂等建/取某张层数牌宝箱右上角的钻石角标，并按宝箱当前尺寸现算大小与位置。
+    /// 位置 = 宝箱右上角外侧留一段净距；大小 = 宝箱的一半（宽高各乘比例）。
+    /// </summary>
+    static Image EnsureRiftBossDiamondBadge(RectTransform chest)
+    {
+        var found = chest.Find(RiftBossDiamondBadgeName) as RectTransform;
+        Image badge = found != null ? found.GetComponent<Image>() : null;
+        if (badge == null)
+        {
+            var go = new GameObject(RiftBossDiamondBadgeName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            go.transform.SetParent(chest, false);
+            found = go.GetComponent<RectTransform>();
+            badge = go.GetComponent<Image>();
+            found.anchorMin = new Vector2(0.5f, 0.5f);
+            found.anchorMax = new Vector2(0.5f, 0.5f);
+            found.pivot = new Vector2(0.5f, 0.5f);
+            var sp = CommonIconSprites.Load("icon_diamond_blue");
+            if (sp == null)
+                Debug.LogError("[AdventureUI] 裂隙 Boss 钻石角标图标缺失：CommonIconSprites/icon_diamond_blue（缺真值不兜底）");
+            else
+                badge.sprite = sp;
+            badge.raycastTarget = false;
+            badge.preserveAspect = true;
+            found.SetAsLastSibling();   // 压在宝箱图之上
+        }
+        float chestW = chest.rect.width;
+        float chestH = chest.rect.height;
+        if (chestW <= 1f || chestH <= 1f)
+        {
+            Debug.LogError("[AdventureUI] 裂隙宝箱节点尺寸异常，Boss 钻石角标不排版（缺真值不兜底）");
+            return badge;
+        }
+        float w = chestW * RiftBossDiamondBadgeSizeRatio;
+        float h = chestH * RiftBossDiamondBadgeSizeRatio;
+        found.sizeDelta = new Vector2(w, h);
+        found.anchoredPosition = new Vector2(
+            chestW * 0.5f + w * 0.5f + RiftBossDiamondBadgeGap,
+            chestH * 0.5f + h * 0.5f + RiftBossDiamondBadgeGap);
+        return badge;
+    }
+
 }

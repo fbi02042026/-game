@@ -3,8 +3,8 @@ using UnityEngine;
 
 /// <summary>
 /// 竞技场商店（2026-10-30 主人拍板「积分版」，覆盖 v1 竞技币方案）：
-/// · 唯一货币 = 竞技场积分（SaveData.arenaPoints），🔴 禁新增第二种货币字段；
-///   扣分唯一出口 = <see cref="ArenaRules.TrySpendPoints"/>（守卫禁负数），扣积分后按原名次对齐积分序、排名不变；
+/// · 唯一货币 = 竞技场商店分（SaveData.arenaShopPoints，2026-11-16 主人拍板从赛季分拆出、跨赛季累计不清零）；
+///   扣分唯一出口 = <see cref="ArenaRules.TrySpendShopPoints"/>（守卫禁负数），只扣商店分、不碰赛季分与排名；
 /// · 货架（§三）：逐风长弓（买断）+ 莉娜/索尔/伊芙（首购本体、复购转本命碎片）+ 金币包
 ///   + 徽记包×2（游侠/剑盾，周限）+ 好感礼物×3（2 普通 + 1 稀有，周限）；
 /// · 【2026-11-13 主人拍板「徽记按职业分家」】徽记包只卖**游侠/剑盾**；
@@ -103,16 +103,16 @@ public static class ArenaShopGoods
     {
         new Good { id = "arena_bow", kind = GoodKind.Bow, name = "逐风长弓",
             desc = "游侠限定，风里来箭里去。",
-            price = 2500, repurchasePrice = 0, frameRarity = MercRosterDefs.MercRarity.Rare },
+            price = 200, repurchasePrice = 0, frameRarity = MercRosterDefs.MercRarity.Rare },
         new Good { id = "arena_merc_h017", kind = GoodKind.Merc, name = "莉娜", hireId = "H017",
             desc = "圣光牧师，奶量管够，安全感的具象化。",
-            price = 5000, repurchasePrice = 1000, frameRarity = MercRosterDefs.MercRarity.Rare },
+            price = 400, repurchasePrice = 80, frameRarity = MercRosterDefs.MercRarity.Rare },
         new Good { id = "arena_merc_h022", kind = GoodKind.Merc, name = "索尔", hireId = "H022",
             desc = "铁面重武者，能抗能打，人形城墙本墙。",
-            price = 5000, repurchasePrice = 1000, frameRarity = MercRosterDefs.MercRarity.Rare },
+            price = 400, repurchasePrice = 80, frameRarity = MercRosterDefs.MercRarity.Rare },
         new Good { id = "arena_merc_h014", kind = GoodKind.Merc, name = "伊芙", hireId = "H014",
             desc = "火舞火法，一切都会燃烧，包括敌人的血条。",
-            price = 12000, repurchasePrice = 4000, frameRarity = MercRosterDefs.MercRarity.Legendary },
+            price = 1000, repurchasePrice = 300, frameRarity = MercRosterDefs.MercRarity.Legendary },
         new Good { id = "arena_gold_2000", kind = GoodKind.Gold, name = "金币包",
             desc = "", price = 150, weeklyLimit = 5, grantGold = 2000,
             frameRarity = MercRosterDefs.MercRarity.Common },
@@ -302,7 +302,7 @@ public static class ArenaShopGoods
 
     /// <summary>
     /// 购买执行（货架点击确认后的唯一入口）：
-    /// 校验（买断/满星/周限/余额）→ 扣积分（ArenaRules.TrySpendPoints，守卫禁负数；扣后按原名次对齐积分序、排名不变）
+    /// 校验（买断/满星/周限/余额）→ 扣商店分（ArenaRules.TrySpendShopPoints，守卫禁负数；只扣 arenaShopPoints、不动排名）
     /// → 按货架发放（弓=GrantEquip 进 legacyEquipPool；佣兵首购=UnlockMerc 入册、复购=转本命碎片；
     ///   金币=ResourceWallet；徽记=MercGrowInventory）→ 落盘。
     /// 发放失败退回积分不落账，可重试（照里程商店口径）。msg 带结果文案给调用方 toast。
@@ -354,7 +354,7 @@ public static class ArenaShopGoods
         }
 
         int price = PriceOf(data, good);
-        if (data.arenaPoints < price || !ArenaRules.TrySpendPoints(data, price))
+        if (data.arenaShopPoints < price || !ArenaRules.TrySpendShopPoints(data, price))
         {
             msg = "积分不足";
             return false;
@@ -415,9 +415,9 @@ public static class ArenaShopGoods
         if (!granted)
         {
             // 发放失败不入账可重试（里程商店口径）：退回积分，LogError 不静默
-            data.arenaPoints += price;
+            data.arenaShopPoints += price;
             SaveSystem.Instance?.Save();
-            Debug.LogError($"[ArenaShop] 商品 {good.id} 发放失败，积分 {price} 已退回（可重试）");
+            Debug.LogError($"[ArenaShop] 商品 {good.id} 发放失败，商店分 {price} 已退回（可重试）");
             msg = "发放失败，积分已退回，请重试";
             return false;
         }

@@ -95,6 +95,12 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     int _sortBoostOnce;
     /// <summary>
+    /// 【2026-11-16】一次性「气泡尖角朝上」：底图 uvRect 纵向翻转（尖角从底部挪到顶部），
+    /// 气泡摆到目标下方、尖角朝上指上方按钮；文字保持正立（只翻底图不改文字）。Hide 自动还原。
+    /// 0/false = 尖角朝下（现有全部引导的默认，观感零变化）。
+    /// </summary>
+    bool _bubblePointUpOnce;
+    /// <summary>
     /// 【2026-11-16 主人需求】一次性「点击任意处立即收掉」：只给收尾那条对话小提示用。
     /// Hide 时清空，其余引导零影响；短时武装门限防弹窗关闭那一下的残余点击误关。
     /// </summary>
@@ -111,6 +117,12 @@ public class TutorialHintUI : MonoBehaviour
     public void SetSortOrderOnce(int sortingOrder)
     {
         _sortBoostOnce = sortingOrder;
+    }
+
+    /// <summary>【2026-11-16】一次性尖角朝上：下一次气泡底图上下翻转、尖角指上方目标；Hide 后自动还原。</summary>
+    public void SetBubblePointUpOnce(bool on = true)
+    {
+        _bubblePointUpOnce = on;
     }
 
     /// <summary>一次性「点击任意处立即收掉」：下一次 Show 生效，Hide 后自动清空。on=false = 取消。</summary>
@@ -165,6 +177,8 @@ public class TutorialHintUI : MonoBehaviour
             _bannerImage.type = Image.Type.Simple;
             _bannerImage.preserveAspect = true;
             _bannerImage.color = Color.white;
+            // 【2026-11-16】尖角朝上：只翻底图 uvRect（v 从 1 往下 -1），文字节点不受影响
+            _bannerImage.uvRect = _bubblePointUpOnce ? new Rect(0f, 1f, 1f, -1f) : new Rect(0f, 0f, 1f, 1f);
             _bannerSpriteApplied = true;
         }
         else if (_bannerSpriteApplied)
@@ -605,6 +619,8 @@ public class TutorialHintUI : MonoBehaviour
         ApplyDefaultTextStyle();        // 【2026-11-08 方案 A】一次性字样式到此为止（自动隐藏也走这里）
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         _sortBoostOnce = 0;             // 【2026-11-16】一次性抬层同上：Hide 即还原默认层级
+        _bubblePointUpOnce = false;     // 【2026-11-16】一次性尖角朝上同上
+        if (_bannerImage != null) _bannerImage.uvRect = new Rect(0f, 0f, 1f, 1f);
         _tapToHideOnce = false;         // 【2026-11-16】一次性点击收掉同上：Hide 即失效
         if (_group != null)
         {
@@ -833,7 +849,9 @@ public class TutorialHintUI : MonoBehaviour
             _pointerRt.localRotation = Quaternion.Euler(0f, 0f, _pointerAbove ? 180f : 0f);
 
         // 气泡模式没有手，横幅不需要给手让位（让位会把气泡推离按钮，尖角就指不上了）
-        PlaceBanner(new Vector2(centerX, minY), maxY, top, bot,
+        // 【2026-11-16】尖角朝上：气泡摆到目标下方、尖角指上方按钮 → 目标传上沿 maxY
+        bool pointUp = _bannerSpriteOverride != null && _bubblePointUpOnce;
+        PlaceBanner(new Vector2(centerX, pointUp ? maxY : minY), maxY, top, bot,
             _bannerSpriteOverride != null ? 0f : (_pointerAbove ? handH + gap : 0f));
     }
 
@@ -886,7 +904,7 @@ public class TutorialHintUI : MonoBehaviour
             // 【2026-11-16】窄气泡（单条覆盖 250×120）里 20px 会顶到上边框 → 按气泡高度等比缩放；
             // 默认 192 高时系数正好 1，四条 400×192 气泡的观感一个像素不动。
             float lift = _bannerSpriteOverride != null
-                ? BubbleTextLift * (bannerH / BubbleBannerHeight) : 0f;
+                ? (_bubblePointUpOnce ? -BubbleTextLift : BubbleTextLift) * (bannerH / BubbleBannerHeight) : 0f;
             lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
             lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
         }
@@ -902,9 +920,16 @@ public class TutorialHintUI : MonoBehaviour
 
         float half = bannerH * 0.5f;
         // 手在按钮上方时，横幅要让开整只手，否则字压在手背上
-        float y = targetTop + 24f + extraTopClearance + half;
-        if (y + half > top - 12f)
+        // 【2026-11-16】尖角朝上：气泡摆到目标下方（target.Value.y 此刻是目标上沿），尖角指上方按钮
+        float y;
+        if (_bubblePointUpOnce)
             y = target.Value.y - 24f - half;
+        else
+        {
+            y = targetTop + 24f + extraTopClearance + half;
+            if (y + half > top - 12f)
+                y = target.Value.y - 24f - half;
+        }
         y = Mathf.Clamp(y, bot + half + 12f, top - half - 12f);
         _bannerRt.anchoredPosition = new Vector2(x, y);
     }

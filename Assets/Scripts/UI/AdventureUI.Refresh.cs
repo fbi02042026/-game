@@ -597,6 +597,22 @@ public partial class AdventureUI
     {
         for (int i = 0; i < slots.Count; i++)
         {
+            // 【2026-11-16 主人拍板】每十层（10 的倍数 = 有 Boss 钻石奖励那关）宝箱右上角挂钻石角标。
+            // 显隐复用金色编号的同一判定出口，翻滚/刷新都与牌面层号同步（见 RiftMarker.cs）。
+            var riftChest = slots[i].Find("宝箱") as RectTransform;
+            if (riftChest != null)
+            {
+                var bossDiamond = EnsureRiftBossDiamondBadge(riftChest);
+                if (bossDiamond != null)
+                {
+                    bool wantDiamond = (start + i) % GameConfig.ENDLESS_SAVE_INTERVAL == 0;
+                    if (bossDiamond.gameObject.activeSelf != wantDiamond)
+                        bossDiamond.gameObject.SetActive(wantDiamond);
+                }
+            }
+            else
+                Debug.LogError("[AdventureUI] 裂隙层数牌缺「宝箱」节点，Boss 钻石角标无从挂载（缺真值不兜底）");
+
             // prefab 实测：编号牌 = 槽位/bg/Text (Legacy)（fontSize 30、烤死「1-1」；
             // 取法与主线槽位 ChestNodes.cs:202 同款路径）。只改文案，牌的图/位置不动
             var plate = slots[i].Find("bg/Text (Legacy)")?.GetComponent<Text>();

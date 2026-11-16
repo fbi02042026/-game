@@ -786,7 +786,7 @@ public class MercAscendUI : MonoBehaviour
             string body = $"{def.Name} 升至 {target} 星";
             if (goldCost > 0) body += $"\n消耗金币 ×{goldCost}";
             body += "\n另消耗升星徽记与本命碎片（数量见面板预览）";
-            DiamondSpendGate.Request("确认升星", body, diaCost, DoStarUp, "确定升星");
+            DiamondSpendGate.Request("确认升星", body, diaCost, DoStarUp, "确定升星", SortOrder + 1);
             return;
         }
 

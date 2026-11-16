@@ -59,6 +59,7 @@ public class ArenaPopupUI : MonoBehaviour
     GameObject _rowTemplate;
     Text _triesText;      // 顶部「对战次数 N/M」
     Text _adBtnText;
+    RectTransform _adBtnRt;   // 【2026-11-16】看广告加号按钮矩形（没次数时箭头引导用）
     Text _noticeText;
     bool _bindFailed;
 
@@ -199,6 +200,7 @@ public class ArenaPopupUI : MonoBehaviour
         GlobalToastUI.Hide();   // 战败「积分 -10」toast 会活着飘进榜单压住一行（2026-11-01 主人截图）：开榜即收，掉分由名次动效表达
         TryPlayShiftAnim();   // 战斗结算名次动效（2026-10-30 主人拍板：胜=放大上移砸落 / 败=隐藏下移出现）
         TryShowSeasonHint(data);   // 距结算 ≤5 天自动弹一次倒计时信息框（每天最多一次，2026-11-11 主人拍板）
+        ArenaAdHint.TryShow(data, _adBtnRt);   // 【2026-11-16】次数用完时指向看广告加号（一次性，尖角朝上气泡）
         if (_noticeText != null)
         {
             _noticeText.gameObject.SetActive(!string.IsNullOrEmpty(notice));
@@ -336,6 +338,7 @@ public class ArenaPopupUI : MonoBehaviour
         var adBtn = UiFind.Deep(transform, "AdBonusBtn");
         if (adBtn != null)
         {
+            _adBtnRt = adBtn as RectTransform;
             if (!GameConfig.ADS_ENABLED)
             {
                 adBtn.gameObject.SetActive(false);
@@ -1352,15 +1355,15 @@ public class ArenaPopupUI : MonoBehaviour
     }
 
     /// <summary>点「购买」→ 商品信息弹窗（2026-10-31 主人拍板「按照技能那个信息弹窗来」：
-    /// 走 ArenaShopInfoPopupUI（同「获得技能」弹窗皮），弹窗带 价格行 + 现有积分（主人要求
+    /// 走 ArenaShopInfoPopupUI（同「获得技能」弹窗皮），弹窗带 价格行 + 现有商店分（主人要求
     /// 「弹窗上要加个价格」「也要玩家的积分总量」）。置灰两档（键仍可点，点击 toast 不入账）：
-    /// ① 积分不足；② 佣兵满星（判定与 TryBuy 拦截同源）。确认回调里做购买（判定/扣账仍在这边）。</summary>
+    /// ① 商店分不足；② 佣兵满星（判定与 TryBuy 拦截同源）。确认回调里做购买（判定/扣账仍在这边）。</summary>
     void OnShopUnitClicked(ArenaShopGoods.Good good)
     {
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null) return;
         int price = ArenaShopGoods.PriceOf(data, good);
-        bool afford = data.arenaPoints >= price;
+        bool afford = data.arenaShopPoints >= price;
         bool fullStar = good.kind == ArenaShopGoods.GoodKind.Merc
             && ArenaShopGoods.IsOwned(data, good)
             && MercStarSystem.OutStarOf(good.hireId) >= MercStarDefs.MaxOutStar;
@@ -1369,16 +1372,16 @@ public class ArenaPopupUI : MonoBehaviour
         if (good.weeklyLimit > 0)
             body += $"\n本周已购 {ArenaShopGoods.WeekBuyCount(data, good.id)}/{good.weeklyLimit} 次";
         ArenaShopInfoPopupUI.Show("商品信息", good.DisplayName,
-            $"价格 {price} 积分 · 现有 {data.arenaPoints}", body,
+            $"价格 {price} 积分 · 现有 {data.arenaShopPoints}", body,
             ShopIconFor(good), !afford || fullStar, () =>
         {
             // 复验日志（照 2026-10-31「点关闭无反应」落日志先例）：确认回调有没有进来、走了哪条分支
             var d2 = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
             if (d2 == null) { Debug.LogWarning("[Arena] 确认购买回调：存档未就绪，忽略"); return; }
             int pay = ArenaShopGoods.PriceOf(d2, good);
-            if (d2.arenaPoints < pay)
+            if (d2.arenaShopPoints < pay)
             {
-                Debug.Log($"[Arena] 确认购买 {good.id}：积分不足（现有 {d2.arenaPoints} < 应付 {pay}）");
+                Debug.Log($"[Arena] 确认购买 {good.id}：商店分不足（现有 {d2.arenaShopPoints} < 应付 {pay}）");
                 // force=true：购买反馈必须让玩家看到，不被对话/气泡压制吞掉（同 GlobalToastUI 物品变动口径）
                 GlobalToastUI.Show("积分不足", true);
                 return;
@@ -1437,7 +1440,7 @@ public class ArenaPopupUI : MonoBehaviour
         if (data == null) return;
         ArenaShopGoods.EnsureWeek(data);
 
-        if (_shopBalanceText != null) _shopBalanceText.text = data.arenaPoints.ToString();
+        if (_shopBalanceText != null) _shopBalanceText.text = data.arenaShopPoints.ToString();
 
         for (int i = 0; i < _shopUnits.Count && i < _shopGoods.Count; i++)
         {
@@ -1459,7 +1462,7 @@ public class ArenaPopupUI : MonoBehaviour
             bool fullStar = good.kind == ArenaShopGoods.GoodKind.Merc && owned
                             && !string.IsNullOrEmpty(good.hireId)
                             && MercStarSystem.OutStarOf(good.hireId) >= MercStarDefs.MaxOutStar;
-            bool canBuy = !soldOut && !weekFull && !fullStar && data.arenaPoints >= price;
+            bool canBuy = !soldOut && !weekFull && !fullStar && data.arenaShopPoints >= price;
             var buyBtn = UiFind.Deep(unit.transform, "购买")?.GetComponent<Button>();
             if (buyBtn != null) PurchasePriceStyle.ApplyBuyable(buyBtn, canBuy);
             else Debug.LogError($"[Arena] 商品 {good.id} 缺「购买」按钮，不能购买时无法置灰");
