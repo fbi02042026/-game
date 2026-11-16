@@ -119,6 +119,13 @@ public class BattleStateSaver : MonoBehaviour
     /// <summary>写一次中断快照（进关时 + 每 10s 心跳 + 切后台 / 退出）。</summary>
     public void SaveBattleState()
     {
+#if UNITY_EDITOR
+        // 【2026-11-16 主人拍板】编辑器下不写中断档：改 .cs 触发 Unity 重编译 → Play 重启，
+        // 退出时的 OnApplicationQuit 会落中断档 → 重进被判「上次强退」静默结算，清掉本局构筑/雇佣
+        //（表现：从 1-1 重来、佣兵没了）。编辑器不落盘，真机行为一字不动。
+        // 唯一出口堵这里，心跳/进关/切后台/退出四条写入路径一起断；代价=开发期测不了「中断结算」本身。
+        return;
+#endif
         if (!IsInActiveBattle())
             return;
 

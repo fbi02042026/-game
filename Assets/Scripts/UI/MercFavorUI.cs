@@ -14,7 +14,7 @@ using UnityEngine.UI;
 ///   Row 本体 = 头像框，随本格佣兵稀有度换三档：普通银/稀有蓝/传奇金，2026-10-26 晚拍板）
 /// → Right/Top/mask/Icon：选中佣兵立绘（半身，GetStand）+【代码建】问题对话框（主人口吻提问，
 ///   2026-10-27 挪出 Mask：挂 Panel/Right/Top（scale=1），mask 只做裁剪不随稀有度换图）
-///   （Top/mask 与 Top/bg = 半身像框，随稀有度换同款三档，2026-10-26 晚拍板）
+///   （Top/mask 与 Top/bg = 半身像背景板，用 prefab 摆好的酒馆内景，代码不设图；2026-11-16 主人拍板定稿）
 /// → Right/Top/好感进度/爱心1..6（各带「空心」子节点）：爱心本体即进度条（2026-10-31 主人拍板：
 ///   每颗心内部随好感一点点涨满——实心常驻铺底、空心 Filled 竖向裁剪随进度退去，
 ///   粉色从下往上一点点露出；不跳变、不建任何进度条图）
@@ -61,7 +61,7 @@ public class MercFavorUI : MonoBehaviour
     Color _bondLabelOrigColor = Color.white;   // 战斗按钮/地图名字 的 prefab 原色（Bind 时缓存）
 
     // —— T4/T5 新增：顶部好感数值 + 换题动画（运行时补节点/组件，预制体一字不动）——
-    Text _favorValueText;                  // 【代码建】顶部「当前/满值」进度文本
+    Text _favorValueText;                  // 【2026-11-16 主人拍板】绑定 prefab 的 Panel/Right/Top/好感进度/haogan（主人手加的 0/60），代码只赋真实值，不再另建
     RectTransform[] _talkSlotRts;          // 三个答案槽（换题动画用）
     float[] _talkSlotBaseX;                // 槽 prefab 原 x（动画结束复位，不写死布局）
     CanvasGroup[] _talkSlotGroups;         // 动画淡入淡出（运行时挂）
@@ -104,6 +104,10 @@ public class MercFavorUI : MonoBehaviour
     static string _pendingHireId;
     string _initialHireId;
 
+    /// <summary>【2026-11-16 主人拍板】界面开着时压制酒馆老板娘的挂机台词（Toast force 会顶到弹窗上）。
+    /// Awake 成功建树后置 true、OnDestroy 清 false；判据单一出口，与 MercDrawPoolUI.IsOpen 同款。</summary>
+    public static bool IsOpen { get; private set; }
+
     /// <summary>【T11】羁绊本撤离 / 退出 / 通关回城后自动重开好感界面（带 hireId）。
     /// 置位点在战斗收尾链，消费点 = TownHubController.Start；清档复位在 NewGameReset.ApplyAll。</summary>
     public static string PendingOpenAfterBattleHireId;
@@ -141,10 +145,13 @@ public class MercFavorUI : MonoBehaviour
 
         FitPanelUniformScale();   // T1：只改根 Panel 的 localScale，不动任何子节点坐标 / 锚点 / SizeDelta
         if (!BindNodes()) { Destroy(gameObject); return; }
+        IsOpen = true;             // 老板娘挂机台词压制标记（关界面 OnDestroy 清掉）
         _initialHireId = _pendingHireId;
         _pendingHireId = null;
         RefreshAll();
     }
+
+    void OnDestroy() { IsOpen = false; }
 
     /// <summary>绑定全部节点；认不出 = LogError + 关界面（不静默，铁律 14）。</summary>
     bool BindNodes()
@@ -282,6 +289,11 @@ public class MercFavorUI : MonoBehaviour
         _mapNameText = mapNameT != null ? mapNameT.GetComponent<Text>() : null;
         var infoT = FindT("Panel/Right/bottom/Info", "Info");
         _infoText = infoT != null ? infoT.GetComponent<Text>() : null;
+        // 【2026-11-16 主人拍板】0/60 用 prefab 里主人手加的 haogan 节点，代码只赋真实好感值，不再另建动态文本。
+        var favorValueT = FindT("Panel/Right/Top/好感进度/haogan", "0/60 数值 haogan");
+        _favorValueText = favorValueT != null ? favorValueT.GetComponent<Text>() : null;
+        if (_favorValueText == null)
+            Debug.LogError(LogTag + "缺 Panel/Right/Top/好感进度/haogan（0/60 数值，主人手加节点；结构被改过？）");
         var bondBtnT = FindT("Panel/Right/bottom/战斗按钮", "战斗按钮");
         _bondBtn = bondBtnT != null ? bondBtnT.GetComponent<Button>() : null;
         var bondLabelT = bondBtnT != null ? bondBtnT.Find("地图名字") : null;
@@ -497,14 +509,14 @@ public class MercFavorUI : MonoBehaviour
     // —— 运行时建图（2026-10-27 主人点名：问题对话框；锚点比例摆位，不碰 prefab 节点）——
 
     /// <summary>
-    /// 问题对话框：盖在立绘框上方的条形泡（底图复用 prefab「选中对话」同款槽底图，风格一致），
+    /// 问题对话框：盖在立绘框上方的条形泡（2026-11-16 主人拍板：底用半透黑纯色块，不用装饰框），
     /// 文本用 prefab 佣兵名字同款字体 + BestFit 自适应。
     /// </summary>
     void BuildQuestionBubble(Transform standRoot)
     {
         if (standRoot == null || _nameText == null) return;
         var bubble = NewUiImage(standRoot, "QuestionBubble", null,
-            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Color.white, -1);
+            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Color(0f, 0f, 0f, 0.6f), -1);
         if (bubble == null) return;
 
         // 2026-10-27 美术给值：气泡盖立绘框上方，世界框 y≈[293,337]、x≈立绘框宽的 0.05~0.95。
@@ -516,11 +528,6 @@ public class MercFavorUI : MonoBehaviour
         bubbleRt.pivot = new Vector2(0.5f, 0.5f);
         bubbleRt.sizeDelta = new Vector2(338f, 44f);
         bubbleRt.anchoredPosition = new Vector2(73f, 325f);
-
-        var slotImgT = transform.Find("Panel/Right/Top1/选择对话/1");
-        var slotImg = slotImgT != null ? slotImgT.GetComponent<Image>() : null;
-        if (slotImg != null && slotImg.sprite != null)
-            bubble.GetComponent<Image>().sprite = slotImg.sprite;   // 同款底图（不造图）
 
         var textGo = new GameObject("QuestionText", typeof(RectTransform), typeof(Text));
         var textT = textGo.GetComponent<RectTransform>();
@@ -542,23 +549,8 @@ public class MercFavorUI : MonoBehaviour
         text.raycastTarget = false;
         _questionText = text;
 
-        // 【T5】顶部「当前/满值」好感数值：几何沿用气泡实测值（不发明布局数值），挂在气泡正上方。
-        // 主人点名要「最上面显示当前/满值」，属必要介入；字号 24（fusion-pixel 12 倍数）。
-        var favGo = new GameObject("FavorValueText", typeof(RectTransform), typeof(Text));
-        var favRt = favGo.GetComponent<RectTransform>();
-        favRt.SetParent(standRoot, false);
-        favRt.anchorMin = favRt.anchorMax = new Vector2(0.5f, 0.5f);
-        favRt.pivot = new Vector2(0.5f, 0.5f);
-        favRt.sizeDelta = new Vector2(bubbleRt.sizeDelta.x, 30f);
-        favRt.anchoredPosition = new Vector2(bubbleRt.anchoredPosition.x,
-            bubbleRt.anchoredPosition.y + bubbleRt.sizeDelta.y * 0.5f + 16f);
-        var favTx = favGo.GetComponent<Text>();
-        favTx.font = text.font;
-        favTx.fontSize = 24;
-        favTx.color = Color.white;
-        favTx.alignment = TextAnchor.MiddleCenter;
-        favTx.raycastTarget = false;
-        _favorValueText = favTx;
+        // 【2026-11-16 主人拍板】0/60 数值用 prefab 里主人手加的 haogan 节点（BindNodes 已绑定），
+        // 代码不再动态建 FavorValueText——避免屏幕出现两个 0/60、位置以主人 prefab 摆的为准。
     }
 
     /// <summary>建一个带 Image 的 UI 子节点（锚点用比例；siblingIndex 0 = 垫底，-1 = 最上层）。</summary>
@@ -617,10 +609,15 @@ public class MercFavorUI : MonoBehaviour
         if (_mercIds == null)
         {
             var all = MercRosterDefs.All;
-            var owned = new List<string>();
-            for (int i = 0; i < all.Count; i++)
-                if (d.IsMercUnlocked(all[i].HireId)) owned.Add(all[i].HireId);
-            _mercIds = owned.ToArray();
+            // 【2026-11-16 主人拍板】左列按稀有度排序：传奇→稀有→普通，同档保持花名册表序（稳定）。
+            // 只排序展示顺序，不改解锁/好感数据；排序做在 _mercIds 一次成型处，行渲染/选中索引全沿用。
+            var tierOrder = new List<string>();
+            for (int tier = (int)MercRosterDefs.MercRarity.Legendary;
+                 tier >= (int)MercRosterDefs.MercRarity.Common; tier--)
+                for (int i = 0; i < all.Count; i++)
+                    if ((int)all[i].Rarity == tier && d.IsMercUnlocked(all[i].HireId))
+                        tierOrder.Add(all[i].HireId);
+            _mercIds = tierOrder.ToArray();
         }
 
         // 【2026-10-31】一个佣兵都没有时：RefreshMercPanel 会因 hireId 为空直接 return，
@@ -654,9 +651,15 @@ public class MercFavorUI : MonoBehaviour
             _rowGos[i].SetActive(true);
             var sp = MercPortraitSprites.GetHead(_mercIds[i]);
             if (sp != null && i < _rowIcons.Count && _rowIcons[i] != null) _rowIcons[i].sprite = sp;
-            // 【T2/T3 按预制体效果来】左列头像框与行色一律保持 prefab 摆好的样子：
-            // 代码不再按稀有度换框、不再改行色。要换图请直接在预制体里重拖，代码不补图、不开加载路径。
-            // _rowBgs / _rowOrigColor 保留节点绑定（死字段只报告不清理，铁律 18）。
+            // 【2026-11-16 主人拍板恢复】头像框随本格佣兵稀有度换三档（唯一入口 LoadTavernCardFrame，普通银/稀有蓝/传奇金）。
+            // 旧「按 prefab 效果来、代码不换框」口径作废——主人当场指出边框必须随稀有度变化。
+            if (i < _rowBgs.Count && _rowBgs[i] != null)
+            {
+                if (MercRosterDefs.TryGetByHireId(_mercIds[i], out var rowDef))
+                    _rowBgs[i].sprite = MercHireSession.LoadTavernCardFrame(rowDef.Rarity);
+                else
+                    Debug.LogError(LogTag + "花名册里查不到佣兵 " + _mercIds[i] + "，头像框不换（表被改过？）");
+            }
         }
         // 左列每格好感百分比（2026-10-27 主人拍板：爱心旁显示当前进度；FavorPct 由 Tools/好感界面/第三批构建 生成）
         for (int i = 0; i < _mercIds.Length && i < _rowPcts.Count; i++)
@@ -691,17 +694,16 @@ public class MercFavorUI : MonoBehaviour
         if (stand != null) _standIcon.sprite = stand;
         if (stand != null) _headIcon.sprite = stand;
 
-        // 【T2 按预制体效果来】Top/bg、Top/mask 的背景与卡框一律用 prefab 摆好的图，
-        // 代码不再按稀有度换图（切换佣兵稀有度也不换背景）。要换图请直接在预制体里重拖。
-        // 立绘只按 hireId 提供 sprite 内容，显示尺寸 / preserveAspect 全交给 prefab 节点（T3）。
-        // _standFrameBg 保留绑定不参与换图（死字段只报告不清理，铁律 18）。
+        // 【2026-11-16 主人拍板定稿】右侧半身像区（Top/mask + Top/bg）用 prefab 摆好的酒馆内景背景，代码不设图。
+        // 根因：mask 与 bg 几何完全重叠（都 835×470）、mask 渲染在 bg 之上；三档稀有度头像框卡片是
+        // 不透明整图（深蓝底+剪影+银柱），设到 mask 上会整个盖住 bg 的酒馆内景——即主人反馈的「背景没有了」。
+        // 稀有度换框只在左列头像列表（见 RefreshAll）；右侧不换图，回归 2026-10-27「mask 只做裁剪」口径。
+        // _standFrame / _standFrameBg 保留绑定不设图（死字段只报告不清理，铁律 18）。
+        // 立绘只按 hireId 提供 sprite 内容，显示尺寸 / preserveAspect 全交给 prefab 节点。
 
-        // 名字
+        // 名字（2026-11-16 主人拍板）：只写真名，不拼外号（花名册 Nickname 字段此处不用）
         if (_nameText != null)
-        {
-            string nick = def.Nickname;
-            _nameText.text = string.IsNullOrEmpty(nick) ? def.Name : def.Name + "·" + nick;
-        }
+            _nameText.text = def.Name;
 
         // 好感进度（2026-10-31 主人拍板）：爱心本体就是进度条——每颗心内部随进度一点点涨满，
         // 不是数值够 10 就整颗一下点亮。实现：实心（爱心N 本体）常驻满图铺底，
@@ -761,15 +763,8 @@ public class MercFavorUI : MonoBehaviour
         ApplyBondFullOverlay(cleared ? "羁绊已建立" : full ? "好感值已满" : null);
         // 【T5】满好感遮罩是运行时后建、层级在上；把数值文本提到最上层，避免「当前/满值」被黑罩压暗。
         if (_favorValueText != null) _favorValueText.transform.SetAsLastSibling();
-        if (_infoText != null)
-        {
-            if (cleared)
-                _infoText.text = "羁绊已建立，" + def.Name + " 全属性永久提升！";
-            else if (full)
-                _infoText.text = "好感已满！羁绊地图已开放，通关后 " + def.Name + " 属性提升。";
-            else
-                _infoText.text = "好感 " + favor + "/" + MercFavorDefs.FavorMax + "，每日对话、送礼可提升好感，攒满解锁羁绊地图。";
-        }
+        // 【2026-11-16 主人拍板】底部说明文案用 prefab 里摆好的原文（Info 节点，字体/字号都已设好），
+        // 代码不再写死覆盖三态文案。状态区分仍由顶部压暗 ApplyBondFullOverlay + 按钮文字体现。
         _bondBtn.interactable = full && !cleared;
         if (_bondBtnLabel != null)
         {

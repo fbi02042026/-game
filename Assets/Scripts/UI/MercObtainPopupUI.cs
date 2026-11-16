@@ -185,6 +185,9 @@ public partial class MercObtainPopupUI : MonoBehaviour
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
+        // 【2026-11-16 主人补拍板】点开任意佣兵详情（含不带替换钮的已入队详情）即收第②条指卡气泡：
+        // 玩家点开详情=已定位到卡，气泡使命完成；不收会抬层浮到详情弹窗上。只认 CardText，零副作用。
+        MercSwapHint.DismissCardBubble();
         // 【2026-11-16】带「替换」钮的详情：先收掉第②条指卡气泡（玩家已点卡=使命完成），
         // 等一帧让替换钮布局量准，再弹第④条指钮气泡。
         if (showReplace)

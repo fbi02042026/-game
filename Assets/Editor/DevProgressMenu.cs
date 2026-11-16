@@ -157,6 +157,15 @@ public static class DevProgressMenu
         // 8. UTF-8 无 BOM 写回。
         File.WriteAllText(path, newJson, new UTF8Encoding(false));
 
+        // 【2026-11-16 堵漏】写盘后强制刷新残留的内存 SaveSystem 单例，让"不必完全重启引擎"也稳：
+        // 团结若未完全重启（域重载关闭 / static _instance 残留），内存 _data 还是改档前的旧档，
+        // 进 Play 后任意一次 Save() 都会走 SyncListsFromRuntime()，用旧的内存 clearedStages 把
+        // 刚写盘的 clearedStageEntries 冲成空、用旧 mailInbox 覆盖领取状态
+        // —— 表现就是"进度回 1-1 / 邮件奖励没了"，而 maxCh 这类普通字段却能留下。
+        // InstanceQuiet 在非 Play 时只返回已存在的残留实例、绝不 new；返回 null 说明域已重载，
+        // 下次进 Play 会全新 Load 磁盘，此处无副作用。仅编辑态工具，不进玩家包、不碰运行时逻辑。
+        SaveSystem.InstanceQuiet?.Load();
+
         // 9. 成功日志 + 重启提示弹窗。
         Debug.Log("[测试进度] 已设为通关第 " + n + " 章，共 " + totalStages + " 节；备份：" + backupPath);
         EditorUtility.DisplayDialog(

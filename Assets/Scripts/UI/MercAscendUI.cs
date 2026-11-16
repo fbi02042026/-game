@@ -113,6 +113,7 @@ public class MercAscendUI : MonoBehaviour
     Coroutine _popCo;              // 成功弹出协程（Close/Fill 停）
     RectTransform _dimRt;          // 进阶成功/Dim 黑幕（按当前逻辑高等比铺满）
     Vector3 _dimBaseScale;         // Dim 预制体 authored 缩放，适配系数只乘在它上面
+    Button _successDimBtn;         // 进阶成功/Dim 预制体自带空 Button（2026-11-16：点任意处只收成功图，不关升阶弹窗）
 
     /// <summary>七行行名（左/右两侧同名）：顺序按主人 dump：Hp/Spd/MagicDef/Crit/Def/Atk/MagicAtk。</summary>
     static readonly string[] RowRootNames =
@@ -263,12 +264,13 @@ public class MercAscendUI : MonoBehaviour
         {
             fxCanvas.overrideSorting = true;
             fxCanvas.sortingOrder = SortOrder + 1;
-            // 【2026-11-08】升阶成功层是纯展示层，不接点击：预制体自带的 GraphicRaycaster 随本层抬到
-            // SortOrder+1 后压过根 Canvas，其全屏 Dim（raycastTarget=1 + 空 Button）把点击全吞掉，
-            // 「取消」/点黑幕/上层 X 都收不到事件，弹窗关不掉。只关掉本层 raycaster，让点击穿透回根 Canvas；
-            // 不动预制体、不动排序、不动特效播放入口（与 EnsureSuccessBannerOnTop 的纯排序层同口径）。
+            // 【2026-11-16 主人拍板覆盖 11-08】成功大图显示期间「点任意地方关闭（只关成功图，不关升阶弹窗）」：
+            // 重新启用本层 GraphicRaycaster（11-08 曾为救「取消被吞」关掉它，导致点击穿透到根 Dim 把弹窗整个关掉、
+            // 或点到升阶面板，正是本次报的 bug）。本层全屏 Dim（raycastTarget=1 + 空 Button）在下方绑定处改挂
+            // CloseSuccessOnly —— 点大图/黑幕任意处只收成功节点，升阶弹窗留着继续操作。
+            // 横幅在 EnsureSuccessBannerOnTop 的嵌套 Canvas（纯排序、无 raycaster），不参与射线；粒子非 Graphic。
             var fxRay = fxCanvas.GetComponent<GraphicRaycaster>();
-            if (fxRay != null) fxRay.enabled = false;
+            if (fxRay != null) fxRay.enabled = true;
         }
         if (_successFx != null)
         {
@@ -285,7 +287,19 @@ public class MercAscendUI : MonoBehaviour
         // ---- 成功层黑幕（2026-11-08 主人拍板「黑幕没铺满、上下露边」）----
         _dimRt = _successRt != null ? FindDeep(_successRt, "Dim") as RectTransform : null;
         if (_dimRt == null) Debug.LogError("[MercAscend] 缺节点 进阶成功/Dim（黑幕无法按逻辑高铺满）");
-        else _dimBaseScale = _dimRt.localScale;   // 现读 authored 值，适配系数只乘在它上面
+        else
+        {
+            _dimBaseScale = _dimRt.localScale;   // 现读 authored 值，适配系数只乘在它上面
+            // 【2026-11-16】把预制体自带的空 Button 改挂「只关成功图」：点大图/黑幕任意处收起成功节点，
+            // 升阶弹窗不动（与 Root/Dim → Close 的「关整个弹窗」彻底分开，不复用同一出口）。
+            _successDimBtn = _dimRt.GetComponent<Button>();
+            if (_successDimBtn == null) Debug.LogError("[MercAscend] 进阶成功/Dim 缺 Button（点关闭失效）");
+            else
+            {
+                _successDimBtn.onClick.RemoveAllListeners();
+                _successDimBtn.onClick.AddListener(CloseSuccessOnly);
+            }
+        }
 
         // ---- 按钮 ----
         _starUpBtn = BindButton(p, "shengjieButton", OnStarUpClick, "升阶");
@@ -785,7 +799,7 @@ public class MercAscendUI : MonoBehaviour
             long goldCost = MercStarDefs.GoldCost(def.Rarity, target);
             string body = $"{def.Name} 升至 {target} 星";
             if (goldCost > 0) body += $"\n消耗金币 ×{goldCost}";
-            body += "\n另消耗升星徽记与本命碎片（数量见面板预览）";
+            body += "\n另消耗升星徽记与本命碎片\n（数量见面板预览）";
             DiamondSpendGate.Request("确认升星", body, diaCost, DoStarUp, "确定升星", SortOrder + 1);
             return;
         }
@@ -880,6 +894,27 @@ public class MercAscendUI : MonoBehaviour
         if (cv == null) cv = banner.gameObject.AddComponent<Canvas>();
         cv.overrideSorting = true;
         cv.sortingOrder = SortOrder + 3;
+    }
+
+    /// <summary>【2026-11-16 主人拍板】点「升星成功」大图/黑幕任意处：只收成功节点，回到升阶面板继续操作。
+    /// 成功层 Dim 的空 Button 绑这里（不碰 Root/Dim→Close 的「关整个弹窗」出口，不碰 Fill/播放入口）。
+    /// 停弹出协程 + 停粒子 + 收节点，下次升星 Fill 会重置、PlaySuccessFx 重播，幂等。</summary>
+    void CloseSuccessOnly()
+    {
+        if (_popCo != null) { StopCoroutine(_popCo); _popCo = null; }
+        if (_successFx != null)
+        {
+            for (int i = 0; i < _successFx.Length; i++)
+            {
+                var ps = _successFx[i];
+                if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+        }
+        if (_successRt != null)
+        {
+            _successRt.gameObject.SetActive(false);
+            _successRt.localScale = Vector3.one;
+        }
     }
 
     /// <summary>播成功动效：节点显形 + 猛的弹出 + effect 粒子/音效齐播。

@@ -44,7 +44,7 @@ public static class DiamondSpendGate
             return;
         }
 
-        string fullBody = body + $"\n\n花费钻石 ×{cost}（持有 {have} → 剩余 {have - cost}）";
+        string fullBody = body + $"\n\n花费钻石 ×{cost}\n（持有 {have} → 剩余 {have - cost}）";
         StaminaConfirmPopup.Show(title, fullBody, okLabel, onConfirmed, sortingOrder);
     }
 }

@@ -342,11 +342,9 @@ public static class MercFavorDefs
 
     // —— 羁绊地图 ——
 
-    /// <summary>羁绊地图名（按佣兵名拼，主人有专属地名随时整表替换）。</summary>
+    /// <summary>羁绊地图名（2026-11-16 主人拍板：统一短名「羁绊试炼」，不再按佣兵名拼）。</summary>
     public static string BondMapName(string hireId)
     {
-        return MercRosterDefs.TryGetByHireId(hireId, out var d)
-            ? d.Name + "的心防试炼"
-            : "羁绊试炼";
+        return "羁绊试炼";
     }
 }

@@ -439,9 +439,11 @@ public partial class Monster
         // monster_stats 已全体减半(2.2→1.1)，1.1 × 0.3142 = 0.3456 世界单位。
         // 注：原 Boss 走 Mathf.Min(表值, DEFAULT×1.5) 会被钳回 1.0368；减半后表值远低于该上限，
         // 若保留上限会把减半后的速度又钳高，故这里不再设上限。
+        // 【2026-11-16 主人拍板】精英不吃 0.8 全局降速（普通怪/Boss 照旧）：eliteWave 取 1f，恢复表值全速。
         float moveSpd = ((template != null && template.baseMoveSpeed > 0.01f)
             ? template.baseMoveSpeed * GameConfig.MONSTER_MOVE_SPEED_TO_WORLD
-            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED) * GameConfig.MONSTER_GLOBAL_MOVE_SPEED_MUL;
+            : GameConfig.MONSTER_DEFAULT_MOVE_SPEED)
+            * (eliteWave ? 1f : GameConfig.MONSTER_GLOBAL_MOVE_SPEED_MUL);
         float atkRange;
         if (_isBossUnit)
         {

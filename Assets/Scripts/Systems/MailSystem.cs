@@ -161,6 +161,11 @@ public static class MailSystem
         mail.decomposeMats = 0;
         mail.talentPoints = 0;
         mail.claimed = true;
+        // 【2026-11-16 主人报「没看过的邮件一键领取后，删除已读按钮不起作用，必须看过后才能删」】
+        // 领取即视为已读：ClaimAll/行内领取/详情领取三条路都只设 claimed 不设 read，
+        // 领过的邮件 read 仍为 false，被 DeleteRead 的 !m.read 挡住删不掉。领取成功统一补标 read。
+        // 公告类不走领取（点开详情 MarkAsRead），不受影响；红点本就按 claimed 灭，无副作用。
+        mail.read = true;
 
         if (notify)
         {

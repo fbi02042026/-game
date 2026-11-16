@@ -68,6 +68,11 @@ public static class MercSwapHint
         if (MercDrawPoolUI.Instance != null && MercDrawPoolUI.Instance.IsOpen) return true;
         var recruit = MercenaryRecruitPopupUI.Instance;
         if (recruit != null && recruit.IsOpen) return true;
+        // 【2026-11-16 主人报「提示跑到邮件界面上」】邮件列表/详情是 DDOL 弹窗，
+        // 盖在 Guild 页上时外层气泡①会浮到邮件窗上。两级都纳入占屏判定：
+        // 开邮件窗 → DismissOuterOnPopup 收气泡并回滚标记，关窗回主界面再轮询弹。
+        if (MailListUI.Instance != null && MailListUI.Instance.gameObject.activeInHierarchy) return true;
+        if (MailDetailUI.Instance != null && MailDetailUI.Instance.gameObject.activeInHierarchy) return true;
         return false;
     }
 
@@ -125,6 +130,20 @@ public static class MercSwapHint
         if (hint.CurrentHint != ReplaceText) return;
         hint.Hide();
         Debug.Log("[MercSwapHint] ④ 气泡随详情弹窗关闭已收起");
+    }
+
+    /// <summary>
+    /// 【2026-11-16 主人补拍板】点开任意佣兵详情（含不带替换钮的已入队详情）时收掉第②条指卡气泡：
+    /// 玩家已点开详情=第②条使命完成，标记不回滚；不收会浮到详情弹窗上（气泡抬层 940 > 详情 925）。
+    /// 只认 CardText，其它三条引导零影响；与 DismissReplaceIfVisible 同口径。
+    /// </summary>
+    public static void DismissCardBubble()
+    {
+        var hint = TutorialHintUI.Instance;
+        if (hint == null || !hint.IsVisible) return;
+        if (hint.CurrentHint != CardText) return;
+        hint.Hide();
+        Debug.Log("[MercSwapHint] ② 气泡随佣兵详情打开已收起");
     }
 
     // ============================================================

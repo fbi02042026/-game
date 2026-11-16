@@ -404,6 +404,12 @@ public class TavernLandladyTease : MonoBehaviour,
             _idleTimer = 0f;
             return;
         }
+        // 【2026-11-16 主人拍板】佣兵好感界面（MercFavorUI）同款：开着期间不出挂机台词，关掉重数 60 秒
+        if (MercFavorUI.IsOpen)
+        {
+            _idleTimer = 0f;
+            return;
+        }
         if (Input.GetMouseButtonDown(0) || Input.GetMouseButtonDown(1) || Input.touchCount > 0)
         {
             _idleTimer = 0f;

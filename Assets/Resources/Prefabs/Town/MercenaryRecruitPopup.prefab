@@ -2416,6 +2416,7 @@ GameObject:
   - component: {fileID: 2603156757015909838}
   - component: {fileID: 3735362814587186182}
   - component: {fileID: 4647811476877689618}
+  - component: {fileID: 8669022220831353533}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Portrait
@@ -2481,6 +2482,21 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &8669022220831353533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3407852365844353525}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 2, y: -2}
+  m_UseGraphicAlpha: 1
 --- !u!1 &3482228410719893435
 GameObject:
   m_ObjectHideFlags: 0
@@ -6258,6 +6274,7 @@ GameObject:
   - component: {fileID: 7499403282597570817}
   - component: {fileID: 2137077578844080052}
   - component: {fileID: 5317234263449345085}
+  - component: {fileID: 2304652343271507867}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Portrait
@@ -6323,6 +6340,21 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &2304652343271507867
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7126427157398872508}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 2, y: -2}
+  m_UseGraphicAlpha: 1
 --- !u!1 &7205097791269685389
 GameObject:
   m_ObjectHideFlags: 0
@@ -7624,6 +7656,7 @@ GameObject:
   - component: {fileID: 1137991061651656345}
   - component: {fileID: 6665718155236462808}
   - component: {fileID: 2849089391949715482}
+  - component: {fileID: 6531486878754485865}
   m_Layer: 0
   m_HasEditorInfo: 1
   m_Name: Portrait
@@ -7689,6 +7722,21 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!114 &6531486878754485865
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8998017345677041591}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e19747de3f5aca642ab2be37e372fb86, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_EffectColor: {r: 0, g: 0, b: 0, a: 1}
+  m_EffectDistance: {x: 2, y: -2}
+  m_UseGraphicAlpha: 1
 --- !u!1 &9105996411363334811
 GameObject:
   m_ObjectHideFlags: 0
