@@ -95,8 +95,8 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     int _sortBoostOnce;
     /// <summary>
-    /// 【2026-11-16】一次性「气泡尖角朝上」：底图 uvRect 纵向翻转（尖角从底部挪到顶部），
-    /// 气泡摆到目标下方、尖角朝上指上方按钮；文字保持正立（只翻底图不改文字）。Hide 自动还原。
+    /// 【2026-11-16】一次性「气泡尖角朝上」：整条 banner 用 localScale.y=-1 镜像（尖角从底部挪到顶部），
+    /// 气泡摆到目标下方、尖角朝上指上方按钮；文字节点再 localScale.y=-1 反向补翻保正立。Hide 自动还原。
     /// 0/false = 尖角朝下（现有全部引导的默认，观感零变化）。
     /// </summary>
     bool _bubblePointUpOnce;
@@ -177,8 +177,11 @@ public class TutorialHintUI : MonoBehaviour
             _bannerImage.type = Image.Type.Simple;
             _bannerImage.preserveAspect = true;
             _bannerImage.color = Color.white;
-            // 【2026-11-16】尖角朝上：只翻底图 uvRect（v 从 1 往下 -1），文字节点不受影响
-            _bannerImage.uvRect = _bubblePointUpOnce ? new Rect(0f, 1f, 1f, -1f) : new Rect(0f, 0f, 1f, 1f);
+            // 【2026-11-16】尖角朝上：整条 banner localScale.y=-1 镜像（底图尖角从底挪到顶）；
+            // 文字是 banner 子节点会被一起镜像，故文字自己再 localScale.y=-1 反向补翻，保持正立。
+            float bannerFlipY = _bubblePointUpOnce ? -1f : 1f;
+            if (_bannerRt != null) _bannerRt.localScale = new Vector3(1f, bannerFlipY, 1f);
+            if (_label != null) _label.rectTransform.localScale = new Vector3(1f, bannerFlipY, 1f);
             _bannerSpriteApplied = true;
         }
         else if (_bannerSpriteApplied)
@@ -536,7 +539,9 @@ public class TutorialHintUI : MonoBehaviour
         // 只在「换了说法」或「从隐藏变为显示」时重播展开动画，避免同一句被反复 Show 时抖动
         bool wasHidden = string.IsNullOrEmpty(prevHint) || _group == null || _group.alpha < 0.05f;
         if (wasHidden || !string.Equals(prevHint, _label != null ? _label.text : ""))
-            _openT = 0f;
+            // 【2026-11-16】方案 b：尖角朝上气泡不播展开动画 —— UpdateOpenMotion 会覆写 localScale，
+            // 会把镜像用的 -1 冲掉；_openT 直接置 1 跳过动画。
+            _openT = (_bannerSpriteOverride != null && _bubblePointUpOnce) ? 1f : 0f;
         _follow = highlight;
         // 换了目标就丢掉旧矩形：避免新目标还没量到时，横幅短暂停在旧目标的位置上
         if (targetChanged) _hasLastFollowRect = false;
@@ -620,7 +625,8 @@ public class TutorialHintUI : MonoBehaviour
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         _sortBoostOnce = 0;             // 【2026-11-16】一次性抬层同上：Hide 即还原默认层级
         _bubblePointUpOnce = false;     // 【2026-11-16】一次性尖角朝上同上
-        if (_bannerImage != null) _bannerImage.uvRect = new Rect(0f, 0f, 1f, 1f);
+        // 【2026-11-16】banner 的 localScale 由下方 636 行还原；文字补翻节点须在此显式还原，防串到下一条引导。
+        if (_label != null) _label.rectTransform.localScale = Vector3.one;
         _tapToHideOnce = false;         // 【2026-11-16】一次性点击收掉同上：Hide 即失效
         if (_group != null)
         {
@@ -903,8 +909,10 @@ public class TutorialHintUI : MonoBehaviour
             var lrt = _label.rectTransform;
             // 【2026-11-16】窄气泡（单条覆盖 250×120）里 20px 会顶到上边框 → 按气泡高度等比缩放；
             // 默认 192 高时系数正好 1，四条 400×192 气泡的观感一个像素不动。
+            // 【2026-11-16】局部镜像修正：文字节点被 localScale.y=-1 反向补翻后，其 offset 的 y 方向
+            // 也跟着镜像（+offsetMin.y 变成屏幕下方），故尖角朝上时 lift 取 +BubbleTextLift 才是原来的屏幕位移。
             float lift = _bannerSpriteOverride != null
-                ? (_bubblePointUpOnce ? -BubbleTextLift : BubbleTextLift) * (bannerH / BubbleBannerHeight) : 0f;
+                ? (_bubblePointUpOnce ? BubbleTextLift : BubbleTextLift) * (bannerH / BubbleBannerHeight) : 0f;
             lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
             lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
         }
@@ -1000,7 +1008,9 @@ public class TutorialHintUI : MonoBehaviour
         if (_bannerRt == null) return;
         if (_openT >= 1f)
         {
-            if (_bannerRt.localScale != Vector3.one) _bannerRt.localScale = Vector3.one;
+            // 【2026-11-16】方案 b：尖角朝上时静止态 localScale.y 须保持 -1，不能被动画复位冲成 +1。
+            Vector3 restScale = _bubblePointUpOnce ? new Vector3(1f, -1f, 1f) : Vector3.one;
+            if (_bannerRt.localScale != restScale) _bannerRt.localScale = restScale;
             return;
         }
         _openT = Mathf.Clamp01(_openT + Time.unscaledDeltaTime / OpenDur);
