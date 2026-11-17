@@ -442,7 +442,7 @@ public partial class TalentUI
             : "升级【" + node.name + "】  Lv" + fromLevel + " → Lv" + effLevel;
         string body = head
             + "\n效果：" + eff
-            + "\n消耗天赋石：" + cost
+            + "\n消耗天赋石：" + cost + "\n"
             + (have >= cost ? "（持有 " + have + "）" : "（持有 " + have + "，天赋石不足）");
 
         StaminaConfirmPopup.Show("确认消耗", body, unlock ? "确定解锁" : "确定升级", () =>
@@ -496,8 +496,8 @@ public partial class TalentUI
             "确认要洗点吗？\n" +
             "· 将清空全部右侧天赋（含已选职业）；\n" +
             "· 消耗遗忘药水×" + potionCost + "（当前持有 " + potionHave + "）；\n" +
-            "· 返还已投入天赋石的 80%：本次预计返还 " + refund + "（已投入 " + totalSpent + "）；\n" +
-            "· 左侧金币天赋不参与洗点，金币不返还。";
+            "· 返还已投入天赋石的 80%：\n本次预计返还 " + refund + "（已投入 " + totalSpent + "）；\n" +
+            "· 左侧金币天赋不参与洗点，\n金币不返还。";
 
         // 2026-10-21 主人拍板：确认弹窗一律走通用弹出（StaminaConfirmPopup，底层默认弹窗预制体
         // EvacuateConfirmPopupUI），不再手搓运行时建树，排版随之统一。

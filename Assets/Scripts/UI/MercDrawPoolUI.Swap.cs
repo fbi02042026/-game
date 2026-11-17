@@ -60,7 +60,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         int cost = SaveData.DrawPoolPaidUnlockCost;
         StaminaConfirmPopup.Show("解锁佣兵队列",
-            $"花费 {cost} 钻石解锁最后一个佣兵队列格子？",
+            $"花费 {cost} 钻石解锁\n最后一个佣兵队列格子？",
             $"确定解锁（{cost}钻）",
             () =>
             {

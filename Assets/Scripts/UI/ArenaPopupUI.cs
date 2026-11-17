@@ -185,7 +185,6 @@ public class ArenaPopupUI : MonoBehaviour
         ArenaLadderDrift.SettleIfDue(data);   // 离线漂移（2026-11-11）：离线期间被机器人挑战扣分 + 机器人积分只涨不跌（幂等，不足 1 天不结）
         // 结算冻结期：机器人分不再「游玩中刷新」，榜单保持结算时的最终名次
         bool frozen = ArenaSeasonClock.IsFrozen();
-        if (!frozen) ArenaRules.RefreshBotScoresIfDue(data);   // 游玩中到点刷机器人分（2026-10-30 20:10 主人拍板「一个时间刷一下，不要不变」）
         string notice = ArenaRules.TakeSeasonNotice(data);
         if (frozen) notice = $"赛季结算中：排行榜已冻结。{ArenaSeasonClock.RuleLine}";
 
@@ -216,6 +215,12 @@ public class ArenaPopupUI : MonoBehaviour
         ArenaShopInfoPopupUI.CloseIfOpen();   // 商品信息弹窗是 DDOL 独立实例，主弹窗关了顺带收掉
         ArenaSeasonHintPopup.CloseIfOpen();   // 赛季倒计时信息框同口径（防 DDOL 残页）
         _pendingRowIdx = -1;
+        // 关界面时结算机器人分（2026-11-17 改版）：冻结期不动榜；到期才结、幂等（防反复开关刷分）
+        if (!ArenaSeasonClock.IsFrozen())
+        {
+            var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            ArenaRules.RefreshBotScoresIfDue(data);
+        }
         gameObject.SetActive(false);
     }
 

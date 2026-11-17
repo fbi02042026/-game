@@ -29,8 +29,8 @@ public static class FeatureUnlock
     /// <summary>世界地图入口：第 1 篇第 1 座大关通关（它是主线导航，不是玩法，跟着主线走）。</summary>
     public const int WORLD_MAP_GRAND_GATE = 1;
 
-    /// <summary>支线岛派岛：第 1 篇第 1 座大关通关。</summary>
-    public const int SIDE_ISLAND_GRAND_GATE = 1;
+    /// <summary>支线岛派岛：通第 1 章（10 关全通）后才开放。2026-11-17 主人拍板后挪。</summary>
+    public const int SIDE_ISLAND_GRAND_GATE = 10;
 
     /// <summary>金币副本：通第 1 章。</summary>
     public const int GOLD_DUNGEON_CHAPTER_GATE = 1;

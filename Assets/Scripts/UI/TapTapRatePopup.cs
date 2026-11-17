@@ -70,7 +70,7 @@ public static class TapTapRatePopup
 
         GameAnalytics.ReportTapTapRateShow(fromScene);
         StaminaConfirmPopup.Show("给个好评",
-            "如果喜欢《像素冒险：裂隙之刃》，去 TapTap 给我们打个分吧！",
+            "如果喜欢《像素冒险：裂隙之刃》，\n去 TapTap 给我们打个分吧！",
             "去好评",
             () =>
             {

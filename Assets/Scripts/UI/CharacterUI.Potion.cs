@@ -69,7 +69,7 @@ public partial class CharacterUI
         if (waste > 0)
         {
             StaminaConfirmPopup.Show(
-                $"使用体力药水后将超出上限，多余的 {waste} 点会浪费。\n是否仍要使用？",
+                $"使用体力药水后将超出上限，\n多余的 {waste} 点会浪费。\n是否仍要使用？",
                 "仍要使用",
                 ApplyStaminaPotion);
             return;

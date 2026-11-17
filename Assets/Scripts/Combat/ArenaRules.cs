@@ -355,26 +355,41 @@ public static class ArenaRules
     }
 
     /// <summary>
-    /// 游玩中机器人分数刷新：距上次刷新超过 BotRefreshSeconds 就把每个非垫底机器人向「当前天花板下的标准曲线」收敛一步
-    /// （BotRefreshLerp；每日漂移 DriftBots 照旧，收敛保证整体不离曲线），再按原名次对齐积分序，玩家名次不变。
-    /// 调用口 = ArenaPopupUI.Open / ApplyBattleOutcome（到点才刷，幂等）。垫底保底分以下不再有 0 分（2026-10-31 主人拍板「0 分太多」）。
+    /// 关界面时机器人分数模拟结算（2026-11-17 主人拍板改版：取代原「游玩中/胜局即时刷分」，
+    /// 解决「打一回再回来机器人就涨分、分数都是整百、前三固定」的作弊感）。
+    /// 唯一调用口 = ArenaPopupUI.Close。冻结期不动榜；闸门复用 arenaBotRefreshAt + BotRefreshSeconds
+    /// （防短时间反复开关刷分）。确定性随机走 ArenaLadderDrift.StableHash(seed, 时间bucket)，
+    /// 同一闸门周期内重复开关结果稳定（幂等）。约 40% 机器人参与变动，增量一律 ±10×N
+    /// （N 1~5、前三 1~8），分数恒为 10 倍数；涨多跌少（58% 涨 / 42% 跌，期望温和通胀），
+    /// 跌时钳到 BotMinScore=10。前三放大 N 让分差可被单次波动覆盖、频繁易位。
+    /// 重排：关界面结算走 ArenaLadderDrift.ReorderByPoints 按分数自然落位（玩家名次随涨跌自然变化、
+    /// 机器人分数零改写→恒 10 倍数）；战斗胜/败结算仍走 RepositionByPoints 原样不动。
     /// </summary>
     public static void RefreshBotScoresIfDue(SaveData data)
     {
         if (data?.arenaBots == null || data.arenaBots.Count == 0) return;
+        if (ArenaSeasonClock.IsFrozen()) return;   // 结算冻结期：榜单一动不动
+
         long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (data.arenaBotRefreshAt > 0 && now - data.arenaBotRefreshAt < BotRefreshSeconds) return;
+        if (data.arenaBotRefreshAt > 0 && now - data.arenaBotRefreshAt < BotRefreshSeconds) return;   // 闸门：未到期不结
         data.arenaBotRefreshAt = now;
 
-        int top = TopTargetFor(data);
+        long bucket = now / BotRefreshSeconds;   // 时间 bucket：同一闸门周期内重复开关结果稳定（幂等、防刷）
         for (int i = 0; i < data.arenaBots.Count; i++)
         {
             var b = data.arenaBots[i];
-            if (b == null || b.points <= 0) continue;
-            int target = ScoreForRankScaled(i + 1, top);   // 按当前链序排名取目标分（刷新末尾重排，下一轮自然对齐）
-            b.points = Mathf.Max(b.points, Mathf.RoundToInt(Mathf.Lerp(b.points, target, BotRefreshLerp)));
+            if (b == null) continue;
+            int seed = b.seed != 0 ? b.seed : i;   // 老档 seed=0 时用下标兜底，不跨文件新写哈希
+            int h = ArenaLadderDrift.StableHash(seed, bucket);
+            if (h % 100 >= 40) continue;   // 约 60% 机器人本次不动，分数原样
+
+            bool rise = (h / 100) % 100 < 58;              // 58% 涨 / 42% 跌，期望温和通胀（整体不通缩）
+            int maxN = i <= 2 ? 8 : 5;                      // 前三（列表已按积分降序）放大 N 上限，分差可被单次波动覆盖
+            int n = (h / 10000) % maxN + 1;                 // N = 1~maxN
+            int delta = (rise ? 1 : -1) * 10 * n;           // 增量恒为 ±10 的整数倍，分数恒满足 points % 10 == 0
+            b.points = rise ? b.points + delta : Mathf.Max(b.points + delta, BotMinScore);   // 跌时守 10 分下限
         }
-        RepositionByPoints(data, 0);   // 只把积分序对齐回原位次，玩家名次不变（唯一重排口复用）
+        ArenaLadderDrift.ReorderByPoints(data);   // 按分数自然落位：玩家名次随涨跌变化，机器人分数零改写（恒 10 倍数）
         SaveSystem.Instance?.Save();
         FireChanged();
     }
@@ -1216,18 +1231,12 @@ public static class ArenaRules
         }
         // 低分保底（armed 口径）：积分落账后仍 ≤ LowScorePityAt 且无进行中保底 → 再送 N 场必赢（橡皮筋，直到爬出低分区）
         data.arenaPoints = Mathf.Max(0, data.arenaPoints + pts);   // 守卫：积分永不扣成负数
-        if (won)
-        {
-            for (int i = 0; i < data.arenaBots.Count; i++)
-                if (data.arenaBots[i] != null) data.arenaBots[i].points += pts;
-        }
         // 目标位次驱动重排：胜局升名 1~RankGainMax（前 TopTenRank 固定 1、第 1 名 0），败局掉名 1~RankGainMax；
         // 已垫底时目标位次钳到机器人总数、位移为 0。位移写 LastBattleAnim 动效标记（正=升 / 负=降 / 0=没动）。
         int step = (pos + 1) <= TopTenRank ? 1 : UnityEngine.Random.Range(1, RankGainMax + 1);
         int desiredGain = won ? Mathf.Min(step, pos) : -UnityEngine.Random.Range(1, RankGainMax + 1);
         LastBattleAnim = RepositionByPoints(data, desiredGain);
         data.arenaBattlesTotal++;                    // 累计场次（机器人分数天花板驱动，2026-10-30 20:10 主人拍板「根据玩家玩的次数改变」）
-        RefreshBotScoresIfDue(data);                 // 游玩中到点刷机器人分（Open/结算双口幂等；到点才刷）
         if (data.arenaPoints <= LowScorePityAt && data.arenaLowPityLeft <= 0)
             data.arenaLowPityLeft = LowScorePityWins;
         AddBattleRecord(data, opponent, won, pts);   // 对战记录（对手/胜败/分值/时间；败局也记 +10）

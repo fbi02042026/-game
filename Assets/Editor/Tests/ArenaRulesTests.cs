@@ -181,31 +181,27 @@ public class ArenaRulesTests
     }
 
     [Test]
-    public void ApplyBattleOutcome_Win_BotsRiseByPts_AndSumUp()
+    public void ApplyBattleOutcome_Win_BotsNotRaisedImmediately()
     {
+        // 2026-11-17 改版：机器人分数只在关界面时模拟结算，胜局不再即时给全体机器人 +pts。
         var data = NewSave();
-        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制刷新，隔离单场抬升
-        long sumBefore = 0;
-        foreach (var b in data.arenaBots) if (b != null) sumBefore += b.points;
-        int topBefore = data.arenaBots[0].points;   // 榜首机器人不会落入胜局下调区间
+        data.arenaBotRefreshAt = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();   // 抑制关界面刷新，隔离单场
+        int topBefore = data.arenaBots[0].points;   // 榜首不会落入胜局下调区间（RepositionByPoints 升名只压玩家附近）
         int rowIdx = data.arenaPlayerPos - 1;
         ExpectWalletNoSaveWarning();
         ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out int pts, out _);
-        long sumAfter = 0;
-        foreach (var b in data.arenaBots) if (b != null) sumAfter += b.points;
-        Assert.Greater(sumAfter, sumBefore, "胜局后机器人分数整体上升");
-        Assert.AreEqual(pts, data.arenaBots[0].points - topBefore,
-            "单个机器人单场增量应等于 pts");
+        Assert.AreEqual(topBefore, data.arenaBots[0].points,
+            "胜局不应给全体机器人即时加分（榜首分数应不变，即时加分循环已删）");
+        Assert.AreEqual(ArenaRules.WinBasePoints, pts, "玩家仍照常得基础分");
     }
 
     [Test]
-    public void RefreshBotScoresIfDue_OldTimestamp_KeepsRankConsistent_NoBounce()
+    public void RefreshBotScoresIfDue_OldTimestamp_KeepsPointsOrderConsistent()
     {
         var data = NewSave();
         int rowIdx = data.arenaPlayerPos - 1;
         ExpectWalletNoSaveWarning();
         ArenaRules.ApplyBattleOutcome(data, rowIdx, won: true, out _, out _);
-        int posBefore = data.arenaPlayerPos;
 
         data.arenaBotRefreshAt = 1;   // 很旧的时间戳，强制触发刷新
         ArenaRules.RefreshBotScoresIfDue(data);
@@ -214,7 +210,58 @@ public class ArenaRulesTests
         foreach (var b in data.arenaBots)
             if (b != null && b.points >= data.arenaPoints) atOrAbove++;
         Assert.AreEqual(atOrAbove, data.arenaPlayerPos, "刷新后积分序与 arenaPlayerPos 仍一致");
-        Assert.AreEqual(posBefore, data.arenaPlayerPos, "刷新后名次不回跳");
+    }
+
+    // ---------- 关界面机器人模拟结算（2026-11-17 改版） ----------
+
+    [Test]
+    public void RefreshBotScoresIfDue_AllPointsMultipleOfTen()
+    {
+        var data = NewSave();
+        // 玩家分设到榜单中段机器人的分数（普通区间，不用 999999 规避），并按结算前积分序落位；
+        // 结算时贴近玩家分的机器人涨分即会跨过玩家分，覆盖原 RepositionByPoints 会改写分数（造出个位）的分支。
+        int k = ArenaRules.BotCount / 2;
+        data.arenaPoints = data.arenaBots[k].points;
+        data.arenaPlayerPos = 0;
+        for (int i = 0; i < data.arenaBots.Count; i++)
+            if (data.arenaBots[i] != null && data.arenaBots[i].points >= data.arenaPoints) data.arenaPlayerPos++;
+
+        ArenaRules.RefreshBotScoresIfDue(data);   // 新档 arenaBotRefreshAt=0，立即结算
+        foreach (var b in data.arenaBots)
+            Assert.AreEqual(0, b.points % 10, $"机器人 {b.name} 分数 {b.points} 应为 10 的倍数（无个位尾数）");
+    }
+
+    [Test]
+    public void RefreshBotScoresIfDue_HasDownwardMove()
+    {
+        if (ArenaSeasonClock.IsFrozen()) Assert.Ignore("赛季冻结期不结算，跳过本用例");
+        var data = NewSave();
+        var before = new Dictionary<string, int>();
+        foreach (var b in data.arenaBots) before[b.name] = b.points;
+
+        ArenaRules.RefreshBotScoresIfDue(data);   // 新档 arenaBotRefreshAt=0，立即结算
+
+        bool anyDrop = false;
+        foreach (var b in data.arenaBots)
+            if (b.points < before[b.name]) { anyDrop = true; break; }
+        Assert.IsTrue(anyDrop, "确定性结算中应至少出现一个机器人分数下跌（涨跌并存，非一味整百上涨）");
+    }
+
+    [Test]
+    public void RefreshBotScoresIfDue_SameGateIdempotent()
+    {
+        var data = NewSave();
+        ArenaRules.RefreshBotScoresIfDue(data);   // 第一次结算：arenaBotRefreshAt = now
+
+        var snapshot = new Dictionary<string, int>();
+        foreach (var b in data.arenaBots) snapshot[b.name] = b.points;
+        long gateAt = data.arenaBotRefreshAt;
+
+        ArenaRules.RefreshBotScoresIfDue(data);   // 闸门未到期：应直接返回
+
+        Assert.AreEqual(gateAt, data.arenaBotRefreshAt, "同闸门周期内再次调用不应推进闸门时间");
+        foreach (var b in data.arenaBots)
+            Assert.AreEqual(snapshot[b.name], b.points, $"同闸门内重复调用机器人 {b.name} 分数不应变化");
     }
 
     // ---------- 阀门战力系数 ----------
@@ -380,7 +427,6 @@ public class ArenaRulesTests
 
         data.arenaBotRefreshAt = 1;                       // 强制触发刷新
         ArenaRules.RefreshBotScoresIfDue(data);
-        Assert.AreEqual(posBefore, data.arenaPlayerPos, "刷新后名次仍不变");
         atOrAbove = 0;
         foreach (var b in data.arenaBots)
             if (b != null && b.points >= data.arenaPoints) atOrAbove++;

@@ -3078,7 +3078,7 @@ public partial class BattleManager
         else if (kind == ResourceAdRewards.ClaimKind.Diamond)
             tier = "花 " + price + " 钻领 " + ResourceAdRewards.StaminaPerAd + " 体力";
         else
-            tier = "今日补给已达上限（可等体力自然回复）";
+            tier = "今日补给已达上限\n（可等体力自然回复）";
 
         string body = "进本需 " + StaminaSystem.ADVENTURE_COST + " 体力，当前 " + StaminaSystem.Current
                     + "/" + StaminaSystem.Max

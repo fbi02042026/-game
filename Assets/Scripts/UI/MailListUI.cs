@@ -637,7 +637,7 @@ public class MailListUI : MonoBehaviour
         if (waste > 0)
         {
             StaminaConfirmPopup.Show(
-                $"有体力邮件领取后将超出上限，多余的 {waste} 点体力会浪费。\n是否仍要一键领取？",
+                $"有体力邮件领取后将超出上限，\n多余的 {waste} 点体力会浪费。\n是否仍要一键领取？",
                 "仍要领取",
                 DoClaimAll);
             return;

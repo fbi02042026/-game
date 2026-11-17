@@ -194,8 +194,8 @@ public partial class AdventureUI
         if (data == null || data.endlessRiftIntroShown) return;
         StaminaConfirmPopup.ShowNotice(
             title: "无限裂隙玩法",
-            body: "一层层往上打，越深越强。\n" +
-                  "每 10 层设一个保存点，\n" +
+            body: "越往上打，敌人越强。\n" +
+                  "每十层有一个保存点，\n" +
                   "打通它才记录进度。",
             okLabel: "知道了",
             onClose: null);
@@ -763,7 +763,7 @@ public partial class AdventureUI
         else if (kind == ResourceAdRewards.ClaimKind.Diamond)
             tier = "花 " + price + " 钻领 " + ResourceAdRewards.StaminaPerAd + " 体力";
         else
-            tier = "今日补给已达上限（可等体力自然回复）";
+            tier = "今日补给已达上限\n（可等体力自然回复）";
 
         string body = "进本需 " + enterCost + " 体力，当前 " + StaminaSystem.Current + "/" + StaminaSystem.Max
                     + "\n持有钻石 " + ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond)

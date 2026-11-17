@@ -233,7 +233,7 @@ public static class ArenaLadderDrift
     /// （ArenaRules.RepositionByPoints 已是 public；离线漂移只需要"按当前积分自然落位"，
     /// 不需要 desiredGain 硬驱动——所以直接 sort + 数 count 即可，结果和 RepositionByPoints(data,0) 一致）。
     /// </summary>
-    static int ReorderByPoints(SaveData data)
+    public static int ReorderByPoints(SaveData data)
     {
         data.arenaBots.Sort((a, b) => (b == null ? 0 : b.points).CompareTo(a == null ? 0 : a.points));
         int pos = 0;

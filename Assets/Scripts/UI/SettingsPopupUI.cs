@@ -366,7 +366,7 @@ public class SettingsPopupUI : MonoBehaviour
     void OnClearDataClicked()
     {
         StaminaConfirmPopup.Show("清除数据",
-            "清除数据将删除本地存档，游戏将从新档重新开始，是否同意？",
+            "清除数据将删除本地存档，\n游戏将从新档重新开始，\n是否同意？",
             "同意", OnClearDataConfirmed);
     }
 

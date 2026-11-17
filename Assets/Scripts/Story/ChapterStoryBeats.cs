@@ -100,13 +100,19 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo("艾丽娅", "还记得吗？三年前你揣着三枚铜板买面包，排在我后面。", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("艾丽娅", "现在你是公会第八支小队的队长了。今天只是新人试炼，别紧张。", StoryPortraits.Xiaomei),
+            // 【2026-11-17 失踪时间线修正】艾丽娅三个月前带队进裂隙后失踪，不能在本章战前剧情里"本人在场"说话。
+            // 她的话统一改成主角回忆（Narration 无名牌无立绘）；触发时机/句数/顺序不变，第 7 章真人现身时立绘回归作回收。
+            // 【2026-11-17 二次·合理性】三枚铜板是全局最早的情感钩子：原句空降"你想起她曾说过——还记得吗"，
+            // 玩家此时还不认识艾丽娅、也不知这笔账。改成旁白直接讲清"她是谁/账从哪来/她去哪了"，
+            // 让第一次出现就立得住；真源统一为"她欠主角三枚铜板"（对齐 C01 线索、第7章重逢、Happy 结局），
+            // 去掉与设定打架的"三年前"。
+            StoryDirector.Narration("三枚铜板，是她出发前那晚借你的——买了两个面包，一个塞给你，笑着说回来就还。"),
+            StoryDirector.Narration("三个月了，她没回来，钱也没还。你是接她手、第八支小队的队长。"),
             StoryDirector.Narration("这里是裂隙第一层的暮影森林。怪物是从缝里渗出来的——清完这波，把样本带回去交差。"),
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c1_blade 两句并入战前
             StoryDirector.Narration("你摸了摸腰间的裂隙之刃，刃口有一道旧缺口。"),
             StoryDirector.Narration("公会档案写着：这把剑的前一任主人，三年前在森林层失踪。"),
-            StoryDirector.Solo("你", "转正仪式上说好的，债没还清之前我哪都不去。走吧。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "她还没还那三枚铜板。账不清，我就当她还会回来。走吧。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -118,9 +124,9 @@ public static class ChapterStoryBeats
             // 【2026-11-11 背景校对】战前剧情补挂本章背景（图早已在 WarmupChapterAssets 预热，此前只给战后用）：
             // 挂图后自带地点揭示黑场（大字取 StoryBackgrounds.DisplayName）；战后 N 同 ID → 同景续话不重复黑场。
             StoryDirector.Narration("幽冥墓园：城外的旧墓园，三年前起埋着的东西开始往外爬。").Bg(StoryBackgrounds.GraveSeven),
-            StoryDirector.Solo("艾丽娅", "这片园里埋着以前的冒险者。公会对外说是地脉波动——你信吗？", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("你想起艾丽娅曾说过——『这片园里埋着以前的冒险者。公会对外说是地脉波动——你信吗？』"),
             StoryDirector.Solo("你", "第八支小队之前的七支，全都进过裂缝。一块碑都没立回来。", StoryPortraits.Player),
-            StoryDirector.Solo("艾丽娅", "所以我们才要走到最里面，看看他们到底碰上了什么。", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("她那时还说——『所以我们才要走到最里面，看看他们到底碰上了什么。』"),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -129,8 +135,8 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Solo("艾丽娅", "岔路这边是翡翠秘境。十一年前，有一整支小队消失在这一层。", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("艾丽娅", "你转正那天，会长亲自给你别上徽章——他看我们的眼神，像在数还剩几个人。", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("你想起艾丽娅说过——『岔路这边是翡翠秘境。十一年前，有一整支小队消失在这一层。』"),
+            StoryDirector.Narration("她还说——『你转正那天，会长亲自给你别上徽章——他看我们的眼神，像在数还剩几个人。』"),
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c3_jungle 两句并入战前
             StoryDirector.Narration("藤蔓后头有一座塌了的石门，门上刻着不属于这个时代的字。"),
             StoryDirector.Narration("守在这里的东西没有名字——它只是记得，有人曾经从这儿走进去，再没出来。"),
@@ -148,8 +154,8 @@ public static class ChapterStoryBeats
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c4_field 两句并入战前
             StoryDirector.Narration("草原的风里混着铁锈味，那是更远处的战火被吹了过来。"),
             StoryDirector.Narration("你在草根下捡到一块木牌，背面刻着一个名字，笔画很新。"),
-            StoryDirector.Solo("你", "艾丽娅，当年介绍我进公会的时候，你是不是早就知道会有今天？", StoryPortraits.Player),
-            StoryDirector.Solo("艾丽娅", "我只知道我这支小队不能白组。走吧——今天风停了，这不正常。", StoryPortraits.Xiaomei),
+            StoryDirector.Solo("你", "当年她介绍我进公会的时候，是不是早就知道会有今天？", StoryPortraits.Player),
+            StoryDirector.Narration("你想起她的回答——『我只知道我这支小队不能白组。走吧——今天风停了，这不正常。』"),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -159,9 +165,9 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             // 【2026-11-11 背景校对】同 Pre2：补挂本章背景（黑场大字「搁浅的补给船」，与首句文案正好衔接）。
-            StoryDirector.Solo("艾丽娅", "三条岔路在海岛遗迹汇合。那艘补给船的残骸是新的，最多三个月。", StoryPortraits.Xiaomei).Bg(StoryBackgrounds.WreckShip),
+            StoryDirector.Narration("你想起艾丽娅说过——『三条岔路在海岛遗迹汇合。那艘补给船的残骸是新的，最多三个月。』").Bg(StoryBackgrounds.WreckShip),
             StoryDirector.Solo("你", "三个月前……正好是我们转正的月份。", StoryPortraits.Player),
-            StoryDirector.Solo("艾丽娅", "怪物越来越像被赶过来的。有什么东西在深处催它们。", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("她那时还说——『怪物越来越像被赶过来的。有什么东西在深处催它们。』"),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -174,8 +180,8 @@ public static class ChapterStoryBeats
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c6_cave 两句并入战前
             StoryDirector.Narration("深窟的石壁上有人用刀刻过字，一层压着一层，像很多人写过同一句话。"),
             StoryDirector.Narration("最上面那行还没写完：『如果你读到这——』"),
-            StoryDirector.Solo("艾丽娅", "当年我拉你进公会，你说『面包钱还没还我呢』。现在我怕你还想讨这笔债。", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("你", "三枚铜板，记着呢。等出去了，你请。", StoryPortraits.Player),
+            StoryDirector.Narration("你想起艾丽娅出发前那晚的笑脸——『等回来，三枚铜板连本带利还你。』"),
+            StoryDirector.Solo("你", "她自己说的，要当面还清。那我就等她回来还。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -185,7 +191,7 @@ public static class ChapterStoryBeats
         var beats = new List<StoryBeat>
         {
             StoryDirector.Narration("赤焰炼狱：通往最深处前的最后一层。这里的热不是火——是裂缝本身在烧。"),
-            StoryDirector.Solo("你", "她把话说完就自己先进来了。炼狱烧不穿她留下的脚印。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "三个月前，她走进这层就再没出来。炼狱烧不穿她留下的脚印。", StoryPortraits.Player),
             StoryDirector.Solo("你", "第八支小队走到这儿的，只剩我一个。答案和债，今天一起结。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
@@ -219,9 +225,9 @@ public static class ChapterStoryBeats
     {
         var beats = new List<StoryBeat>
         {
-            StoryDirector.Narration("森林层的雾散了。艾丽娅把今天采的样本码进补给箱，忽然停了手。"),
-            StoryDirector.Solo("艾丽娅", "箱子底下压着张纸条，字很新，只有三个字：「别停下。」", StoryPortraits.Xiaomei),
-            StoryDirector.Solo("艾丽娅", "公会发的箱子，谁会提前写好这种话？", StoryPortraits.Xiaomei),
+            StoryDirector.Narration("森林层的雾散了。你翻开那只补给箱，像想起她曾做过的那样，把样本码进去——忽然停了手。"),
+            StoryDirector.Narration("箱底压着张纸条，字很新，只有三个字：「别停下。」"),
+            StoryDirector.Narration("你想起她曾说过——『公会发的箱子，谁会提前写好这种话？』"),
             new StoryBeat
             {
                 leftName = "你",
@@ -241,7 +247,7 @@ public static class ChapterStoryBeats
     static void ApplyN1Choice(int idx, Action onDone)
     {
         StoryBeat echo = idx == 0
-            ? StoryDirector.Solo("艾丽娅", "收好了就走吧。「别停下」——哼，说得倒轻巧。", StoryPortraits.Xiaomei)
+            ? StoryDirector.Narration("你想起她说过——『收好了就走吧。「别停下」——哼，说得倒轻巧。』")
             : StoryDirector.Solo("你", "开玩笑的。……不过这张纸，我先收在剑鞘边上。", StoryPortraits.Player);
         StoryDirector.Ensure().Play(new List<StoryBeat> { echo }, () => onDone?.Invoke());
     }
@@ -507,7 +513,7 @@ public static class ChapterStoryBeats
         }
         else if (index == 1)
         {
-            echo = StoryDirector.Solo("艾丽娅", "好啊。\n那这次换我跟在你后面。", StoryPortraits.Xiaomei);
+            echo = StoryDirector.Solo("艾丽娅", "好啊。那这次换我跟在你后面。", StoryPortraits.Xiaomei);
             StoryProgress.AddBond(StoryProgress.NpcXiaomei, 15);
         }
         else

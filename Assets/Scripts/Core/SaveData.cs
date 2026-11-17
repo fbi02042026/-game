@@ -1323,10 +1323,10 @@ public class SaveData
         // 【2026-10-29 主人拍板】支线岛改为「通关第 1 章后才开放」：若第 1 章尚未通关却已派定支线岛
         // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
         // 等门槛到了由 EnsureForkRoll 重新随机派定。
-        // 【2026-10-31 对齐 FeatureUnlock.SideIslandOpen】B2 后「通第 1 章」= 50 小关会把支线岛拖到第 2 天，
-        // 派岛门槛改成「第 1 篇第 1 座大关通关」（≈25 体力）。
+        // 【2026-11-17 主人拍板「支线后挪」】对齐 FeatureUnlock.SideIslandOpen：
+        // 派岛门槛从「通第 1 座大关」后挪到「通第 1 章」（CHAPTER_GRANDS=10 关全通）。
         // 🔴 一律从 clearedStages 推，不读 grandProgress 缓存（同 StartChapter / OnStageComplete / FeatureUnlock 口径）。
-        if (DerivedGrandProgressFromClearedStages(1) < 1) { branchRoll1 = 0; branchRoll2 = 0; }
+        if (DerivedGrandProgressFromClearedStages(1) < 10) { branchRoll1 = 0; branchRoll2 = 0; }
         MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();

@@ -88,21 +88,21 @@ public partial class AdventureUI
         // cleared = 0（刚重置过）时更不能写「上次止步第 0 层」。
         string body;
         if (cleared <= 0)
-            body = "本轮进度已重置，本次将从第 1 层重新开始（上一局的构筑与装备已失效）。";
+            body = "本轮进度已重置，\n本次将从第 1 层重新开始\n（上一局的构筑与装备已失效）。";
         else if (checkpoint > 0)
             body = $"上次止步第 {cleared} 层，保存点第 {checkpoint} 层。\n" +
-                   $"是否返回上回保存点，从第 {startStage} 层继续？（保留保存点时的构筑与装备）\n" +
-                   "想从第 1 层重来，请点页面右下角的重置徽章。";
+                   $"是否返回上回保存点，从第 {startStage} 层继续？\n（保留保存点时的构筑与装备）\n" +
+                   "想从第 1 层重来，\n请点页面右下角的重置徽章。";
         else
-            body = $"上次止步第 {cleared} 层，还没到第 {GameConfig.ENDLESS_SAVE_INTERVAL} 层存档点。\n" +
-                   "本次从第 1 层重新开始（上一局的构筑与装备已失效）。";
+            body = $"上次止步第 {cleared} 层，\n还没到第 {GameConfig.ENDLESS_SAVE_INTERVAL} 层存档点。\n" +
+                   "本次从第 1 层重新开始\n（上一局的构筑与装备已失效）。";
 
         // 跳层补偿的抽数只算一次，文案和实际发放用同一个值（不另算一遍，防两处口径漂移）
         int catchUp = canJump ? EndlessRiftRules.CatchUpDraws(startStage, bestStart) : 0;
         if (canJump)
-            body += $"\n\n生涯最高出生点：第 {EndlessRiftRules.BestCheckpoint(data)} 层。" +
+            body += $"\n\n生涯最高出生点：第 {EndlessRiftRules.BestCheckpoint(data)} 层。\n" +
                     $"直达第 {bestStart} 层可跳过中间 {bestStart - startStage} 层。\n" +
-                    (catchUp > 0 ? $"跳过的层免费抽 {catchUp} 次会一次性自动抽完。\n" : "") +
+                    (catchUp > 0 ? $"跳过的层免费抽 {catchUp} 次\n会一次性自动抽完。\n" : "") +
                     "不想进入请点弹窗外空白处关闭。";
 
         // 弹窗期间先把进本标记放下：玩家点暗底/取消时不会把 true 带进下一次进本。
@@ -151,10 +151,10 @@ public partial class AdventureUI
     {
         int skipped = Mathf.Max(1, bestStart - startStage);
         string body =
-            $"直接跳到生涯最高出生点：从第 {bestStart} 层开始。\n" +
+            $"直接跳到生涯最高出生点：\n从第 {bestStart} 层开始。\n" +
             $"跳过第 {startStage}～{bestStart - 1} 层，共 {skipped} 层。\n" +
-            (catchUp > 0 ? $"这些层的免费抽 {catchUp} 次，进本第一层会一次性自动抽完。\n" : "") +
-            "跳过的层不补发首通奖励与宝箱金币（想要那些奖励就逐层打）。\n" +
+            (catchUp > 0 ? $"这些层的免费抽 {catchUp} 次，\n进本第一层会一次性自动抽完。\n" : "") +
+            "跳过的层不补发首通奖励与宝箱金币\n（想要那些奖励就逐层打）。\n" +
             "本轮保存点不会因此后退。";
 
         StaminaConfirmPopup.ShowChoice(
