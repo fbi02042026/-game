@@ -87,17 +87,15 @@ public static class StageRoller
     public const float PinnedEliteChance = 1.0f;
 
     /// <summary>
-    /// 正式关类型按位置定死：
-    /// 每关最后一节（0-based = <see cref="GameConfig.StagesPerGrandOf"/>(章)-1）= Boss；
-    /// 第 3 节（0-based 2）= <see cref="PinnedEliteChance"/> 概率精英（当前 1.0 = 必精英）；
-    /// 其余普通。8/10 节章的精英位沿用第 3 节（2026-11-01 待主人确认）。
+    /// 正式关类型按位置定死（【路线 B】关型真源 = <see cref="ActProgressionDefs.TypeOfStage"/>）：
+    /// 关 5（0-based 4）/ 关 10（9）= Boss；关 3（2）/ 关 8（7）= <see cref="PinnedEliteChance"/> 概率精英（当前 1.0 = 必精英）；
+    /// 其余普通。
     /// 只服务主线正式关（ChapterManager.RollNextStageType 唯一调用方）。
     /// </summary>
     public static StageType RollByPosition(int stageIndex0Based, int chapter)
     {
-        if (stageIndex0Based == GameConfig.StagesPerGrandOf(chapter) - 1) return StageType.Boss;
-        if (stageIndex0Based == 2)
-            return Random.value < PinnedEliteChance ? StageType.Elite : StageType.Normal;
+        StageType forced = ActProgressionDefs.TypeOfStage(stageIndex0Based);
+        if (forced != StageType.Normal) return forced;   // 关型真源：Boss(关5/10)+精英(关3/8)统一走单一出口
         return StageType.Normal;
     }
 

@@ -223,7 +223,7 @@ public partial class WavePlanner
         // 【2026-10-19 修A】无限裂隙每层 stageIndex 恒为 0（ChapterManager.StartEndlessRift），
         // 按 stageIdx 过滤会把 minWave=9 的真 Boss 行全滤掉，Boss 波只能拿普通怪模板走 800/55 兜底。
         // Boss 波取池按大关末关（STAGES_PER_GRAND-1）取，真 Boss 行必入池；
-        // 主线 Boss 关 stageIdx 本来就是末关，行为不变。小怪波（wantBoss=false）仍按原 stageIdx。
+        // 【路线B】末关=关10=stageIdx9（poolIdx 恒 9 照旧取池），关5(stageIdx4) 造型另按关号定点（见下方 wantBoss 分支）。小怪波（wantBoss=false）仍按原 stageIdx。
         // 【2026-11-01 批 B3】Boss 波取池按本关末节（StagesPerGrandOf(章)-1，节数 5/8/10 按章取）。
         int poolIdx = wantBoss ? GameConfig.StagesPerGrandOf(CurrentChapter) - 1 : stageIdx;
         var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, poolIdx);
@@ -257,6 +257,14 @@ public partial class WavePlanner
         {
             // 优先 Boss 段行（sprite >= BOSS_SPRITE_START，含 10 号 xiaoboss）；避免高阶小怪 isBoss 误抢模板
             var trueBosses = pool.Where(m => m.isBoss && m.spriteIndex >= GameConfig.BOSS_SPRITE_START).ToList();
+            // 【路线B定点】仅正式主线按关号锁造型：关5(stageIdx=4)=10号xiaoboss；关10(stageIdx=9)=11/12真Boss。
+            // 非主线（裂隙/副本/支线岛/竞技场 stageIdx=0）走原随机，行为不变。
+            bool formalMain = bm != null && bm.IsFormalMainRun;
+            if (formalMain && stageIdx == 4)
+                trueBosses = trueBosses.Where(m => m.spriteIndex == GameConfig.BOSS_SPRITE_START).ToList();
+            else if (formalMain && stageIdx == 9)
+                trueBosses = trueBosses.Where(m => m.spriteIndex > GameConfig.BOSS_SPRITE_START).ToList();
+            // 下面原有 if(trueBosses.Count>0) 抽取/兜底逻辑一律不动
             if (trueBosses.Count > 0)
                 template = trueBosses[Random.Range(0, trueBosses.Count)];
             else

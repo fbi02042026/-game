@@ -114,6 +114,15 @@ public class MercSkillCaster : MonoBehaviour
 
     public bool TryCast(bool manual = false)
     {
+        return TryCastInternal(manual, false);
+    }
+
+    /// <summary>
+    /// committed=true = 读条已满的真结算，跳过读条段直接扣蓝+放技能；
+    /// committed=false = 首次尝试，治疗技走 1 秒读条，读满回调再以 true 重入。
+    /// </summary>
+    bool TryCastInternal(bool manual, bool committed)
+    {
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return false;
         if (_cooldownRemain > 0f) return false;
         if (BattleManager.Instance == null) return false;
@@ -122,6 +131,20 @@ public class MercSkillCaster : MonoBehaviour
         // 不扣蓝、不进冷却，出怪后下一帧自动补发；治疗/增益/护盾类目标是自己人，不受此限。
         // 闸必须放在扣蓝之前：放后面的话没目标时返回 false，蓝已扣、CD 不重置，会每帧空扣蓝。
         if (MercSkillNeedsTarget(_activeSkillId) && _merc.FindNearestEnemy() == null) return false;
+
+        // 【2026-11-18 主人拍板】治疗技读满 1 秒才扣蓝 / 进 CD / 出特效 / 出左侧条。
+        // 读条期间施法者定身（UnitBase.Update 里 HealCastBar.IsCasting 早退）、防重入。
+        // 眩晕砸地 → 读条取消 → 回调不触发 → 不扣蓝、不进 CD。非治疗技（攻击/护盾/Buff）不读条。
+        if (!committed && GameConfig.HEAL_CAST_SEC > 0f && IsHealActiveSkill())
+        {
+            if (HealCastBar.IsCasting(_merc)) return false;
+            HealCastBar.Begin(_merc, () =>
+            {
+                if (_merc == null || _merc.isDead || _merc.IsStunned) return;
+                TryCastInternal(manual, true);
+            });
+            return true;
+        }
         // 2026-10-06 主人拍板：蓝不足不能释放。MP 闸在施法之前，扣不到蓝就不放 —— CD 也不重置。
         if (_mpType != MpArchetype.None && !BattleManager.Instance.TrySpendMercMp(_merc, _mpCost)) return false;
         bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual: false);
@@ -132,6 +155,15 @@ public class MercSkillCaster : MonoBehaviour
             _cooldownRemain = CooldownTotal;
         }
         return ok;
+    }
+
+    /// <summary>当前主动技是否是治疗类（读条口径）：单奶 / 群奶 / 团队治疗攻击技。</summary>
+    bool IsHealActiveSkill()
+    {
+        var kind = MercSkillExecutor.Resolve(_activeSkillId);
+        return kind == MercSkillExecutor.Kind.HealSingle
+            || kind == MercSkillExecutor.Kind.HealTeam
+            || kind == MercSkillExecutor.Kind.TeamHealAtk;
     }
 
     // 【2026-10-23 主人拍板】[Obsolete] ResetCooldown 已删除：语义陷阱（清零冷却 = 立刻可放），确认零调用。

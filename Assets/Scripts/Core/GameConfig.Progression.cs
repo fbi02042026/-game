@@ -42,6 +42,12 @@ public static partial class GameConfig
     // 原实现会无限站桩脱队 → 超此时限强制恢复跟队（治疗由 MercSkillCaster.Update 自动放，不要求站着）。
     public const float MERC_HEAL_WAIT_MAX_SEC = 1.5f;
 
+    // 【2026-11-18 主人拍板】治疗读条：玩家奶 / 佣兵奶读满 1 秒才结算（扣蓝/CD/特效/左侧条一起出），
+    // 读条期间施法者定身、挂头顶同款攒槽条；Boss 砸地眩晕可打断（眩晕单体 = 读条作废、不扣蓝）。
+    public const float HEAL_CAST_SEC = 1.0f;
+    // 近战 Boss 砸地命中我方单位的眩晕时长（只砸地、不晕远程弹道；只 Boss、不含精英）。
+    public const float BOSS_SLAM_STUN_SEC = 1.0f;
+
     public const int ADVANCED_MERC_GUILD_LEVEL = 5; // 优秀=公会5；稀有10/传奇20 另见 MercQuality
 
     [Header("隐藏经验等级")]

@@ -80,8 +80,8 @@ public static class MercRosterDefs
         D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         // 【2026-11-02 主人拍板】H013 升传奇：数值=传说公式（基准 206.0/36.7/24.1 ×1.70/×2.00/×1.85），
         //   补被动 SK017 魔力涌动，价格 2000→8000 对齐伊芙。模型 2026-11-03 主人拍板换 fashi202（naima201 战士相不符已归还模型库）。
-        D("H013", "莫娜", "紫晶", "fashi202", "雷系法师", MercRarity.Legendary, 1.30f, 350.2f,73.4f,44.7f, 1.00f, 3.5f, "SK013", "SK017", 8000, false, false),
-        D("H014", "伊芙", "火舞", "fashi201", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK020", "SK019", 8000, false, false),
+        D("H013", "莫娜", "紫晶", "fashi202", "雷系法师", MercRarity.Legendary, 1.30f, 350.2f,73.4f,44.7f, 1.00f, 3.5f, "SK022", "SK017", 8000, false, false),
+        D("H014", "伊芙", "火舞", "fashi201", "火系法师", MercRarity.Legendary, 1.30f, 355.4f,62.8f,38.5f, 1.20f, 3.5f, "SK021", "SK019", 8000, false, false),
         // 【2026-10-31 主人拍板·看广告送佣兵活动】H015 艾拉改稀有档（原普通档）：
         // 攻 = 传奇最弱的凯恩 BaseAtk 58.2、血 = 普通档 244.8 不动、防补到稀有标准 34.6、攻速 1.60 不动。
         // 与 merc_roster.csv / merc_roster.bytes 三处同值；改完跑「Tools → 佣兵 → 花名册三处同值校验」。
@@ -444,6 +444,28 @@ public static class MercRosterDefs
 
     public static string GetMvpLine(string hireId)
         => MercLineTable.Pick(hireId, MercLineTable.Scene.Mvp);
+
+    /// <summary>【2026-11-18 主人拍板】佣兵队列替换上阵 toast：读表「上阵」台词 + 真名前缀。
+    /// 真名只取花名册真名 def.Name（铁律：不用昵称/职业顶替，缺名 LogError 不静默），
+    /// 台词表只存纯台词，两者在此单一出口拼「真名：台词」。</summary>
+    public static string GetDeployLine(string hireId)
+    {
+        string line = MercLineTable.Pick(hireId, MercLineTable.Scene.Deploy);
+        if (string.IsNullOrEmpty(line)) return null;
+
+        string name = null;
+        if (!string.IsNullOrEmpty(hireId) && TryGetByHireId(hireId, out var def))
+            name = def.Name;
+        if (string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(hireId) && TryGetByAssetId(hireId, out var def2))
+            name = def2.Name;
+        if (string.IsNullOrEmpty(name))
+        {
+            Debug.LogError("[MercRosterDefs] GetDeployLine 缺真名 hireId=" + hireId
+                + "，去 merc_roster.csv 补真名，别拿昵称顶替");
+            return line;   // 表里有台词但花名册缺真名：退回纯台词，不静默吞、不拿昵称冒充
+        }
+        return name + "：" + line;
+    }
 
     /// <summary>可出现在酒馆形象池的 AssetId（去重）。</summary>
     public static List<string> GetHireableAssetIds()

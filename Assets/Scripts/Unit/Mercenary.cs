@@ -32,6 +32,9 @@ public partial class Mercenary : UnitBase
     float _awayFightTimer;
     /// <summary>【2026-10-20】牧师「站住等自动奶」已定身时长，超过 MERC_HEAL_WAIT_MAX_SEC 强制恢复跟队。</summary>
     float _healWaitTimer;
+    /// <summary>【2026-11-18】本次交战已放弃「站定等奶」：蓝不足 / 表缺耗蓝导致技能放不出、CD 恒 ≤0 时，
+    /// 超时后闭锁，不再每隔 1.5 秒又站桩；技能真正放出（CD>0）或切关复用时解除。</summary>
+    bool _healWaitAbandoned;
     /// <summary>引导：原地眩晕，不跑 AI，受击不死。</summary>
     public bool TutorialStunned { get; private set; }
     float _stunAnimTimer;
@@ -232,6 +235,8 @@ public partial class Mercenary : UnitBase
         base.ResetForReuse();
         _acquireLock = null;
         _healWaitTimer = 0f;
+        _healWaitAbandoned = false;
+        HealCastBar.Cancel(this);   // 切关/对象池复用：上一局没读完的奶条不许留到新关
     }
 
     public void SetHireId(string id)

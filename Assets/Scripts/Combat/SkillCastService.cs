@@ -38,6 +38,18 @@ public sealed class SkillCastService
     /// <summary>释放指定技能槽的技能（slot 来自 BattleManager.FindReadySkillSlot）。</summary>
     public bool TryUsePlayerSkillSlot(int slot)
     {
+        // 【2026-11-18】读条期间施法独占：任何技能都点不动（防攻击技插队抢在奶前出特效/左侧条）。
+        // 读条本身由 HealCastBar 推进，committed 重入走 Internal 不吃这道闸。
+        if (HealCastBar.IsCasting(hero)) return false;
+        return TryUsePlayerSkillSlotInternal(slot, false);
+    }
+
+    /// <summary>
+    /// 治疗技读条重入口：committed=true 表示读条已满、本次为真结算，直接落到下方扣蓝与特效段；
+    /// committed=false 是首次点击，走满所有闸后启动读条，读满回调再以 true 重入。
+    /// </summary>
+    bool TryUsePlayerSkillSlotInternal(int slot, bool committed)
+    {
         if (slot < 0) return false;
         // 纯冷却制下不再看能量（PLAYER_SKILL_USE_ENERGY 置 true 可退回原行为）
         if (GameConfig.PLAYER_SKILL_USE_ENERGY && bm.GetPlayerSkillEnergy(slot) < 0.99f) return false;
@@ -85,6 +97,21 @@ public sealed class SkillCastService
                 Debug.Log($"[SkillCast] 全员接近满血，治疗技 {skill.skillName} ({realId}) 不释放（不扣蓝不进冷却）");
                 return false;
             }
+        }
+        // 【2026-11-18 主人拍板】治疗技读满 1 秒才结算：扣蓝 / 回血 / CD / 特效 / 左侧通知全部延到读满后。
+        // 首次点击（committed=false）启动读条；读满回调以 committed=true 重入，跳过本段直接落原结算。
+        // 读条期间施法者定身（HealCastBar.IsCasting 挡移动）、禁再点技能（挡重入）。
+        // 眩晕/死亡/切关导致读条取消 → 回调不触发 → 不扣蓝、不进 CD、不出特效。
+        if (isHeal && GameConfig.HEAL_CAST_SEC > 0f && !committed)
+        {
+            if (HealCastBar.IsCasting(hero)) return false;
+            HealCastBar.Begin(hero, () =>
+            {
+                // 读满这一帧复核：人没了 / 切关 / 又被眩晕 → 结算作废（回调仍在则条未取消，这里再兜一层）。
+                if (hero == null || hero.isDead || hero.IsStunned) return;
+                TryUsePlayerSkillSlotInternal(slot, true);
+            });
+            return true;
         }
         if (!bm.TrySpendPlayerMp(mpCost)) return false;
 

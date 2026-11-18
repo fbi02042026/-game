@@ -37,6 +37,9 @@ public class ParallaxBackground : MonoBehaviour
     // 【2026-11-08】竞技场战斗专属背景：只换图；敌人/怪池仍按竞技场自身规则，跟章节背景无关。
     const string ArenaBackgroundPath = "UI/Art/background/新战斗背景/竞技场";
 
+    // 【2026-11-18 主人「新加金币副本背景，替换一下」】金币副本战斗专属背景：只换图，场景章/怪池/数值不动。
+    const string GoldDungeonBackgroundPath = "UI/Art/background/新战斗背景/金币副本";
+
     [Header("2026-10-26 主人拍板：中景2/远景3先隐藏，战斗背景只用近景1（拼接单元）")]
     /// <summary>true=整层不建、源节点直接关掉；要恢复中远景改回 false 即可。</summary>
     public bool hideMidBackLayers = true;
@@ -417,15 +420,18 @@ public class ParallaxBackground : MonoBehaviour
 
     /// <summary>
     /// 本次战斗背景精灵（唯一出口，2026-10-27 起按路径加载）。
-    /// 竞技场用专属图，不跟章节走（敌人/怪池仍按竞技场自身规则，与章节背景无关）；
+    /// 竞技场 / 金币副本用专属图，不跟章节走（其余规则仍按各自玩法，与章节背景无关）；
     /// 其余玩法按章节号取 ChapterBackgroundPaths。取不到返回 null（调用方 LogError 可见），不做任何兜底。
     /// </summary>
     static Sprite LoadChapterBackgroundSprite(int chapter)
     {
         bool isArena = BattleManager.Instance != null && BattleManager.Instance.IsArena;
+        bool isGoldDungeon = BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon;
         string path = isArena
             ? ArenaBackgroundPath
-            : (chapter >= 1 && chapter < ChapterBackgroundPaths.Length ? ChapterBackgroundPaths[chapter] : "");
+            : isGoldDungeon
+                ? GoldDungeonBackgroundPath
+                : (chapter >= 1 && chapter < ChapterBackgroundPaths.Length ? ChapterBackgroundPaths[chapter] : "");
         if (string.IsNullOrEmpty(path)) return null;
         var sprite = Resources.Load<Sprite>(path);
         if (sprite == null)

@@ -92,8 +92,8 @@ public static class RiftEquipGenerator
         // 后果：稀有弓在 1-5 能到 8.09×3.6×0.88×1.50≈38.4（今天 Editor.log 实测 ch=1 档=RARE 最终=36.73），
         // 玩家打完 1-5 带着这件进 2-1，看到的就是「2-1 的 40 攻稀有弓」。
         // 正确出口 = 带章上下文的双参版（2026-11-03 方案A：8/10 节章按节数摊满 10 档，不再吃尾档），
-        // 节数真源一律走 GameConfig.StagesPerGrandOf（= ActProgressionDefs.SubsPerGrandOf）。
-        int subsPerGrand = GameConfig.StagesPerGrandOf(Mathf.Max(1, chapter));
+        // 裂隙装备成长走固定 STAGES_PER_GRAND=5（独立玩法，不随路线B主线 subs=10 漂移）。
+        int subsPerGrand = GameConfig.STAGES_PER_GRAND;
         float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter))
                               * GameConfig.GetStageStatScale(stageIdx0, subsPerGrand);
         float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值

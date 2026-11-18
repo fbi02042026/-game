@@ -921,7 +921,7 @@ public static class DraftPool
                     Star = star,
                     MercLevel = level,
                     IsAffinity = false,
-                    PowerDelta = PowerCalc.MercPowerDelta(level, star)
+                    PowerDelta = PowerCalc.MercPowerOf(def.HireId, def.AssetId, level)
                 },
                 Weight = weight,
                 Key = "merc_" + def.HireId
@@ -958,9 +958,9 @@ public static class DraftPool
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
                     MercLevel = next,
-                    // 升 1 级的战力增量：用同一套 MercPowerDelta 求差，保证与 RunLoadout 入账口径一致
-                    PowerDelta = PowerCalc.MercPowerDelta(next, Mathf.Max(1, m.star))
-                              - PowerCalc.MercPowerDelta(Mathf.Max(1, m.level), Mathf.Max(1, m.star))
+                    // 升 1 级的战力增量：求差走同一套属性公式，保证与 RunLoadout 入账、佣兵面板完全一致
+                    PowerDelta = PowerCalc.MercPowerOf(m.hireId, m.mercId, next)
+                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level))
                 },
                 Weight = 8,
                 Key = "merc_lv_" + key
@@ -994,9 +994,10 @@ public static class DraftPool
                     Tag = SynergyTag.Summon,
                     Star = star + 1,
                     MercLevel = Mathf.Max(1, m.level) + 1,
-                    // 升 1 星且升 1 级的战力增量：用同一套 MercPowerDelta 求差，保证与 RunLoadout 入账口径一致
-                    PowerDelta = PowerCalc.MercPowerDelta(Mathf.Max(1, m.level) + 1, star + 1)
-                              - PowerCalc.MercPowerDelta(Mathf.Max(1, m.level), star)
+                    // 升 1 星且升 1 级的战力增量：只有等级那一档真加属性（局内星级只加 MP 池），
+                    // 所以求差同样走属性公式，与 RunLoadout 入账、佣兵面板一致
+                    PowerDelta = PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level) + 1)
+                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level))
                 },
                 Weight = 4,
                 Key = "merc_star_" + key

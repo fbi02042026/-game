@@ -128,6 +128,26 @@ public static class MercGrowInventory
             {
                 // Badge / 其余走本命养成仓库（id 已是 badge: 口径）
                 Add(d.id, d.count);
+                // 【2026-11-10 主人拍板「徽记 卷轴 礼物都要进奖励格」】主线掉的徽记也记一格（照徽记副本口径）
+                var stats = BattleManager.Instance != null ? BattleManager.Instance.RunStats : null;
+                if (stats != null)
+                {
+                    // id 口径 = badge:{职业key}:{档位}（如 badge:剑盾:传奇）；解析失败只影响记格，不影响上面的入账
+                    var parts = d.id != null && d.id.StartsWith(BadgePrefix) ? d.id.Split(':') : null;
+                    if (parts == null || parts.Length < 3)
+                    {
+                        Debug.LogError($"[MercGrow] 关卡掉落徽记奖励格：徽记 id 格式非法（{d.id}），该格不上（不静默）");
+                    }
+                    else
+                    {
+                        string jobKey = parts[1];
+                        string tier = parts[2];
+                        var rarity = tier == "传奇" ? MercRosterDefs.MercRarity.Legendary
+                                   : tier == "稀有" ? MercRosterDefs.MercRarity.Rare
+                                   : MercRosterDefs.MercRarity.Common;
+                        stats.AddActivityReward(jobKey + "徽记", d.count, MercGrowSprites.LoadJobBadge(jobKey, rarity));
+                    }
+                }
                 total += d.count;
             }
         }

@@ -89,6 +89,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
     GameObject _attrSpdRoot; Text _attrSpd;
     GameObject _attrCritRoot; Text _attrCrit;
 
+    // 【2026-11-18 主人需求】左上角「战斗力」节点组（主人摆的 Panel/战斗力：标题 zhandouli + number~number5）。
+    // sprite 由 MercPowerBadge 按路径加载覆盖，不依赖预制体里的图引用（该图集是 56 字符 guid，拖不落盘）。
+    Image _powerTitle;
+    Image[] _powerDigits;
+
     GameObject _skillRoot;
     Text _skillName;
     Text _skillInfo;

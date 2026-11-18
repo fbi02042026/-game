@@ -131,6 +131,29 @@ public partial class MercObtainPopupUI : MonoBehaviour
         _skillName = _root.transform.Find("Panel/you/Skill/SkillName")?.GetComponent<Text>();
         _skillInfo = _root.transform.Find("Panel/you/Skill/Skillxinxi")?.GetComponent<Text>();
         _skillIcon = _root.transform.Find("Panel/you/Skill/SkillIcon")?.GetComponent<Image>();
+
+        // 【2026-11-18 主人需求】左上角战斗力节点组（主人摆的 Panel/战斗力，与右上「进阶」同级对称）：
+        // 只认既有节点、不建树不摆布局；图由 MercPowerBadge 按路径加载覆盖。
+        // 节点/数字位缺失一律报错并让那一部分空着（项目口径：不兜底，出错要看得见）。
+        var powerTf = _root.transform.Find("Panel/战斗力");
+        if (powerTf == null)
+            Debug.LogError("[MercObtainPopup] 缺少节点 Panel/战斗力（佣兵战力不显示）");
+        else
+        {
+            _powerTitle = powerTf.Find("zhandouli")?.GetComponent<Image>();
+            if (_powerTitle == null)
+                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/战斗力/zhandouli（战力标题不显示）");
+
+            _powerDigits = new Image[MercPowerBadge.MaxDigits];
+            for (int i = 0; i < _powerDigits.Length; i++)
+            {
+                string nodeName = i == 0 ? "number" : "number" + i;
+                var digitTf = powerTf.Find(nodeName);
+                _powerDigits[i] = digitTf != null ? digitTf.GetComponent<Image>() : null;
+                if (_powerDigits[i] == null)
+                    Debug.LogError("[MercObtainPopup] 缺少节点 Panel/战斗力/" + nodeName + "（战力数字缺这一位）");
+            }
+        }
     }
 
     /// <summary>

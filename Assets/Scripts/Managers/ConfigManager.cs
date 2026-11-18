@@ -327,8 +327,8 @@ public class ConfigManager : Singleton<ConfigManager>
             .OrderBy(m => m.minWave) // 按出场顺序排序（初级→高级）
             .ToList();
 
-        // 只有关卡最后一节才允许BOSS出现在池中（节数按章 5/8/10，2026-11-01 批 B3）
-        bool isBossStage = stageInChapter == GameConfig.StagesPerGrandOf(chapter) - 1;
+        // 只有 boss 关（关 5/10）才允许 BOSS 出现在池中（路线 B：stageInChapter 为 0-based 关号）
+        bool isBossStage = ActProgressionDefs.BossKindOfStage(stageInChapter) != 0;
         if (!isBossStage)
         {
             pool = pool.Where(m => !m.isBoss).ToList();

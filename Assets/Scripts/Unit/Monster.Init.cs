@@ -254,13 +254,13 @@ public partial class Monster
         }
 
         // 【2026-10-24 主人拍板「章末大Boss 独立档」】B1 后一章 = 一座大关 = 5 小关，
-        // stageIdx0==4 就是章末大 Boss —— v4.1 的「第 5 关小 Boss ×0.6、第 10 关大 Boss（==9）不乘」
-        // 里「不乘」分支已死（域里没有 ==9），大 Boss 一直被误吃 ×0.6。现改：正式关章末 Boss 走
+        // 【路线B】关10(stageIdx0=9)=大Boss 吃本档 BOSS_FINAL_STAT_MUL，关5(stageIdx0=4)=xiaoboss 不吃本档 —— 对应旧文 v4.1 的「第 5 关小 Boss ×0.6、第 10 关大 Boss（==9）不乘」
+        // 里「不乘」分支当年已死（旧域里没有 ==9），大 Boss 曾被误吃 ×0.6。现改：正式关大 Boss 走
         // 独立档 GameConfig.BOSS_FINAL_STAT_MUL（默认 1.0 = 恢复满配）；无限裂隙不吃（自己两条线），
         // 金币本/徽记/支线岛/终章 stageIdx0 恒 0 不命中，行为不变。旧 MINI_BOSS_STAT_MUL 已随小 Boss 位退役删除。
         bool finalBossStage = bossUnit && !endlessRift
             && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun
-            && stageIdx0 == GameConfig.StagesPerGrandOf(BattleManager.Instance.RunStats.Chapter) - 1;   // 【批 B3】末节 Boss 按章取节数
+            && ActProgressionDefs.BossKindOfStage(stageIdx0) == 2;   // 路线B：关10(stageIdx0=9)大Boss档
         float bossStatMul = finalBossStage ? GameConfig.BOSS_FINAL_STAT_MUL : 1f;
         baseHp *= bossStatMul;
         baseAtk *= bossStatMul;
@@ -354,16 +354,26 @@ public partial class Monster
         bool stageDevOn = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
         bool devEliteStage = stageDevOn && gStageType == StageType.Elite;
         bool devFinalStage = stageDevOn && BattleManager.Instance != null
-            && stageIdx0 == GameConfig.StagesPerGrandOf(BattleManager.Instance.CurrentChapter) - 1;
+            && ActProgressionDefs.BossKindOfStage(stageIdx0) == 2;   // 路线B：关10大Boss吃攻/防偏差
         float devHp = stageDevOn && !bossUnit && !eliteWave
             ? GameConfig.GetStageStatDevHp(stageIdx0) : 1f;
         float devAtk = stageDevOn ? GameConfig.GetStageStatDevAtk(devEliteStage, devFinalStage) : 1f;
+        // 【2026-11-18 主人拍板「尽量血少攻高，这样玩家才有就差一点的感觉，只是运气不好、再多打一下就能过」】
+        // 第一章关 10 大 Boss 专属攻加成：只乘攻击（devAtk 只进下方 Attack / MagicAttack 两处写入），
+        // 血量侧 devHp 对 Boss 恒 1、血走 chapterFirstHpRule 独立链，故血完全不受本系数影响。
+        // devFinalStage 已含 IsFormalMainRun + BossKindOfStage(stageIdx0)==2，副本/裂隙/支线/竞技场零影响。
+        if (devFinalStage && bossUnit && gChapter == 1)
+            devAtk *= GameConfig.CH1_FINAL_BOSS_ATK_DEV;
         float devDef = stageDevOn ? GameConfig.GetStageStatDevDef(devEliteStage, devFinalStage) : 1f;
+        // 【2026-11-18 主人拍板「尽量血少攻高」】第一章关10大Boss专属血量系数（只降血，不动攻）。
+        // 判定与上方攻系数同源（devFinalStage 已含 IsFormalMainRun + BossKindOfStage(stageIdx0)==2）。
+        float ch1FinalBossHpMul = devFinalStage && bossUnit && gChapter == 1
+            ? GameConfig.CH1_FINAL_BOSS_HP_MUL : 1f;
 
         // 【2026-11-15】裂隙精英血量加倍：裂隙不走 chapterFirstHpRule 的大血量档，单独补一档。
         // 只判裂隙 + 精英槽位，Boss / 小怪 / 其它玩法一律 ×1，行为零变化。
         float endlessEliteHpMul = endlessRift && eliteWave ? GameConfig.ENDLESS_ELITE_HP_MUL : 1f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul);
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
         // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；

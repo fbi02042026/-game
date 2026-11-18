@@ -119,6 +119,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         var data = SaveSystem.Instance?.Data;
         _enchantAtRunStart = data != null ? data.enchantStones : 0;
         _matsAtRunStart = data != null ? data.decomposeMats : 0;
+        _talentAtRunStart = data != null ? data.talentPoints : 0;
         _stageQuestGoldGranted = false;
         _defeatedMonsterKills = 0;
         RunStats.Reset();

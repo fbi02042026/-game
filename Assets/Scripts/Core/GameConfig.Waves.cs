@@ -103,11 +103,13 @@ public static partial class GameConfig
     /// </summary>
     public const int FORMAL_STAGE_ROUND_COUNT = 3;
     /// <summary>
-    /// 【2026-11-12 主人拍板】一关波数上限（含 Boss 波）：第 1-2 章前期最多 2 波、第 3 章起后期最多 3 波。
+    /// 【路线B·波数合并】总小波数按章递增 ch1=2 / ch2=3 / ch3+=4（每章+1，相对现状 3/4/6 减少）。
+    /// FormalRoundSubWaves 恒 1 后本 cap 即本关总波数；怪量按总波数全波权重均摊（见 WavePlanner 分配段）。
     /// 唯一消费方 WavePlanner（正式关回合表 / 非 formal 波数钳制 / Boss 关小怪波 / 资源副本）。
     /// 副本与无限裂隙同按 CurrentChapter 判前后期。
     /// </summary>
-    public static int StageWaveCap(int chapter) => chapter <= 2 ? 2 : 3;
+    // 【路线B·波数合并】总小波数按章递增 ch1=2 / ch2=3 / ch3+=4
+    public static int StageWaveCap(int chapter) => chapter <= 1 ? 2 : (chapter == 2 ? 3 : 4);
     /// <summary>
     /// 【2026-11-14 主人拍板「第一波的数量要保证玩家能抽 1-2 次奖，后期 2-3 次」】
     /// 每关<b>第 1 小波</b>的保底怪数。依据是击杀给币口径：普通怪每只 `KILL_GOLD_NORMAL=10`，
@@ -133,7 +135,7 @@ public static partial class GameConfig
     /// 【2026-11-14 主人拍板「第2关波数涨太多、不要让玩家觉得打得久；参考植物大战僵尸：
     /// 下一波来袭 1-2 次就够，要的是每次来袭怪更多，不是来袭次数更多」】
     /// 正式主线关的<b>本关怪量总量</b>定表（唯一真源），随关卡序号递增。
-    /// 波数由 <see cref="FormalRoundSubWaves"/> 的 Σ 决定，均摊后单波必须 ≤ <see cref="FORMAL_WAVE_MONSTERS_MAX"/>。
+    /// 路线 B 下波数 = StageWaveCap 按章 2/3/4（每回合 1 小波），均摊后单波必须 ≤ <see cref="FormalWaveMaxOf"/>。
     /// <para>【2026-11-14 二批拍板「难度随座爬坡」（主人报「2-1 难度跟 1-1 差不多」）】
     /// 第 1 篇 10 座大关原先每座重放同一条曲线（怪量公式只有章+大关内序号，座数没喂进来；
     /// 属性侧大关爬坡 GRAND_STAT_STEP=0.02 体感为零）→ 现把座数喂进定表：</para>
@@ -150,7 +152,7 @@ public static partial class GameConfig
         {
             if (grand <= 1) return 28 + i * 3;                     // 第 1 座：原表 28/31/34/37/40
             int waves = grand >= 5 ? 6 : 4;                        // [2,2] / [2,2,2]
-            int cap = (waves - 1) * FORMAL_WAVE_MONSTERS_MAX + FORMAL_FIRST_WAVE_MIN;
+            int cap = (waves - 1) * FormalWaveMaxOf(chapter) + FORMAL_FIRST_WAVE_MIN;
             return Mathf.Min(40 + (grand - 2) * 12 + i * 3, cap);
         }
         if (chapter == 2) return 40 + i * 3;   // 40 / 43 / 46 / 48
@@ -158,25 +160,16 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 【2026-11-14 主人拍板】「大波（旗帜）少、每次更厚」的结构：每回合 = 一个大波，内部 1~3 个小波。
-    /// 小波之间走 <see cref="WAVE_STREAM_GAP_SEC"/> 秒流式压上（不等清场、允许叠怪），
-    /// 只有<b>跨回合</b>才播一次「下一波来袭」—— 全关 1~2 次，不再每小波都亮旗。
-    /// <para>【2026-11-14 二批拍板「难度随座爬坡」】第 1 篇座数入表（只动 ch1，ch2/ch3+ 既有拍板不动）：
-    /// 第 1 座 [1,2]（3 小波 / 1 次来袭）；第 2~4 座 [2,2]（4 小波 / 1 次来袭，大波更厚）；
-    /// 第 5 座起 [2,2,2]（6 小波 / 2 次来袭）。</para>
+    /// 【路线B·合波】每回合 1 小波（原「每回合 2 小波」合并；历史 [1,2]/[2,2]/[2,2,2] 座数分档退役），
+    /// 总波数由 <see cref="StageWaveCap"/> 按章定 2/3/4。grand/chapter 参数保留兼容（路线 B grand 恒 1）。
     /// 唯一消费方 WavePlanner.RollFormalRoundWaveCounts。
     /// </summary>
     public static int FormalRoundSubWaves(int chapter, int grandIndex1Based, int roundIndex0Based)
     {
         if (roundIndex0Based < 0) return 0;
-        int grand = Mathf.Max(1, grandIndex1Based);
-        if (chapter <= 1)
-        {
-            if (grand >= 2) return 2;                                // 第 2 座起每回合 2 小波（回合数由 RollFormalRoundWaveCounts 的 cap 决定）
-            return roundIndex0Based == 0 ? 1 : 2;                    // 第 1 座原样：起手 1 波轻，第二面旗 2 波压上
-        }
-        if (chapter == 2) return 2;                                // 两面旗，各 2 小波 → 1 次来袭
-        return 2;                                                  // 三面旗，各 2 小波 → 2 次来袭
+        // 【路线B·合波】每回合 1 小波（原「每回合 2 小波」合并）；总波数由 StageWaveCap 定 2/3/4。
+        // grand/chapter 参数保留兼容（历史分档退役，路线 B grand 恒 1）。
+        return 1;
     }
     /// <summary>
     /// 【2026-11-05 主人拍板】主线正式关每关削减的波数（从最后一回合扣，每回合保底 1 波）。
@@ -293,8 +286,15 @@ public static partial class GameConfig
     /// <summary>
     /// 【2026-10-22 主人拍板 v4.1】正式关每个普通波怪数上限（含）：Random.Range(MIN, MAX+1)。
     /// 总怪量由此 ~90-135/关；精英末波同口径（编成为精英）。同屏峰值仍 ~15（分波刷，性能口径不变）。
+    /// 【路线 B 起仅退役常量，函数 <see cref="FormalWaveMaxOf"/> 为真源】常量保留不删（铁律9），
+    /// 分配段 / 守口径 / Boss 关小怪波等消费点已全部改读 FormalWaveMaxOf(chapter)。
     /// </summary>
     public const int FORMAL_WAVE_MONSTERS_MAX = 15;
+    /// <summary>【路线B】单波怪量上限（真源）。合波后总波数按章 2/3/4、每回合 1 小波，
+    /// 总怪量按全波权重均摊，各章末关单波峰值远低于本值（见报告复算表），取统一宽松值覆盖；
+    /// 真机帧率不达标可调这里。所有原 FORMAL_WAVE_MONSTERS_MAX 消费点改读本函数。</summary>
+    public static int FormalWaveMaxOf(int chapter)
+        => 32;   // 统一宽松值覆盖所有章峰值，留余量
     /// <summary>
     /// 【2026-10-23 主人拍板】正式关第 1 波怪数折扣：减半（×0.5，向上取整，钳 ≥1）。
     /// 只作用于正式主线关（formalMain 覆盖段），引导局 / 金币本 / 裂隙不走。

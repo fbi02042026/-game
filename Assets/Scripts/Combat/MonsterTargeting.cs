@@ -50,6 +50,12 @@ public static class MonsterTargeting
                     break;
                 default:
                     score = dist;
+                    // 【2026-11-18 主人拍板】怪物攻击射程内的存活佣兵优先打：逼佣兵承伤消耗，
+                    // 玩家才有动力换人/升星。射程外或无佣兵在射程内时，回退原距离逻辑照旧打最近的。
+                    // 只改 Distance 分支，不新增策略枚举、不碰 RollPolicy 词条怪约定。
+                    if (enemy is Mercenary
+                        && dist <= self.GetEffectiveAttackRange())
+                        score -= RankWeight;
                     break;
             }
             if (score < bestScore)

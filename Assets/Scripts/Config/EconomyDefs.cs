@@ -38,10 +38,10 @@ public static class EconomyDefs
 
     /// <summary>
     /// 一次尝试（一局）能打几节。
-    /// 【2026-11-01 批 B3】5 → 按章取（第 1 章 5、第 2 章 8、第 3 章起 10，见 GameConfig.StagesPerGrandOf）。
+    /// 【路线 B】起锁固定 5 保金币产出手感（历史沿革：2026-11-01 批 B3 曾 5→按章取，见 GameConfig.StagesPerGrandOf）。
     /// 用途：StageGold 判 Boss 通关金、RunGold 的 clamp 上界。
     /// </summary>
-    public static int StagesPerRun(int chapter) => GameConfig.StagesPerGrandOf(chapter);
+    public static int StagesPerRun(int chapter) => GameConfig.STAGES_PER_GRAND;   // 路线B：经济分母锁固定5，保金币产出手感
 
     /// <summary>
     /// 各关期望怪数（读 GameConfig.GetStageMonsterTotal 的随机区间算的期望值）。

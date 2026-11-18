@@ -30,6 +30,10 @@ public partial class WavePlanner
     /// 返回每回合波数（下标=回合），Σ 即该关小怪总波数；v4.2「按章区间随机摇」口径作废（Min/Max 已删）；
     /// 【2026-11-05】Σ 还要减去 GameConfig.FormalRoundWaveCut(chapter)（Ch2=3、其余=2；末回合扣，见函数内）；Ch3+ 双段爆发补 1 波口径不变。
     /// v4.0「FORMAL_STAGE_WAVE_COUNT 定死 9」更早作废（常量保留退役）。
+    /// <para>【路线 B · 合波】上方定表 / 削减全部退出生效（保留不删，下线≠删除）：
+    /// 每回合波数改由 <c>r &lt; StageWaveCap(章) ? FormalRoundSubWaves(章) : 0</c> 决定 ——
+    /// StageWaveCap 按章定总波数 2/3/4，FormalRoundSubWaves 恒 1（每回合 1 小波合波）。
+    /// 故本关总波数 = ch1 2 / ch2 3 / ch3+ 4；下方循环「前 cap 个回合各 1 波、其余 0 波」，Σ=cap，逻辑一行未改。</para>
     /// </summary>
     static int[] RollFormalRoundWaveCounts(int chapter, int grandIndex1Based)
     {
@@ -45,19 +49,17 @@ public partial class WavePlanner
             int cut = Mathf.Clamp(GameConfig.FormalRoundWaveCut(chapter), 0, Mathf.Max(0, counts[counts.Length - 1] - 1));
             counts[counts.Length - 1] -= cut;
         }
-        // 【2026-11-12 主人拍板】原按章定表（Ch1 4 / Ch2 6 / Ch3+ 7~8 波）压到上限：前期 2 波、后期 3 波。
-        // 回合数 FORMAL_STAGE_ROUND_COUNT 仍为 3、数组长度不变，用「前 cap 个回合各 1 波、其余 0 波」表达；
+        // 【路线 B · 合波】总波数按章 ch1=2 / ch2=3 / ch3+=4（StageWaveCap）。
+        // 回合数 FORMAL_STAGE_ROUND_COUNT 仍为 3、数组长度不变，用「前 cap 个回合各 1 波、其余 0 波」表达，Σ=cap；
         // FormalRoundEndFlags 遇到 0 波回合不会越界（acc 已 >= 1）。上方定表/削减保留不删（下线≠删除）。
         int cap = GameConfig.StageWaveCap(chapter);
-        // 【2026-11-14 二批拍板「难度随座爬坡」】第 1 篇第 5 座起 [2,2,2] 三回合（6 小波 / 2 次来袭），
-        // 需要突破前期 2 回合上限 —— 只放宽正式关本出口（RollFormalRoundWaveCounts 仅 formalMain 消费），
-        // ⚠ 只对第 1 章：ch2 的 [2,2] / ch3 的 [2,2,2] 是各自已拍板的章表，不随座变；
-        // StageWaveCap 的其他消费方（非正式关钳制 / Boss 小怪波 / 活动副本）一律不动。
+        // 【历史座数爬坡残留，保留不删】第 1 篇第 5 座起放宽到 3 回合；路线 B 下 grand 恒 1，本分支不触发，
+        // ch1 维持 cap=2。StageWaveCap 的其他消费方（非正式关钳制 / Boss 小怪波 / 活动副本）一律不动。
         if (chapter <= 1 && Mathf.Max(1, grandIndex1Based) >= 5 && cap < 3) cap = 3;
         for (int r = 0; r < counts.Length; r++)
         {
-            // 【2026-11-14 主人拍板】每回合（大波）内 1~3 个小波，不再一律压成 1 波。
-            // 小波之间 1 秒流式压上、只有跨回合才播「下一波来袭」= 植物大战僵尸那种一波跟一波。
+            // 【路线 B · 合波】每回合 1 小波（FormalRoundSubWaves 恒 1），前 cap 个回合有波、其后为 0。
+            // 小波之间 1 秒流式压上、跨回合才播「下一波来袭」。
             counts[r] = r < cap ? GameConfig.FormalRoundSubWaves(chapter, grandIndex1Based, r) : 0;
         }
         return counts;
@@ -216,64 +218,54 @@ public partial class WavePlanner
         // 在摇号处直接落地（唯一入口），不影响精英追加额 / Boss 波编成。
         if (formalMain)
         {
-            // 【2026-11-14 主人拍板】数量口径三条一起落：
-            // ① 本关总量走定表 FormalStageMonsterTotal（严格随关卡序号递增、涨幅压小），不再每波随机摇；
-            // ② **第 1 波保底 FORMAL_FIRST_WAVE_MIN 只** —— 击杀每只给 KILL_GOLD_NORMAL=10 币，
-            //    首抽 40 / 二抽 50 / 三抽 60 → 10 只 = 100 币 = 抽 2 次，15 只 = 150 = 抽 3 次。
-            //    主人原话「第一波的数量要保证玩家能抽 1-2 次奖，后期 2-3 次」。
-            // ③ 剩余怪量按「波权重」递增分配给后面的波（越后越厚）——
-            //    主人原话「一次比一次的怪多，而不是下一波来袭的次数多」。
+            // 【2026-11-18 路线 B 拍板】数量口径：
+            // ① 本关总量走定表 FormalStageMonsterTotal（严格随关卡序号递增、涨幅压小），不动；
+            // ② 取消首波钉死 FORMAL_FIRST_WAVE_MIN（合波后不再单独保底；常量 / 函数保留不删，仅退役）；
+            // ③ 总量按「波权重」递增摊到所有波（含首波），末波吃余数保证 Σ==wantTotal ——
+            //    压平峰值，避免合波后单波爆到 30+（历史钉死首波导致 ch1 单波 45 的坑已废弃）。
+            //    首波自然落在均摊值（ch1末≈26 / ch1初≈13 / ch2末≈19 / ch3末≈20 / ch3初≈12），击杀币够抽（经济口径不变）。
             int wantTotal = GameConfig.FormalStageMonsterTotal(CurrentChapter, CurrentGrand, stageIdx);
             total = 0;
+            int waveMax = GameConfig.FormalWaveMaxOf(CurrentChapter);
             if (waveCount > 0)
             {
-                perWave[0] = Mathf.Clamp(GameConfig.FormalFirstWaveMin(CurrentChapter), 1, GameConfig.FORMAL_WAVE_MONSTERS_MAX);
-                int tails = waveCount - 1;
-                int rest = Mathf.Max(tails, wantTotal - perWave[0]);
-                if (tails > 0)
+                float weightSum = 0f;
+                for (int k = 0; k < waveCount; k++) weightSum += 1f + k * GameConfig.FORMAL_WAVE_WEIGHT_STEP;
+                int allocated = 0;
+                for (int k = 0; k < waveCount; k++)
                 {
-                    float weightSum = 0f;
-                    for (int k = 0; k < tails; k++) weightSum += 1f + k * GameConfig.FORMAL_WAVE_WEIGHT_STEP;
-                    int allocated = 0;
-                    for (int k = 0; k < tails; k++)
-                    {
-                        int v = (k == tails - 1)
-                            ? Mathf.Max(1, rest - allocated)     // 最后一波吃掉余数，Σ 恰等于总量
-                            : Mathf.Max(1, Mathf.RoundToInt(rest * (1f + k * GameConfig.FORMAL_WAVE_WEIGHT_STEP) / weightSum));
-                        allocated += v;
-                        perWave[k + 1] = v;
-                    }
-                    // 峰值封顶：超 15 的波削到 15，削掉的量再往还有空间的波里补，保证关总量不缩水
-                    int peak = GameConfig.FORMAL_WAVE_MONSTERS_MAX;
-                    int actual = perWave[0];
-                    for (int k = 1; k < waveCount; k++)
-                    {
-                        if (perWave[k] > peak) perWave[k] = peak;
-                        actual += perWave[k];
-                    }
-                    int leftover = wantTotal - actual;
-                    for (int k = 1; k < waveCount && leftover > 0; k++)
-                    {
-                        int room = peak - perWave[k];
-                        if (room <= 0) continue;
-                        int add = Mathf.Min(room, leftover);
-                        perWave[k] += add;
-                        leftover -= add;
-                    }
+                    int v = (k == waveCount - 1)
+                        ? Mathf.Max(1, wantTotal - allocated)     // 末波吃余数，Σ 恰等于 wantTotal
+                        : Mathf.Max(1, Mathf.RoundToInt(wantTotal * (1f + k * GameConfig.FORMAL_WAVE_WEIGHT_STEP) / weightSum));
+                    allocated += v;
+                    perWave[k] = v;
                 }
-                else
+                // 峰值封顶守卫：全波均摊后峰值已 ≤ waveMax，本段自然不触发，保留不删（下线≠删除）
+                int peak = waveMax;
+                int actual = perWave[0];
+                for (int k = 1; k < waveCount; k++)
                 {
-                    perWave[0] = Mathf.Clamp(wantTotal, 1, GameConfig.FORMAL_WAVE_MONSTERS_MAX);
+                    if (perWave[k] > peak) perWave[k] = peak;
+                    actual += perWave[k];
+                }
+                int leftover = wantTotal - actual;
+                for (int k = 1; k < waveCount && leftover > 0; k++)
+                {
+                    int room = peak - perWave[k];
+                    if (room <= 0) continue;
+                    int add = Mathf.Min(room, leftover);
+                    perWave[k] += add;
+                    leftover -= add;
                 }
                 for (int i = 0; i < waveCount; i++) total += perWave[i];
             }
             // 单波峰值守口径：表配错（波数太少 / 总量太大）时露白，不静默截断
             int peakWave = 0;
             for (int i = 0; i < waveCount; i++) if (perWave[i] > peakWave) peakWave = perWave[i];
-            if (peakWave > GameConfig.FORMAL_WAVE_MONSTERS_MAX)
+            if (peakWave > waveMax)
             {
                 Debug.LogError($"[WavePlanner] ch{CurrentChapter}-{stageIdx + 1} 单波 {peakWave} 只超出同屏峰值口径 " +
-                               $"{GameConfig.FORMAL_WAVE_MONSTERS_MAX}（总量 {wantTotal} / 波数 {waveCount}），" +
+                               $"{waveMax}（总量 {wantTotal} / 波数 {waveCount}），" +
                                "请调整 FormalStageMonsterTotal 或 FormalRoundSubWaves");
             }
         }
@@ -802,11 +794,11 @@ public partial class WavePlanner
         // Boss 关小怪波：按总数抬高波次上限，最多 7 波小怪 + 1 Boss
         int minionWaves = GameConfig.GetSuggestedWaveCount(minions, 0);
         minionWaves = Mathf.Clamp(minionWaves, 3, 7);
-        // 【2026-11-12 主人拍板】Boss 波占 1 波，小怪波 = cap - 1；含 Boss 波在内前期 2 波 / 后期 3 波。
+        // 【2026-11-12 主人拍板 / 路线B】Boss 波占 1 波，小怪波 = cap - 1；cap=2/3/4 → minionWaves=2/2/3（+末位 Boss 波）。
         minionWaves = Mathf.Min(minionWaves, Mathf.Max(1, GameConfig.StageWaveCap(CurrentChapter) - 1));
         int[] perWave;
-        // 【2026-10-25 主人拍板】正式关 Boss 关 = 3 回合小怪波（每回合按章定表：ch1=6…ch3+ =9 波，削减后 7 波）
-        // + 末位 1 Boss 波；v4.2「按章区间随机摇」口径作废；v4.0「小怪波定死 9（FORMAL_STAGE_WAVE_COUNT）」更早作废（常量保留退役）。
+        // 【路线 B】正式关 Boss 关小怪波数 = Max(2, StageWaveCap-1)：cap=2/3/4 → 2/2/3，+ 末位 1 Boss 波。
+        // 历史「3 回合按章定表 ch1=6…ch3+=9 波、削减后 7 波」口径作废（定表/削减保留不删，下线≠删除）。
         // Boss 波放末位（原「小怪波 + 末尾 isBossWave」结构不动），且 Boss 波本身不算回合末（isRoundEnd 恒 false，走通关链）。
         // 【2026-10-22 主人拍板 v4.1】小怪波每波怪数独立摇 10-15（不再用 DistributeMonstersKeepTotal 均摊，
         // 函数保留退役）；Boss 波（末位）维持现有 Boss+杂兵编成与怪数口径不变。
@@ -820,12 +812,12 @@ public partial class WavePlanner
             minionWaves = Mathf.Max(2, GameConfig.StageWaveCap(CurrentChapter) - 1);
             perWave = new int[minionWaves];
             // 【2026-11-14 主人拍板「后面关卡的怪不能比前面少」】Boss 关小怪波也走定表，不再随机摇 10-15：
-            // 取普通关总量的 60% 均摊（剩下 40% 的强度由 Boss 本体承担），单波由 15 只峰值封顶 ——
+            // 取普通关总量的 60% 均摊（剩下 40% 的强度由 Boss 本体承担），单波由 FormalWaveMaxOf(chapter) 峰值封顶 ——
             // 否则 ch3+ 的 Boss 关只有 2 个小怪波，按总量均摊会摊出 39 只/波，直接爆同屏口径。
             int minionTotal = Mathf.RoundToInt(
                 GameConfig.FormalStageMonsterTotal(CurrentChapter, CurrentGrand, stageIdx) * 0.6f);
             int perMinion = Mathf.Clamp(minionTotal / Mathf.Max(1, minionWaves), 1,
-                GameConfig.FORMAL_WAVE_MONSTERS_MAX);
+                GameConfig.FormalWaveMaxOf(CurrentChapter));
             for (int i = 0; i < minionWaves; i++)
                 perWave[i] = perMinion;
         }

@@ -721,8 +721,8 @@ public static class SlotMachineSystem
                       " / 精英 " + SlotMachineDefs.COIN_PER_ELITE + " / Boss " + SlotMachineDefs.COIN_PER_BOSS +
                       "　启动下限 " + SlotMachineDefs.STARTER_COINS);
 
-        // 【2026-11-01 批 B3】自检按第 1 章的 5 节口径估算（诊断用途）
-        int stages = GameConfig.StagesPerGrandOf(1);
+        // 自检按固定 5 节口径估算（诊断用途，不随路线B主线结构漂移）
+        int stages = GameConfig.STAGES_PER_GRAND;   // 诊断估算按固定5节口径，不随主线结构漂移
         int sumPrice = 0, sumFocus = 0, sumIncome = 0;
         // 【2026-10-10】价不再跟关卡走，而是跟**本局已抽数**走（2026-10-23 起 40 起、每抽 +10）。
         // 这里按「每关只抽一次」估：第 n 关那一抽 = 已抽 n-1 次。

@@ -329,17 +329,15 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
-    /// 分配关卡类型占位：第1关普通、末关（第5小关）Boss；中间类型由 StageRoller 按位置定死。
-    /// 【2026-10-23 批 B1】每局从「每章 10 关」改为「每大关 5 小关」（STAGES_PER_GRAND）。
+    /// 分配关卡类型占位。【路线 B】关=节(stageIdx 0..9)，关型全部由单一出口
+    /// <see cref="ActProgressionDefs.TypeOfStage"/> 定：关5(4)/关10(9) Boss、关3(2)/关8(7) 精英、其余普通。
+    /// stageMap[i].stageIndex 与 i 一致（StartChapter 里按 i 建关），故直接传 i 作为 0-based stageIdx。
     /// （旧版预排商人/诅咒等已被轮盘规则取代，避免双轨不一致。）
     /// </summary>
     void AssignStageTypes()
     {
         for (int i = 0; i < stageMap.Count; i++)
-            stageMap[i].type = StageType.Normal;
-
-        stageMap[0].type = StageType.Normal;
-        stageMap[stageMap.Count - 1].type = StageType.Boss;   // 【批 B3】末节 = Boss（节数按章 5/8/10）
+            stageMap[i].type = ActProgressionDefs.TypeOfStage(i);
 
         string log = "[ChapterManager] 关卡占位: ";
         for (int i = 0; i < stageMap.Count; i++)
@@ -531,11 +529,13 @@ public class ChapterManager : Singleton<ChapterManager>
             SaveSystem.Instance?.Save();
         }
 
-        // 首领关可能提前出现在倒数三关里：打完首领这一章就结束
-        bool bossCleared = cleared != null && cleared.type == StageType.Boss;
-        // 【2026-11-01 批 B3】一篇 = 每章 10 关卡（关内节数 5/8/10）。打完一关只算「关卡通关」，
+        // 【路线 B】关=节(stageIdx 0..9)，关5(4)小boss、关10(9)大boss 的 type 都是 Boss。
+        // 整章通关唯一判据 = 打到章末关（关10）：currentStageIndex >= stageMap.Count - 1。
+        // 🔴 旧 bossCleared 判据在路线 B 下是 bug：关5打完 type 也是 Boss，会被误判成整章结束；
+        //    去掉后关5打完走「继续推进到关6」，只有关10打完才进整章解锁/剧情/成就。
+        // 【2026-11-01 批 B3】一篇 = 每章 10 关（grand 恒 1）。打完一关只算「关卡通关」，
         // 整章的关卡全部打完才走章节解锁/剧情/成就。
-        if (bossCleared || currentStageIndex >= stageMap.Count - 1)
+        if (currentStageIndex >= stageMap.Count - 1)
         {
             var gData = SaveSystem.Instance?.Data;
 
@@ -664,19 +664,19 @@ public class ChapterManager : Singleton<ChapterManager>
 
     /// <summary>
     /// 给下一关重新抽一次类型并写回 stageMap。
-    /// 现在关卡类型由轮盘决定，AssignStageTypes 的预排只当兜底。
+    /// 【路线 B】关型真源 = RollByPosition → ActProgressionDefs.TypeOfStage，AssignStageTypes 的预排只当兜底。
     /// </summary>
     public StageData RollNextStageType(StageData target = null)
     {
         StageData next = target ?? GetNextStage();
         if (next == null) return null;
-        // 【2026-10-22 主人拍板】正式关类型按位置定死（v4 回合制）：0-based 4/9 → Boss、2/6 → 50% 精英、其余普通。
-        // 【2026-10-23 批 B1】每局 10 关 → 每大关 5 小关：0-based 4 → Boss、2 → 50% 精英、其余普通。
+        // 【路线 B】按位置定死关型的唯一出口：StageRoller.RollByPosition → TypeOfStage
+        // （关5/10 Boss、关3/8 精英、其余普通）；此处只调用，不自行判 boss。
         // 原权重抽签保留退役不删（恢复关闸已在）；引导局/金币本/裂隙不走本方法（金币本 StartGoldDungeon、
         // 裂隙 StartEndlessRift 各自建关，类型来源未波及）。
         // next.type = StageRoller.Roll(RollState, next.stageIndex, GameConfig.STAGES_PER_GRAND);
         next.type = StageRoller.RollByPosition(next.stageIndex, currentChapter);
-        Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（v4 按位置，2026-10-23 批 B1 改 5 关制）"
+        Debug.Log($"[ChapterManager] 定死下一关类型 第{next.stageIndex + 1}关 = {next.type}（路线 B 按位置，TypeOfStage 单一出口）"
                   + $"（恢复{RollState.restCount}/{StageRoller.MaxRestPerChapter} 战斗{RollState.combatStagesDone}）");
         return next;
     }

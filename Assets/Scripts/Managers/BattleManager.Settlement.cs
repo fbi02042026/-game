@@ -3153,6 +3153,7 @@ public partial class BattleManager
         var runData = SaveSystem.Instance?.Data;
         _enchantAtRunStart = runData != null ? runData.enchantStones : 0;
         _matsAtRunStart = runData != null ? runData.decomposeMats : 0;
+        _talentAtRunStart = runData != null ? runData.talentPoints : 0;
         _stageQuestGoldGranted = false;
         _defeatedMonsterKills = 0;
         RunStats.Reset();

@@ -50,6 +50,7 @@ public static class StageGoldDefs
     /// <summary>
     /// 精英小关在大关内的 0-based 下标（= 第 3 小关）。
     /// 与 <see cref="StageRoller.RollByPosition"/>、冒险页银箱位同一口径（铁律 12/15：不写散魔数）。
+    /// 【路线 B】起 StageGold 改走 <see cref="ActProgressionDefs.TypeOfStage"/> 真源（关 3/8 精英），本常量保留兼容。
     /// </summary>
     const int ELITE_STAGE_INDEX = 2;
 
@@ -103,18 +104,19 @@ public static class StageGoldDefs
 
     /// <summary>本关通关该发的固定金币（局外）。按关卡类型分档，章间每章 +10% 复利。</summary>
     /// <param name="chapter">第几章（1 起）</param>
-    /// <param name="stageIndex0Based">关内第几节（0 起；第 2 = 精英、末节 = Boss，节数按章 5/8/10）</param>
+    /// <param name="stageIndex0Based">章内第几关（0 起；路线 B 每章 10 关：关 3/8=精英、关 5=小 Boss、关 10=大 Boss；旧「第 2=精英、末节=Boss，节数按章 5/8/10」口径退役）</param>
     public static int StageGold(int chapter, int stageIndex0Based)
     {
         int ch = Mathf.Clamp(chapter, 1, 8);
-        int last = GameConfig.StagesPerGrandOf(ch) - 1;   // 【2026-11-01 批 B3】末节 Boss 按章取
+        int last = GameConfig.StagesPerGrandOf(ch) - 1;   // 保留作 clamp 上界（路线 B 每章 10 关 → last=9；Boss 判据改走真源）
         int idx = Mathf.Clamp(stageIndex0Based, 0, last);
 
         // 章间倍率：第 1 章 = 1.0，第 8 章 = 1.1^7 ≈ 1.9487
         float mul = Mathf.Pow(1f + CHAPTER_GOLD_GROWTH, ch - 1);
 
-        int gold = idx == last ? STAGE_GOLD_BOSS
-                 : idx == ELITE_STAGE_INDEX ? STAGE_GOLD_ELITE
+        // 【路线 B】档位判据收敛到关型真源：关 5 小 Boss / 关 10 大 Boss → Boss 金；关 3/8 精英 → 精英金；其余普通（金额不动）
+        int gold = ActProgressionDefs.BossKindOfStage(idx) != 0 ? STAGE_GOLD_BOSS
+                 : ActProgressionDefs.TypeOfStage(idx) == StageType.Elite ? STAGE_GOLD_ELITE
                  : STAGE_GOLD_NORMAL;
         return Mathf.Max(1, Mathf.RoundToInt(gold * mul));
     }
@@ -137,7 +139,7 @@ public static class StageGoldDefs
         {
             int sum = 0;
             sb.Append($"  第{ch}章：");
-            // 【2026-11-01 批 B3】章内按每关节数走（5/8/10 按章取）
+            // 【路线 B】每章固定 10 关，逐关打印 10 个档位（subs 恒 10）
             for (int s = 0; s < GameConfig.StagesPerGrandOf(ch); s++)
             {
                 int g = StageGold(ch, s);

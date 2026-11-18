@@ -516,7 +516,6 @@ public partial class BattleManager
         // 任务金/宝箱/首通/装备折金/拆分币/通关金全记账，不再被抽奖花费抵成 0（净额口径废弃）。
         // 死亡也照常显示本局赚到的钱。
         RunStats.GoldGained = RunStats.GoldEarned;
-        RunStats.TalentGained = talentGain;
         RunStats.EquipCount = BattleBagSystem.Instance != null
             ? BattleBagSystem.Instance.GetAllItemsForLegacy().Count
             : 0;
@@ -525,6 +524,7 @@ public partial class BattleManager
         {
             RunStats.EnchantStoneDelta = Mathf.Max(0, data.enchantStones - _enchantAtRunStart);
             RunStats.DecomposeMatDelta = Mathf.Max(0, data.decomposeMats - _matsAtRunStart);
+            RunStats.TalentGained = Mathf.Max(0, data.talentPoints - _talentAtRunStart);
             RunStats.Chapter = ChapterManager.Instance != null
                 ? ChapterManager.Instance.currentChapter
                 : CurrentChapter;

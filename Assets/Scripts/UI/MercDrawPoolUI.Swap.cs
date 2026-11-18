@@ -111,8 +111,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
         if (data.AddToDrawPool(hireId))
         {
-            MercRosterDefs.TryGetByHireId(hireId, out var def);
-            UIManager.Instance?.ShowToast(def.Name + " 已入队");
+            // 【2026-11-18 主人拍板】上阵 toast 改用佣兵「真名：上阵台词」（GetDeployLine 单一出口，Plain 不套看板娘尾巴）
+            UIManager.Instance?.ShowToast(MercRosterDefs.GetDeployLine(hireId));
             Commit();
             return;
         }
@@ -153,7 +153,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
         string outId = ordered[index];
         if (data != null && data.SwapInDrawPool(_replacingInId, outId))
         {
-            UIManager.Instance?.ShowToast("替换成功");
+            // 【2026-11-18 主人拍板】上阵 toast 改用换上佣兵的「真名：上阵台词」；_replacingInId 此处尚未置空
+            UIManager.Instance?.ShowToast(MercRosterDefs.GetDeployLine(_replacingInId));
             _swapSelecting = false;
             _replacingInId = null;
             StopSwapSway();   // 先还原格子角度再刷新

@@ -831,21 +831,67 @@ public static partial class GameConfig
 
     // ===== 【2026-11-03 主人拍板「每章最少 2 关卡玩家」】章级卡点关 =====
     /// <summary>
-    /// 卡点关额外倍率：每章两关 —— <b>半程大关（第 5 座）末节 Boss</b> 与
-    /// <b>章末大关（第 10 座）末节 Boss</b>，在正常爬坡之上再 +10%，做成「要多试几次」的明显墙。
-    /// 只加成末节 Boss 本身（该大关其余节照常爬坡）；非主线（大关号=1，副本/裂隙/竞技场）不触发。
+    /// 卡点关额外倍率：每章两关 —— <b>第 5 关（stageIdx=4）小 Boss</b> 与
+    /// <b>第 10 关（stageIdx=9）大 Boss</b>，在正常爬坡之上再 +10%，做成「要多试几次」的明显墙。
+    /// 【路线 B】grand 恒 1，原「grand==5||grand==10」判定失效，改按关号 stageIdx 判；只加成 Boss 关本身。
+    /// 非主线（副本/裂隙/支线岛 currentStageIndex 恒 0、无限裂隙走独立分支）不命中，零影响。
     /// 想调手感只改 GRAND_WALL_STEP；设 0 = 关闭章级卡点，回到纯线性爬坡。
     /// </summary>
     public const float GRAND_WALL_STEP = 0.10f;
 
+    /// <summary>
+    /// 【2026-11-18 主人拍板「尽量血少攻高，这样玩家才有就差一点的感觉，只是运气不好、再多打一下就能过」】
+    /// 第一章逐关递进倍率（下标 = 0 基关号）——<b>本表只管血量侧的卡点</b>：
+    ///   关 1~4 不额外加；关 5（小 Boss）1.10 与第 2~8 章的半程卡点同档（+10%）；
+    ///   关 6~9 顺次抬（1.14/1.18/1.22/1.27）保证单调递增，不出现「后一关比前一关容易」的倒挂；
+    ///   <b>关 10 回到 1.00 —— 章末大 Boss 血量不加</b>，血薄才打得快、才看得到血条一路掉。
+    /// 关 10 的难度不靠血，靠攻：见 <see cref="CH1_FINAL_BOSS_ATK_DEV"/>（只作用于攻击维度）。
+    /// 关 5 不做硬墙的原因：佣兵招募（FeatureUnlock.MercRecruitOpen）的门槛就是「通第 5 关」，
+    ///   这一战之前玩家还招不了新人，设太硬会卡死在「无法变强」的死循环里；真墙留给关 10（那时已能招人）。
+    /// 只作用于第一章主线；2~8 章仍走 GRAND_WALL_STEP，副本/裂隙/支线 stageIdx 恒 0 取 [0]=1f 零影响。
+    /// 想调手感只改本数组；实跑后按「Boss 挥几刀/剩多少血」回标。
+    /// </summary>
+    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.10f, 1.14f, 1.18f, 1.22f, 1.27f, 1f };
+
+    /// <summary>
+    /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
+    /// 第一章关 10 大 Boss（forest_110 石灵）<b>专属攻击系数</b>，只乘攻击、不乘血量。
+    /// 为什么单独开一条：全局 <see cref="BOSS_ATTACK_MUL"/> = 0.6 是 11-05「Boss 攻击 -40%」的拍板，
+    ///   直接改它会连累 8 章所有 Boss；这里只补第一章关 10 这一个点。
+    /// 现状换算（guildScale/diffScale=1、waveMul=1；近远真源 = monster_attack_style 风格表：
+    ///   石灵 1-10 = <b>Melee 近战 ⇒ 物理型</b>，血量档走 BossPhysicalHpMul=18，不是法系的 12）：
+    ///   血 = 26.7(本章1号小怪)×18(物理Boss)×1.782(章0.88×末节1.50×TTK1.35)×0.5(全局砍半)×2.0(Boss血倍) ≈ 856
+    ///   攻 = 33.6×1.32(章0.88×末节1.50)×1.8(伤害倍)×1.35(Boss攻TTK)×0.35(章攻击减免)×0.6(Boss攻减免)×1.08(末节Boss攻偏差) ≈ 22.6
+    ///   → 再乘本系数 1.8 ⇒ 攻 ≈ 44.0；血再乘 <see cref="CH1_FINAL_BOSS_HP_MUL"/> 0.85 ⇒ 血 ≈ 728。
+    ///   相对改前（W=1.10 时血 942/攻 26.9）= 血 -23%、攻 +64%。
+    /// ⚠ 别再拿 monster_stats 的 attackRange 判远近：Boss 的 atkRange 在 Monster.Init 里恒取 Ranged 世界值，
+    ///   那列对 Boss 毫无意义；唯一真源是 monster_attack_style.csv 的 style。
+    /// 调法：只改这一个数；实跑后按「玩家能扛几刀 / Boss 差多少血没死」回标。
+    /// </summary>
+    public const float CH1_FINAL_BOSS_ATK_DEV = 1.80f;
+
+    /// <summary>
+    /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
+    /// 第一章关 10 大 Boss（forest_110 石灵）<b>专属血量系数</b>，只乘血量、不乘攻击。
+    /// 为什么单独开一条：<see cref="CH1_STAGE_WALL"/> 是 GetStatScale 的乘数，改它会
+    ///   血量与攻击<b>同时</b>变化，满足不了「只降血、不动攻」；这里只削 Boss 血量这一个维度。
+    /// 作用点：Monster.Init 的 MaxHp 写入式（bossHpMul 之后），判定 = 主线正式局 + 大 Boss + 第 1 章。
+    /// 0.85 的依据：约 -15% 血，让血条掉得看得见、Boss 死前能留下「就差一点」的进度感，
+    ///   同时又不至于瘦到没有 Boss 分量。想更瘦往下调，但别低于 0.7（会失去 Boss 体感）。
+    /// 副本 / 裂隙 / 支线 / 竞技场零影响（条件含 IsFormalMainRun + BossKindOfStage==2）。
+    /// </summary>
+    public const float CH1_FINAL_BOSS_HP_MUL = 0.85f;
+
     public static float GetGrandWallBonus(int gameChapter, int grandIndex1Based, int stageIndex0Based)
     {
-        // 【2026-11-11 主人拍板「第一章不要太卡 最后boss可以稍微卡一下」】第 1 章只留章末大关
-        // （第 10 座）Boss 卡点，半程（第 5 座）墙对第 1 章关闭；第 2 章起维持「每章 2 个卡点关」不动。
-        // 副本/裂隙/支线岛 grand 恒 1，两条路径都不命中，零影响。
-        if (gameChapter == 1 && grandIndex1Based != ActProgressionDefs.GRANDS_PER_ACT) return 1f;
-        if (grandIndex1Based != 5 && grandIndex1Based != ActProgressionDefs.GRANDS_PER_ACT) return 1f;
-        if (stageIndex0Based != ActProgressionDefs.SubsPerGrandOf(gameChapter) - 1) return 1f;
+        // 【2026-11-18 主人拍板「不要硬加，前面几个可以有个提升」+「关 5 可以加」+「尽量血少攻高」】
+        // 第一章改为逐关递进：关 1~4 不加、关 5（半程小 Boss）1.10 起逐关抬升、关 10 回到 1.00 血量不加。
+        // 关 10 的卡点不在血量维度，而由 CH1_FINAL_BOSS_ATK_DEV 只加攻击 —— 「血薄打得快、一刀很痛」。
+        // 只命中第一章，2~8 章逻辑原样保留。
+        // 【路线 B】按关号 stageIdx 判（grand 恒 1 已失效）；副本/裂隙/支线 stageIdx 恒 0 → 取 [0]=1f，零影响。
+        if (gameChapter == 1)
+            return CH1_STAGE_WALL[Mathf.Clamp(stageIndex0Based, 0, CH1_STAGE_WALL.Length - 1)];
+        if (stageIndex0Based != 4 && stageIndex0Based != 9) return 1f;   // 只有关5/关10
         return 1f + GRAND_WALL_STEP;
     }
 

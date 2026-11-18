@@ -31,6 +31,9 @@ public class BuffHudUI : MonoBehaviour
         public Text Mark;
         public Text Cd;
         public CanvasGroup Cg;
+        // buff 点击简介：当前这张牌显示的「属性名 / 数值」，Refresh 同步算好，点击回调直接读现成的。
+        public string TipName;
+        public string TipValue;
     }
 
     readonly List<BuffIcon> _pool = new List<BuffIcon>();
@@ -201,6 +204,9 @@ public class BuffHudUI : MonoBehaviour
                 ApplyStyle(icon, st);
                 icon.Cd.gameObject.SetActive(true);
                 icon.Cd.text = Mathf.CeilToInt(Mathf.Max(0f, b.remain)).ToString();
+                // 点击简介文案：mul 是倍率（1.5 = +50%），转成百分比；数值口径复用 EquipUiText.Value。
+                icon.TipName = EquipUiText.Attr(b.type);
+                icon.TipValue = "+" + EquipUiText.Value(b.type, b.mul - 1f, true);
 
                 // 剩 20% 时间 → 图标整体闪烁（主人拍板）；归 0 由上面 Collect 自动剔除 = 消失
                 bool blink = b.total > 0f && b.remain <= b.total * BlinkRemainK;
@@ -224,12 +230,28 @@ public class BuffHudUI : MonoBehaviour
                 ApplyStyle(icon, st);
                 icon.Cd.gameObject.SetActive(false);
                 icon.Cg.alpha = 1f;
+                // 点击简介文案：常驻 buff 直接读 AttrBonusData 的 value/isPercent。
+                // 负数（诅咒 debuff 如移速 -30%）不加「+」，让 Value 自带负号。
+                icon.TipName = EquipUiText.Attr(b.attrType);
+                string v = EquipUiText.Value(b.attrType, b.value, b.isPercent);
+                icon.TipValue = b.value >= 0f ? "+" + v : v;
             }
         }
 
         // 多余的收起来
         for (int i = idx; i < _pool.Count; i++)
             _pool[i].Root.SetActive(false);
+    }
+
+    /// <summary>
+    /// 点 buff 图标 → toggle「属性名 + 数值」简介浮框（2026-11-18 主人拍板）。
+    /// 牌可能已被 Refresh 复用/收起：隐藏或没文案一律不弹，不给空框。
+    /// </summary>
+    void OnIconClicked(BuffIcon icon)
+    {
+        if (icon == null || icon.Root == null || !icon.Root.activeSelf) return;
+        if (string.IsNullOrEmpty(icon.TipName) || string.IsNullOrEmpty(icon.TipValue)) return;
+        BuffInfoTipUI.Toggle(icon.TipName, icon.TipValue, icon.Root.GetComponent<RectTransform>(), icon.Root);
     }
 
     BuffIcon GetIcon(int index)
@@ -246,7 +268,13 @@ public class BuffHudUI : MonoBehaviour
             rt.sizeDelta = new Vector2(IconSize, IconSize);
 
             var bg = go.AddComponent<Image>();
-            bg.raycastTarget = false;
+            // 【2026-11-18 主人拍板「战斗 buff 点击提示框」】图标要能点 → 开射线。
+            // 与浮框面板/文本相反：牌本身必须吃点击，否则点击穿过去到不了回调。
+            bg.raycastTarget = true;
+            // 【2026-11-18】点击弹「属性名 + 数值」简介：牌本身挂 Button 吃点击。
+            // listener 在本张牌对象建好后绑定（见下方 _pool.Add 后），闭包捕获真实对象读现成文案。
+            var btn = go.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;   // 不要按压变色，避免干扰闪烁/真图
 
             var markGo = new GameObject("Mark", typeof(RectTransform), typeof(Text), typeof(Outline));
             markGo.transform.SetParent(go.transform, false);
@@ -278,14 +306,17 @@ public class BuffHudUI : MonoBehaviour
             crt.offsetMin = Vector2.zero;
             crt.offsetMax = Vector2.zero;
 
-            _pool.Add(new BuffIcon
+            var icon = new BuffIcon
             {
                 Root = go,
                 Bg = bg,
                 Mark = mark,
                 Cd = cd,
                 Cg = go.GetComponent<CanvasGroup>()
-            });
+            };
+            _pool.Add(icon);
+            // 闭包捕获真实牌对象：点击时读它当前显示的那条 buff 文案。
+            btn.onClick.AddListener(() => OnIconClicked(icon));
         }
         return _pool[index];
     }

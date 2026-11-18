@@ -14,7 +14,8 @@ public static class MercLineTable
         HireSuccess,
         Mvp,
         Death,
-        Board   // 【2026-10-26 主人拍板「某些人会有特定的话 只有换了才知道」】主界面看板专属台词
+        Board,  // 【2026-10-26 主人拍板「某些人会有特定的话 只有换了才知道」】主界面看板专属台词
+        Deploy  // 【2026-11-18 主人拍板】佣兵队列替换上阵成功时的参上台词（真名+台词由取词出口拼）
     }
 
     static Dictionary<string, List<string>> _lines;
@@ -81,6 +82,7 @@ public static class MercLineTable
             case "MVP": scene = Scene.Mvp; return true;
             case "战死": scene = Scene.Death; return true;
             case "主界面": scene = Scene.Board; return true;
+            case "上阵": scene = Scene.Deploy; return true;
             default:
                 scene = Scene.Combat;
                 return false;
@@ -126,6 +128,8 @@ public static class MercLineTable
             case Scene.HireSuccess: return $"{who}：走一趟。";
             case Scene.Mvp: return $"{who}：这趟还行。";
             case Scene.Death: return $"{who}：先撤……";
+            // Deploy 真名由 MercRosterDefs.GetDeployLine 统一拼，这里只回纯台词，避免「塔克：塔克：上阵」双前缀
+            case Scene.Deploy: return "上阵！";
             default: return $"{who}：上！";
         }
     }

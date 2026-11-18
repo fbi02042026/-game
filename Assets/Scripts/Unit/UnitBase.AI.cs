@@ -17,9 +17,25 @@ public partial class UnitBase
             _pushHoldUntil = 0f;
             _knockbackBusy = false;
         }
+        // 【2026-11-18】眩晕到期还原动画：PlayDebuff 原本没有对应 ClearDebuff，
+        // 敌人死了看不到，我方被砸晕后不还原会永远顶着眩晕动画 —— 到期这一帧清一次。
+        if (_stunVisualActive && !IsStunned)
+        {
+            if (unitAnim != null) unitAnim.ClearDebuff();
+            _stunVisualActive = false;
+        }
         if (isDead) return;
         attackCd -= Time.deltaTime;
         if (IsStunned)
+        {
+            if (rb != null) rb.velocity = Vector2.zero;
+            if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+            return;
+        }
+        // 【2026-11-18 主人拍板】治疗读条期间施法者定身：与眩晕同一出口清速度 + 停移动动画。
+        // Hero / Mercenary 都走这条基类 Update（Hero.Update 里调 base.Update），不各写一份。
+        // 读条组件自己按 UnitsCanAct 暂停推进；这里只负责「人在读条就别动」。
+        if (HealCastBar.IsCasting(this))
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);
@@ -29,18 +45,22 @@ public partial class UnitBase
     }
 
     float _stunUntil;
+    bool _stunVisualActive;   // PlayDebuff 已播：到期后要 ClearDebuff 还原，否则我方会永远顶着眩晕动画
     /// <summary>眩晕（控制）：期间停 AI。</summary>
     public bool IsStunned => Time.time < _stunUntil;
 
     public void ApplyStun(float seconds)
     {
-        if (seconds <= 0f || isDead || isAlly) return; // 本玩法只眩晕敌人
+        // 【2026-11-18 主人拍板】开放给我方：近战 Boss 砸地眩晕可打断治疗读条。
+        // 敌人眩晕（PS004 暴击）/ 引导眩晕（TutorialStunned，独立字段）口径不变。
+        if (seconds <= 0f || isDead) return;
         _stunUntil = Mathf.Max(_stunUntil, Time.time + seconds);
         if (rb != null) rb.velocity = Vector2.zero;
         if (unitAnim != null)
         {
             unitAnim.SetMove(false, facingDir);
             unitAnim.PlayDebuff();
+            _stunVisualActive = true;
         }
     }
 

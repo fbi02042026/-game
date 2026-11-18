@@ -750,7 +750,11 @@ public static class RunLoadout
     // 本局战力（给玩家看的「数字在长大」）
     // ============================================================
 
-    /// <summary>本局战力：玩家自身属性（输出段 + 血量/防御生存段） + 技能星级/稀有度 + 佣兵等级/星级 + 主题协同。</summary>
+    /// <summary>
+    /// 本局战力：玩家自身属性（输出段 + 血量/防御生存段） + 技能星级/稀有度 + 佣兵战力 + 主题协同。
+    /// <para>佣兵段自 2026-11-18 起按<b>属性公式</b>累加（<see cref="PowerCalc.MercPowerOf"/>），
+    /// 与佣兵信息面板显示的是同一个数字；旧权重 <see cref="PowerCalc.MercPowerDelta"/> 已不参与。</para>
+    /// </summary>
     public static int TotalPower()
     {
         if (_data == null) return 0;
@@ -793,7 +797,12 @@ public static class RunLoadout
             {
                 var m = _data.mercs[i];
                 if (m == null) continue;
-                power += PowerCalc.MercPowerDelta(m.level, m.star);
+                // 佣兵段 = 他自身的战力，与佣兵信息面板显示的是同一个数字（PowerCalc.MercPowerOf 唯一真源）。
+                // 2026-11-18 主人拍板「佣兵的战力要加到玩家战力里，否则玩家不知道哪个佣兵强」：
+                // 旧权重 MercPowerDelta（等级×70 + 星级×110）不含稀有度，普通与传说 Lv1 同分，比不出高低。
+                // ⚠ 局内星级 m.star 不进公式：它的初值就是局外星（MercStarSystem.InRunStarOf），
+                //   星级增益已经在属性乘区里体现；局内升星只加 MP 池/回复，不加血攻防，不重复计。
+                power += PowerCalc.MercPowerOf(m.hireId, m.mercId, m.level);
             }
         }
         foreach (var kv in _themeCache)

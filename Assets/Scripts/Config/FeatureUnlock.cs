@@ -63,8 +63,8 @@ public static class FeatureUnlock
     // ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 佣兵招募（三选一）：通第 1 篇第 2 座大关（2026-11-01 主人拍板「三选一在第二大关完成后解锁，
-    /// 就是 3-1 解锁」——玩家通关 1-1…2-5、可打 3-1 时开启）。必然晚于队列（队列 = 引导结束即开）。
+    /// 佣兵招募（三选一）：【路线 B】改为通第 1 章开启（原「通第 1 篇第 2 座大关 / 3-1 解锁」口径作废）。必然晚于队列（队列 = 引导结束即开）。
+    /// 路线 B 起招募判定 / 文案不再引用本常量，保留仅为兼容。
     /// </summary>
     public const int MERC_RECRUIT_GRAND_GATE = 2;
 
@@ -124,8 +124,9 @@ public static class FeatureUnlock
     /// </summary>
     public static bool MercQueueOpen(SaveData data) => data != null && data.tutorialDone;
 
-    /// <summary>佣兵招募是否开放（通第 2 座大关，必然晚于队列 —— 主人要求「招募开了队列也得开」）。</summary>
-    public static bool MercRecruitOpen(SaveData data) => GrandCleared(data, MERC_RECRUIT_GRAND_GATE);
+    /// <summary>佣兵招募是否开放（【2026-11-18 主人拍板】由「通第 1 章」提前到「第一章第 5 关通关」，0 基关号 4）。
+    /// 目的：让玩家在第一章中途就能招到新佣兵，制造换人/招新欲望。仍晚于队列（队列 = 引导结束即开）。</summary>
+    public static bool MercRecruitOpen(SaveData data) => data != null && data.HasStageCleared(1, 4);
 
     /// <summary>佣兵情报是否开放。</summary>
     public static bool MercIntelOpen(SaveData data) => ChapterCleared(data, MERC_INTEL_CHAPTER_GATE);
@@ -152,8 +153,8 @@ public static class FeatureUnlock
     public static string DungeonLockHint(ActivityDungeonKind kind)
         => $"通关第 {DungeonGateChapter(kind)} 章后开启{ActivityDungeonRules.DungeonName(kind)}";
 
-    /// <summary>佣兵招募未开放提示。【2026-11-03 主人拍板】文案改「通关 X-X 后开启」格式（X-X = 大关-小关卡号），不说「第 N 座大关」。</summary>
-    public static string MercRecruitLockHint() => $"通关 {MercRecruitGateStageNo()} 后开启佣兵招募";
+    /// <summary>佣兵招募未开放提示。【路线 B】文案改「通关第 1 章后开启」口径（旧「X-X 大关-小关」格式作废）。</summary>
+    public static string MercRecruitLockHint() => $"通关{MercRecruitGateStageNo()}后开启佣兵招募";
 
     /// <summary>佣兵队列未开放提示。</summary>
     public static string MercQueueLockHint() => "完成新手引导后开启佣兵队列";
@@ -168,8 +169,8 @@ public static class FeatureUnlock
     public static string MercBondLockHint() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章后开启佣兵羁绊";
 
     /// <summary>卡面副标题用的短锁文案（酒馆功能卡 Desc 直接吃这个）。
-    /// 【2026-11-03 主人拍板】佣兵招募改「通关 X-X 后开启」，不说「第 N 座大关」。</summary>
-    public static string MercRecruitLockDesc() => $"通关 {MercRecruitGateStageNo()} 后开启";
+    /// 【路线 B】佣兵招募改「通关第 1 章后开启」，不说「第 N 座大关」。</summary>
+    public static string MercRecruitLockDesc() => $"通关{MercRecruitGateStageNo()}后开启";
     public static string MercQueueLockDesc() => "完成新手引导开启";
     public static string MercIntelLockDesc() => $"通关第 {MERC_INTEL_CHAPTER_GATE} 章开启";
     public static string MercBondLockDesc() => $"通关第 {MERC_BOND_CHAPTER_GATE} 章开启";
@@ -190,11 +191,8 @@ public static class FeatureUnlock
         => data != null && data.HasClearedChapter(chapter);
 
     /// <summary>
-    /// 佣兵招募门槛的关卡号「大关-小关」（如 2-5）：门槛 = 第 1 篇第 <see cref="MERC_RECRUIT_GRAND_GATE"/>
-    /// 座大关通关，即该大关最后一节打完（2026-11-01 拍板「通 2-5、可打 3-1 时开启」）。
-    /// 【2026-11-03 主人拍板】提示文案改显这个号；末节号按第 1 章每大关节数取（真源
-    /// GameConfig.StagesPerGrandOf），不写死 5。文案唯一出口，锁提示 / 卡面副标题共用。
+    /// 佣兵招募门槛的文案（【2026-11-18 主人拍板】第一章第 5 关通关开启）。
+    /// 文案唯一出口，锁提示 / 卡面副标题共用。
     /// </summary>
-    static string MercRecruitGateStageNo()
-        => $"{MERC_RECRUIT_GRAND_GATE}-{GameConfig.StagesPerGrandOf(1)}";
+    static string MercRecruitGateStageNo() => "第 1 章第 5 关";
 }

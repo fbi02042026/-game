@@ -1167,7 +1167,8 @@ public partial class Monster
         // 右侧镜像技能释放通知：与玩家侧同一模板，x 取反（不翻 scale.x，文字不镜像）
         // 【2026-10-19 主人报白框】怪物技能 id 在玩家图标表里没图 → 白框；改传怪物自身 sprite 当图标
         SkillCastNotifyController.PushEnemySkill(_skillId, SkillNotifyName(), sr != null ? sr.sprite : null);
-        ApplySkillDamage(damage, radius, primaryTarget, hitPos);
+        // 【2026-11-18 主人拍板】近战 Boss 砸地才眩晕（可打断治疗读条）；远程弹道走上面的协程，不晕。
+        ApplySkillDamage(damage, radius, primaryTarget, hitPos, _isBossUnit);
     }
 
     /// <summary>技能通知上的敌人名：副本专属名 → 模板怪物名 → 模板 id → 节点名。</summary>
@@ -1239,7 +1240,7 @@ public partial class Monster
     /// 技能结算：AoE 圆心由调用方锁定 —— 预警技能（Boss/精英）= 红圈位置，跑出圈即躲开；
     /// 瞬发技能 = 出手瞬间目标点（2026-10-19 主人拍板「圆心锁定+统一红圈」）。
     /// </summary>
-    void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget, Vector3 center)
+    void ApplySkillDamage(float damage, float radius, UnitBase primaryTarget, Vector3 center, bool stunOnHit = false)
     {
         if (this == null || isDead || !gameObject.activeInHierarchy) return;
 
@@ -1262,6 +1263,10 @@ public partial class Monster
                 // 【2026-10-24 主人拍板】与普攻统一暴击倍率（原硬编码 ×1.5 → attr.CritDamage=2.0）
                 // 【2026-10-26 词缀怪】补传 source：词缀「暴击/吸血」靠 source 回溯怪物本体。
                 u.TakeDamage(crit ? damage * DamageFormula.CritMultiplier(attr) : damage, crit, false, true, vfxDir, this);
+                // 【2026-11-18 主人拍板】近战 Boss 砸地命中即眩晕（打断治疗读条）；只晕活着的我方。
+                // 眩晕在 TakeDamage 之后施加：被砸死的单位不再晕；读条组件下一帧自检 IsStunned 即取消。
+                if (stunOnHit && !u.isDead)
+                    u.ApplyStun(GameConfig.BOSS_SLAM_STUN_SEC);
             }
             return;
         }

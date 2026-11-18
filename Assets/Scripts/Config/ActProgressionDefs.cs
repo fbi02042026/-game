@@ -2,24 +2,24 @@ using System;
 using UnityEngine;
 
 /// <summary>
-/// 【2026-11-01 主人拍板 方案A】关卡结构重构 · 进度数学层（批 B3）：
-/// 章 → 关卡（每章固定 10 个）→ 节（第 1 章每关 5 节、第 2 章每关 8 节、第 3 章起每关 10 节）。
+/// 【2026-11-01 主人拍板 路线 B】关卡结构塌缩 · 进度数学层（批 B3）：
+/// 8 章 → 每章 1 座大关（GRANDS_PER_ACT=1、运行时 grand 恒 1）→ 每大关 10 节（=10 关），全局 80 关，关=节。
 ///
-/// 口径（施工真源 <c>Docs/关卡结构重构_篇大关小关_待办任务清单.md</c> + 2026-11-01 主人对话拍板）：
-/// · 每章 10 个关卡；关卡号**跨章连续编号**：第 1 章 1-1…10-5，第 2 章 11-1…20-8，第 3 章 21-1…30-10（31-10 后面是 32-1 ✓）；
-/// · 第 1 章每关 5 节、第 2 章每关 8 节、第 3 章及以后每关 10 节；
-/// · 每关最后一节 = Boss；第 3 节 = 精英（概率见 <see cref="StageRoller.PinnedEliteChance"/>，8/10 节章的精英位沿用第 3 节【待主人确认】）。
+/// 口径（施工真源 <c>Docs/关卡结构塌缩_80关一关一战斗_待办任务清单.md</c>）：
+/// · 关号（1-based）即章内节号 1..10，不跨章连续编号；
+/// · 关 5 = 小 boss（10 号 xiaoboss）、关 10 = 大 boss（11/12 真 Boss）、关 3/8 = 精英（概率真源 <see cref="StageRoller.PinnedEliteChance"/>）、其余普通；
+/// · 关型真源 = <see cref="TypeOfStage"/> / <see cref="BossKindOfStage"/> 单一出口。
 ///
 /// 🔴 本文件只做**数学**，不碰战斗、不碰存档、不改任何既有行为。
 /// 特殊关（商人/附魔/诅咒/休息/锻造）不在本层决定 —— 仍由 ChapterManager 的分支机制处理（铁律 12：不许删）。
 /// </summary>
 public static class ActProgressionDefs
 {
-    /// <summary>每章关卡数（2026-11-01 主人拍板「所有章节都是 10 个关卡」）。</summary>
-    public const int GRANDS_PER_ACT = 10;
+    /// <summary>每章大关数（路线 B：每章 1 座大关 = 10 关，运行时 grand 恒 1）。</summary>
+    public const int GRANDS_PER_ACT = 1;
 
-    /// <summary>每关节数（<b>真源，唯一出处</b>）：第 1 章 5、第 2 章 8、第 3 章及以后 10（越界章按 10 续用）。</summary>
-    static readonly int[] ActSubsPerGrand = { 5, 8, 10, 10, 10, 10, 10, 10 };
+    /// <summary>每大关节数（<b>真源，唯一出处</b>）：路线 B 下每章 1 座大关、统一 10 节（关），越界章按 10 续用。</summary>
+    static readonly int[] ActSubsPerGrand = { 10, 10, 10, 10, 10, 10, 10, 10 };
 
     /// <summary>某章每关节数。越界章（第 9 章及以后）按 10 续用。</summary>
     public static int SubsPerGrandOf(int act)
@@ -109,19 +109,26 @@ public static class ActProgressionDefs
         => $"{StartGrandOf(act) + GrandOfSub0(act, sub0) - 1}-{SubInGrand0(act, sub0) + 1}";
 
     /// <summary>
-    /// 节类型（只管 Boss / 精英 / 普通三种战斗型）：
-    /// 每关最后一节 = Boss；第 3 节 = 精英（概率真源 <see cref="StageRoller.PinnedEliteChance"/>）；其余普通。
-    /// （8/10 节章的精英位沿用第 3 节，2026-11-01 待主人确认。）
+    /// 节类型（只管 Boss / 精英 / 普通三种战斗型）——【路线 B】已转发 <see cref="TypeOfStage"/>：
+    /// sub 为 1-based 关号（1..10），实际关型由 TypeOfStage(sub-1) 定；保留签名兼容 Editor 自检等调用点。
     /// </summary>
     public static StageType TypeOf(int grand, int sub)
     {
-        int subs = SubsPerGrandOf(ActOfGrand(grand));
-        int s = Mathf.Clamp(sub, 1, subs);
-        if (s == subs) return StageType.Boss;
-        if (s == 3) return UnityEngine.Random.value < StageRoller.PinnedEliteChance
-            ? StageType.Elite : StageType.Normal;
+        return TypeOfStage(sub - 1);
+    }
+
+    /// <summary>关型单一出口：关=节，stageIdx0（0-based，0..9）。关5(4)小boss/关10(9)大boss/关3(2)·关8(7)精英/其余普通。</summary>
+    public static StageType TypeOfStage(int stageIdx0)
+    {
+        if (stageIdx0 == 9 || stageIdx0 == 4) return StageType.Boss;
+        if (stageIdx0 == 2 || stageIdx0 == 7)
+            return UnityEngine.Random.value < StageRoller.PinnedEliteChance ? StageType.Elite : StageType.Normal;
         return StageType.Normal;
     }
+
+    /// <summary>boss 种类单一出口：0=无 1=小boss(10号xiaoboss) 2=大boss(11/12真Boss)。</summary>
+    public static int BossKindOfStage(int stageIdx0)
+        => stageIdx0 == 9 ? 2 : (stageIdx0 == 4 ? 1 : 0);
 
     /// <summary>
     /// 章表自检（改完本文件任何数字都跑一次）：打印每章关卡数 / 每关节数 / 节总数 / 关卡全局区间，
@@ -130,22 +137,20 @@ public static class ActProgressionDefs
     public static void LogDiagnostics()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("[章表自检] 每章 " + GRANDS_PER_ACT + " 个关卡；每关节数 = 5/8/10/10…");
+        sb.AppendLine("[章表自检] 每章 " + GRANDS_PER_ACT + " 大关 × 10 关；每关节数 = 10");
         for (int a = 1; a <= ActCount; a++)
         {
             int stages = StageCountOf(a);
             int subs = SubsPerGrandOf(a);
-            sb.AppendLine($"  第{a}章：10 关 × 每关{subs}节 = {stages} 节（关卡 {StartGrandOf(a)}–{EndGrandOf(a)}）");
+            sb.AppendLine($"  第{a}章：{GRANDS_PER_ACT} 大关 × {subs} 关 = {stages} 关（关卡 {StartGrandOf(a)}–{EndGrandOf(a)}）");
             if (stages != GRANDS_PER_ACT * subs)
                 Debug.LogError($"[章表自检] 第{a}章 节总数 {stages} ≠ 10×{subs}（表坏了）");
         }
-        // 跨章连续编号对账
-        if (StartGrandOf(2) != 11)
-            Debug.LogError($"[章表自检] 第 2 章起始关卡应为 11，实为 {StartGrandOf(2)}（跨章连续编号口径坏了）");
-        if (StartGrandOf(3) != 21)
-            Debug.LogError($"[章表自检] 第 3 章起始关卡应为 21，实为 {StartGrandOf(3)}");
-        if (ActOfGrand(11) != 2)
-            Debug.LogError($"[章表自检] 关卡 11 应属第 2 章，实为第 {ActOfGrand(11)} 章");
+        // 路线 B：关卡号即章号（关卡号 1..ActCount 直连章号），跨章切换自检
+        if (ActOfGrand(1) != 1)
+            Debug.LogError($"[章表自检] 路线 B：关卡号即章号，关卡 1 应属第 1 章，实为第 {ActOfGrand(1)} 章");
+        if (ActOfGrand(8) != 8)
+            Debug.LogError($"[章表自检] 路线 B：关卡号即章号，关卡 8 应属第 8 章，实为第 {ActOfGrand(8)} 章");
         if (ActOfGrand(EndGrandOf(ActCount)) != ActCount)
             Debug.LogError($"[章表自检] 表尾关卡 {EndGrandOf(ActCount)} 应属第 {ActCount} 章");
         Debug.Log(sb.ToString());

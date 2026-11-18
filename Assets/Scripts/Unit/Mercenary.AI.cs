@@ -311,14 +311,22 @@ public partial class Mercenary : UnitBase
         if (SkillCaster != null && SkillCaster.HasActiveSkill && SkillCaster.CooldownRemain <= 0f
             && AllyNeedsHeal())
         {
+            // 【2026-11-18】技能真正放出（CD>0）→ 解除上轮的闭锁，恢复「奶人时站着」表现。
+            // 读条期的真奶现在由 HealCastBar 在 UnitBase.Update 定身，到不了这里，不冲突。
+            if (_healWaitAbandoned && SkillCaster.CooldownRemain > 0f)
+                _healWaitAbandoned = false;
             // 【2026-11-01 主人报「竞技场敌方弓手总贴很近打」】锚玩家只属于我方佣兵（聚队概念）；
             // 敌方佣兵无玩家可跟，tooFarFromHero 恒 false，只吃下面的最大等待时长上限。
             var waitHero = isAlly ? Hero.Instance : null;
             bool tooFarFromHero = waitHero != null && !waitHero.isDead
                 && Mathf.Abs(GetCombatX(this) - GetCombatX(waitHero)) > GameConfig.MERC_STICK_RADIUS;
             _healWaitTimer += Time.deltaTime;
-            if (tooFarFromHero || _healWaitTimer > GameConfig.MERC_HEAL_WAIT_MAX_SEC)
+            if (_healWaitAbandoned || tooFarFromHero || _healWaitTimer > GameConfig.MERC_HEAL_WAIT_MAX_SEC)
             {
+                // 【2026-11-18】超时这一帧置闭锁：之前只是 timer 归零、下一帧条件又恒真 → 每 1.5s 喘一帧又站桩。
+                // 现在超时即放弃本次交战的「站定等奶」，持续跟队；直到技能真放出（上面解锁）或切关（ResetForReuse）。
+                if (_healWaitTimer > GameConfig.MERC_HEAL_WAIT_MAX_SEC)
+                    _healWaitAbandoned = true;
                 _healWaitTimer = 0f;
                 // 不定住，落到底部正常 AI（跟队 / 粘跟随），治疗照常自动放
             }

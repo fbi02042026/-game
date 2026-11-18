@@ -46,6 +46,7 @@ public partial class BattleManager
     public long RunEarnedGold => RunStats.GoldEarned + _runStageGoldPending;
     int _enchantAtRunStart;
     int _matsAtRunStart;
+    int _talentAtRunStart;
     public BattleRunStats RunStats { get; private set; } = new BattleRunStats();
     public bool isInBattle = false;
     /// <summary>

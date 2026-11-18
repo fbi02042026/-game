@@ -200,6 +200,13 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (crit <= 1.5f) crit *= 100f;
         SetText(_attrCrit, "Panel/you/AttrPanel/AttrCritRoot/AttrCrit", crit.ToString("0.#") + "%");
 
+        // 4.5)【2026-11-18 主人需求】左上角战斗力：与上面属性行同源（等级 = card.MercLevel、星级 = 局外星），
+        //      数值口径见 PowerCalc.MercPowerOf（角色属性 × 星级乘区 × 养成资质）。
+        //      该值同时原样计入本局总战力（RunLoadout.TotalPower），面板与总战力是同一个数字。
+        //      战斗内入口（点头像看详情）同样显示 —— 与属性行口径一致，不另设分支。
+        MercPowerBadge.Paint(_powerTitle, _powerDigits,
+            PowerCalc.MercPowerOf(hireId, def.AssetId, Mathf.Max(1, card.MercLevel)));
+
         // 5) 星星（预制体只摆了 3 个满星节点，正好对上局外星上限 MaxOutStar=3）。
         //    【2026-10-24 主人拍板】星级显示统一 = 已拥有的局外星级（MercStarSystem.OutStarOf，
         //    唯一出口）：没升过星的一律 0 星（整排不亮）；招募候选 / 战斗头像详情 / 复活框同口径。

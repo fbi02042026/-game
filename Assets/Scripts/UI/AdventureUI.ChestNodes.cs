@@ -72,7 +72,8 @@ public partial class AdventureUI
     const int ChestStateLocked = 2;
     const int ChestStateClaimed = 3;
 
-    /// <summary>银箱小关号（2026-10-23 批 B1：5 关制下金箱占第 5 关，银箱移到第 3 关）。</summary>
+    /// <summary>银箱小关号（2026-10-23 批 B1：5 关制下金箱占第 5 关，银箱移到第 3 关）。
+    /// 【路线 B】起宝箱档改走 <see cref="ActProgressionDefs.TypeOfStage"/> 真源（关 3/8 精英→银箱），本常量保留兼容。</summary>
     const int ChestSilverStage = 3;
 
     /// <summary>窗口首尾槽位（底/顶）的透明度（2026-10-22 主人拍板：0.7）。</summary>
@@ -100,9 +101,9 @@ public partial class AdventureUI
     /// <summary>章号上限（与 ChapterRouteTable 的 1~8 口径一致；跨章铺列钳住，不铺 8 之上的假章）。</summary>
     const int ChestRouteMaxChapter = 8;
 
-    /// <summary>窗口槽位上限 = 跨章数 × 每章关卡数（2026-11-01 批 B3：每章 10 关卡 → 30 槽铺满 3 章；
-    /// 瘦屏 Fit 只把「可见 5 关」排进带，多出的槽位向视口下方溢出成滚动余量）。</summary>
-    static int MaxSlotCount => Mathf.Max(4, ActProgressionDefs.GRANDS_PER_ACT * ChestSpanChapters);
+    /// <summary>窗口槽位上限 = 跨章数 × 每章关卡数（路线 B：每章 10 关（StageCountOf 真源）→ 30 槽铺满 3 章；
+    /// 旧口径 2026-11-01 批 B3：每章 10 关卡。瘦屏 Fit 只把「可见 5 关」排进带，多出的槽位向视口下方溢出成滚动余量）。</summary>
+    static int MaxSlotCount => Mathf.Max(4, ActProgressionDefs.StageCountOf(1) * ChestSpanChapters);
 
     /// <summary>当前浮动槽位下标（2026-10-23 主人「只有当前开放的宝箱关卡有浮动」：仅关闭态槽位浮动，
     /// 其余钉回基准；-1 = 无（整章通关后无「关闭」位，全列静止））。RefreshChestNodes 每次刷新重算。</summary>
@@ -1033,13 +1034,15 @@ public partial class AdventureUI
     }
 
     /// <summary>按（章,节序）取三态图路径（2026-10-24 从 WriteSlotContent 抽出：动效切图与刷新共用一个出口）。
-    /// 关内第 3 节银、末节（Boss）金，其余木（【2026-11-01 批 B3】按章取节数 5/8/10 还原关内位置）。</summary>
+    /// 【路线 B】每章 10 关：关 3/8 精英→银箱，关 5 小 Boss / 关 10 大 Boss→金箱，其余木箱（旧「第 3 节银、末节金，节数按章 5/8/10」口径退役）。</summary>
     static string[] ChestPathsForStage(int chapter, int stage)
     {
         int subs = GameConfig.StagesPerGrandOf(chapter);
-        int s = ((stage - 1) % subs + subs) % subs + 1;
-        return s == ChestSilverStage ? ChestSilverPaths
-             : s == subs ? ChestGoldPaths
+        int s = ((stage - 1) % subs + subs) % subs + 1;   // 1-based 关号，越界（裂隙等）取模归一化保留
+        int idx = s - 1;                                  // 真源吃 0-based
+        // 【路线 B】档位判据收敛到关型真源（路径表不动）
+        return ActProgressionDefs.BossKindOfStage(idx) != 0 ? ChestGoldPaths
+             : ActProgressionDefs.TypeOfStage(idx) == StageType.Elite ? ChestSilverPaths
              : ChestWoodPaths;
     }
 
@@ -1322,8 +1325,8 @@ public partial class AdventureUI
         if (!data.MarkChestClaimed(slotCh, stage1 - 1)) return;   // 防重复发奖
         // 先标记再取/发：保证只发一次；Take 返回 null = 该关没有记录（重复通关补领），不弹窗直接退场
         var notice = AdventureRewardNotice.Take(slotCh, stage1 - 1);
-        // 【2026-11-01 批 B3】Boss 箱 = 关内末节（节数按章 5/8/10）
-        bool isBossChest = ((stage1 - 1) % GameConfig.StagesPerGrandOf(slotCh)) == GameConfig.StagesPerGrandOf(slotCh) - 1;
+        // 【路线 B】Boss 箱 = 关5小boss / 关10大boss（真源 BossKindOfStage）
+        bool isBossChest = ActProgressionDefs.BossKindOfStage(stage1 - 1) != 0;
         var entries = BuildChestRewardEntries(notice, bossDiamond: isBossChest);
         if (isBossChest)
         {

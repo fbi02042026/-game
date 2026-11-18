@@ -257,6 +257,96 @@ public static class PowerCalc
             + POWER_PER_HP * (hp + hpEq) + POWER_PER_DEF * (defTotal + defEq));
     }
 
+    /// <summary>
+    /// 佣兵单体战力（2026-11-18 主人拍板）：与 <see cref="PlayerPowerSegment"/>
+    /// <b>同一套系数与取整</b>，只是属性来源换成佣兵（等级/稀有度成长/局外星/养成资质，
+    /// 由 <see cref="MercPowerOf"/> 取好再传进来）。
+    /// <para>佣兵没有装备词条 → 暴伤/元素/减伤/闪避/吸血四个乘区天然为 0 或 1，
+    /// 公式退化成「暴击期望 × 攻速」的旧式；系数一律读本类常量，不另写字面量。</para>
+    /// <para>🔴 <b>进</b> <see cref="RunLoadout.TotalPower"/>：本局总战力的佣兵段直接累加这个值
+    /// （取数走 <see cref="MercPowerOf"/>），所以「佣兵信息面板显示的战力」与「他给队伍加的战力」
+    /// 是同一个数字 —— 玩家看得懂，也能横向比。旧权重口径 <see cref="MercPowerDelta"/>
+    /// （等级×70 + 星级×110）自 2026-11-18 起不再参与总战力。</para>
+    /// </summary>
+    /// <param name="atk">最终攻击（法系佣兵 = 魔攻，两者同值，见 MercRosterDefs 赋 def/atk 口径）</param>
+    /// <param name="atkSpeed">每秒攻击次数</param>
+    /// <param name="hp">最终生命上限</param>
+    /// <param name="defense">最终物防</param>
+    /// <param name="magicDefense">最终魔防（佣兵与物防同值，各自吃自己的星级乘区）</param>
+    public static int MercPowerSegment(float atk, float atkSpeed, float hp, float defense, float magicDefense)
+    {
+        // 佣兵暴击 = 项目基础值、暴伤 = 默认倍率（Mercenary.Attributes 只登记 BASE_CRIT_RATE，不吃装备词条）
+        float dps = Mathf.Max(0f, atk)
+                    * (1f + GameConfig.BASE_CRIT_RATE * (GameConfig.DefaultCritMultiplier - 1f))
+                    * Mathf.Max(0.01f, atkSpeed);
+        return Mathf.RoundToInt(POWER_BASE + POWER_PER_DPS * dps
+            + POWER_PER_HP * Mathf.Max(0f, hp)
+            + POWER_PER_DEF * (Mathf.Max(0f, defense) + Mathf.Max(0f, magicDefense)));
+    }
+
+    /// <summary>
+    /// 单个佣兵的战力（<b>唯一出口</b>）：佣兵信息面板显示、本局总战力入账、抽卡卡面「+N 战力」
+    /// 三处全部调这里，数字必须一致，禁止另写一份。
+    /// <para>取数链条与战斗侧逐段对齐：花名册等级属性（<see cref="MercRosterDefs.TryApplyCombatStatsByHire"/>，
+    /// 含稀有度成长/羁绊）→ 局外星乘区（<see cref="MercStarDefs"/>，与 Mercenary.ApplyOutStarBonus 同源）
+    /// → 养成资质乘区（<see cref="MercGrowSystem.AptitudePct"/>，与 Mercenary.ApplyGrowBonus 同源）。</para>
+    /// <para>不叠局内 tempBuffs（石像赐福）：这是「这个佣兵本身多强」的比较口径，不是战斗实时面板 ——
+    /// 否则同一佣兵在不同局里数字会变，没法横向比。</para>
+    /// <para>🔴 局内星级不进本函数：<see cref="RunMercEntry.star"/> 的初值就是局外星
+    /// （<see cref="MercStarSystem.InRunStarOf"/>），星级增益已通过上面的属性乘区体现；
+    /// 局内升星只加 MP 池/回复（MpProfile），不加血攻防，因此不重复计战力。</para>
+    /// </summary>
+    /// <param name="hireId">花名册 hireId（H001…；为空或查不到时按 assetId 取首行）</param>
+    /// <param name="assetId">贴图/职业 assetId（如 dunbing101）</param>
+    /// <param name="level">佣兵等级（局外面板 = 卡面 MercLevel；局内 = RunMercEntry.level，与实际战斗属性同源）</param>
+    public static int MercPowerOf(string hireId, string assetId, int level)
+    {
+        int lv = Mathf.Max(1, level);
+        float hp = 0f, atk = 0f, def = 0f, atkSpd = 0f, move = 0f, range = 0f;
+        // 与佣兵信息弹窗的属性行同一取法：hireId 优先（共用 asset 的佣兵各吃各的行），取不到退回 asset 首行
+        bool byHire = !string.IsNullOrEmpty(hireId)
+            && MercRosterDefs.TryApplyCombatStatsByHire(hireId, lv,
+                out hp, out atk, out def, out atkSpd, out move, out range);
+        if (!byHire)
+            MercRosterDefs.ApplyCombatStats(assetId, lv,
+                out hp, out atk, out def, out atkSpd, out move, out range);
+
+        // 两条取行路径都空（表里没这个佣兵）→ 报错并计 0，不拿底盘 130 当战力虚加
+        if (hp <= 0f || atk <= 0f || atkSpd <= 0f)
+        {
+            Debug.LogError("[PowerCalc] 佣兵战力取不到属性：hireId=" + hireId
+                + " assetId=" + assetId + " Lv" + lv + "（该佣兵战力按 0 计）");
+            return 0;
+        }
+
+        string id = string.IsNullOrEmpty(hireId) ? assetId : hireId;
+
+        // 局外星 0~3：每星 攻/防/魔攻/魔防/血 各 +15%（MercStarDefs 唯一真源）
+        int star = MercStarSystem.OutStarOf(id);
+        if (star < 0)
+        {
+            Debug.LogError("[PowerCalc] 查不到局外星：" + id + "（非花名册佣兵，战力按 0 星算）");
+            star = 0;
+        }
+        star = Mathf.Clamp(star, 0, MercStarDefs.MaxOutStar);
+        float atkMul = 1f + MercStarDefs.AtkPctPerStar * star;
+        float magMul = 1f + MercStarDefs.MagicPctPerStar * star;
+        float hpMul = 1f + MercStarDefs.HpPctPerStar * star;
+
+        // 养成资质：0=攻（魔攻同档） 1=防（魔防同档） 2=血；无记录返回 0，Lv1 与未养成完全一致
+        float aptAtk = MercGrowSystem.AptitudePct(id, 0);
+        float aptDef = MercGrowSystem.AptitudePct(id, 1);
+        float aptHp = MercGrowSystem.AptitudePct(id, 2);
+
+        float finalAtk = atk * atkMul * (1f + aptAtk);
+        float finalHp = hp * hpMul * (1f + aptHp);
+        // 佣兵魔防与物防同值（MercRosterDefs.ApplyCombatStatsCore 同源赋 def），各吃自己的星级乘区
+        float finalDef = def * atkMul * (1f + aptDef);
+        float finalMdef = def * magMul * (1f + aptDef);
+
+        return MercPowerSegment(finalAtk, atkSpd, finalHp, finalDef, finalMdef);
+    }
+
     /// <summary>复刻 Hero.RecalcAttr 的武器类型攻速乘区（SetAttr 覆盖，Hero.cs L259-265），模拟侧必须同样打上。</summary>
     static void ApplyWeaponAttackSpeedMul(AttrSystem attr, List<EquipInstance> set)
     {
