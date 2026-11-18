@@ -28,7 +28,10 @@ public static class ResourceWallet
         /// 主人原话「定向招募改用特殊的金币 也可以叫佣兵币」，与 Gold / SlotCoin 三边不通用。
         /// 产出见 <see cref="GrantMercGold"/>：主人拍板「击杀精英1个 击杀Boss两个」。
         /// </summary>
-        MercGold
+        MercGold,
+        /// <summary>2026-11-18 主人拍板：招募卷轴收编为资源，底层映射存档 mercScrollCommon / mercScrollLegendary（存档零迁移）。</summary>
+        ScrollCommon,
+        ScrollLegendary
     }
 
     /// <summary>
@@ -79,6 +82,8 @@ public static class ResourceWallet
             case ResourceType.TalentPoint: return data.talentPoints;
             case ResourceType.SlotCoin: return data.slotCoins;
             case ResourceType.MercGold: return data.mercGold;
+            case ResourceType.ScrollCommon: return data.mercScrollCommon;
+            case ResourceType.ScrollLegendary: return data.mercScrollLegendary;
             default: return 0;
         }
     }
@@ -95,6 +100,8 @@ public static class ResourceWallet
             case ResourceType.TalentPoint: data.talentPoints = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
             case ResourceType.SlotCoin: data.slotCoins = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
             case ResourceType.MercGold: data.mercGold = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
+            case ResourceType.ScrollCommon: data.mercScrollCommon = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
+            case ResourceType.ScrollLegendary: data.mercScrollLegendary = (int)Mathf.Clamp(value, 0, int.MaxValue); break;
         }
     }
 
@@ -113,6 +120,8 @@ public static class ResourceWallet
             case ResourceType.TalentPoint: return "天赋石";
             case ResourceType.SlotCoin: return "抽奖币";
             case ResourceType.MercGold: return "佣兵币";
+            case ResourceType.ScrollCommon: return "普通招募卷轴";
+            case ResourceType.ScrollLegendary: return "高级招募卷轴";
             default: return "资源";
         }
     }

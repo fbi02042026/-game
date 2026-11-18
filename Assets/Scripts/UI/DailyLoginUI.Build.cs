@@ -85,6 +85,8 @@ public partial class DailyLoginUI
                 var card = MercGrowUI.CreateFragmentCard(icon, "FragmentCard", MercRosterDefs.MercRarity.Rare, "", fragSize);
                 c.fragCard = card;
                 if (card.Root != null) card.Root.SetActive(false);
+                // 2026-11-18：数量角标挂 IconHolder 下、碎片卡之后建 → 永远在最上层
+                c.qtyBadge = EnsureQtyBadge(icon);
             }
 
             var reward = FindChildDeep(t, "Reward");
@@ -334,6 +336,8 @@ public partial class DailyLoginUI
         c.iconFallback = CreateTxt(iconHolder.transform, "Fallback", "", 40, TextAnchor.MiddleCenter);
         Stretch(c.iconFallback.rectTransform);
         c.iconFallback.color = new Color(0.9f, 0.85f, 0.7f, 0.9f);
+        // 2026-11-18：数量角标挂 IconHolder 下（两条建树路径各建一次）
+        c.qtyBadge = EnsureQtyBadge(iconHolder.transform);
 
         // 奖励名（两行）
         c.rewardText = CreateTxt(bg.transform, "Reward", "", 18, TextAnchor.MiddleCenter, true);

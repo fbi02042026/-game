@@ -33,9 +33,8 @@ public static class DailyLoginDefs
     /// 选它的理由：稀有档里最硬的前排（防 20 为稀有最高），坦克定位不挑流派，
     /// 中后期第 6/7 章的数值墙依然靠得住；且 InInitialPool=false ，玩家自己拿不到，
     /// 登录送才有"专属"价值。换人只改这里（后续碎片会跟着走）。
-    /// 落点：【2026-10-20 首拍】第 1 天给佣兵（daily_login.csv 的 starter_1），D4 起给碎片。
-    /// 【2026-10-23 主人重申】D1=塔克本体，不是碎片：塔克已移出默认解锁名单，
-    /// 新档 D1 真发本体+报喜；仅当存档里塔克已解锁（旧档遗留/酒馆/招募所得）或后续轮回才折算碎片×10。
+    /// 落点：【2026-11-18 主人重申】D1=塔克本体，不是碎片，恒发本体不折算。
+    /// 引导那位塔克只是剧情临时入队、不算已拥有；每日登录 D1 才是塔克的正式获取途径。
     /// </summary>
     public const string STARTER_MERC_ID = "H003";
 
@@ -63,6 +62,7 @@ public static class DailyLoginDefs
         MercFragment = 3,      // 指定佣兵的本命碎片（hireId + amount）
         LegendaryFragment = 4, // 随机传说佣兵本命碎片（amount）
         Badge = 5,             // 【2026-10-23 主人拍板 D3】升星职业徽记（hireId 反查职业+档位 + amount）
+        Item = 6,              // 【2026-11-18 主人拍板 D6】通用道具（param=item_defs defId，走 ItemGrantSystem）
     }
 
     public struct Reward
@@ -128,22 +128,22 @@ public static class DailyLoginDefs
         // 【2026-10-23 主人拍板】D3 发塔克升星徽记：塔克=剑盾·稀有 →「中级徽记」；双倍日已取消，直发 30 =
         // 升2星10 + 升3星20 全包（消耗见 MercStarDefs.BadgeCost）。
         Badge("中级徽记30",    STARTER_MERC_ID,                           30), // D3（双倍日取消后直发30；原金币×120）
-        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D4（2026-10-22 主人拍板：第4天给2星碎片×20）
+        Res("普通招募卷轴×5",  ResourceWallet.ResourceType.ScrollCommon,   5), // D4（2026-11-18 主人拍板：改普通招募卷轴×5）
         Res("金币500",         ResourceWallet.ResourceType.Gold,          500), // D5（2026-10-23 主人拍板：800→500）
-        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D6（2026-10-22 主人拍板：第6天给3星碎片×20，与D8合计40=第3星；累计D8满星70零溢出）
+        new Reward { name = "遗忘药水×1", grant = Grant.Item, hireId = "item_forget_potion", amount = 1 }, // D6（2026-11-18 主人拍板：改遗忘药水×1，走 ItemGrantSystem）
         Res("钻石200",         ResourceWallet.ResourceType.Diamond,      200), // D7（2026-10-23 主人拍板：改钻石×200，原金币×200）
-        Frag("塔克碎片×20",    STARTER_MERC_ID,                           20), // D8（2026-10-22 主人拍板：第8天给3星碎片×20，与D6合计40=第3星；累计70零溢出）
+        Res("高级招募卷轴×1",  ResourceWallet.ResourceType.ScrollLegendary, 1), // D8（2026-11-18 主人拍板：改高级招募卷轴×1）
     };
 
     /// <summary>
     /// 唯一出口：界面显示与实际发放都走这里。
-    /// 备注：【2026-10-23 主人重申】D1（starter_1）就是「佣兵本体」格——塔克移出默认名单后，
-    /// mercOwned→碎片 的折算只对「存档里塔克已解锁（旧档遗留/酒馆/招募所得）」或后续轮回的 D1 触发；
-    /// 新档第一次领 D1 不折算，真发本体。
+    /// 备注：【2026-11-18 主人重申】D1（starter_1）恒为「佣兵本体」格——
+    /// 引导那位塔克只是剧情临时入队、不算已拥有（见 RunDraftDirector 的 inTutorial 分支），
+    /// 每日登录 D1 才是塔克的正式获取途径，任何情况下都不折算成碎片；mercOwned 参数仅为兼容签名保留。
     ///
     /// 节日覆盖：仅当 day == 今天累计登录天数（即"今天"那一格）且节日表命中时，
     /// 才整条替换为节日奖励——**只覆盖 Starter 新手格**，Cycle / Streak 不动（范围不扩大）。
-    /// 命中后直接返回表的翻译结果（整条覆盖）；原有 mercOwned→碎片 的兜底对节日行不强制套用，
+    /// 命中后直接返回表的翻译结果（整条覆盖）；
     /// 若节日给了佣兵且已解锁，GrantOne 会安全 no-op（不会崩，只是当天无奖励，主人配节日数据时自决）。
     /// </summary>
     public static Reward EffectiveStarterReward(int day, bool mercOwned)
@@ -153,8 +153,10 @@ public static class DailyLoginDefs
             return Translate(sp);
 
         var r = Starter[(day - 1) % Starter.Length];
-        if (r.grant == Grant.Merc && mercOwned)
-            r = Frag("塔克碎片×10", STARTER_MERC_ID, 10);   // 【2026-11-01 主人拍板】道具名=「塔克碎片」，数量×N跟后
+        // 【2026-11-18 主人重申】引导那位塔克只是剧情临时角色，不算「已拥有」；
+        // 每日登录 D1 才是塔克的正式获取途径，D1 恒发本体，不再因 mercOwned 折算成碎片。
+        //（引导入队走 RunDraftDirector 的 inTutorial 分支，本就不写永久解锁；旧档若真已解锁，
+        //  D1 领取时 GrantOne 的 Merc 分支会安全 no-op，不重复发放。）
         return r;
     }
 
@@ -319,7 +321,7 @@ public static class DailyLoginDefs
             amount = row.amount,
         };
         if (r.grant == Grant.Resource) { r.type = ParseResourceType(row.param); r.hireId = ""; }
-        else if (r.grant == Grant.Merc || r.grant == Grant.MercFragment || r.grant == Grant.Badge) { r.hireId = row.param; }
+        else if (r.grant == Grant.Merc || r.grant == Grant.MercFragment || r.grant == Grant.Badge || r.grant == Grant.Item) { r.hireId = row.param; }
         else { r.hireId = ""; }
 
         // 第二份奖励（组合峰值，如「钻石 + 传说碎片」）
@@ -327,7 +329,7 @@ public static class DailyLoginDefs
         r.amount2 = row.amount2;
         r.name2 = row.name2;
         if (r.grant2 == Grant.Resource) { r.type2 = ParseResourceType(row.param2); r.hireId2 = ""; }
-        else if (r.grant2 == Grant.Merc || r.grant2 == Grant.MercFragment || r.grant2 == Grant.Badge) { r.hireId2 = row.param2; }
+        else if (r.grant2 == Grant.Merc || r.grant2 == Grant.MercFragment || r.grant2 == Grant.Badge || r.grant2 == Grant.Item) { r.hireId2 = row.param2; }
         else { r.hireId2 = ""; }
 
         return r;
@@ -343,6 +345,7 @@ public static class DailyLoginDefs
             case "mercfrag": return Grant.MercFragment;
             case "legendfrag": return Grant.LegendaryFragment;
             case "badge": return Grant.Badge;   // 2026-10-23 D3 升星徽记
+            case "item": return Grant.Item;     // 2026-11-18 D6 遗忘药水
             case "none":
             case "":
             default: return Grant.None;
@@ -360,6 +363,8 @@ public static class DailyLoginDefs
             case "talent": return ResourceWallet.ResourceType.TalentPoint;
             case "enchant": return ResourceWallet.ResourceType.EnchantStone;
             case "decompose": return ResourceWallet.ResourceType.DecomposeMat;
+            case "scrollcommon": return ResourceWallet.ResourceType.ScrollCommon;
+            case "scrolllegendary": return ResourceWallet.ResourceType.ScrollLegendary;
             default:
                 Debug.LogWarning("[DailyLoginDefs] 未知资源类型：" + s + "，按 Gold 处理");
                 return ResourceWallet.ResourceType.Gold;

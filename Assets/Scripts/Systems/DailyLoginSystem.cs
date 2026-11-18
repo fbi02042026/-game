@@ -211,7 +211,8 @@ public static class DailyLoginSystem
     }
 
     /// <summary>
-    /// 第 day 天（累计天数）的**实际奖励**：塔克已解锁时，佣兵日自动换成碎片 ×10。
+    /// 第 day 天（累计天数）的**实际奖励**：D1 恒为塔克本体（引导那位只是剧情临时入队、不算已拥有，
+    /// 每日登录 D1 才是正式获取途径，不折算碎片）。
     /// UI 显示与 TryClaimStarter 发放都走这一个入口，保证「看到的 = 拿到的」。
     /// </summary>
     public static DailyLoginDefs.Reward EffectiveStarterReward(int day)
@@ -380,6 +381,16 @@ public static class DailyLoginSystem
                 // 【2026-10-22 主人拍板】「通用传说碎片 legendfrag」取消 —— 没有这个道具。
                 // 表里若仍配 legendfrag（不该发生，CSV 已改钻石）fail closed 报出来，不发不吞。
                 Debug.LogError($"[DailyLogin] 登录奖励配了已取消的 legendfrag（amount={amount}）——请改 daily_login.csv，本格未发放任何碎片");
+                break;
+            case DailyLoginDefs.Grant.Item:
+                // 【2026-11-18 主人拍板 D6】通用道具（遗忘药水）：hireId 承载 item_defs defId。
+                // 唯一发放出口 ItemGrantSystem.GrantItem（进随身仓库 townBagItems），不另造背包写入口。
+                if (string.IsNullOrEmpty(hireId))
+                {
+                    Debug.LogError("[DailyLogin] 道具类奖励缺 defId（item_defs id），本格未发放");
+                    break;
+                }
+                ItemGrantSystem.GrantItem(hireId, amount);
                 break;
         }
         return null;

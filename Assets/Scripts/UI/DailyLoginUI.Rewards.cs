@@ -61,6 +61,56 @@ public partial class DailyLoginUI
         return name.Substring(0, start) + (v * factor) + name.Substring(end);
     }
 
+    /// <summary>
+    /// 【2026-11-18 主人拍板「数量放到图标框右下角，跟其他界面一致」】
+    /// 在 IconHolder 下建数量角标，规格与 RewardPopupUI.EnsureCountBadge 完全一致：
+    /// 右下角锚定内缩 8px、24 号中文字体、白字黑描边。节点名不含「Count」，避免
+    /// Open 末尾 GameFonts.ApplyToHierarchy 按数字规则换成没有「×」字形的 PixelFont。
+    /// 每次建树只建一次并缓存到 cell，Refresh 只改 text/显隐；挂在 Icon 下随整体缩放一起动。
+    /// </summary>
+    static Text EnsureQtyBadge(Transform icon)
+    {
+        if (icon == null) return null;
+        var go = new GameObject("QtyBadge", typeof(RectTransform), typeof(Text), typeof(Outline));
+        go.transform.SetParent(icon, false);
+        go.layer = 5;
+        var t = go.GetComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = 24;
+        t.alignment = TextAnchor.LowerRight;
+        t.color = Color.white;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        var ol = go.GetComponent<Outline>();
+        ol.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        ol.effectDistance = new Vector2(1.5f, -1.5f);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(1f, 0f);
+        rt.anchoredPosition = new Vector2(-3f, 6f);   // 主人 2026-11-18：右下角内缩 8→(3,6)（往右 5、往下 2）
+        rt.sizeDelta = new Vector2(120f, 30f);
+        go.SetActive(false);
+        return t;
+    }
+
+    /// <summary>
+    /// 把奖励名里的数量拆出来给角标：名字去掉尾部「×N」或「N」，角标显示「×N」（N 取实发 amount，
+    /// 保证显示=到账）。amount&lt;=0（佣兵本体）时不出角标，名字原样。兼容表里两种写法
+    /// （塔克碎片×10 / 中级徽记30），避免只按 × 拆会漏掉无 × 的那些。
+    /// </summary>
+    static void SplitQtySuffix(string display, int amount, out string nameOnly, out string qty)
+    {
+        nameOnly = display ?? "";
+        qty = "";
+        if (amount <= 0 || string.IsNullOrEmpty(nameOnly)) return;
+        qty = "×" + amount;
+        int end = nameOnly.Length;
+        while (end > 0 && char.IsDigit(nameOnly[end - 1])) end--;    // 去掉尾部数字
+        if (end > 0 && nameOnly[end - 1] == '×') end--;              // 再去掉紧跟的 ×
+        if (end < nameOnly.Length) nameOnly = nameOnly.Substring(0, end).TrimEnd();
+    }
+
     static void SetIcon(Cell cell, Sprite sp, string rewardName)
     {
         if (cell?.icon == null) return;
@@ -166,6 +216,9 @@ public partial class DailyLoginUI
             case DailyLoginDefs.Grant.LegendaryFragment:
                 sp = MercGrowSprites.LoadFragmentBase(MercRosterDefs.MercRarity.Legendary);
                 break;
+            case DailyLoginDefs.Grant.Item:
+                sp = ItemDefs.LoadIcon(r.hireId);   // hireId 承载 item_defs defId（遗忘药水）
+                break;
             default:
                 sp = null;
                 break;
@@ -193,6 +246,11 @@ public partial class DailyLoginUI
                 return CommonIconSprites.Load("icon_enchant_stone");
             case ResourceWallet.ResourceType.DecomposeMat:
                 return CommonIconSprites.Load("icon_decompose_mat");
+            case ResourceWallet.ResourceType.ScrollCommon:
+                return ItemDefs.LoadIcon("item_scroll_merc_common");
+            case ResourceWallet.ResourceType.ScrollLegendary:
+                return Resources.Load<Sprite>("UI/Art/Icons/Common/高级招募卷轴")
+                    ?? ItemDefs.LoadIcon("item_scroll_merc_common");  // 缺图回落普通卷图（清单 T8）
             default:
                 return null;
         }
@@ -213,6 +271,8 @@ public partial class DailyLoginUI
                 return "Badge_" + r.hireId + "_" + LookupRarity(r.hireId).ToString();
             case DailyLoginDefs.Grant.LegendaryFragment:
                 return "Frag_" + r.hireId + "_" + MercRosterDefs.MercRarity.Legendary.ToString();
+            case DailyLoginDefs.Grant.Item:
+                return "Item_" + r.hireId;
             case DailyLoginDefs.Grant.Resource:
                 return "Res_" + r.type.ToString();
             default:

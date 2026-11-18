@@ -804,6 +804,18 @@ public static class MailSystem
             case ResourceWallet.ResourceType.EnchantStone: mail.enchantStones += (int)Mathf.Min(amount, int.MaxValue); break;
             case ResourceWallet.ResourceType.DecomposeMat: mail.decomposeMats += (int)Mathf.Min(amount, int.MaxValue); break;
             case ResourceWallet.ResourceType.TalentPoint: mail.talentPoints += (int)Mathf.Min(amount, int.MaxValue); break;
+            // 2026-11-18 主人拍板：招募卷轴无上限（9999999），极端溢出仍走既有附件通道——
+            // 卷轴在邮件系统里本就是 attachments（见 TryClaim 的 scrollCommon/scrollLegendary 分支），
+            // 不在 MailEntry 上加 flat 字段（存档零迁移、不新增序列化字段）。
+            case ResourceWallet.ResourceType.ScrollCommon:
+            case ResourceWallet.ResourceType.ScrollLegendary:
+                mail.attachments ??= new List<MailAttachment>();
+                mail.attachments.Add(new MailAttachment
+                {
+                    type = type == ResourceWallet.ResourceType.ScrollCommon ? "scrollCommon" : "scrollLegendary",
+                    amount = amount
+                });
+                break;
         }
     }
 

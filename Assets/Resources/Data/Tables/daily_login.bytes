@@ -1,8 +1,8 @@
 # 每日登录奖励主表（CSV → .bytes）
 # 列：id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
 # table：starter=新手8日 / cycle=每日循环7日 / streak=连击档（day 填连击天数 3/7/14/30）/ accum=累计登录领限定佣兵（day 填所需累计天数）
-# grant：resource / merc / mercfrag / legendfrag / none
-# param：grant=resource 时填资源名(gold/diamond/stamina/talent/enchant/decompose)；merc/mercfrag 时填 hireId；其它留空
+# grant：resource / merc / mercfrag / legendfrag / badge / item / none
+# param：grant=resource 时填资源名(gold/diamond/stamina/talent/enchant/decompose/scrollCommon/scrollLegendary)；merc/mercfrag/badge 时填 hireId；item 时填 item_defs 的 defId；其它留空
 # 本表数据先把旧硬编码 1:1 抄入，再按主人口径改 D4（佣兵）与 D8（碎片）；其余数值保持原样。
 # 【2026-10-20 首拍】佣兵本体挪到 D1（starter_1），D4 改塔克碎片×10。
 # 【2026-10-23 主人重申】D1=塔克本体，不是碎片：塔克已移出默认名单（SaveData.DefaultUnlockedMercIds），
@@ -12,11 +12,11 @@ id,table,day,name,grant,param,amount,name2,grant2,param2,amount2,note
 starter_1,starter,1,塔克·重盾,merc,H003,,,,,★2026-10-23 主人拍板重申：D1 发塔克本体（塔克已移出默认名单，真发本体+报喜；已领过的轮回自动折算碎片×10）
 starter_2,starter,2,塔克碎片×10,mercfrag,H003,10,,,,,★2026-10-22 主人拍板：第2天给1星碎片×10；【2026-11-01 主人拍板】道具名改「塔克碎片」（XX碎片），数量用×N跟在后面
 starter_3,starter,3,中级徽记30,badge,H003,30,,,,,★2026-10-23 主人拍板：D3 发塔克升星徽记（塔克=剑盾·稀有→中级徽记，按H003反查）；双倍日取消，直发30=升2星10+升3星20全包
-starter_4,starter,4,塔克碎片×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第4天给2星碎片×20
+starter_4,starter,4,普通招募卷轴×5,resource,scrollCommon,5,,,,,★2026-11-18 主人拍板：D4 改普通招募卷轴×5
 starter_5,starter,5,金币500,resource,gold,500,,,,,★2026-10-23 主人拍板：D5 金币 800→500
-starter_6,starter,6,塔克碎片×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第6天给3星碎片×20（与D8合计40=第3星），累计到D8正好70满星、无溢出；碎片不再吃双倍
+starter_6,starter,6,遗忘药水×1,item,item_forget_potion,1,,,,,★2026-11-18 主人拍板：D6 改遗忘药水×1
 starter_7,starter,7,钻石200,resource,diamond,200,,,,,★2026-10-23 主人拍板：D7 改钻石×200（原金币×200）
-starter_8,starter,8,塔克碎片×20,mercfrag,H003,20,,,,,★2026-10-22 主人拍板：第8天给3星碎片×20（与D6合计40=第3星），累计D2+D4+D6+D8=70正好满星、零溢出
+starter_8,starter,8,高级招募卷轴×1,resource,scrollLegendary,1,,,,,★2026-11-18 主人拍板：D8 改高级招募卷轴×1
 cycle_1,cycle,1,金币200,resource,gold,200,,,,,★2026-10-23 主人拍板：登录奖励不再发体力；原体力×15 按商店汇率(400金/30体力)折金币×200
 cycle_2,cycle,2,金币250,resource,gold,250,,,,,,
 cycle_3,cycle,3,金币240,resource,gold,240,,,,,★2026-10-22 拍板：塔克碎片×3取消（碎片只走统一发碎片入口），改金币×240

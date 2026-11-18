@@ -107,6 +107,7 @@ public partial class DailyLoginUI : MonoBehaviour
         public Text dayText;
         public Image icon;
         public Text iconFallback;
+        public Text qtyBadge;   // 2026-11-18 主人拍板：数量从名字里拆出、放图标框右下角（与奖励弹窗同款）
         public Text rewardText;
         public GameObject x2Badge;
         public GameObject rareBadge;
@@ -119,6 +120,7 @@ public partial class DailyLoginUI : MonoBehaviour
         public Color baseDayColor;
         // B11: 其余「已领要一起暗下去」的元素原色（奖励文字 / 图标 / X2 / 限定 / 已领斜字 / 碎片卡三张图）
         public Color baseRewardColor;
+        public Color baseQtyBadgeColor;
         public Color baseIconColor;
         public Color baseX2Color;
         public Color baseRareColor;

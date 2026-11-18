@@ -23,7 +23,7 @@ public partial class DailyLoginUI
             // C1: 每帧先清染色标记，再由本格奖励重新判定（稀有度色每格独立，绝不跨天累积）
             cell.hasRarityTint = false;
             int day = round * lastDay + i + 1;                      // ★ 轮回后的真实累计天数
-            var r = DailyLoginSystem.EffectiveStarterReward(day);   // 轮回后佣兵日自动换碎片，显示=实发
+            var r = DailyLoginSystem.EffectiveStarterReward(day);   // 显示=实发（D1 恒本体，见 DailyLoginDefs）
             cell.day = day;                        // 点击领取用的就是这个
 
             bool dbl = DailyLoginDefs.IsStarterDouble(day);
@@ -42,8 +42,16 @@ public partial class DailyLoginUI
             cell.dayText.text = DayNumberStyled(day,
                 cell.dayText != null ? cell.dayText.fontSize : 0);
             // B6: 奖励名去掉稀有度前缀（"稀有佣兵·" 等），并把 \n 换成 ·
-            // 【2026-10-23 主人要求】奖励名「名字数量」直写无 ×、无空格（来自表 daily_login.csv），此处不再加字号
-            cell.rewardText.text = StripRarity(r.DisplayName);
+            // 【2026-11-18 主人拍板】数量从名字拆出、放图标框右下角（与奖励弹窗一致）：
+            // 名字只留纯名，角标显示 ×N（N 取实发 amount）；佣兵本体 amount=0 → 不出角标。
+            string nameOnly, qtyText;
+            SplitQtySuffix(StripRarity(r.DisplayName), r.amount, out nameOnly, out qtyText);
+            cell.rewardText.text = nameOnly;
+            if (cell.qtyBadge != null)
+            {
+                cell.qtyBadge.text = qtyText;
+                cell.qtyBadge.gameObject.SetActive(!string.IsNullOrEmpty(qtyText));
+            }
             if (cell.x2Badge != null) cell.x2Badge.SetActive(dbl);
             // B8: 「限定」标识位置以预制体为准，代码只控 active；判定改为该格奖励是 Merc 才显示（佣兵日后自动换碎片则不显示）
             if (cell.rareBadge != null) cell.rareBadge.SetActive(r.grant == DailyLoginDefs.Grant.Merc && !claimed);
@@ -283,6 +291,7 @@ public partial class DailyLoginUI
         c.baseBgColor = c.bg != null ? c.bg.color : Color.white;
         c.baseDayColor = c.dayText != null ? c.dayText.color : Color.white;
         c.baseRewardColor = c.rewardText != null ? c.rewardText.color : Color.white;
+        c.baseQtyBadgeColor = c.qtyBadge != null ? c.qtyBadge.color : Color.white;
         c.baseIconColor = c.icon != null ? c.icon.color : Color.white;
         c.baseMarkColor = c.markText != null ? c.markText.color : Color.white;
 
@@ -327,6 +336,7 @@ public partial class DailyLoginUI
         if (c == null) return;
         // C1: 碎片格用稀有度色当「原色」，其余格用预制体原色；k=1 即还原到该原色
         if (c.rewardText != null) c.rewardText.color = MulColor(RewardBase(c), k);
+        if (c.qtyBadge != null) c.qtyBadge.color = MulColor(c.baseQtyBadgeColor, k);
         // 2026-10-15 主人拍板：「已领」二字不灰显，恒用原色
         if (c.markText != null) c.markText.color = c.baseMarkColor;
 
