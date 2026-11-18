@@ -171,8 +171,12 @@ public partial class UnitBase
     protected bool TryHoldDuringAttack()
     {
         if (unitAnim == null || !unitAnim.InAttackLock) return false;
+        // 【2026-11-18】我方出屏追打时攻击锁不因视口判定被解除；仍受「离目标≤1屏」约束。
+        bool targetEngageable = isAlly
+            ? GetCombatDist(this, target) <= GameConfig.GetCombatScreenWidth()
+            : GameConfig.IsInCombatViewport(target);
         if (target == null || target.isDead || target.isAlly == isAlly
-            || !target.gameObject.activeInHierarchy || !GameConfig.IsInCombatViewport(target))
+            || !target.gameObject.activeInHierarchy || !targetEngageable)
             return false;
 
         if (rb != null && !_knockbackBusy) rb.velocity = Vector2.zero;   // 击退推进中不清速度（会把击退顶掉）
@@ -296,27 +300,45 @@ public partial class UnitBase
     }
 
     /// <summary>
-    /// 仅玩家跟镜头钳制屏幕。佣兵/怪物必须保留世界坐标：
-    /// 若按相机左右缘夹单位，镜头跟随主角时会把整队/全场一起拖走。
+    /// 【2026-11-18 主人拍板】不能卡边、敌人能去的地方我方也能、但不能离怪超出1个屏。
+    /// 取消旧的「钳在相机视口边缘」：它与跟随相机死锁（相机跟主角），屏外怪追不到还卡边缘乱转。
+    /// 新口径：有合法活目标时，把主角钳在「离目标一个屏宽」内——可走出屏幕去打，但不会离怪太远；
+    /// 无目标（清场推图/集结）时保留旧相机视口钳，防止走出屏幕。
+    /// 佣兵/怪物仍保留世界坐标，本函数对非 Hero 为空操作。
     /// </summary>
     protected void ClampToScreen()
     {
         if (!(this is Hero)) return;
-        // 【2026-11-12 主人报「黑幕结束玩家已站在地图上，卡一下才往前走」走进场免罪：
-        // 黑幕底下摆屏外→走进开战位期间若开钳制，UnitsCanAct 短暂为 true 的窗口会把整队扣回屏内，直接跳过。
+        // 黑幕走进场免罪：窗口期 UnitsCanAct 短暂为 true 会把整队扣回屏内，直接跳过。
         if (BattleManager.Instance != null && BattleManager.Instance.PartyIntroWalking) return;
         Camera cam = Camera.main;
         if (cam == null) return;
-        float halfH = cam.orthographicSize;
-        float halfW = halfH * cam.aspect;
+
+        UnitBase tgt = target;
+        if (tgt != null && !tgt.isDead && tgt.gameObject.activeInHierarchy && tgt.isAlly != isAlly)
+        {
+            float leash = GameConfig.GetCombatScreenWidth();
+            float tx = GetCombatX(tgt);
+            Vector3 p = transform.position;
+            float tMin = tx - leash;
+            float tMax = tx + leash;
+            if (p.x < tMin || p.x > tMax)
+            {
+                p.x = Mathf.Clamp(p.x, tMin, tMax);
+                GameConfig.SetWorldPosition(transform, p);
+            }
+            return;
+        }
+
+        float halfW = cam.orthographicSize * cam.aspect;
         float camX = cam.transform.position.x;
         float margin = 0.3f;
-        float minX = camX - halfW + margin;
-        float maxX = camX + halfW - margin;
+        float cMin = camX - halfW + margin;
+        float cMax = camX + halfW - margin;
         Vector3 pos = transform.position;
-        if (pos.x < minX || pos.x > maxX)
+        if (pos.x < cMin || pos.x > cMax)
         {
-            pos.x = Mathf.Clamp(pos.x, minX, maxX);
+            pos.x = Mathf.Clamp(pos.x, cMin, cMax);
             GameConfig.SetWorldPosition(transform, pos);
         }
     }
@@ -426,6 +448,8 @@ public partial class UnitBase
             if (isAlly && enemy.isAlly) continue;
             if (!isAlly && !enemy.isAlly) continue;
             if (!GameConfig.CanAcquireTarget(this, enemy)) continue;
+            // 【2026-11-18】我方不锁离自己超过一个屏宽的怪：出屏可追，但不无限远锁、追不到还一直前压抖。
+            if (isAlly && GetCombatDist(this, enemy) > GameConfig.GetCombatScreenWidth()) continue;
             if (enemy == target) currentTargetCandidate = true;
             float dist = GetCombatDist(this, enemy);
             if (dist < minDist)

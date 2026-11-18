@@ -942,8 +942,12 @@ public static partial class GameConfig
     public const float TELEGRAPH_DISC_Y_RATIO = 0.35f;
     /// <summary>精英红圈半径上限（小一点）。</summary>
     public const float TELEGRAPH_ELITE_RADIUS = 2.6f;
-    /// <summary>Boss 红圈半径下限（大一点）。</summary>
+    /// <summary>【已废弃 2026-11-18】Boss 红圈半径下限（大一点）。新口径见 TELEGRAPH_BOSS_RADIUS_MUL；本常量仅保留给尚未迁移的引用点，勿在新逻辑使用。</summary>
     public const float TELEGRAPH_BOSS_RADIUS = 4.5f;
+    /// <summary>【2026-11-18 主人拍板】Boss 红圈半径 = 不透明宽 × 本值，替代原 4.5 硬下限。</summary>
+    public const float TELEGRAPH_BOSS_RADIUS_MUL = 2f;
+    /// <summary>【2026-11-18 主人拍板】Boss 二阶段红圈深血红。仅 RGB；alpha 仍由 TELEGRAPH_PROGRESS_ALPHA / TELEGRAPH_RANGE_ALPHA 决定。</summary>
+    public static readonly Color TELEGRAPH_ENRAGED_COLOR = new Color(1f, 0.02f, 0.02f, 1f);
     /// <summary>精英预警时长（秒）。</summary>
     public const float TELEGRAPH_ELITE_SEC = 3f;
     /// <summary>Boss 预警时长（秒），阶段 2 与阶段切换同用。</summary>
@@ -954,14 +958,14 @@ public static partial class GameConfig
     public static float BOSS_SKILL_RELEASE_SHAKE_DUR => CombatTuningTable.Get("BOSS_SKILL_RELEASE_SHAKE_DUR", 0.26f);
 
     // ===== Boss 狂暴机制（只加这一种；仅改攻击间隔，不动伤害/属性缩放）=====
-    /// <summary>Boss 狂暴总开关。false=完全关闭；true=第 BOSS_ENRAGE_MIN_CHAPTER 章起启用。</summary>
+    /// <summary>Boss 狂暴总开关（安全阀）。false=完全关闭；true=二阶段按 BOSS_ENRAGE_ATK_SPEED_MUL 加速。</summary>
     public static bool BOSS_ENRAGE_ENABLED => CombatTuningTable.GetBool("BOSS_ENRAGE_ENABLED", true);
-    /// <summary>狂暴起始章节（含）：前 4 章 Boss 保持原样，第 5 章起才触发。</summary>
+    /// <summary>【已废弃 2026-11-18】狂暴起始章节：章节门槛已取消，所有 Boss 二阶段均生效。常量保留兼容配置表，勿在新逻辑使用。</summary>
     public static int BOSS_ENRAGE_MIN_CHAPTER => CombatTuningTable.GetInt("BOSS_ENRAGE_MIN_CHAPTER", 5);
     /// <summary>触发狂暴的血量阈值（当前/最大 ≤ 此值触发）。0.40=低于 40%。</summary>
     public static float BOSS_ENRAGE_HP_RATIO => CombatTuningTable.Get("BOSS_ENRAGE_HP_RATIO", 0.40f);
-    /// <summary>狂暴攻速倍率（>1 即更快）。1.5=攻击速度 +50%（攻击间隔 ÷1.5）。</summary>
-    public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.5f);
+    /// <summary>【2026-11-18 主人拍板】Boss 二阶段攻速倍率固定 1.3（原 1.5 线性曲线已废弃，见 HpScaledAttackSpeedMul）。攻击间隔 ÷1.3。</summary>
+    public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.3f);
 
     // =====================================================================
     // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】

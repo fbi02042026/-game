@@ -102,6 +102,19 @@ public static partial class GameConfig
     static float _combatDetectCached = -1f;
     static int _combatDetectCachedFrame = -1;
 
+    /// <summary>
+    /// 【2026-11-18 主人拍板「不能卡边、敌人能去的地方我方也能、但不能离怪超出1个屏」】
+    /// 当前战斗相机一个屏幕的完整宽度（世界单位），作为我方出屏追敌的牵引绳上限。
+    /// 竖屏设计比例下约 6.08 世界单位；无正交相机时回退到索敌兜底距离。
+    /// </summary>
+    public static float GetCombatScreenWidth()
+    {
+        var cam = Camera.main;
+        if (cam != null && cam.orthographic)
+            return cam.orthographicSize * cam.aspect * 2f;
+        return COMBAT_DETECT_FALLBACK;
+    }
+
     public static float GetCombatDetectRange()
     {
         if (_combatDetectCachedFrame == Time.frameCount && _combatDetectCached > 0f)

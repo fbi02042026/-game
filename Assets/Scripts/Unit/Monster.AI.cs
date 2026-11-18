@@ -175,6 +175,20 @@ public partial class Monster
             }
         }
 
+        // 【2026-11-18 看门狗】演出标志超时自愈：协程被强停（切场景/SetActive(false)/StopAllCoroutines）时 finally 不执行，
+        // 标志残留 true 会让下面这道闸门永久 SetMove(false)+return（石灵红圈完发呆 / Boss 不动）。
+        // 沿用 CareerSkillExecutor._chargeBusyUntil、UnitBase._pushHoldUntil 的过期自愈范式，不靠 finally。
+        if (_skillBusySince > 0f
+            && Time.time - _skillBusySince > SKILL_BUSY_WATCHDOG_SEC)
+        {
+            Debug.LogWarning($"[Monster.Skills] {gameObject.name} 演出标志超时自愈（协程疑似被强停）：telegraph={_skillTelegraphing} leap={_leaping} blink={_teleporting} phase2={_bossPhaseShiftBusy}");
+            _skillTelegraphing = false;
+            _leaping = false;
+            _teleporting = false;
+            _bossPhaseShiftBusy = false;
+            _skillBusySince = 0f;
+            ClearHpChargeTelegraph();   // 收掉可能残留的攒槽预铺圈
+        }
         if (_skillTelegraphing || _bossPhaseShiftBusy || _leaping || _teleporting)
         {
             if (rb != null) rb.velocity = Vector2.zero;

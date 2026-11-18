@@ -36,6 +36,7 @@ public partial class Monster
     IEnumerator CoBossPhaseShift()
     {
         _bossPhaseShiftBusy = true;
+        _skillBusySince = Time.time;
         GameObject disc = null;
         GameObject progressDisc = null;
         Vector3 baseScale = Vector3.one;
@@ -44,7 +45,9 @@ public partial class Monster
             if (rb != null) rb.velocity = Vector2.zero;
             UIManager.Instance?.ShowToast("Boss 进入狂暴阶段！");
             Vector3 center = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
-            baseScale = CreateTelegraphPair(center, GameConfig.TELEGRAPH_BOSS_RADIUS, out disc, out progressDisc);
+            // 【2026-11-18 主人拍板】半径口径与正式释放一致；二阶段切换圈用深血红
+            baseScale = CreateTelegraphPair(center, ResolveSkillRadius(SkillRegistry.Instance?.GetActiveSkill(_skillId)),
+                out disc, out progressDisc, GameConfig.TELEGRAPH_ENRAGED_COLOR);
             float t = 0f;
             float frozenReal = 0f;   // 【2026-10-20 保险】连续冻场真实时间累计
             // 冻场感知与技能预警同口径（2026-10-16）：UnitsCanAct=false 期间不倒数，
@@ -80,7 +83,8 @@ public partial class Monster
             if (progressDisc != null) { Destroy(progressDisc); progressDisc = null; }
             // 【2026-10-19 圆心锁定】伤害圆心 = 红圈位置（预警开始时锁定），不取砸下瞬间 Boss 当前位置
             if (!isDead)
-                ApplySkillDamage(GetMainAttackStat() * 0.85f, GameConfig.TELEGRAPH_BOSS_RADIUS, null, center);
+                ApplySkillDamage(GetMainAttackStat() * 0.85f,
+                    ResolveSkillRadius(SkillRegistry.Instance?.GetActiveSkill(_skillId)), null, center);
         }
         finally
         {
@@ -89,21 +93,23 @@ public partial class Monster
             if (disc != null) Destroy(disc);
             if (progressDisc != null) Destroy(progressDisc);
             _bossPhaseShiftBusy = false;
+            if (!_skillTelegraphing && !_leaping && !_teleporting && !_bossPhaseShiftBusy)
+                _skillBusySince = 0f;
         }
     }
 
     /// <summary>?????????????????????????/summary>
-    // ===== Boss 狂暴机制：仅第 5 章起、总开关控制；只改攻击间隔 =====
+    // ===== Boss 狂暴机制：总开关控制；只改攻击间隔（2026-11-18 去掉章节门槛）=====
     /// <summary>
     /// 运行期标志，不持久化。条件满足即进入狂暴一次：
-    /// 是 Boss、未死、总开关开、章节≥阈值、当前/最大血量≤阈值。
+    /// 是 Boss、未死、总开关开、当前/最大血量≤阈值。
     /// 恢复存档后本标志随怪物重建而重置，下一帧 Update 会按当前血量重新判定。
     /// </summary>
     void TryBeginEnrage()
     {
         if (!_isBossUnit || _enraged || isDead) return;
         if (!GameConfig.BOSS_ENRAGE_ENABLED) return;
-        if (_chapter < GameConfig.BOSS_ENRAGE_MIN_CHAPTER) return;
+        // 【2026-11-18 主人拍板】去掉章节门槛：前 4 章 Boss 二阶段同样 ×1.3
         float maxHp = attr != null ? attr.GetAttr(AttrType.MaxHp) : 0f;
         if (maxHp < 1f) return;
         if (currentHp / maxHp > GameConfig.BOSS_ENRAGE_HP_RATIO) return;
@@ -115,26 +121,18 @@ public partial class Monster
     }
 
     /// <summary>
-    /// 【2026-11-16 主人「boss 血量越少 CD 越短、攻击越快，就是狂暴状态的数值」】
-    /// 从 BOSS_ENRAGE_HP_RATIO 血线开始，随血量线性加速：血线处 = 原速（1.0），
-    /// 血量见底 = BOSS_ENRAGE_ATK_SPEED_MUL（默认 1.5）倍速；血线以上不变。
-    /// 复用原有狂暴数值与章节/总开关闸（BOSS_ENRAGE_ENABLED、BOSS_ENRAGE_MIN_CHAPTER），不另起一套。
+    /// 【2026-11-18 主人拍板】替换原「血线起线性加速」曲线：所有 Boss 二阶段固定 ×1.3（BOSS_ENRAGE_ATK_SPEED_MUL）。
+    /// 只改这一个攻速乘数出口，不动伤害/血量/攻击范围；BOSS_ENRAGE_ENABLED 保留作总安全阀。
     /// </summary>
     float HpScaledAttackSpeedMul()
     {
-        if (!_isBossUnit || attr == null) return 1f;
+        if (!_isBossUnit) return 1f;
         if (!GameConfig.BOSS_ENRAGE_ENABLED) return 1f;
-        if (_chapter < GameConfig.BOSS_ENRAGE_MIN_CHAPTER) return 1f;
-        float maxHp = attr.GetAttr(AttrType.MaxHp);
-        if (maxHp < 1f) return 1f;
-        float hp01 = Mathf.Clamp01(currentHp / maxHp);
-        float startRatio = Mathf.Max(0.01f, GameConfig.BOSS_ENRAGE_HP_RATIO);
-        if (hp01 >= startRatio) return 1f;
-        float t = 1f - hp01 / startRatio;          // 血线处 0 → 血空 1
-        return Mathf.Lerp(1f, GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL, t);
+        if (GetBossPhase() >= 2) return GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL;
+        return 1f;
     }
 
-    /// <summary>狂暴：攻击间隔随时血量缩短（原「过线一次性 ×1.5」改为连续曲线，见 HpScaledAttackSpeedMul）。</summary>
+    /// <summary>【2026-11-18】狂暴：Boss 二阶段攻速固定 ×1.3（见 HpScaledAttackSpeedMul）。</summary>
     protected override float GetAttackCooldown()
     {
         float cd = base.GetAttackCooldown();

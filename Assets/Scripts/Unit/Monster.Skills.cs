@@ -103,8 +103,9 @@ public partial class Monster
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
         _hpChargeCenter = center;
         _hpChargeRadius = ResolveSkillRadius(SkillRegistry.Instance?.GetActiveSkill(_skillId));
+        Color? telegraphTint = _isBossUnit && GetBossPhase() >= 2 ? GameConfig.TELEGRAPH_ENRAGED_COLOR : (Color?)null;
         _hpChargeBaseScale = CreateTelegraphPair(center, _hpChargeRadius,
-            out _hpChargeDisc, out _hpChargeProgress);
+            out _hpChargeDisc, out _hpChargeProgress, telegraphTint);
     }
 
     /// <summary>【2026-11-16】收掉攒槽预铺的双圈：死亡 / 对象池复用 / 转交给释放协程前统一走这里。</summary>
@@ -116,16 +117,23 @@ public partial class Monster
     }
 
     /// <summary>
-    /// 红圈半径唯一出口（原先散在 UseActiveSkill 内）：表 aoeRadius 作基准，按精英 / Boss 分类夹上下限，
-    /// Boss 二阶段再放大 —— 攒槽预铺圈与正式释放必须同一口径，否则圈与判定对不上。
+    /// 红圈半径唯一出口（原先散在 UseActiveSkill 内）：精英读表 aoeRadius 并夹上限，
+    /// Boss 按自身不透明宽 × 2（2026-11-18 新口径）；二阶段再 ×1.3 —— 攒槽预铺圈与正式释放必须同一口径。
     /// </summary>
     float ResolveSkillRadius(SkillSystem.ActiveSkill skill)
     {
-        float radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
-        radius = _isBossUnit
-            ? Mathf.Max(radius, GameConfig.TELEGRAPH_BOSS_RADIUS)
-            : Mathf.Min(radius, GameConfig.TELEGRAPH_ELITE_RADIUS);
-        if (_isBossUnit && GetBossPhase() >= 2) radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
+        float radius;
+        if (_isBossUnit)
+        {
+            // 【2026-11-18 主人拍板】Boss 圈半径 = 不透明宽 × 2：按自身体型定圈，不再读表 aoeRadius、不再用 4.5 硬下限。
+            radius = Mathf.Max(GetOpaqueFootprintHalfWidth() * GameConfig.TELEGRAPH_BOSS_RADIUS_MUL, 1.2f);
+        }
+        else
+        {
+            radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
+            radius = Mathf.Min(radius, GameConfig.TELEGRAPH_ELITE_RADIUS);   // 精英分支保持原样
+        }
+        if (_isBossUnit && GetBossPhase() >= 2) radius *= 1.3f;   // 二阶段统一 ×1.3，不再叠加旧 BOSS_PHASE2_RADIUS_MUL
         return radius;
     }
 
@@ -154,6 +162,11 @@ public partial class Monster
     /// 放弃本次技能演出并走 finally 清理标志，绝不让 _skillTelegraphing/_leaping 卡死成永久站桩。
     /// 正常对白冻场只有几秒，永不触发；正常路径行为零变化。</summary>
     const float SkillFrozenBailoutSec = 10f;
+    /// <summary>【2026-11-18 看门狗】演出标志占用上限（游戏秒，timeScale=0 暂停/剧情/抽奖期间不计时）：Boss 预警 4s + 冻场保险上限 SkillFrozenBailoutSec(10s) + 余量，
+    /// 正常演出绝不会到 18s；超时视为协程被强停（切场景/SetActive(false)/StopAllCoroutines），由 AIUpdate 统一自愈，不靠 finally。</summary>
+    const float SKILL_BUSY_WATCHDOG_SEC = 18f;
+    /// <summary>【2026-11-18 看门狗】最近一次任意演出标志置位的时刻（与 CareerSkillExecutor._chargeBusyUntil 同口径，用 Time.time；timeScale=0（暂停/剧情/抽奖）期间不计时，避免误清）；0=当前无占用。</summary>
+    float _skillBusySince = 0f;
     /// <summary>【2026-10-20 保险】蓄力跳被冻场保险中断时置位：外层据此跳过砸地结算（防冻场中越权出伤害）。</summary>
     bool _leapAborted;
     /// <summary>【2026-10-17 主人拍板】精英蓄力跳滞空中：AI 提前返回时跳过归道（ApplyLaneY），
@@ -427,6 +440,7 @@ public partial class Monster
             yield break;
         }
         _skillTelegraphing = true;
+        _skillBusySince = Time.time;
         // 【2026-10-17 主人拍板】只有精英加「蓄力压扁 → 高跳快落」演出；Boss 节奏一律不动。
         // 【2026-10-20 主人拍板「砸地与远程互斥」】本协程只接待近战：远程精英/Boss 在 UseActiveSkill
         // 分流瞬发弹道、根本不进来。近战精英蓄力跳，落地直接砸地近战结算（kit 同为近战刀光，
@@ -459,7 +473,8 @@ public partial class Monster
             // 伤害圆心 = 本红圈位置，预警期跑出圈即真躲开 —— 演出与判定同位（修复「躲了照样挨打」）。
             // 【2026-11-09 主人拍板】双圈：浅色范围圈第一秒就亮（完整范围），
             // 深色进度圈从中心缩放 0 线性放大到跟范围一样大，用时＝预警时长。
-            baseScale = CreateTelegraphPair(center, radius, out disc, out progressDisc);
+            Color? telegraphTint = _isBossUnit && GetBossPhase() >= 2 ? GameConfig.TELEGRAPH_ENRAGED_COLOR : (Color?)null;
+            baseScale = CreateTelegraphPair(center, radius, out disc, out progressDisc, telegraphTint);
         }
         // 【2026-10-16】冻场（UnitsCanAct=false）期间不计时，红圈原地等，解冻才继续；砸下瞬间出波纹扩散。
         // 蓄力底账：身体缩放（精英 ×2.0 根缩放含在内）与玩家影子 —— 任何退出路径都在 finally 里还原
@@ -538,6 +553,7 @@ public partial class Monster
                 {
                     // 蓄力结束 → 起跳：身体弹回原比例，抛物线高跳快落到目标点（升慢降快）
                     _leaping = true;
+                    _skillBusySince = Time.time;
                     if (rb != null) rb.velocity = Vector2.zero;
                     if (MoveRoot != null) MoveRoot.localScale = bodyScale0;
                     _leapAborted = false;
@@ -582,6 +598,8 @@ public partial class Monster
             UnitShadowAlpha.RestorePlayerShadowDim(shadowRoot);
             _leaping = false;
             _skillTelegraphing = false;
+            if (!_skillTelegraphing && !_leaping && !_teleporting && !_bossPhaseShiftBusy)
+                _skillBusySince = 0f;
         }
     }
 
@@ -714,6 +732,7 @@ public partial class Monster
 
         _blinkCd = GameConfig.MONSTER_BLINK_COOLDOWN;
         _teleporting = true;
+        _skillBusySince = Time.time;
         StartCoroutine(CoMonsterBlinkAway(threat));
         return true;
     }
@@ -833,6 +852,8 @@ public partial class Monster
             if (this != null && MoveRoot != null)
                 MoveRoot.localScale = bodyScale0;
             _teleporting = false;
+            if (!_skillTelegraphing && !_leaping && !_teleporting && !_bossPhaseShiftBusy)
+                _skillBusySince = 0f;
         }
     }
 
@@ -1026,13 +1047,15 @@ public partial class Monster
     }
 
     /// <summary>创建一个红圈：isProgress=true 为深色进度圈（初始缩放 0），false 为浅色范围圈（初始全尺寸）。</summary>
-    static GameObject CreateTelegraphDisc(Vector3 center, float radius, bool isProgress)
+    static GameObject CreateTelegraphDisc(Vector3 center, float radius, bool isProgress, Color? tint = null)
     {
         var go = new GameObject(isProgress ? "SkillTelegraphProgress" : "SkillTelegraphRange");
         go.transform.position = center;
         var sr = go.AddComponent<SpriteRenderer>();
         sr.sprite = MakeCircleSprite();
-        sr.color = new Color(0.9f, 0.07f, 0.06f,
+        // 【2026-11-18 主人拍板】二阶段可传深血红；tint 只覆盖 RGB，alpha 仍用各自原值（不让圈变不透明）
+        Color rgb = tint.HasValue ? tint.Value : new Color(0.9f, 0.07f, 0.06f, 1f);
+        sr.color = new Color(rgb.r, rgb.g, rgb.b,
             isProgress ? GameConfig.TELEGRAPH_PROGRESS_ALPHA : GameConfig.TELEGRAPH_RANGE_ALPHA);
         // 【2026-10-19 主人拍板】红圈不挡玩家：地图(10) 之上、所有单位(15+) 之下。
         // 范围圈 11、进度圈 12、砸下波纹 13，三层依次叠，不互相抢。
@@ -1045,11 +1068,11 @@ public partial class Monster
         return go;
     }
 
-    /// <summary>一次建好双圈，返回满尺寸基准缩放（供进度圈逐帧放大）。</summary>
-    static Vector3 CreateTelegraphPair(Vector3 center, float radius, out GameObject rangeDisc, out GameObject progressDisc)
+    /// <summary>一次建好双圈，返回满尺寸基准缩放（供进度圈逐帧放大）。tint 为 null 时用默认红。</summary>
+    static Vector3 CreateTelegraphPair(Vector3 center, float radius, out GameObject rangeDisc, out GameObject progressDisc, Color? tint = null)
     {
-        rangeDisc = CreateTelegraphDisc(center, radius, false);
-        progressDisc = CreateTelegraphDisc(center, radius, true);
+        rangeDisc = CreateTelegraphDisc(center, radius, false, tint);
+        progressDisc = CreateTelegraphDisc(center, radius, true, tint);
         float dia = Mathf.Max(1.2f, radius * 2f);
         return new Vector3(dia, dia * GameConfig.TELEGRAPH_DISC_Y_RATIO, 1f);
     }

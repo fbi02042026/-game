@@ -543,6 +543,15 @@ public partial class Monster
         // 之后每触发一次再降一档。普通小怪不走血量触发，这个值只是为了复用/换关时干净。
         _nextSkillHpRatio = 1f - GameConfig.MONSTER_HP_SKILL_STEP;
         _hpSkillCharging = false;   // 池复用/换关：上一次的攒槽窗口不能带过来
+        // 【2026-11-18 修复卡死】协程被强停（对象池 SetActive(false)/StopCoroutine）时 finally 不执行，
+        // 标志残留 → AI 闸门 (Monster.AI.cs:178) 永久 SetMove(false)。池复用/Init 统一清零。
+        // 已有清理：_bossPhaseShiftBusy(528)、_skillEnergy(538)、_hpSkillCharging(上)、
+        // _chargeSpent/_chargeFlashT/ClearHpChargeTelegraph(EnsureSkillChargeBar:220-226)。这里只补缺失的三个。
+        _skillTelegraphing = false;
+        _leaping = false;
+        _teleporting = false;
+        if (!_skillTelegraphing && !_leaping && !_teleporting && !_bossPhaseShiftBusy)
+            _skillBusySince = 0f;
 
         // 【2026-10-20 主人拍板】远程精英/Boss 弹幕技：首发错开，避免开打瞬间齐射。
         // 携带规则：远程 Boss 两种全带（追踪弹幕要血量降到二阶段线 70% 才解锁，判定在触发把关里）；

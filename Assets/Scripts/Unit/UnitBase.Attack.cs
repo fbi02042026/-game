@@ -187,8 +187,13 @@ public partial class UnitBase
         // 进距才打：防配置过大射程 / AI 漏判导致半屏开砍
         if (!IsInBasicAttackRange(target))
             return;
-        // 屏外目标：不进入攻击（索敌已过滤；此处防 OnField/技能漏网）
-        if (!GameConfig.IsInCombatViewport(target))
+        // 【2026-11-18】我方出屏也能打（对等敌人能屏外打我方），但离目标不得超过一个屏宽；
+        // 敌方保持原视口闸不变。真正进距硬闸 IsInBasicAttackRange 在上面，不会隔空开砍。
+        if (isAlly)
+        {
+            if (GetCombatDist(this, target) > GameConfig.GetCombatScreenWidth()) return;
+        }
+        else if (!GameConfig.IsInCombatViewport(target))
             return;
 
         // 2026-09-26：魔法伤害单位（法师/牧师、法球怪）用魔法攻击力起手
