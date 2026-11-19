@@ -139,6 +139,36 @@ public partial class Mercenary : UnitBase
                   $"spd={GetCombatMoveSpeed():F2} hp={currentHp:F0} stun={IsStunned}");
     }
 
+    // 【2026-11-19 临时探针 · 佣兵打不到屏外怪 / 边缘乱转归因，定位后连同调用点删除】
+    // 我方锁到屏外目标时每秒一条：记录各层回队/攻击闸的实时距离 + 朝向与速度方向是否一致，
+    // 一次定位「打不到」的主瓶颈和「乱转」是朝向与位移相反还是回队/交战拉锯。
+    float _offscreenProbeTimer;
+    void LogAllyOffscreenChaseProbe()
+    {
+        if (!isAlly || target == null || target.isDead) return;
+        if (GameConfig.IsInCombatViewport(target)) return;   // 只查屏外追击场景
+        _offscreenProbeTimer -= Time.deltaTime;
+        if (_offscreenProbeTimer > 0f) return;
+        _offscreenProbeTimer = 1f;
+        var hero = Hero.Instance;
+        var cam = Camera.main;
+        float distHero = hero != null && !hero.isDead
+            ? Mathf.Abs(GetCombatX(this) - GetCombatX(hero)) : -1f;
+        float distTgt = GetCombatDist(this, target);
+        float myX = GetCombatX(this);
+        bool atLeftEdge = cam != null && cam.orthographic
+            && myX < cam.transform.position.x - cam.orthographicSize * cam.aspect + 0.6f;
+        float vx = rb != null ? rb.velocity.x : 0f;
+        int velDir = Mathf.Abs(vx) < 0.05f ? 0 : (vx > 0f ? 1 : -1);
+        Debug.Log($"[ProbeMercOffscreen] {mercId} myX={myX:F2} " +
+                  $"distHero={distHero:F2} distTgt={distTgt:F2} " +
+                  $"attackGate={GameConfig.GetCombatScreenWidth():F2} " +
+                  $"leash={GameConfig.MERC_LEASH_RADIUS:F2} stick={GameConfig.MERC_STICK_RADIUS:F2} " +
+                  $"leftEdge={atLeftEdge} recalling={_recallingToHero} " +
+                  $"face={facingDir} vel={velDir} " +
+                  $"inRange={IsInBasicAttackRange(target)} cd={attackCd:F2}");
+    }
+
     /// <summary>
     /// 【2026-11-14 主人报「佣兵一会就跑后面消失」】相机只跟玩家（CameraFollow 仅 X 跟随），
     /// 竖屏半宽约 3 个世界单位；MERC_LEASH_RADIUS=4.2 比屏幕还宽 —— 按旧口径佣兵必须先跑出
@@ -181,7 +211,10 @@ public partial class Mercenary : UnitBase
 
         BeginRecallToHero();
         int dir = heroX > myX ? 1 : -1;
-        facingDir = 1;
+        // 【2026-11-19 主人「佣兵到屏幕边上会左右乱转」】原实现把 facingDir 写死为 1（朝右），
+        // 但速度方向 dir 由玩家位置决定（玩家在左时 dir=-1）→ 面朝右却往左走，边缘反复触发
+        // 「回队/交战」切换时朝向与位移对不上，看起来就是左右乱转。改为朝向跟移动同向。
+        facingDir = dir;
         ApplyFacing(facingDir);
         // 不走 GetCombatMoveSpeed 覆写，避免与 lagBoost / rush 叠乘；紧急回队固定吃入队冲刺倍率
         float speed = base.GetCombatMoveSpeed() * GameConfig.MERC_RUSH_SPEED_MUL;
@@ -195,6 +228,11 @@ public partial class Mercenary : UnitBase
     {
         // 【2026-11-06】先刷新冲刺/掉队加速开关，本帧所有移动点统一走 GetCombatMoveSpeed。
         UpdateSpeedBoostState();
+
+        // 【2026-11-19 临时探针 · 佣兵打不到屏外怪归因，定位后连同调用点删除】
+        // 只在我方追「屏外」目标时每秒一条，一次区分是哪层在拉回：左缘强制回队 / 聚队 / 拴绳 /
+        // 偏远交战 / 攻击闸。放在强制回队之前，才能记录到触发前的真实状态。
+        LogAllyOffscreenChaseProbe();
 
         // 【2026-11-14】回队判定必须在所有早退分支之前（详见 TryForceRejoinWhenOffscreen 注释）。
         if (TryForceRejoinWhenOffscreen())

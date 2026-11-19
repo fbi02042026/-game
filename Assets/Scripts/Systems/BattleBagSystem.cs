@@ -901,7 +901,10 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         }
 
         if (old != null && old != equip)
-            ScrapEquip(old);
+            // 【2026-11-19 主人拍板】进战注入（countsAsObtain:false，系统发装/还原）顶掉起步武器时
+            // 不弹「XX 折成抽奖币」——玩家还没抽奖就冒替换提示，莫名其妙（文档 T3 第90行预警的
+            // 「多一次折币 Toast」）。玩家主动抽奖替换走默认 countsAsObtain:true，照旧弹。
+            ScrapEquip(old, silent: !countsAsObtain);
 
         // 【2026-10-06 主人报「我的主武器怎么没了」→ 诊断日志】
         // 奖励装备走这条「直接穿上」的链，会把同槽旧件 <b>分解成强化石</b>（主人定的规则：低级的变成材料）。
@@ -930,7 +933,7 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     /// 折币提示也一并跳过，只由抽奖结果弹「替换成功」。
     /// 分解即消失，不做二次确认（2026-09-15 需求）。
     /// </summary>
-    public void ScrapEquip(EquipInstance equip)
+    public void ScrapEquip(EquipInstance equip, bool silent = false)
     {
         if (equip == null) return;
 
@@ -952,7 +955,8 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         // 【2026-11-08 主人拍板】折币进「战斗中用于抽奖的资源」（GrantScrapGold 唯一出口）。
         // 返回 0 = 没发币（无限裂隙不折币），此时不弹折币提示 —— 裂隙只弹「替换成功」，装备增减照常。
         int gold = WeaponLoadoutRules.GrantScrapGold(equip, save: false);
-        if (gold > 0) UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
+        // 银币照发，只是注入路径静默不弹提示（见 TryEquipDirect 调用处的 11-19 拍板说明）。
+        if (!silent && gold > 0) UIManager.Instance?.ShowToast(BuildScrapToast(equip, gold), true);
         OnBackpackChanged?.Invoke();
     }
 

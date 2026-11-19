@@ -30,18 +30,15 @@ public partial class TalentUI
         if (lineshuTf != null) v.lineV = lineshuTf.GetComponent<Image>();
         else Debug.LogError("[TalentUI] 左列模板缺 Lineshu 节点（主人预制体应有），竖向连线不显示");
         EnsureLeftVerticalLineGeometry(go, v.lineV);
-        // 【2026-11-19 主人拍板】左侧层级标记：只用「LvN」纯文字（太阳图后期主人自己补）。
-        // 每行第一列显示一个：Lv1=L1~L3、Lv2=L4~L6……挂节点左侧外，运行时建树不改预制体。
-        if (index0 % TalentDefs.LeftPerRow == 0)
-        {
-            var tag = CreateText(go.transform, "LevelTag", "Lv" + (index0 / TalentDefs.LeftPerRow + 1),
-                20, new Color(1f, 0.86f, 0.32f, 1f));
-            tag.alignment = TextAnchor.MiddleCenter;
-            // 放格子内左上角（不探出左侧，避免被 ScrollRect 视口裁掉；美术后期替换时也在这个位置）
-            SetAnchored(tag.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(2f, -4f), new Vector2(48f, 24f));
-            v.levelTag = tag;
-        }
+        // 【2026-11-19 主人拍板】横线同样按运行时格子重算（预制体是旧单列宽格子时代的手摆值，
+        // 三列 116 格下左端会探进左邻图标，表现＝线头压在左邻六边形框上）。
+        EnsureLeftHorizontalLineGeometry(go, v.line);
+        // 【2026-11-19 主人拍板】左列行底图（图标身后那块浅色圆角方框）退场：只压 alpha 不关组件，
+        // raycastTarget 保持 true——整格点击热区不变，按钮 transition 乘色后也依旧不可见。
+        var rowBg = go.GetComponent<Image>();
+        if (rowBg != null) { var bgC = rowBg.color; bgC.a = 0f; rowBg.color = bgC; }
+        // 【2026-11-19 主人拍板】左侧每一行 = 1 级：等级标记只放在每行第一格（复用主人摆好的 Number 节点），
+        // 原先运行时另建的 LevelTag 小字整段退场（与 Number 叠在一格里重复表达）。
         var upgradeTf = go.transform.Find("升级") ?? go.transform.Find("Upgrade");
         if (upgradeTf != null)
         {
@@ -71,7 +68,9 @@ public partial class TalentUI
     /// 左列加了个Number节点 把每行的数字加上」）——位置/字号/颜色底全按预制体，代码只填文本；
     /// 旧的运行时建 OrderText + 手调坐标那套（21:51 那版）整段删除。
     /// 【2026-11-05 拍板】右列门槛改挂人物等级 → 原「门槛行金色」配色废除，序号统一灰。
-    /// ⚠ 序号 = TalentDefs.Left 的次序 i+1；reverseArrangement 只影响视觉上下，不影响编号。
+    /// 【2026-11-19 主人拍板】左侧每一行 = 1 级：只在每行首格标「LvN」（Lv1 在最下），
+    /// 同格其余两格的 L 序号隐藏——原先每格一个 L1…L90，读起来像「一格一级」。
+    /// ⚠ 等级真源 = 行号（index0 / LeftPerRow + 1）；reverseArrangement 只影响视觉上下，不影响编号。
     /// </summary>
     void EnsureLeftOrderLabel(LeftNodeView v, int index0)
     {
@@ -84,14 +83,30 @@ public partial class TalentUI
         }
         if (v.orderText == null)
         {
-            Debug.LogError("[TalentUI] 左列模板缺 Number 节点，L" + (index0 + 1) + " 不显示编号");
+            Debug.LogError("[TalentUI] 左列模板缺 Number 节点，Lv" + (index0 / TalentDefs.LeftPerRow + 1) + " 不显示等级");
             return;
         }
 
-        int no = index0 + 1;
-        v.orderText.text = "L" + no;
+        bool rowStart = index0 % TalentDefs.LeftPerRow == 0;
+        // 非行首格：整块等级标记隐藏（不占位、不写空串留白块）
+        v.orderText.gameObject.SetActive(rowStart);
+        if (!rowStart)
+        {
+            v.levelTag = null;
+            return;
+        }
+
+        int row = index0 / TalentDefs.LeftPerRow + 1;
+        v.orderText.text = "Lv" + row;
+        // 【2026-11-19 主人拍板】Lv 标签跟行对齐 + 大两号：
+        // 纵向落到行中心（prefab 手摆 y=49.4 偏上 → 运行时 y=0；只改 y，x/sizeDelta 不碰）；
+        // 字号 30 → 34。锚点(0,0.5) 保持，仍贴在格子左侧。
+        var orderRt = v.orderText.rectTransform;
+        orderRt.anchoredPosition = new Vector2(orderRt.anchoredPosition.x, 0f);
+        v.orderText.fontSize = 34;
         // 【2026-11-05 拍板】右列门槛改挂人物等级、与左列解耦 →「门槛行金色」失去意义，序号统一灰色。
         v.orderText.color = new Color(0.80f, 0.80f, 0.82f, 1f);
+        v.levelTag = v.orderText;
     }
 
     RightNodeView BindRightNode(GameObject go, int visualIndex0, TalentDefs.TalentRightNode node)
@@ -110,6 +125,14 @@ public partial class TalentUI
         // Line (1) 是主人在预制体里手工复制出来的节点；显隐规则见 RefreshOneRightNode。
         v.lineUp = go.transform.Find("Line")?.GetComponent<Image>();
         v.lineDown = go.transform.Find("Line (1)")?.GetComponent<Image>();
+        // 【2026-11-19 主人拍板】右列天赋再小 30%：主卡 Opt_0 运行时缩到 0.7（预制体不动）。
+        // 缩放放在连线对齐之前——EnsureRightLinkAxis 读 Opt_0 的 localScale 算中轴，自动跟随新尺寸。
+        // 互斥合并行（两张卡并排）另有语义，不缩、不在此处理。
+        if (node.type != TalentDefs.RightNodeType.Mutex)
+        {
+            var mainOpt = go.transform.Find("Opt_0") as RectTransform;
+            if (mainOpt != null) mainOpt.localScale = Vector3.one * RightIconScale;
+        }
         // 【2026-11-19 自适应】连线/菱形运行时对齐到选项卡片中轴（只改 X）。
         // Mutex 合并行两张卡并排、轨道另有语义，跳过不动。
         if (node.type != TalentDefs.RightNodeType.Mutex) EnsureRightLinkAxis(go, v);
@@ -137,7 +160,12 @@ public partial class TalentUI
                 var label = opt.Find("Label")?.GetComponent<Text>();
                 var iconT = opt.Find("Icon") ?? opt.Find("icon");
                 var icon = iconT != null ? iconT.GetComponent<Image>() : null;
-                if (label != null) label.text = singleOpt.name;
+                if (label != null)
+                {
+                    label.text = singleOpt.name;
+                    // 【2026-11-19 主人拍板】卡片下方名字不显示（图标即语义），节点保留只隐藏
+                    label.gameObject.SetActive(false);
+                }
                 if (icon != null)
                 {
                     var sp = TalentIcons.GetTalent(singleOpt.name);
@@ -293,12 +321,10 @@ public partial class TalentUI
                 }
             }
         }
-        SetRowRedDot(v.root, ref v.redDot, canAct);
+        SetRowRedDot(v.root, ref v.redDot, false);   // 【2026-11-19 主人拍板】右列不要红点——合并行刷新同口径（与单选行 RefreshOneRightNode 一致）
 
-        // 「新」：两口子任一是新就算（口径与普通行同源 TalentDefs.IsNewlyOpen）
-        bool isNew = TalentDefs.IsNewlyOpen(n1, talents, playerLv)
-                     || TalentDefs.IsNewlyOpen(n2, talents, playerLv);
-        SetRowNewTag(v.root, ref v.newTag, isNew);
+        // 【2026-11-19 主人拍板】右列红色「新」标记也退场（截图里右上角的红点即它）；节点保留恒隐藏。
+        SetRowNewTag(v.root, ref v.newTag, false);
 
         // 选项槽：已选另一流派 → 这侧置灰表达互斥（门槛锁由整行 CanvasGroup 统一压暗，不再叠加）
         for (int o = 0; o < 2; o++)
@@ -333,6 +359,29 @@ public partial class TalentUI
         rt.pivot = new Vector2(0.5f, 0f);
         rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y0);
         rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
+    }
+
+    /// <summary>
+    /// 【2026-11-19 主人拍板】左列横线（Lineheng）按运行时格子重算：预制体按旧单列宽格子手摆
+    /// （锚右缘 -92 / 长 60），三列网格（116 格 + 8 列距）下左端探进左邻图标 18px。
+    /// 只重算长度与 x：右端缩进自家图标 4px（同格内自家图标后画、天然盖住），
+    /// 左端精确顶到左邻图标右缘（不重叠＝不压图标，也不留缝）；y、线宽、贴图仍以预制体为准。
+    /// </summary>
+    static void EnsureLeftHorizontalLineGeometry(GameObject node, Image lineH)
+    {
+        if (node == null || lineH == null) return;
+        float iconW = 96f;
+        var iconbg = node.transform.Find("Iconbg") as RectTransform;
+        if (iconbg != null && iconbg.sizeDelta.x > 8f) iconW = iconbg.sizeDelta.x;
+        float cellHalf = LeftNodeW * 0.5f;
+        float neighborRight = -(LeftNodeW + LeftGapX) + iconW * 0.5f;   // 左邻图标右缘
+        float rightEnd = -iconW * 0.5f + 4f;                            // 自家图标左缘内缩 4（被自家图标盖住）
+        float len = Mathf.Max(4f, rightEnd - neighborRight);
+        var rt = lineH.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 0.5f);            // 与预制体同口径：锚格子右缘 / pivot 右端
+        rt.pivot = new Vector2(1f, 0.5f);
+        rt.sizeDelta = new Vector2(len, rt.sizeDelta.y);
+        rt.anchoredPosition = new Vector2(rightEnd - cellHalf, rt.anchoredPosition.y);
     }
 
     /// <summary>

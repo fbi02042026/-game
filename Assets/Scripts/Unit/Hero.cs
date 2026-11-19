@@ -436,6 +436,10 @@ public class Hero : UnitBase
             return;
         }
 
+        // 【2026-11-19 临时探针 · 游侠滑步归因，确认后删除】必须在 TryHoldDuringAttack 之前，
+        // 才能覆盖「被拦截停步」和「放行前压」两条分支。
+        ProbeRangerSlide();
+
         if (!_manualMove && TryHoldDuringAttack())
             return;
         // 手动移动时不做受击脚步硬直（继续走位；DAMAGED 动画照播，UnitAnimation 内部保证播完/被攻击打断）
@@ -652,6 +656,24 @@ public class Hero : UnitBase
         if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
             ClampToScreen();
         ApplyLaneY(dt);
+    }
+
+    // 【2026-11-19 临时探针 · 游侠滑步归因，定位后连同调用点一起删除】
+    // 只在我方弓手普攻出手窗口采样：记录前摇/攻击锁、移动速度、目标是否可交战、是否在并道。
+    // 判别：① 攻击锁内仍在移动 → 前压没被拦；② 攻击锁已过但箭未射出 → 前摇超出锁；
+    //       ③ 目标被判不可交战 → TryHoldDuringAttack 放行导致前压。节流 0.15s 避免刷屏。
+    float _slideProbeNext;
+    void ProbeRangerSlide()
+    {
+        if (Time.time < _slideProbeNext) return;
+        if (!(this is Hero) || PlayerJobDefs.GetSelected() != PlayerJobId.Ranger) return;
+        if (GetAttackVfxKit() != AttackVfxKit.Bow) return;   // 只看弓普攻窗口
+        _slideProbeNext = Time.time + 0.15f;
+        float vx = rb != null ? rb.velocity.x : 0f;
+        bool lockOn = unitAnim != null && unitAnim.InAttackLock;
+        bool inRange = target != null && IsInBasicAttackRange(target);
+        bool engaged = target != null && GetCombatDist(this, target) <= GameConfig.GetCombatScreenWidth();
+        Debug.Log($"[ProbeSlide] lock={lockOn} vx={vx:0.000} inRange={inRange} engaged={engaged} tgtNull={target == null} manual={_manualMove}");
     }
 
     protected override void Die(bool isCritKill = false)

@@ -2500,22 +2500,13 @@ public partial class BattleManager
             // · 放行后 ContinueToNextStageInPlace：不回城，黑底字幕过场直进下一关（全新一局、职业继承）。
             // · 章末（整篇打完）/ 其它模式不传 → 只有【确定】= 原回城链零改动；失败路径不受影响（只有返回）。
             // · onRewardsShown：主人拍板「奖励展示完再弹」升级窗（LevelUpPopup.FlushPending，996 盖 985）。
-            // 【2026-11-12 主人报「怎么一上来还有上局的佣兵」→ 拍板「通关即清」】通关瞬间作废本局可续档
-            // （10-24「打完就清」的补完）：清账原在回城链/直进链（点按钮才跑），玩家停在结果界面直接退出
-            //（停 Play/杀进程）构筑档就留盘 → 下次启动 AutoGameInitializer 自动开战（不经过冒险页，
-            // 「继续上一局/重新开始」询问弹窗没机会弹）→ StartNewRunInternal parked 判定同章同难度
-            // 静默续局 → 上局佣兵/构筑带进新局（Editor.log [RunLoadout] 继续上一局 chapter=1 mercs=1 实锤）。
-            // ↑ 这条链路同日稍后已被主人「不要续局这个功能，中途退出一律按失败」口径彻底修掉：
-            //   BattleManager.StartNewRun 开战前统一清档、RunDraftDirector 非裂隙一律 BeginNew；
-            //   本处 Clear 保留作「通关瞬间」的第一道闸，两道闸幂等、互为兜底。
-            // 通关 = 局结束，快照不该活过通关时刻。只清主线 Normal（本分支即主线专属；支线岛/活动副本
-            // 进本 Pending* 标志天然作废 parked 局）；没通关不走这里，不受影响。
-            // 【2026-11-12 晚】中断「续局恢复」已整体下线（一律按撤离失败静默结算），不再有续局档接回。
-            // NoteStageProgress（StageClearRewardDirector:1002）
-            // 有 IsActive 守卫 → 清档后自动 no-op 不重新落盘；EndRunAndReturnToTown /
-            // ContinueToNextStageInPlace 的 Clear 幂等，零冲突。中断快照一并清（金币已 Persist 入账，
-            // 留快照会被崩溃恢复重复入账，同 ContinueToNextStageInPlace ① 段口径）。
-            RunLoadout.Clear();
+            // 【2026-11-19 主人拍板】通关「清」照做，但时机 = 关掉本关后（点确定回城 / 点下一关直进），
+            // 由 EndRunLoadout() 完成（EndRunAndReturnToTown:3243 / ContinueToNextStageInPlace:3134 都会调）。
+            // 胜利面板开着期间不清 RunLoadout：否则 BattleUI.UpdateRunSkillSlots 读 RunLoadout.IsActive=false
+            // 把底部 4 个技能槽画成空槽，本局抽到的盾技能看着像丢了（主人 11-19 报）。
+            // 续局功能已整体下线、StartNewRun 开战前统一清档，面板期间留档不会带进新局。
+            // 中断快照仍在这里清（金币已 Persist 入账，留快照会被崩溃恢复重复入账，
+            // 同 ContinueToNextStageInPlace ① 段口径）；NoteStageProgress 有 IsActive 守卫会 no-op 不重落盘。
             BattleStateSaver.Instance?.ClearBattleState();
             bool canNext = Mode.Id == BattleModeId.Normal && HasChapterNextStageForSettlement();
             if (canNext)

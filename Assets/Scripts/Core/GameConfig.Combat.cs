@@ -1378,10 +1378,11 @@ public static partial class GameConfig
     public const float CAREER_CHARGE_BOSS_PIN = 0.35f;
     public const float CAREER_CHARGE_BURST_RADIUS = 1.2f;    // ⚠ 2026-11-16 起停用：撞击判定改矩形，尺寸由盾的世界大小推导（见 CAREER_CHARGE_HIT_RANGE_MUL），常量保留不删
     // 【2026-11-16 主人「让剑盾的冲锋伤害范围再小一半，应该是盾的一半大小的范围」】
+    // 【2026-11-19 主人「剑盾冲锋的时候面积还是大」】再收一档：0.5 → 0.4（约 1.92 × 1.35 的矩形）。
     // 判定框 = 盾的世界尺寸 × 本倍率（0.5 = shield_block 148×104 帧 / 100ppu × 预制体 3.6 × 0.9 缩放
     // -> 盾 4.795 × 3.370，一半即 2.40 × 1.69 的矩形），撞击点居中、横纵各取一半作半径。
     // 想再收/再放只改这一个倍率，不要另写第二份尺寸数值。
-    public const float CAREER_CHARGE_HIT_RANGE_MUL = 0.5f;
+    public const float CAREER_CHARGE_HIT_RANGE_MUL = 0.4f;
     // 【2026-11-15 主人「尘土这个特效在玩家冲锋的时候加到脚后面」】脚后偏移（世界单位，只动 X、Y 恒用 FootY）。
     public const float CAREER_CHARGE_DUST_BACK = 0.4f;
     // 【2026-11-15 主人「盾在小 10% 再往下 20 / 尘土小一半往上 10」】

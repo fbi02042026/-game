@@ -46,7 +46,10 @@ public static class HeroVaultSystem
         try
         {
             int rows = Mathf.Clamp(unlockedRows <= 0 ? DefaultUnlockedRows : unlockedRows, 1, RowsMax);
-            var equips = CollectSourceEquips();
+            // 【2026-11-19 主人拍板】带出的装备只在角色页装备栏（CharacterEquipBar.BuildPersistentSlots）显示，
+            // 随身仓库不再铺装备格：legacyEquipPool 字段与老数据一条不清，进战注入照旧读凭证。
+            // 故这里取空装备列表，Collect 只铺道具/碎片/徽记/卷轴等展示位。
+            var equips = new List<EquipInstance>();
             // 【2026-10-24 主人拍板】整理态：装备稀有度高的在前；同稀有度保持获得顺序（按下标决胜=稳定排序）
             if (SortByRarity && equips != null && equips.Count > 1)
             {

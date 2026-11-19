@@ -149,6 +149,19 @@ public class CharacterEquipBar : MonoBehaviour
         view.button = t.GetComponent<Button>();
         if (view.button == null) view.button = t.gameObject.AddComponent<Button>();
         view.button.transition = Selectable.Transition.None;
+
+        // 【2026-11-19 主人拍板】角色页装备栏 6 槽下面不要显示部位名（主手/副手/头/胸/手/脚）：
+        // 预制体每槽下挂「Text (Legacy)」写死部位名，战斗侧 EquipQuickSlotUI:52 同款做法运行时隐藏。
+        // 只隐藏文字节点，不动图标/底图/预制体；按节点名认，槽下只有这一个 Text。
+        for (int i = 0; i < t.childCount; i++)
+        {
+            var child = t.GetChild(i);
+            if (child.name == "Text (Legacy)")
+            {
+                var label = child.GetComponent<Text>();
+                if (label != null) label.gameObject.SetActive(false);
+            }
+        }
         return view;
     }
 
@@ -305,15 +318,22 @@ public class CharacterEquipBar : MonoBehaviour
         var job = PlayerJobDefs.Playable[_idx];
         var kit = GetKit(job);
 
+        // 【2026-11-19 主人报「主线通关，角色界面装备栏里没有带出的装备」→ 修】
+        // 旧口径（11-14）三职业一律显示起步套，那会儿还没有装备持久化；11-19 带出上线后
+        // SaveData.legacyEquipPool 才是局外真源，角色页必须显示该职业带出的穿戴件。
+        // 只读展示、不写背包：按槽还原持久件，同槽多件取最后一件（与进战注入 TryEquipDirect
+        // 顺序一致——后进覆盖前进）；没带出的槽回退起步套，三职业仍严格按 job 隔离。
+        var persistentBySlot = BuildPersistentSlots(job);
+
         for (int i = 0; i < _slots.Count; i++)
         {
-            // 【2026-11-14 修「剑盾初始不见了」】三个职业一律走起步套预览。
-            // 原「当前职业读 BattleBagSystem.GetEquippedInSlot」是死路：局内背包在开局/回城/结算
-            // 都被 InitNewRun 清空（肉鸽设计，局外无装备存档字段），角色页在城镇必然 6 槽全空。
-            EquipInstance eq =
-                _slots[i].slot == EquipSlotType.MainHand ? kit[0]
-              : _slots[i].slot == EquipSlotType.OffHand  ? kit[1]
-              : null;   // 起步无护甲 → 头/胸/手/脚空槽
+            EquipInstance eq = null;
+            if (persistentBySlot.TryGetValue(_slots[i].slot, out var carried) && carried != null)
+                eq = carried;   // 带出的穿戴件优先
+            else
+                eq = _slots[i].slot == EquipSlotType.MainHand ? kit[0]
+                   : _slots[i].slot == EquipSlotType.OffHand  ? kit[1]
+                   : null;     // 起步无护甲 → 头/胸/手/脚空槽
             BindSlot(_slots[i], eq);
         }
 
@@ -358,6 +378,27 @@ public class CharacterEquipBar : MonoBehaviour
             var captured = item;
             sv.button.onClick.AddListener(() => EquipDetailPopupUI.Show(captured));
         }
+    }
+
+    /// <summary>该职业带出的穿戴件，按角色页 6 槽归位（只读、不写背包）。同槽多件取最后一件，
+    /// 与进战注入顺序一致；还原失败 LogError 暴露、不静默兜底（与 PlayerJobDefs 同口径）。</summary>
+    static Dictionary<EquipSlotType, EquipInstance> BuildPersistentSlots(PlayerJobId job)
+    {
+        var map = new Dictionary<EquipSlotType, EquipInstance>();
+        var pool = SaveSystem.Instance?.Data?.legacyEquipPool;
+        if (pool == null) return map;
+        int jobInt = (int)job;
+        for (int i = 0; i < pool.Count; i++)
+        {
+            var rec = pool[i];
+            if (rec == null || rec.job != jobInt) continue;
+            var inst = PersistentEquipConverter.FromPersistent(rec);
+            if (inst == null) continue;   // 还原失败已由转换器 LogError，这里跳过该件
+            // 武器走逻辑主/副手，防具走自身 slotType —— 与 TryEquipDirect 穿槽同一判据
+            var slot = WeaponLoadoutRules.ResolveLogicalSlot(inst);
+            map[slot] = inst;             // 后者覆盖前者（池顺序 = 进战注入顺序）
+        }
+        return map;
     }
 
     /// <summary>三职业起步套缓存（主手/副手，副手仅剑盾有盾）。

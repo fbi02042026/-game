@@ -76,15 +76,12 @@ public partial class TalentUI
             }
             if (v.upgradeButton != null)
             {
-                // 【2026-10-18 修·主人报「到第10个节点不显示按钮」】金币不足时 can=false 把按钮整个藏了。
-                // 改为：下一个待解锁节点（i == unlocked）按钮始终显示并始终标花费；
-                // 金币不足时点击有 OnClickLeft 的「金币不足」提示兜底，不需要靠藏按钮表达。
-                bool showBtn = can || i == unlocked;
-                v.upgradeButton.SetActive(showBtn);
-                if (showBtn && v.upgradeCostText != null && nextCost > 0 && i == unlocked)
-                    v.upgradeCostText.text = nextCost.ToString();
+                // 【2026-11-19 主人拍板】图标上不再叠「升级」按钮与金币价格牌——解锁入口只有
+                // 「点图标 → 弹窗里点解锁」。绑定与字段保留（GetLeftNode 引导仍可用），这里统一隐藏。
+                v.upgradeButton.SetActive(false);
             }
-            if (v.button != null) v.button.interactable = can;
+            // 锁定节点也保持可点（与右列同口径）：点了弹气泡卡看效果与花费缺口，不「点不动又没说法」。
+            if (v.button != null) v.button.interactable = true;
             // 节点始终显示；仅灰态表示锁定
             if (v.root != null) v.root.SetActive(true);
             SetRowGray(v.root, locked);
@@ -92,7 +89,8 @@ public partial class TalentUI
             // 默认贴角 (-12,-12) 的红点右侧约 11px 会被裁掉 —— 左列红点内收到 (-26,-12)，
             // 右缘 299 距裁切线留 3px。右列行居中不越界，仍走默认贴角。
             // 【2026-11-19 正方形格子】红点贴图标右上角（图标居中半径48、格子半宽58 → 右上角内缩约10）。
-            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-12f, -12f));
+            // 【2026-11-19 主人拍板】红点离图标再近 2px：偏移 -12→-14（anchor 右上、负得越多越往图标靠）。
+            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-14f, -14f));
             // 【第15轮·主人拍板】竖向不再只连 S 形折返端：每列上下相邻节点都直连（上下之间都要
             // 看到连线），顶行上方没有节点才藏；横线仍只连左邻居（col 0 不画）。
             int col = i % TalentDefs.LeftPerRow;
@@ -106,8 +104,12 @@ public partial class TalentUI
             }
             if (v.lineV != null)
             {
-                // 竖线每列直连上一行同列（几何由主人预制体定，长度须贯穿行距 24）。
-                bool showV = hasNodeAbove;
+                // 【2026-11-19 主人拍板·参考图】竖线蛇形交替：这一行连左列(col 0)、下一行连右列(末列)，
+                // 行行交替（横线连左邻居口径不变）；几何由主人预制体定，长度随行距自动变长。
+                int row = i / TalentDefs.LeftPerRow;
+                bool showV = hasNodeAbove && (row % 2 == 1
+                    ? col == 0
+                    : col == TalentDefs.LeftPerRow - 1);
                 v.lineV.gameObject.SetActive(showV);
                 if (showV) v.lineV.color = on ? Color.white : NodeLinkOffTint;
             }
@@ -224,10 +226,9 @@ public partial class TalentUI
 
         if (v.root != null) v.root.SetActive(true);
         SetRowGray(v.root, locked ? 0.72f : 1f);
-        SetRowRedDot(v.root, ref v.redDot, canAct);
-        // 2026-09-29 主人要求：新开通且还没点过的节点右上角标红「新」；玩家一点就消失。
-        // 判定统一走 TalentDefs.IsNewlyOpen（与入口红点同一口径），不要在这里另写一套条件。
-        SetRowNewTag(v.root, ref v.newTag, TalentDefs.IsNewlyOpen(node, talents, playerLv));
+        SetRowRedDot(v.root, ref v.redDot, false);   // 【2026-11-19 主人拍板】右列不要红点（节点保留，恒隐藏）
+        // 【2026-11-19 主人拍板】右列红色「新」标记也退场（截图里右上角的红点即它）；节点保留恒隐藏。
+        SetRowNewTag(v.root, ref v.newTag, false);
         // 【2026-10-17 主人要求】锁定行也保持可点：点了弹具体开启条件（等级达到几级 / 互斥），
         // 不再「点不动又没说法」。灰态与锁图标照旧 —— 灰度走 CanvasGroup，不依赖按钮禁用色。
         if (v.button != null) v.button.interactable = true;
@@ -269,6 +270,18 @@ public partial class TalentUI
                       && TalentSystem.CanUnlockLeft(unlocked + 1, out _);
         if (resetButton != null)
         {
+            // 【2026-11-19 主人拍板】一键升级亮态用主人指定的「确定按钮.png」（见随附素材）：预制体亮态
+            // sprite 引用悬空（旧 guid 全库无 meta），新图 guid 是 56 字符不能落 prefab 引用——按路径加载补图，
+            // 与下面灰态补图同一口径；缺图报错不静默。
+            var litImg = resetButton.GetComponent<Image>();
+            var litSp = Resources.Load<Sprite>("UI/Art/Common/确定按钮");
+            if (litImg != null && litSp != null)
+            {
+                litImg.sprite = litSp;
+                litImg.color = Color.white;
+            }
+            else
+                Debug.LogError("[TalentUI] 确定按钮.png 取不到（应在 Resources/UI/Art/Common/），一键升级亮态没图（不兜底）");
             resetButton.gameObject.SetActive(canBuy);
             resetButton.interactable = canBuy;
         }
@@ -276,20 +289,18 @@ public partial class TalentUI
         {
             resetButtonGray.gameObject.SetActive(!canBuy);
             resetButtonGray.interactable = true;
-            // 预制体 ResetButton灰 的 sprite 引用悬空（guid 全库无 meta，AGENTS.md §2.3）：
-            // 按路径加载补真图（与主界面名牌 Icon 同一口径，不是复制资源兜底）；缺图报错不静默。
-            if (!canBuy)
+            // 【2026-11-19 主人拍板】一键升级亮/灰两态统一用主人指定的「确定按钮.png」（见随附素材）：
+            // 无条件补图（不藏在 if(!canBuy) 里，避免显隐切换时序导致偶发显示旧图/空图）；
+            // 预制体两态 sprite 引用悬空，按路径加载；灰态只压暗色区分"暂不可买"，形状与亮态一致。缺图报错不静默。
+            var img = resetButtonGray.GetComponent<Image>();
+            var graySp = Resources.Load<Sprite>("UI/Art/Common/确定按钮");
+            if (img != null && graySp != null)
             {
-                var img = resetButtonGray.GetComponent<Image>();
-                var graySp = Resources.Load<Sprite>("UI/Art/Talent/重置天赋灰");
-                if (img != null && graySp != null)
-                {
-                    img.sprite = graySp;
-                    img.color = Color.white;
-                }
-                else
-                    Debug.LogError("[TalentUI] 重置天赋灰.png 取不到（应在 Resources/UI/Art/Talent/），一键升级灰态没图（不兜底）");
+                img.sprite = graySp;
+                img.color = new Color(0.55f, 0.55f, 0.55f, 1f);
             }
+            else
+                Debug.LogError("[TalentUI] 确定按钮.png 取不到（应在 Resources/UI/Art/Common/），一键升级灰态没图（不兜底）");
         }
     }
 

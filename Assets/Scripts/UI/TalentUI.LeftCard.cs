@@ -28,15 +28,24 @@ public partial class TalentUI
         long gold = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
         bool canBuy = gold >= cost;
 
-        // 参考图排版：胶囊标题（属性名）→ 描述（属性效果连属性名一起）→「解锁 + 金币x数量」
+        // 参考图排版：顶部大图标（节点图标）→ 胶囊标题（属性名）→ 效果文字 → 分隔线 →
+        // 资源行「持有/花费」→「解锁」大按钮
+        if (_leftBubbleRefs.head != null)
+        {
+            Sprite headSp = null;
+            if (index0 >= 0 && index0 < _leftViews.Count && _leftViews[index0].icon != null)
+                headSp = _leftViews[index0].icon.sprite;
+            _leftBubbleRefs.head.sprite = headSp;
+            _leftBubbleRefs.head.color = headSp != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        }
         if (_leftBubbleRefs.name != null) _leftBubbleRefs.name.text = def.name;
         if (_leftBubbleRefs.desc != null)
             _leftBubbleRefs.desc.text = string.IsNullOrEmpty(def.effect.display) ? "" : def.effect.display.Replace(" ", "");
         if (_leftBubbleRefs.okLabel != null) _leftBubbleRefs.okLabel.text = "解锁";
         if (_leftBubbleRefs.cost != null)
         {
-            _leftBubbleRefs.cost.text = "x" + cost;
-            _leftBubbleRefs.cost.color = canBuy ? Color.white : BubbleCostRed;   // 不足标红（项目口径：不可购买标红）
+            _leftBubbleRefs.cost.text = FormatCompact(gold) + "/" + cost;
+            _leftBubbleRefs.cost.color = canBuy ? BubbleTextOnNavy : BubbleCostRed;   // 不足标红（项目口径：不可购买标红）
         }
         // 金币不足时按钮仍可点（点走 OnLeftCardOk → DoBuyLeft → TryUnlockLeft 给 toast），不禁用。
 

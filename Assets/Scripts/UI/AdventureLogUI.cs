@@ -869,6 +869,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 var v = views[i];
                 totalCount++;
                 if (v.done) doneCount++;
+                // 【2026-11-19 主人拍板】冒险日志主线页只列「当前该做的 + 已完成的」，
+                // 未完成且非当前的任务先隐藏：NPC 对话任务只有 isCurrent 才触发（PendingTalkQuest
+                // 只认 CurrentView），若这里仍列出非当前任务，玩家「看到任务→去做了却没反应」。
+                // 统计 totalCount/doneCount 照旧全量累加（进度条反映真实完成度，不受隐藏影响）。
+                // 🔴 不能用 v.isCurrent：ChapterViews 每章各标一条，未到章节也会露出一条。
+                if (!v.done && (current == null || v.def.id != current.def.id)) continue;
                 bool reachable = ch <= curChapter;   // 未推到的章节行整体锁定（先做完前面的）
                 string how = MainQuestDefs.AutoDesc(v.def);
                 string name = string.IsNullOrEmpty(v.def.title) ? how : v.def.title;

@@ -33,8 +33,8 @@ public partial class TalentUI
 
         // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
         // 【2026-11-19 三列网格】左列改 GridLayoutGroup 固定 3 列（原单列 VerticalLayoutGroup）；右列不动。
-        EnsureGridContentLayout(leftContent, LeftGridColumns, LeftNodeW, LeftNodeH, LeftGapX, LeftGapY);   // 【第15轮·主人拍板】列距 8 不变，行距 8→24（上下拉开 3 倍）
-        EnsureScrollContentLayout(rightContent, 8f);   // 右列不动
+        EnsureGridContentLayout(leftContent, LeftGridColumns, LeftNodeW, LeftNodeH, LeftGapX, LeftGapY);   // 【2026-11-19 主人拍板】列距 8 不变，行距 36→54（再大 50%）
+        EnsureScrollContentLayout(rightContent, 8f);   // 右列先建骨架，下方按左列总高覆盖 spacing
 
         for (int i = 0; i < TalentDefs.Left.Length; i++)
         {
@@ -87,13 +87,54 @@ public partial class TalentUI
 
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
+        // 【2026-11-19 主人拍板·按左列行号对齐】右列三个图标从上往下对准左列从上数第 1/3/5 行（Lv6/Lv4/Lv2）：
+        // 行心距 = 左列「一格高 + 一行距」× 2（左列 3 列一「级」，隔一行对齐），
+        // 不再按右列视图数均匀铺满总高（旧算法让图标落在 Lv6/中间/Lv1，与行号对不上）。
+        var rightVlg = rightContent.GetComponent<VerticalLayoutGroup>();
+        if (_rightViews.Count > 1 && rightVlg != null)
+        {
+            float tplH = rightRowTemplate.GetComponent<RectTransform>().sizeDelta.y;
+            float rowH = tplH > 8f ? tplH : RightRowH;
+            rightVlg.spacing = Mathf.Max(4f, (LeftNodeH + LeftGapY) * 2f - rowH);
+        }
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
+
+        // 读数前先把两列滚到同一基准（normalized=0，L1/R1 在视野底部）——世界 y 差值才有意义。
+        // 滚动同步 WireScrollSync 仍在末尾，不动。
+        WireScroll(leftScroll, leftContent);
+        WireScroll(rightScroll, rightContent);
+
+        // 【2026-11-19 主人拍板·第一个往下一点】右列底部图标（R1，reverseArrangement 下 _rightViews[0] 在视野底部）
+        // 实测对齐左列 Lv2 图标中心（从上数第 5 行、从底数第 2 个 = _leftViews[1]）——只改纵向 y：
+        // 因行距已固定 2 行，R1 对准 Lv2 后 R2 自然对准 Lv4（从上第 3 行）、R3 对准 Lv6（从上第 1 行）。
+        // 从两边图标的世界 y 现读差值，换算到父节点本地坐标后补进每个右列行的 Opt_0（所有行同模板），不写死手摆坐标。
+        if (_leftViews.Count > 1 && _rightViews.Count > 0)
+        {
+            var lIcon = _leftViews[1].root != null ? _leftViews[1].root.transform.Find("Iconbg") as RectTransform : null;
+            var rIcon = _rightViews[0].root != null ? _rightViews[0].root.transform.Find("Opt_0/Icon") as RectTransform : null;
+            if (lIcon != null && rIcon != null)
+            {
+                float dy = lIcon.position.y - rIcon.position.y;
+                if (Mathf.Abs(dy) > 0.5f)
+                {
+                    foreach (var rv in _rightViews)
+                    {
+                        var opt = rv.root != null ? rv.root.transform.Find("Opt_0") as RectTransform : null;
+                        if (opt == null) continue;
+                        // 世界 y 差 → 本地坐标增量：除以父链总缩放，画布缩放下才准。
+                        float parentScaleY = opt.parent != null ? opt.parent.lossyScale.y : 1f;
+                        if (Mathf.Abs(parentScaleY) < 0.001f) parentScaleY = 1f;
+                        opt.anchoredPosition = new Vector2(opt.anchoredPosition.x, opt.anchoredPosition.y + dy / parentScaleY);
+                    }
+                    LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
+                }
+            }
+        }
+        StretchRightLinkLines();   // 行距/首行对齐落位后重算连线两段，两端仍精确顶卡边
 
         // 【2026-11-19 三列网格】左探出适配是单列时代产物，Grid 居中排版下跳过（否则会把 grid 强改左对齐）。
 
-        WireScroll(leftScroll, leftContent);
-        WireScroll(rightScroll, rightContent);
-        // 【2026-11-19 主人拍板】恢复左右双向滚动同步（覆盖 10-13「分开动」口径）。
+        // 【2026-11-19 主人拍板】左右双向滚动同步（覆盖 10-13「分开动」口径）。WireScroll 已提前到读数前。
         WireScrollSync();
 
         _listsBuilt = true;
@@ -111,7 +152,9 @@ public partial class TalentUI
         if (oldV != null) Destroy(oldV);
         var grid = content.GetComponent<GridLayoutGroup>();
         if (grid == null) grid = content.gameObject.AddComponent<GridLayoutGroup>();
-        grid.padding = new RectOffset(0, 0, 4, 4);
+        // 【2026-11-19 主人拍板】滚动区上下边界压住首末行内容 → 内容上下各留 24 内边距，
+        // 滑到顶/底时首行末行不再贴着视口边缘（4px 那版看着像被切了一半）。
+        grid.padding = new RectOffset(0, 0, ContentPadY, ContentPadY);
         grid.spacing = new Vector2(spacingX, spacingY);
         grid.cellSize = new Vector2(cellW, cellH);
         grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -126,13 +169,55 @@ public partial class TalentUI
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
     }
 
+    /// <summary>
+    /// 【2026-11-19 主人拍板】右列连线只填「卡与卡之间的空隙」：冲上段从自家卡顶缘拉到上邻卡底缘、
+    /// 冲下段从自家卡底缘拉到下邻卡顶缘，两端精确顶到卡边——不留缝，也不再穿到相邻卡片上面
+    /// （旧口径「中心距+12 穿卡、靠卡图遮住」跨行遮不住：上行冲下段画在下行卡上面＝线压图标）。
+    /// 卡上下缘从 Opt_0 实际 RectTransform 现读（锚左下 / pivot 左下：底缘 = anchoredPosition.y）。
+    /// 只改纵向长度与 y 落点；X 中轴仍由 EnsureRightLinkAxis 管，这里不动。
+    /// </summary>
+    void StretchRightLinkLines()
+    {
+        var vlg = rightContent.GetComponent<VerticalLayoutGroup>();
+        if (vlg == null) return;
+        float tplH = rightRowTemplate.GetComponent<RectTransform>().sizeDelta.y;
+        float rowH = tplH > 8f ? tplH : RightRowH;
+        float spacing = vlg.spacing;
+        foreach (var v in _rightViews)
+        {
+            var opt = v.root != null ? v.root.transform.Find("Opt_0") as RectTransform : null;
+            if (opt == null)
+            {
+                Debug.LogError("[TalentUI] 右列行缺 Opt_0，连线长度算不出（不兜底）");
+                continue;
+            }
+            float cardBottom = opt.anchoredPosition.y;
+            float cardTop = cardBottom + opt.sizeDelta.y * opt.localScale.y;
+            float pitch = rowH + spacing;                                 // 相邻两行的行心距
+            float len = Mathf.Max(4f, pitch - (cardTop - cardBottom));    // 恰好＝卡与卡的视觉空隙
+            StretchRail(v.lineUp, cardTop, len, true);                    // 锚行底：起点=自家卡顶缘
+            StretchRail(v.lineDown, cardBottom - rowH * 0.5f, len, false); // 锚行中：起点=自家卡底缘
+        }
+    }
+
+    /// <summary>连线单段重排：up=true 冲上段（锚行底/pivot 底、起点行中心向上），false 冲下段（锚行中/pivot 顶、起点行中心向下）。</summary>
+    static void StretchRail(Image img, float startY, float len, bool up)
+    {
+        if (img == null) return;
+        var rt = img.rectTransform;
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, len);
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, up ? 0f : 0.5f);
+        rt.pivot = new Vector2(0.5f, up ? 0f : 1f);
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, startY);
+    }
+
     /// <summary>Content 用 VerticalLayoutGroup 排布；不拉伸子项宽高。spacing 由调用方按列给（左右列可不同）。</summary>
     static void EnsureScrollContentLayout(RectTransform content, float spacing)
     {
         if (content == null) return;
         var vlg = content.GetComponent<VerticalLayoutGroup>();
         if (vlg == null) vlg = content.gameObject.AddComponent<VerticalLayoutGroup>();
-        vlg.padding = new RectOffset(0, 0, 4, 4);
+        vlg.padding = new RectOffset(0, 0, ContentPadY, ContentPadY);
         vlg.spacing = spacing;
         vlg.childAlignment = TextAnchor.UpperCenter;
         vlg.childControlWidth = false;
@@ -243,8 +328,8 @@ public partial class TalentUI
     }
 
     // 【2026-11-19 主人拍板】左右栏双向滚动同步：滑一边另一边跟着动。
-    // _scrollSyncing 防回调死循环；【第15轮改】按「滚动像素量」1:1 对齐——两栏内容高度不同，
-    // 直接同步 normalized 会让两边速度/深浅对不上；改成像素量相同、各自到头后夹住。
+    // 【本轮改回】按 verticalNormalizedPosition 同步——左列 30 行、右列 13 行内容高度悬殊，
+    // 像素 1:1 必然首尾对不齐；normalized 同步才能保证「第一个同一行、最后一个对齐」。
     void WireScrollSync()
     {
         if (leftScroll != null)
@@ -262,34 +347,19 @@ public partial class TalentUI
     void OnLeftScrolled(Vector2 v)
     {
         if (_scrollSyncing || rightScroll == null) return;
-        float rMax = ScrollMaxOffset(rightScroll, rightContent);
-        if (rMax <= 1f) return;
-        float pix = (1f - Mathf.Clamp01(v.y)) * ScrollMaxOffset(leftScroll, leftContent);
         _scrollSyncing = true;
-        rightScroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(pix / rMax);
+        rightScroll.verticalNormalizedPosition = v.y;
         _scrollSyncing = false;
     }
 
     void OnRightScrolled(Vector2 v)
     {
         if (_scrollSyncing || leftScroll == null) return;
-        float lMax = ScrollMaxOffset(leftScroll, leftContent);
-        if (lMax <= 1f) return;
-        float pix = (1f - Mathf.Clamp01(v.y)) * ScrollMaxOffset(rightScroll, rightContent);
         _scrollSyncing = true;
-        leftScroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(pix / lMax);
+        leftScroll.verticalNormalizedPosition = v.y;
         _scrollSyncing = false;
     }
     bool _scrollSyncing;
-
-    /// <summary>该滚动区最大像素位移 = 内容高 − 视口高（视口取不到回退 content 父节点）。</summary>
-    static float ScrollMaxOffset(ScrollRect scroll, RectTransform content)
-    {
-        if (scroll == null || content == null) return 0f;
-        var vp = scroll.viewport != null ? scroll.viewport : content.parent as RectTransform;
-        if (vp == null) return 0f;
-        return Mathf.Max(0f, content.rect.height - vp.rect.height);
-    }
 
     /// <summary>右列缺 Lock 时按手做模板补一个右下角锁（不改已有坐标）。</summary>
     void EnsureRightLock(RightNodeView v)

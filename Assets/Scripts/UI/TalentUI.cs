@@ -20,15 +20,20 @@ public partial class TalentUI : MonoBehaviour
     //    把 628 的列永久缩到 96.9%，运行时从来没和预制体一致过；现在一律按预制体原尺寸渲染，不缩放。
     // 【2026-11-19 三列网格】左列节点格子尺寸：三列排在一行，格子取 ~96 宽 / 112 高，留图标+角标。
     // 【2026-11-19 间距微调·以视觉为主】格子正方形 + 图标居中，左右图标间隔一致(约 8px 净距)。
-    // 【第15轮·主人拍板】行距 8→24（上下拉开 3 倍），竖线（lineshu）贯穿行距连接上下格。
+    // 【第15轮】行距 8→24；【2026-11-19 主人拍板】每行间隔再大 50%：36→54（竖线随间隙自动变长）。
     const float LeftNodeH = 116f;     // 左列格子高（三列网格 cell 高，=宽，正方形）
     const float RightRowH = 126f;     // 兜底行高：同上（当前右模板 150）
     const float LeftNodeW = 116f;     // 左列格子宽（三列网格 cell 宽）；原单列 258.6
     const float RightRowW = 269.2f;
+    // 【2026-11-19 主人拍板】右列天赋卡先小 30%、再大 10%：预制体 Opt_0 scale=1 → 运行时 0.77（连线/卡顶计算读 localScale 自动跟随）
+    const float RightIconScale = 0.77f;
     const int LeftGridColumns = 3;    // 左列网格列数（与 TalentDefs.LeftPerRow 一致）
     // 【2026-11-19 自适应】网格间距提成常量：左列竖线长度要按「格高+行距」算，间距只能有一处真源。
     const float LeftGapX = 8f;
-    const float LeftGapY = 24f;
+    const float LeftGapY = 54f;
+    // 【2026-11-19 主人拍板】滚动内容上下内边距：滑到顶/底时首末行不再被视口边界压住。
+    // 左右列共用（右列铺满公式要扣掉上下这两段），只能有这一处真源。
+    const int ContentPadY = 24;
 
     [Header("壳")]
     public Image panelImage;

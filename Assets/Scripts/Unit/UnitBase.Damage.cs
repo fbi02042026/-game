@@ -121,7 +121,17 @@ public partial class UnitBase
             {
                 _lastHitVfxTime = Time.time;
                 int dir = hitVfxFacing != 0 ? hitVfxFacing : -GetVfxFacingDir();
-                BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, dir);
+                // 【2026-11-19 主人「敌人受冲锋的受击不要用刀光，换一个」】破阵冲锋撞击用弓箭命中特效，
+                // 不套刀光。判定必须精确到「冲锋中 + 伤害来自英雄」——冲锋期间英雄不普攻（Hero.AIUpdate 全停），
+                // 唯一伤害源就是撞击；EndCharging 立刻清标记，冲锋后的普攻不会误伤。其余受击一律走原刀光。
+                if (CareerSkillExecutor.IsCharging && source is Hero)
+                {
+                    var bowHit = BattleVFXSystem.Instance.LoadSharedKit(
+                        AttackVfxKit.Bow, VfxFaction.Ally, "hit");
+                    BattleVFXSystem.Instance.PlaySlash(GetHitPosition(), dir, VfxFaction.Ally, bowHit);
+                }
+                else
+                    BattleVFXSystem.Instance.PlayVictimHit(GetHitPosition(), isAlly, dir);
             }
         }
 

@@ -36,7 +36,15 @@ public partial class TalentUI
         _pendingRightNode = node;
         _pendingRightFromLevel = fromLevel;
 
-        // 参考图排版：胶囊标题（天赋名）→ 描述（解锁=效果；升级=Lv x → y + 效果）→「解锁/升级 + 天赋石x数量」
+        // 参考图排版：顶部大图标（选项图标）→ 胶囊标题（天赋名）→ 描述（解锁=效果；升级=Lv x → y + 效果）
+        // → 分隔线 → 资源行「持有/花费」→「解锁/升级」大按钮
+        if (_rightBubbleRefs.head != null)
+        {
+            var opt = (!node.IsJobChoice && node.options != null && node.options.Length > 0) ? node.options[0] : null;
+            var headSp = opt != null ? TalentIcons.GetTalent(opt.name) : null;
+            _rightBubbleRefs.head.sprite = headSp;
+            _rightBubbleRefs.head.color = headSp != null ? Color.white : new Color(1f, 1f, 1f, 0f);
+        }
         if (_rightBubbleRefs.name != null)
             _rightBubbleRefs.name.text = !string.IsNullOrEmpty(node.name) ? node.name : "天赋";
         if (_rightBubbleRefs.desc != null)
@@ -44,8 +52,8 @@ public partial class TalentUI
         if (_rightBubbleRefs.okLabel != null) _rightBubbleRefs.okLabel.text = unlock ? "解锁" : "升级";
         if (_rightBubbleRefs.cost != null)
         {
-            _rightBubbleRefs.cost.text = "x" + cost;
-            _rightBubbleRefs.cost.color = have >= cost ? Color.white : BubbleCostRed;   // 不足标红
+            _rightBubbleRefs.cost.text = FormatCompact(have) + "/" + cost;
+            _rightBubbleRefs.cost.color = have >= cost ? BubbleTextOnNavy : BubbleCostRed;   // 不足标红
         }
 
         _rightBubbleRefs.root.SetActive(true);
