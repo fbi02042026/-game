@@ -18,10 +18,17 @@ public partial class TalentUI : MonoBehaviour
     // 左右列各 -4，左列视口约 302。节点宽取模板自身设计宽，不跟着列宽被拉/压。
     // 🔴 2026-10-16 主人拍板「以预制体的表现为准」：删掉旧 FitColumnsScale——它按 648 设计宽
     //    把 628 的列永久缩到 96.9%，运行时从来没和预制体一致过；现在一律按预制体原尺寸渲染，不缩放。
-    const float LeftNodeH = 96f;      // 兜底行高：模板 sizeDelta.y>8 时以模板为准（当前左模板 100）
+    // 【2026-11-19 三列网格】左列节点格子尺寸：三列排在一行，格子取 ~96 宽 / 112 高，留图标+角标。
+    // 【2026-11-19 间距微调·以视觉为主】格子正方形 + 图标居中，左右图标间隔一致(约 8px 净距)。
+    // 【第15轮·主人拍板】行距 8→24（上下拉开 3 倍），竖线（lineshu）贯穿行距连接上下格。
+    const float LeftNodeH = 116f;     // 左列格子高（三列网格 cell 高，=宽，正方形）
     const float RightRowH = 126f;     // 兜底行高：同上（当前右模板 150）
-    const float LeftNodeW = 258.6f;   // 模板 stretch 到 720 根下的原始宽（720-461.405）
+    const float LeftNodeW = 116f;     // 左列格子宽（三列网格 cell 宽）；原单列 258.6
     const float RightRowW = 269.2f;
+    const int LeftGridColumns = 3;    // 左列网格列数（与 TalentDefs.LeftPerRow 一致）
+    // 【2026-11-19 自适应】网格间距提成常量：左列竖线长度要按「格高+行距」算，间距只能有一处真源。
+    const float LeftGapX = 8f;
+    const float LeftGapY = 24f;
 
     [Header("壳")]
     public Image panelImage;
@@ -110,7 +117,7 @@ public partial class TalentUI : MonoBehaviour
     bool _listsBuilt;
 
     // 右列「开通演出」（2026-10-13 主人拍板；【2026-11-05】触发源改人物升级：右列门槛改挂人物等级、
-    // 门槛档位 20/30/40）——人物等级跨过门槛时对应那批右列节点「暗→亮 + 放大缩小」提示玩家。
+    // 门槛为 1~13 逐级）——人物等级跨过门槛时对应那批右列节点「暗→亮 + 放大缩小」提示玩家。
     // ⚠ 打开界面 / 重复刷新都不重播（RefreshRight 不碰这两个字段）。
     Coroutine _rightUnlockFx;
     readonly List<RightNodeView> _fxBatch = new List<RightNodeView>();
@@ -145,7 +152,9 @@ public partial class TalentUI : MonoBehaviour
         public Text nameText;
         public Text effectText;
         public Image check;
-        public Image line;
+        public Image line;      // 横向连线（同行节点之间）
+        public Image lineV;     // 竖向连线（主人预制体 lineshu 节点，代码只绑不改）2026-11-19
+        public Text levelTag;   // 左侧层级标记「LvN」（每行第一列显示一次）2026-11-19
         public GameObject redDot;
         public GameObject upgradeButton;
         public Text upgradeCostText;
@@ -268,6 +277,9 @@ public partial class TalentUI : MonoBehaviour
             }
             if (seenChanged) SaveSystem.Instance.Save();
         }
+        // 【2026-11-19 主人拍板】打开天赋页 = 本次登录的红点已消费：入口红点关闭，本次登录内不再亮
+        //（下次登录进程重启静态清零后重新判定；判定收口见 TalentSystem.RefreshTalentEntryRedDot）。
+        TalentSystem.TalentDotSeenThisSession = true;
         RefreshAll();
     }
 

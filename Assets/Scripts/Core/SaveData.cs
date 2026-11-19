@@ -2610,6 +2610,27 @@ public class EquipmentData
     public List<AttrBonusData> attrBonus = new List<AttrBonusData>();
     public List<string> tags = new List<string>();
     public bool isLegacy;
+
+    // === 装备持久化（T1）：所有枚举字段存 int，字段初始化给默认值兼容老档 ===
+    public int job = -1;
+    public int qualityScore = 0;
+    public int enhanceLevel = 0;
+    public int baseAttrCount = 0;
+    public int gridWidth = 0;
+    public int gridHeight = 0;
+    public int slotType = 0;
+    public int weaponType = 0;
+    public int weaponHand = 0;
+    public int weaponKindOverride = -1;
+    public int weaponAttackType = 0;
+    public int armorPrefix = 0;
+    public string equipName = "";
+    public string appearanceId = "";
+    public string spumNameOverride = "";
+    public string grantSkillId = "";
+    public List<EnchantData> enchants = new List<EnchantData>();
+    public List<AttrBonusData> skillPassives = new List<AttrBonusData>();
+    public AttrBonusData globalBonus;
 }
 
 [Serializable]

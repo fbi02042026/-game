@@ -36,7 +36,71 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     public void ClearRunEquipment()
     {
         MoveItemsToTownBag();
+        SnapshotEquippedToPersistent();   // T2：清零前先快照穿戴装备入持久池（含死亡/撤离/直进/重开）
         InitNewRun();
+    }
+
+    /// <summary>
+    /// T2 带出接线（契约 7.4-T2）：把本局穿戴的全部装备（武器+防具）转成持久记录写入
+    /// SaveData.legacyEquipPool 并落盘，按当前职业分库。必须在 InitNewRun() 清零之前调用；
+    /// 转换 / 写入 / 落盘失败一律 Debug.LogError 暴露，不静默。
+    /// </summary>
+    void SnapshotEquippedToPersistent()
+    {
+        // 【T3 返工 8.2 / 2026-11-19】引导局不快照持久装备（剧情固定流程）：剧情流程固定，不带出。
+        // 【第九节 R1 / 2026-11-19 + 第十节 / 2026-11-19 主人拍板】带出范围：主线正式关（三难度）+ 支线岛 + 终章。
+        // 主线困难/噩梦 Mode 仍是 Normal，IsFormalMainRun 天然包含；支线岛/终章按主人拍板「算主线可带出」纳入。
+        // 竞技场/裂隙/资源本/羁绊本仍排除（但进战注入无玩法守卫，照样穿主线带出的装备）。
+        // 🔴 不直接改 IsFormalMainRun 定义：它还管 Boss 加成/结算等主线专属门禁，改了会连带放开。
+        // InstanceQuiet 只读查询已有实例，不建物、不刷 Error；战斗收尾期可用。
+        var bm = BattleManager.InstanceQuiet;
+        bool carryScope = bm != null && !bm.IsTutorialRun
+                          && (bm.IsFormalMainRun || bm.IsSideIsland || bm.IsFinale);
+        if (!carryScope)
+        {
+            Debug.Log("[GridBackpack] 本玩法不在带出范围（引导/竞技场/裂隙/资源本/羁绊本不带出）");
+            return;
+        }
+
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            Debug.LogError("[GridBackpack] 带出快照失败：存档未就绪，本局穿戴装备无法入池");
+            return;
+        }
+        int job = (int)PlayerJobDefs.GetSelected();
+        data.legacyEquipPool ??= new List<EquipmentData>();
+        var equipped = GetEquippedItems();
+        int carried = 0;
+        for (int i = 0; i < equipped.Count; i++)
+        {
+            var eq = equipped[i];
+            if (eq == null || string.IsNullOrEmpty(eq.templateId)) continue;
+            try
+            {
+                var rec = PersistentEquipConverter.ToPersistent(eq, job, PersistentEquipConverter.RollQualityScore(eq.rarity, bm != null ? bm.BattleDifficulty : 0));
+                if (rec == null)
+                {
+                    Debug.LogError($"[GridBackpack] 带出快照：{eq.equipName}({eq.templateId}) 转换返回 null，未入池");
+                    continue;
+                }
+                data.legacyEquipPool.Add(rec);
+                carried++;
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[GridBackpack] 带出快照：{eq.equipName}({eq.templateId}) 转换/写入异常：{e}");
+            }
+        }
+        try
+        {
+            SaveSystem.Instance?.Save();
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"[GridBackpack] 带出快照：落盘失败：{e}");
+        }
+        Debug.Log($"[GridBackpack] 带出快照：本局穿戴装备入池 {carried}/{equipped.Count} 件（职业 job={job}）");
     }
 
     /// <summary>

@@ -6,7 +6,7 @@ using UnityEngine;
 /// 天赋 V4 静态表（右列重制）。
 /// 【2026-11-05 主人拍板】左右列解锁门槛统改**人物等级**（LevelSystem，满级 80），左右列互相解耦：
 /// 左列 N 级开第 N 个（80 级 ↔ 80 节点一一对应，见 LeftNodeUnlockLevel）；
-/// 右列门槛 = 配表 unlockLeftIndex（20/30/40 三档，2026-11-05 主人拍板「30级的门槛变成40级」整体+10；语义 = 人物等级）。
+/// 右列门槛 = 配表 unlockLeftIndex（2026-11-19 起可见 13 个节点改 1~13 级逐级开启；语义 = 人物等级）。
 /// 左列 L1-L80（金币，1.5 倍价档）；右列 13 个「天赋石」节点（花石、可升级、互斥）。
 /// 右列数据来源：Assets/Data/Source/Tables/talent_right.csv → Resources/Data/Tables/talent_right.bytes。
 /// 缺表/解析失败时回退到下方 HardcodedRightNodes()，保证天赋界面一定开得起来。
@@ -186,12 +186,20 @@ public static class TalentDefs
     }
 
     /// <summary>
-    /// 【2026-11-05 主人拍板「左边的天赋按玩家升一级开一个」】左列第 N 个节点的解锁人物等级。
-    /// 人物满级 80（LevelSystem.MaxLevel）↔ 左列 80 节点**一一对应**：N 级开第 N 个（1 级只有 L1 可点）。
-    /// 「开局只能点一个」由两层共同保证：1 级只有 L1 可点 + 金币 1.5 倍价（L1=150）。
+    /// 【2026-11-19 主人拍板「三列网格，一行是一级，升一级开一行」】左列第 N 个节点的解锁人物等级。
+    /// 左列排成三列网格：每 3 个节点一行、对应一个人物等级 —— 1 级开第一行(L1~L3)、
+    /// 2 级开第二行(L4~L6)……即解锁等级 = ceil(N/3)。80 节点 → 约 27 行、27 级点满。
+    /// 【2026-11-05 旧口径作废】原「N 级开第 N 个」一一对应已废除；存档/金币/顺序点规则都不变，
+    /// 只把「等级门槛」从每个节点改为每行（同 3 个共享一个等级）。
     /// </summary>
     public static int LeftNodeUnlockLevel(int index1Based)
-        => index1Based <= LevelSystem.MaxLevel ? index1Based : LevelSystem.MaxLevel;
+    {
+        if (index1Based < 1) return 1;
+        int row = (index1Based + LeftPerRow - 1) / LeftPerRow;   // ceil(N / 每行列数)
+        return row <= LevelSystem.MaxLevel ? row : LevelSystem.MaxLevel;
+    }
+    /// <summary>左列网格每行的节点数（三列）。</summary>
+    public const int LeftPerRow = 3;
 
     // ===== 左列查询（保持不变） =====
     public static LeftNode GetLeft(int index1Based)
@@ -266,7 +274,7 @@ public static class TalentDefs
     /// <summary>
     /// 【2026-11-05 主人拍板「右侧天赋改人物等级开启，跟左列取消挂钩」】
     /// 可升上限随**人物等级**线性铺满：cap = 1 + (人物等级 - 门槛) * (maxLevel - 1) / (<see cref="RightCapWindow"/> - 门槛)，
-    /// 向上不超过 maxLevel；未达门槛返回 0。门槛真源 = 配表 unlockLeftIndex（20/30/40，语义 = 人物等级；
+    /// 向上不超过 maxLevel；未达门槛返回 0。门槛真源 = 配表 unlockLeftIndex（2026-11-19 起 1~13 逐级，语义 = 人物等级；
     /// 2026-11-05 主人拍板「30级的门槛变成40级」→ 三档整体 +10）。
     /// <para>例：R_F1（门槛 20 / 满级 5）→ 20级 上限1、28级 上限2、35级 上限3、43级 上限4、50级(满) 上限5；
     /// 门槛 30 的节点（span 20）→ 40级 上限2、50级 满；门槛 40 的节点（span 10）→ 45级 上限2、50级 满。</para>
@@ -323,16 +331,23 @@ public static class TalentDefs
     /// 这批剩下的全部去掉「新」字，入口红点也一起灭。所以判定必须看整批，不能只看单个节点。</para>
     /// 右列行的红色「新」字与天赋入口红点**共用这一个判定**，不要各写一套。
     /// </summary>
+    /// <summary>
+    /// 【2026-11-19 主人拍板】天赋界面隐藏的右列节点 id：流派·物理专精(R_F1) + 流派·魔法专精(R_F2)。
+    /// 只做界面隐藏：表 / 存档 / 属性结算全部保留，老玩家已点的流派效果继续生效。
+    /// 判定集中在这一处，Lists 构建、红点、升级提示统一调用，别在各处散写 id。
+    /// </summary>
+    public static bool IsHiddenRightNode(string id)
+        => id == "R_F1" || id == "R_F2";
+
     public static bool IsNewlyOpen(TalentRightNode node, IDictionary<string, int> talents, int playerLevel)
     {
         if (node == null || talents == null) return false;
+        if (IsHiddenRightNode(node.id)) return false;                        // 【2026-11-19】隐藏节点不算新开通
         if (playerLevel < node.unlockLeftIndex) return false;               // 还没到门槛（人物等级）
         if (GetRightNodeLevel(talents, node.id) > 0) return false;           // 自己已经点了
         if (IsRightNodeMutexLocked(node, talents)) return false;             // 互斥组已选其它
-        // R_DUAL 的额外前置：主流派（R_F1 / R_F2 任一）满 5 级，没满足不算「可点」
-        if (node.id == "R_DUAL"
-            && GetRightNodeLevel(talents, "R_F1") < 5
-            && GetRightNodeLevel(talents, "R_F2") < 5) return false;
+        // 【2026-11-19 主人拍板】R_F1/R_F2 界面隐藏 → R_DUAL 原「主流派满5级」前置改挂等级门槛
+        // （与 R_DUAL 自身 unlockLeftIndex=9（2026-11-19 起） 一致，见上方判断），不再依赖流派节点。
 
         // 同批（同门槛）里只要有一个已经被点 → 整批都不再算「新」
         for (int i = 0; i < RightNodes.Length; i++)
@@ -386,7 +401,7 @@ public static class TalentDefs
         return cap;
     }
 
-    /// <summary>是否解锁第二流派（R_DUAL 点了即 true；其解锁本身要求主流派满 5 级，见 TalentSystem）。</summary>
+    /// <summary>是否解锁技能精通（R_DUAL 点了即 true；2026-11-19 起解锁只挂人物等级门槛，见 TalentSystem）。</summary>
     public static bool IsDualPathUnlocked(IDictionary<string, int> talents) =>
         talents != null && GetRightNodeLevel(talents, "R_DUAL") > 0;
 
@@ -604,7 +619,8 @@ public static class TalentDefs
         string[] romans =
         {
             "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X",
-            "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"
+            "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX",
+            "XXI", "XXII", "XXIII"   // 【2026-11-19 三列网格补 10 节点】group 20~22
         };
         // 【2026-10-18 主人拍板】左列攻击槽**前固定后百分比交叉**：
         // 旧每节点 +3~16 固定、点满 +85 —— 新武器数值（普通 3.6~4.8）下等于白送 20 把武器。
@@ -615,29 +631,32 @@ public static class TalentDefs
         float[] atkPct =
         {
             4f, 5f, 6f, 7f, 8f,                         // VI~X（组 5~9，老档不变）
-            4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f      // XI~XX（组 10~19，每档 +4%）
+            4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f, 4f,      // XI~XX（组 10~19，每档 +4%）
+            4f, 4f, 4f                                   // 组 20~22（2026-11-19 补节点，延续 +4%）
         };
         float[] hp =                                    // 体质：生命（前 10 个老档不变，后 10 个 §2.3 标准档）
         {
             15, 20, 25, 32, 40, 50, 60, 72, 85, 100,
-            105, 115, 125, 140, 155, 175, 195, 220, 245, 275
+            105, 115, 125, 140, 155, 175, 195, 220, 245, 275,
+            305, 340, 380                                // 组 20~22（2026-11-19 补节点，延续递增）
         };
         float[] def =                                   // 防御：物防+魔防各加（前 10 老档，后 10 §2.3）
         {
             2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
-            12, 13, 14, 15, 16, 17, 18, 19, 20, 21
+            12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+            22, 23, 24                                   // 组 20~22（2026-11-19 补节点，延续 +1）
         };
         // 【2026-10-31 主人拍板·轮流版】里程碑加码：每跨 10 个天赋的十年区间里，按 生命→攻击→双防
         // 轮流挑「该区间内最后一个该类型节点」翻倍（整十节点按四槽循环恰好全落攻击槽，主人拍板改三类轮流），
         // 其余节点数值不动。milestoneNode[k] = 第 k 个十年里被翻倍的节点序号（1-based）。
-        int[] milestoneNode = new int[9];
-        for (int k = 1; k <= 8; k++)
+        int[] milestoneNode = new int[10];   // 2026-11-19 扩到 9 个十年（90 节点）
+        for (int k = 1; k <= 9; k++)
         {
             int s = k % 3 == 1 ? 0 : k % 3 == 2 ? 3 : 2;   // 槽位：0体质 3攻击 2防御 → 生命/攻击/双防轮流
             milestoneNode[k] = 10 * k - ((10 * k - 1 - s) % 4);
         }
-        var list = new LeftNode[80];
-        for (int i = 0; i < 80; i++)
+        var list = new LeftNode[90];   // 2026-11-19 三列网格 30 行 × 3 = 90（原 80）
+        for (int i = 0; i < 90; i++)
         {
             int group = i / 4;
             int slot = i % 4;

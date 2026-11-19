@@ -21,7 +21,27 @@ public partial class TalentUI
         v.nameText = go.transform.Find("NameText")?.GetComponent<Text>();
         v.effectText = go.transform.Find("EffectText")?.GetComponent<Text>();
         v.check = go.transform.Find("Check")?.GetComponent<Image>();
-        v.line = go.transform.Find("Line")?.GetComponent<Image>();
+        // 【第15轮·主人预制体】连线拆成两个模板节点：lineheng（横）/ lineshu（竖）。
+        // 代码只绑定，不改几何/贴图（以主人预制体为准）；显隐与亮暗由 RefreshLeft 控制。
+        var linehengTf = go.transform.Find("Lineheng");
+        if (linehengTf != null) v.line = linehengTf.GetComponent<Image>();
+        else Debug.LogError("[TalentUI] 左列模板缺 Lineheng 节点（主人预制体应有），横向连线不显示");
+        var lineshuTf = go.transform.Find("Lineshu");
+        if (lineshuTf != null) v.lineV = lineshuTf.GetComponent<Image>();
+        else Debug.LogError("[TalentUI] 左列模板缺 Lineshu 节点（主人预制体应有），竖向连线不显示");
+        EnsureLeftVerticalLineGeometry(go, v.lineV);
+        // 【2026-11-19 主人拍板】左侧层级标记：只用「LvN」纯文字（太阳图后期主人自己补）。
+        // 每行第一列显示一个：Lv1=L1~L3、Lv2=L4~L6……挂节点左侧外，运行时建树不改预制体。
+        if (index0 % TalentDefs.LeftPerRow == 0)
+        {
+            var tag = CreateText(go.transform, "LevelTag", "Lv" + (index0 / TalentDefs.LeftPerRow + 1),
+                20, new Color(1f, 0.86f, 0.32f, 1f));
+            tag.alignment = TextAnchor.MiddleCenter;
+            // 放格子内左上角（不探出左侧，避免被 ScrollRect 视口裁掉；美术后期替换时也在这个位置）
+            SetAnchored(tag.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(2f, -4f), new Vector2(48f, 24f));
+            v.levelTag = tag;
+        }
         var upgradeTf = go.transform.Find("升级") ?? go.transform.Find("Upgrade");
         if (upgradeTf != null)
         {
@@ -90,6 +110,9 @@ public partial class TalentUI
         // Line (1) 是主人在预制体里手工复制出来的节点；显隐规则见 RefreshOneRightNode。
         v.lineUp = go.transform.Find("Line")?.GetComponent<Image>();
         v.lineDown = go.transform.Find("Line (1)")?.GetComponent<Image>();
+        // 【2026-11-19 自适应】连线/菱形运行时对齐到选项卡片中轴（只改 X）。
+        // Mutex 合并行两张卡并排、轨道另有语义，跳过不动。
+        if (node.type != TalentDefs.RightNodeType.Mutex) EnsureRightLinkAxis(go, v);
         EnsureRightLock(v);
         if (v.titleText != null) v.titleText.text = node.name;
         if (v.costText != null) v.costText.text = "";
@@ -288,5 +311,55 @@ public partial class TalentUI
 
         // 与普通行同口径：锁定行也保持可点，点了给说法（见 OnClickMutexPairRow）
         if (v.button != null) v.button.interactable = true;
+    }
+
+    /// <summary>
+    /// 【2026-11-19 自适应】左列竖线只连「本格图标顶 → 上一行图标底」。
+    /// 预制体里 Lineshu 是按 100 高的预览格子摆的（PosY 90.1 / 高 100），运行时格子被 GridLayoutGroup
+    /// 改成 116 高，原封不动套进来就会一路上穿进上一行图标（表现＝每个图标身上都插着一根线）。
+    /// 这里按运行时格高 LeftNodeH + 行距 LeftGapY 重算一遍 Y 与长度；X、宽度、贴图仍以预制体为准。
+    /// </summary>
+    static void EnsureLeftVerticalLineGeometry(GameObject node, Image lineV)
+    {
+        if (node == null || lineV == null) return;
+        float iconH = 96f;
+        var iconbg = node.transform.Find("Iconbg") as RectTransform;
+        if (iconbg != null && iconbg.sizeDelta.y > 8f) iconH = iconbg.sizeDelta.y;
+        float y0 = LeftNodeH * 0.5f + iconH * 0.5f;                     // 本格图标顶边
+        float y1 = LeftNodeH + LeftGapY + (LeftNodeH - iconH) * 0.5f;   // 上一格图标底边
+        float h = Mathf.Max(4f, y1 - y0);
+        var rt = lineV.rectTransform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, y0);
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, h);
+    }
+
+    /// <summary>
+    /// 【2026-11-19 自适应】右列连线（Line / Line (1)）与菱形对齐到选项卡片的中轴。
+    /// 卡片 Opt_0 是「锚左 + localScale 0.61」，连线是「锚中心」，行宽又由代码钉成 RightRowW；
+    /// 预制体里手调的 X 到了运行时会偏开（2026-11-19 实测：卡片中轴≈行中心 −3.7、连线 +69.2，差 73px）。
+    /// 这里只改 X，Y、长度、贴图、显隐全不动。找不到卡片时退回菱形自身的 X（保持原样）。
+    /// </summary>
+    static void EnsureRightLinkAxis(GameObject row, RightNodeView v)
+    {
+        if (row == null || v == null) return;
+        float x = float.NaN;
+        var opt = row.transform.Find("Opt_0") as RectTransform;
+        if (opt != null && opt.sizeDelta.x > 1f)
+            x = opt.anchoredPosition.x + opt.sizeDelta.x * opt.localScale.x * 0.5f - RightRowW * 0.5f;
+        else if (v.diamond != null)
+            x = v.diamond.rectTransform.anchoredPosition.x;
+        if (float.IsNaN(x)) return;
+        SetRailX(v.lineUp, x);
+        SetRailX(v.lineDown, x);
+        if (v.diamond != null) SetRailX(v.diamond, x);
+    }
+
+    static void SetRailX(Image img, float x)
+    {
+        if (img == null) return;
+        var rt = img.rectTransform;
+        rt.anchoredPosition = new Vector2(x, rt.anchoredPosition.y);
     }
 }

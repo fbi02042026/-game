@@ -613,6 +613,9 @@ public class TownBackpackGrid : MonoBehaviour
         {
             var legacy = data.legacyEquipPool[i];
             if (legacy == null) continue;
+            // T4 按职业过滤：只显示当前职业带出的装备(job==当前职业) + job<0 奖励装备
+            // （冠军武器/商店弓/老档）；被过滤的件直接 continue，不推进 slot，格子保持紧凑。
+            if (!(legacy.job == (int)PlayerJobDefs.GetSelected() || legacy.job < 0)) continue;
             int x = slot % LogicalColumns();
             int y = slot / LogicalColumns();
             var eq = ToEquipInstance(legacy);

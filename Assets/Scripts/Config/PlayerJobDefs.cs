@@ -652,6 +652,40 @@ public static class PlayerJobDefs
                 Debug.LogWarning($"[PlayerJobDefs] 副手模板缺失: id={kit.OffTemplateId}");
         }
 
+        // 【T3 2026-11-19《装备持久化与抽奖递进》】持久装备进战注入（独立段，非主手 if/else 链）：
+        // 设计意图——起步/奖励发装链（冠军武器/暮火之杖/商店弓/起步主手；冠军盾/里程盾/起步副手）完全保持原样；
+        // 本段放在副手盾 if 之后、RecalcAttr 之前无条件执行（守卫仅「池中有无当前职业件」），
+        // 逐件按槽位覆盖对应起步/奖励件——这些都是每局重新生成的实例，被顶掉分解是安全的。
+        // TryEquipDirect 内部已解析槽位（双手武器清主副手、防具按自身 slotType），外层不再重复判槽。
+        // job=-1 的奖励装备不走本路（有专属 branch）；还原失败 LogError 暴露，不静默兜底、不回退旧武器；
+        // countsAsObtain:false 不触发获得 Toast / 二次计账。
+        if (data?.legacyEquipPool != null
+            && data.legacyEquipPool.Exists(d => d != null && d.job == (int)job && d.job >= 0))
+        {
+            int persistentLv = Hero.Instance != null ? Hero.Instance.level : 1;
+            int injectedCount = 0;
+            var persistentPool = data.legacyEquipPool;
+            for (int pi = 0; pi < persistentPool.Count; pi++)
+            {
+                var rec = persistentPool[pi];
+                if (rec == null || rec.job != (int)job || rec.job < 0) continue;
+                var inst = PersistentEquipConverter.FromPersistent(rec);
+                if (inst == null)
+                {
+                    Debug.LogError($"[PlayerJobDefs] 持久装备还原失败（模板缺失/异常）: equipId={rec.equipId}, job={rec.job}，本件跳过（不回退旧武器）");
+                    continue;
+                }
+                // 照职业起步武器口径钳等级：requireLevel 高于英雄等级会被 EquipItem 挡下导致空槽
+                inst.requireLevel = Mathf.Min(inst.requireLevel, Mathf.Max(1, persistentLv));
+                if (bag.TryEquipDirect(inst, countsAsObtain: false))
+                    injectedCount++;
+                else
+                    Debug.LogError($"[PlayerJobDefs] 持久装备开局装备失败: equipId={rec.equipId}, job={rec.job}");
+            }
+            if (injectedCount > 0)
+                Debug.Log($"[PlayerJobDefs] 持久装备进战注入完成: job={job}, 件数={injectedCount}");
+        }
+
         Hero.Instance?.RecalcAttr();
         var costume = Hero.Instance?.costumeManager;
         if (costume != null)

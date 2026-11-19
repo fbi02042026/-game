@@ -55,7 +55,7 @@ public partial class TalentUI
             GlobalToastUI.Show(reason, true);
             return;
         }
-        OpenCostConfirm(picked, pickedLv);
+        OpenCostConfirm(picked, pickedLv, v.root);
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public partial class TalentUI
                 GlobalToastUI.Show(upReason, true);
                 return;
             }
-            OpenCostConfirm(n, lv);
+            OpenCostConfirm(n, lv, v.root);
             return;
         }
         if (lvOther > 0)
@@ -419,51 +419,22 @@ public partial class TalentUI
         }
     }
 
-    // ===== 【2026-10-18 主人拍板】解锁/升级费用确认（2026-10-21 起改走通用弹出 StaminaConfirmPopup）=====
+    // ===== 【2026-10-18 主人拍板】解锁/升级费用确认（2026-10-21 起走通用弹出 StaminaConfirmPopup；
+    // 【2026-11-19 主人拍板】改成左列同款参考图气泡卡——建树与填值在 TalentUI.RightCard.cs，这里只留转发）=====
 
     /// <summary>
-    /// 打开费用确认窗（通用弹出）：让玩家看到「效果 + 需要多少天赋石」。
-    /// 天赋石不足也照样弹（能看到缺口），确定时校验不过再 toast —— 不再「点一下直接弹不够」。
+    /// 打开费用确认窗（参考图气泡卡）：让玩家看到「效果 + 需要多少天赋石」。
+    /// 天赋石不足也照样弹（按钮数量标红看缺口），确定时校验不过再 toast —— 不再「点一下直接弹不够」。
     /// </summary>
-    void OpenCostConfirm(TalentDefs.TalentRightNode node, int fromLevel)
+    void OpenCostConfirm(TalentDefs.TalentRightNode node, int fromLevel, GameObject anchorGo = null)
     {
-        if (node == null) return;
-
-        bool unlock = fromLevel <= 0;
-        int cost = node.costByLevel != null && fromLevel < node.costByLevel.Length ? node.costByLevel[fromLevel] : 0;
-        var data = SaveSystem.Instance?.Data;
-        int have = data?.talentPoints ?? 0;
-        int chosenJob = TalentDefs.GetRightNodeChosenJob(data != null ? data.talents : null, node.id);
-        int effLevel = unlock ? 1 : fromLevel + 1;
-        string eff = node.EffectSummary(effLevel, chosenJob);
-
-        string head = unlock
-            ? "解锁【" + node.name + "】"
-            : "升级【" + node.name + "】  Lv" + fromLevel + " → Lv" + effLevel;
-        string body = head
-            + "\n效果：" + eff
-            + "\n消耗天赋石：" + cost + "\n"
-            + (have >= cost ? "（持有 " + have + "）" : "（持有 " + have + "，天赋石不足）");
-
-        StaminaConfirmPopup.Show("确认消耗", body, unlock ? "确定解锁" : "确定升级", () =>
-        {
-            string reason;
-            bool ok = unlock
-                ? TalentSystem.TryUnlockRightNode(node.id, 0, out reason)
-                : TalentSystem.TryUpgradeRightNode(node.id, out reason);
-            if (!ok)
-            {
-                Debug.Log("[TalentUI] " + reason);
-                GlobalToastUI.Show(reason, true);
-                return;
-            }
-            RefreshAll();
-        });
+        // 调用方手里是行 GameObject（RightNodeView.root），在这里统一转 RectTransform
+        OpenRightCostBubble(node, fromLevel, anchorGo != null ? anchorGo.transform as RectTransform : null);
     }
 
     void CloseCostConfirm()
     {
-        StaminaConfirmPopup.Close();
+        CloseRightCard();
     }
 
     // ===== 任务：洗点确认（2026-10-21 改走通用弹出 StaminaConfirmPopup）=====

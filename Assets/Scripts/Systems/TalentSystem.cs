@@ -114,20 +114,46 @@ public static class TalentSystem
     const string RightUnlockHint = "升级了！右侧有新的天赋可以解锁";
 
     /// <summary>
-    /// 天赋入口红点（**唯一出口**，「天赋图标」与「角色入口」两个 key 一起刷）：
-    /// ① 还有「新开通未点」且**门槛等级高于已看等级**的右列节点
-    ///    （2026-11-11 口径：打开天赋页即记已看，见 TalentUI.Show；人物升级跨新门槛才再亮）；
-    /// ② 【2026-11-14 主人拍板】还有「能升级但未读」的右列节点
-    ///    （判定 = HasUnseenUpgradeableRight，打开天赋页记已读 id 表即灭）。
-    /// 两级引导共用同一状态：主界面「角色」按钮 → 角色界面「天赋」图标，打开天赋页一起灭。
+    /// 【2026-11-19 主人拍板「只要有可解锁的就在角色和天赋图标加红点 每次登录游戏显示一次 玩家打开后关闭
+    /// 注意要在金币天赋石够的情况下」】天赋入口红点（**唯一出口**，「天赋图标」与「角色入口」两个 key 一起刷）：
+    /// · 亮 = 本次登录还没打开过天赋页（TalentDotSeenThisSession=false）且存在「可解锁/可升级且货币够」的天赋；
+    ///   左列金币（CanUnlockLeft）、右列解锁（CanUnlockRightNode）、右列升级（CanUpgradeRightNode，
+    ///   【2026-11-14 拍板】升级也算亮）——三个判定都是唯一口径函数，全部自带货币条件。
+    /// · 玩家打开天赋页（TalentUI.Show）→ TalentDotSeenThisSession=true → 关闭，本次登录内不再亮；
+    ///   下次登录（进程重启，静态清零）重新判定。旧口径（11-11 已看等级 / 11-14 已读 id 表）不再用于入口红点，
+    ///   存档字段与右列行内「新」字逻辑保留不动。
     /// </summary>
+    public static bool TalentDotSeenThisSession = false;   // 本次登录是否已打开过天赋页（进程级，不进存档）
+
     public static void RefreshTalentEntryRedDot(SaveData data)
     {
-        bool on = data != null
-            && (TalentDefs.EntryDotShouldLight(data.talents, data.talentNewSeenLevel)
-                || HasUnseenUpgradeableRight(data));
+        bool on = !TalentDotSeenThisSession && HasAnyAffordableUnlockable(data);
         RedDot.Set(RedDot.Talent, on);
         RedDot.Set(RedDot.Character, on);
+    }
+
+    /// <summary>
+    /// 是否存在「可解锁/可升级且货币够」的天赋（红点判定，2026-11-19 口径）：
+    /// 左列按下一个未解锁节点判（顺序/人物等级/金币）；右列逐节点判未解锁（门槛/互斥/双修前置/天赋石）
+    /// 或已解锁可升级（含天赋石）。只读判定，不改任何状态。
+    /// </summary>
+    public static bool HasAnyAffordableUnlockable(SaveData data)
+    {
+        if (data == null) return false;
+        int unlocked = TalentDefs.LeftUnlockedCount(data.talents);
+        if (CanUnlockLeft(unlocked + 1, out _)) return true;
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var n = TalentDefs.RightNodes[i];
+            if (n == null || string.IsNullOrEmpty(n.id)) continue;
+            if (TalentDefs.IsHiddenRightNode(n.id)) continue;   // 隐藏节点不计入（与旧口径一致）
+            if (TalentDefs.GetRightNodeLevel(data.talents, n.id) <= 0)
+            {
+                if (CanUnlockRightNode(n.id, out _)) return true;
+            }
+            else if (CanUpgradeRightNode(n.id, out _)) return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -143,6 +169,7 @@ public static class TalentSystem
         {
             var n = TalentDefs.RightNodes[i];
             if (n == null || string.IsNullOrEmpty(n.id)) continue;
+            if (TalentDefs.IsHiddenRightNode(n.id)) continue;   // 【2026-11-19】隐藏节点不计入红点/已读表
             if (!CanUpgradeRightNode(n.id, out _)) continue;
             if (sb.Length > 0) sb.Append(',');
             sb.Append(n.id);
@@ -162,6 +189,7 @@ public static class TalentSystem
         {
             var n = TalentDefs.RightNodes[i];
             if (n == null || string.IsNullOrEmpty(n.id)) continue;
+            if (TalentDefs.IsHiddenRightNode(n.id)) continue;   // 【2026-11-19】隐藏节点不计入红点/已读表
             if (!CanUpgradeRightNode(n.id, out _)) continue;
             if (!seen.Contains("," + n.id + ",")) return true;
         }
@@ -172,7 +200,7 @@ public static class TalentSystem
     /// 【2026-11-05 主人拍板「右边天赋达到解锁条件时弹个 toast」】人物升级后由 LevelSystem 调用
     ///（AddStageClearExp / AddDirectExp / AddExpForTown 三个经验入口）：右列门槛（=人物等级）刚跨过的节点
     /// → 弹 toast + 刷入口红点；天赋页开着就顺带播右列开通演出（TalentUI.OnLevelUpFx）。
-    /// 判定口径：已解锁 / 被互斥锁 / R_DUAL 前置没满足的不算「新解锁」。
+    /// 判定口径：已解锁 / 隐藏节点(R_F1/R_F2) 的不算「新解锁」（2026-11-19 R_DUAL 前置已改挂等级门槛）。
     /// </summary>
     public static void NotifyLevelUp(int beforeLevel, int afterLevel)
     {
@@ -185,11 +213,10 @@ public static class TalentSystem
         {
             var node = TalentDefs.RightNodes[i];
             if (node == null || node.unlockLeftIndex <= beforeLevel || node.unlockLeftIndex > afterLevel) continue;
+            if (TalentDefs.IsHiddenRightNode(node.id)) continue;                          // 【2026-11-19】隐藏节点不提示
             if (TalentDefs.GetRightNodeLevel(data.talents, node.id) > 0) continue;      // 已解锁
             if (TalentDefs.IsRightNodeMutexLocked(node, data.talents)) continue;        // 互斥：已选其它流派
-            if (node.id == "R_DUAL"
-                && TalentDefs.GetRightNodeLevel(data.talents, "R_F1") < 5
-                && TalentDefs.GetRightNodeLevel(data.talents, "R_F2") < 5) continue;    // 双修前置没满足
+            // 【2026-11-19 主人拍板】R_DUAL 原「主流派满5级」前置已改挂等级门槛（自身 unlockLeftIndex=9（2026-11-19 起））
             any = true;
         }
 
@@ -242,16 +269,11 @@ public static class TalentSystem
         // 任务4：互斥组已有其它节点则点不了
         if (TalentDefs.IsRightNodeMutexLocked(node, data.talents)) { reason = "互斥：已选其它流派"; return false; }
 
-        // R_DUAL 前置：主流派（R_F1/R_F2）需满 5 级
-        if (node.id == "R_DUAL")
-        {
-            int p1 = TalentDefs.GetRightNodeLevel(data.talents, "R_F1");
-            int p2 = TalentDefs.GetRightNodeLevel(data.talents, "R_F2");
-            if (p1 < 5 && p2 < 5) { reason = "需主流派满 5 级"; return false; }
-        }
+        // 【2026-11-19 主人拍板】R_DUAL 原「主流派满5级」前置已改挂等级门槛
+        //（自身 unlockLeftIndex=9（2026-11-19 起），见下方等级判断）；流派节点已界面隐藏，不再依赖 R_F1/R_F2。
 
         // 【2026-11-05 主人拍板「右侧天赋改人物等级开启，跟左列取消挂钩」】门槛 = 人物等级
-        //（配表 unlockLeftIndex：10/20/30/40，语义由「左列已点数」改为「人物等级」）。
+        //（配表 unlockLeftIndex：2026-11-19 起 1~13 逐级，语义由「左列已点数」改为「人物等级」）。
         if (LevelSystem.CurrentLevel < node.unlockLeftIndex)
         { reason = $"等级达到{node.unlockLeftIndex}级后解锁"; return false; }
 

@@ -1258,6 +1258,23 @@ public static partial class GameConfig
         return v < 1 ? 1 : v;
     }
 
+    /// <summary>
+    /// 难度装备属性系数（困难 +30% / 噩梦 +60%；第十节主人拍板，让困境装备能破局普通卡关；T5 重标锚点时重新标定）。
+    /// 0=普通 1.0f / 1=困难 1.30f / 2=噩梦 1.60f，越界按 clamp 到 0~2。
+    /// </summary>
+    public static float GetDifficultyEquipMul(int difficulty)
+    {
+        const float NormalMul = 1.0f;
+        const float HardMul = 1.30f;
+        const float NightmareMul = 1.60f;
+        switch (Mathf.Clamp(difficulty, 0, 2))
+        {
+            case 1: return HardMul;
+            case 2: return NightmareMul;
+            default: return NormalMul;
+        }
+    }
+
     // —— 替换装备折抽奖币（【2026-10-31 主人拍板「替换掉的道具转换成抽奖币 要整十数根据稀有度和部位来」】）——
     /// <summary>稀有度基础折币（整十）：白10 / 绿20 / 蓝40 / 紫60 / 橙100。下标 = (int)Rarity（1~5）。</summary>
     static readonly int[] ScrapDraftCoinByRarity = { 0, 10, 20, 40, 60, 100 };

@@ -519,7 +519,8 @@ public static class DraftPool
                 for (int attempt = 0; attempt < 5; attempt++)
                 {
                     var one = ConfigManager.Instance.GetRandomEquipInstances(
-                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed, forceAtLeastRare);
+                        1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed, forceAtLeastRare,
+                        BattleManager.InstanceQuiet != null ? BattleManager.InstanceQuiet.BattleDifficulty : 0);
                     if (one == null || one.Count == 0 || one[0] == null) { eq = null; break; }
                     eq = one[0];
                     bool fresh = batchSeen.Add(eq.templateId);

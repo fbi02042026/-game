@@ -19,17 +19,18 @@ public partial class TalentUI
             closeButton.onClick.RemoveAllListeners();
             closeButton.onClick.AddListener(Hide);
         }
+        // 【2026-11-19 主人拍板】重置天赋退场，Footer 原重置按钮位（亮/灰两个态）换成「一键升级」：
+        // 灰态点击同样进 OnClickBuyAll，由里面的拦截原因（金币不够 / 等级不够 / 已点满）给 toast。
+        // 洗点链路（OnClickReset / OpenResetConfirm / TalentSystem.TryRespecRight）保留为死代码，无入口。
         if (resetButton != null)
         {
             resetButton.onClick.RemoveAllListeners();
-            resetButton.onClick.AddListener(OnClickReset);
+            resetButton.onClick.AddListener(OnClickBuyAll);
         }
         if (resetButtonGray != null)
         {
-            // 【2026-11-01 主人要求】灰态重置钮也要有反馈：点它同样走 OnClickReset，
-            // 由里面的拦截原因（右列无可洗天赋 / 遗忘药水不足）给 toast，不再「点了没反应」。
             resetButtonGray.onClick.RemoveAllListeners();
-            resetButtonGray.onClick.AddListener(OnClickReset);
+            resetButtonGray.onClick.AddListener(OnClickBuyAll);
         }
         if (choiceCancelButton != null)
         {
@@ -142,28 +143,20 @@ public partial class TalentUI
         OpenResetConfirm();
     }
 
+    /// <summary>
+    /// 点左列节点：2026-11-19 起先弹「当前→升级后 + 花费」对比卡，确认后才买（见 TalentUI.LeftBuy.cs）。
+    /// 购买执行体已搬到 DoBuyLeft，供对比卡与一键升级共用。
+    /// </summary>
     void OnClickLeft(int index0)
     {
-        if (!TalentSystem.TryUnlockLeft(index0 + 1, out string reason))
-        {
-            Debug.Log("[TalentUI] " + reason);
-            // 2026-10-10 主人反馈「点击购买天赋，没有弹出toast」→ 买不动必须把原因（金币不足等）弹出来
-            GlobalToastUI.Show(reason, true);
-            return;
-        }
-        onLeftUnlockRequested?.Invoke(index0 + 1);
-        RefreshAll();
-        // 买成功也要有反馈，光是节点变色玩家不确定扣没扣钱
-        // 【2026-10-31 主人拍板】toast 不再念「已激活：节点名」，直接报实际属性增益 + 一句情绪价值
-        // 【2026-11-05 拍板】右列与左列解耦 → 左列购买不再触发右列开通演出/提示（改由升级链路 NotifyLevelUp 触发）
-        GlobalToastUI.Show(LeftUnlockToast(index0), true);
+        ConfirmBuyLeft(index0);
     }
 
     /// <summary>
     /// 【2026-10-13 主人拍板】右列跨过门槛时演「暗→亮 + 放大缩小」。
     /// 【2026-11-05 拍板】右列门槛改挂人物等级、与左列解耦 → 本方法改由升级链路触发
     /// （TalentSystem.NotifyLevelUp → OnLevelUpFx，天赋页开着才演），before/after = 升级前后的人物等级。
-    /// 门槛真源 = talent_right.csv 的 unlockLeftIndex（10/20/30/40，语义 = 人物等级）。
+    /// 门槛真源 = talent_right.csv 的 unlockLeftIndex（2026-11-19 起 1~13 逐级，语义 = 人物等级）。
     /// </summary>
     void PlayRightUnlockFx(int before, int after)
     {
@@ -374,7 +367,7 @@ public partial class TalentUI
                     GlobalToastUI.Show(lockReason, true);
                     return;
                 }
-                OpenCostConfirm(node, 0);   // 不足：照样弹窗看缺口，确定时校验不过再 toast
+                OpenCostConfirm(node, 0, v.root);   // 不足：照样弹窗看缺口，确定时校验不过再 toast
                 return;
             }
             // 能解锁：JobChoice 先弹职业选择（保持原流程，确认时才扣费）；其余先弹费用确认
@@ -383,7 +376,7 @@ public partial class TalentUI
                 OpenRightJobChoice(node);
                 return;
             }
-            OpenCostConfirm(node, 0);
+            OpenCostConfirm(node, 0, v.root);
         }
         else
         {
@@ -393,7 +386,7 @@ public partial class TalentUI
                 GlobalToastUI.Show(upReason, true);
                 return;
             }
-            OpenCostConfirm(node, level);
+            OpenCostConfirm(node, level, v.root);
         }
     }
 

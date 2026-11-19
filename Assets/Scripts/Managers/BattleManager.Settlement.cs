@@ -2197,7 +2197,7 @@ public partial class BattleManager
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = (DropsEquipment && ConfigManager.Instance != null)
-            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS, false, ch)
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS, false, ch, difficulty: BattleDifficulty)
             : new List<EquipInstance>();
 
         if (rewards != null && rewards.Count > 3)

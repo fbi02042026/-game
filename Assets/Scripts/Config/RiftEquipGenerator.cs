@@ -20,22 +20,25 @@ public static class RiftEquipGenerator
     /// 【2026-10-24 主人拍板】保底稀有：true 时 roll 出「普通（白）」升档为「稀有（RARE）」，
     /// 引导局（fixedForTutorial）不生效。签名末尾默认参数，既有调用点零改动。
     /// </param>
-    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false)
+    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0)
     {
         RiftEquipTables.EnsureLoaded();
         var list = new List<EquipInstance>();
         PlayerJobId job = PlayerJobDefs.GetSelected();
         for (int i = 0; i < count; i++)
         {
-            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial, forceAtLeastRare);
+            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial, forceAtLeastRare, difficulty);
             if (inst != null) list.Add(inst);
         }
         return list;
     }
 
-    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false)
+    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0)
     {
         RiftEquipTables.EnsureLoaded();
+        // 【2026-11-19 R2】难度装备系数：困难+15%/噩梦+35%温和档；只算一次，引导恒 1.0（确定性不破）。
+        // 乘点严格放在 LiftToStarterFloor 保底平移之后，低半段才不会被 floor 吃掉（假增强）。
+        float difficultyMul = fixedForTutorial ? 1.0f : GameConfig.GetDifficultyEquipMul(difficulty);
         // 【2026-11-13 主人拍板】初级装备下限：采集一次本局开局发的初始武器 / 盾，
         // 生成主属性与词条时逐条钳制（详见下方 StarterFloor 注释）。
         var starter = CaptureStarterBaseline(job, fixedForTutorial);
@@ -137,6 +140,7 @@ public static class RiftEquipGenerator
             ? tplAtk * chapterGrowth                                      // anchorRoll 下限恒 1.0
             : RolledMin(main, rarity.Id, rarity.BaseMul, chapterGrowth);
         mainVal = LiftToStarterFloor(mainVal, mainRolledMin, mainFloor);
+        mainVal *= difficultyMul;   // 【2026-11-19 R2】难度系数乘在保底平移之后（先 floor 再乘）
         if (enemyAnchored)
             Debug.Log($"[EQUIP-FLOOR] ch={chapter} 敌人均值={enemyAvg:F2} 档={rarity.Id} " +
                       $"区间=[{tierLo:F2},{tierHi:F2}]×A 最终={mainVal:F2} 初始基准={starter.Attack:F2}");
@@ -162,6 +166,7 @@ public static class RiftEquipGenerator
             // ApplyDropBonus 对非速率 / 非射程词条 +attrBonus；理论最小值同步加，避免多抬一次
             if (attrBonus != 0f && !IsRateAttr(id) && id != "RANGE") affixMin += attrBonus;
             v = LiftToStarterFloor(v, affixMin, affixFloor);
+            v *= difficultyMul;   // 【2026-11-19 R2】每条词条同样乘在保底平移之后
             if (TryMapAttr(id, v, job, out var bonus))
                 attrs.Add(bonus);
         }

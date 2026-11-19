@@ -120,6 +120,9 @@ public partial class BattleManager
         // run 三件套回第一章存档基线、tempBuffs 只按引用摘掉本关那一条（石像赐福等整局 buff 不动）。
         // 必须放在下面读取 heroMaxHp 之前，否则进关回血还会按上一关加过属性的上限算。
         RevertBossStageBlessing();
+        // 【战斗白夜天气 T5】本关天气 debuff 挂摘（BattleManager.WeatherBuff.cs，独立引用字段）：
+        // 订阅 BattleAtmosphere.OnChanged，与下方 T2 的 ApplyForStage 同步；同时装配 T3/T6 表现控制器（懒创建，随场景销毁）。
+        BindWeatherBuffToAtmosphere();
         ResetMpForNewStage();
         HeroThunderUltimate.Instance?.ResetForBattle();
         // 2026-11-13 职业自带技能：每关重新送 30% 起步槽，攒槽不跨关继承。
@@ -164,6 +167,19 @@ public partial class BattleManager
 
         // 触发章节背景切换
         SwitchBattleBackground(CurrentChapter);
+
+        // 【2026-11-19 战斗昼夜天气 T2】按章节解析一次相位/天气，引导局强制白日晴（不受表影响）。
+        {
+            DayPhase phase = DayPhase.Day;
+            WeatherType weather = WeatherType.Clear;
+            if (Mode == null || Mode.Id != BattleModeId.Tutorial)
+            {
+                phase = ChapterThemeMapTable.GetAmbience(CurrentChapter);
+                weather = ChapterThemeMapTable.GetWeather(CurrentChapter);
+            }
+            if (BattleAtmosphere.Instance != null)
+                BattleAtmosphere.Instance.ApplyForStage(phase, weather);
+        }
 
         // 按关卡类型切 BGM（Loading 中会记 pending，结束后再播）。
         // 【2026-10-31 主人拍板】竞技场对战与首领/精英同用 bgm_boss（新曲「boss战」）；普通关维持 bgm_battle。

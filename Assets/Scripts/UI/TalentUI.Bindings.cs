@@ -52,10 +52,11 @@ public partial class TalentUI
         resetButton = transform.Find("Panel/Footer/ResetButton")?.GetComponent<Button>();
         resetButtonGray = transform.Find("Panel/Footer/ResetButton灰")?.GetComponent<Button>()
                           ?? transform.Find("Panel/Footer/ResetButtonGray")?.GetComponent<Button>();
-        // 【2026-10-27 主人新增节点】Footer/Icon/数量：遗忘药水持有数（Text，预制体静态 "X0"），RefreshResetButton 写值
-        resetPotionCountText = FindTxt("Panel/Footer/Icon/数量");
-        if (resetPotionCountText == null)
-            Debug.LogError("[TalentUI] 找不到遗忘药水计数节点 Panel/Footer/Icon/数量，重置按钮旁的持有数不显示");
+        // 【2026-11-19 主人拍板】重置天赋退场：Footer/icon 药水计数容器已在预制体隐藏（m_IsActive 0），
+        // 找不到属预期，不再报错；RefreshResetButton 里的补绑写值保留为无害兜底。
+        // （注：预制体节点实际名是小写 icon，历史路径 "Icon" 一直匹配不上——两个路径都兜。）
+        resetPotionCountText = FindTxt("Panel/Footer/Icon/数量")
+                               ?? FindTxt("Panel/Footer/icon/数量");
 
         choicePopup = transform.Find("ChoicePopup")?.gameObject;
         choiceTitleText = FindTxt("ChoicePopup/Title")

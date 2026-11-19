@@ -10,6 +10,9 @@ using UnityEngine.UI;
 public partial class TalentUI
 {
 
+    /// <summary>左列连线暗态颜色（不改主人贴图，只压亮度表达未点亮）。</summary>
+    static readonly Color NodeLinkOffTint = new Color(0.55f, 0.55f, 0.55f, 1f);
+
     /// <summary>刷新货币、节点状态、底部加成（读档后可再调）</summary>
     public void RefreshAll()
     {
@@ -55,7 +58,8 @@ public partial class TalentUI
             bool locked = !on && !can;
 
             if (v.nameText != null) v.nameText.text = def.name;
-            if (v.effectText != null) v.effectText.text = def.effect.display;
+            // 【2026-11-19】数值角标：只显示数值（+15 / +4%），不再整句「生命 +15」
+            if (v.effectText != null) v.effectText.text = ValueBadgeOf(def.effect.display);
             if (v.icon != null)
             {
                 var sp = TalentIcons.GetLeftAttr(i % 4);
@@ -87,13 +91,25 @@ public partial class TalentUI
             // 左列行右缘超出视口被 Mask 裁（左内边距 51 + 行宽 258.6 = 309.6 > 视口 302），
             // 默认贴角 (-12,-12) 的红点右侧约 11px 会被裁掉 —— 左列红点内收到 (-26,-12)，
             // 右缘 299 距裁切线留 3px。右列行居中不越界，仍走默认贴角。
-            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-26f, -12f));
+            // 【2026-11-19 正方形格子】红点贴图标右上角（图标居中半径48、格子半宽58 → 右上角内缩约10）。
+            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-12f, -12f));
+            // 【第15轮·主人拍板】竖向不再只连 S 形折返端：每列上下相邻节点都直连（上下之间都要
+            // 看到连线），顶行上方没有节点才藏；横线仍只连左邻居（col 0 不画）。
+            int col = i % TalentDefs.LeftPerRow;
+            bool hasNodeAbove = i + TalentDefs.LeftPerRow < _leftViews.Count;
             if (v.line != null)
             {
-                // 最底 L1（index 0）不画向下连接线；其余连线
-                bool showLine = i > 0;
-                v.line.gameObject.SetActive(showLine);
-                if (showLine) ApplySprite(v.line, on ? sprLeftLinkOn : sprLeftLinkOff, false);
+                // 横线画在节点左侧：col 1/2 显示连左邻居，col 0 不画。
+                bool showH = col > 0;
+                v.line.gameObject.SetActive(showH);
+                if (showH) v.line.color = on ? Color.white : NodeLinkOffTint;
+            }
+            if (v.lineV != null)
+            {
+                // 竖线每列直连上一行同列（几何由主人预制体定，长度须贯穿行距 24）。
+                bool showV = hasNodeAbove;
+                v.lineV.gameObject.SetActive(showV);
+                if (showV) v.lineV.color = on ? Color.white : NodeLinkOffTint;
             }
         }
 
@@ -232,36 +248,37 @@ public partial class TalentUI
         if (lockSp != null) ApplySprite(img, lockSp, true);
     }
 
+    /// <summary>
+    /// 【2026-11-19 主人拍板】重置天赋退场，Footer 重置按钮位换成「一键升级」，本函数改为刷一键升级的亮/灰：
+    /// 亮 = 能买下一个左列天赋（CanUnlockLeft 已含顺序 / 人物等级 / 金币三重口径）；灰 = 买不动，仍可点，
+    /// 点了走 OnClickBuyAll 弹具体原因（金币不够 / 等级不够 / 已点满）。函数名保留（调用点只有 RefreshAll）。
+    /// 药水计数节点（Footer/icon）随重置退场已在预制体隐藏，补绑写值降级为无害兜底（找不到不报错）。
+    /// </summary>
     void RefreshResetButton()
     {
-        // 【2026-10-27 主人拍板】重置按钮亮/灰 = 药水够不够**下一次**消耗（阶梯：第1-3次×1、4-6次×2、第7次起×3）：
-        // 够 → 亮图「ResetButton」可点；不够 → 显示预制体「ResetButton灰」（灰图路径加载补真图）。
-        // 原口径（10-21「没药水不堵死按钮，点了告诉你去哪买」）作废；「去哪买」说明在里程商店条目里。
         var data = SaveSystem.Instance?.Data;
-        int potionHave = data != null ? data.TownBagCount(TalentSystem.ItemForgetPotion) : 0;
-
-        // 药水计数（主人手摆节点 Footer/Icon/数量）：×N。
-        // 新字段在旧序列化 prefab 上为空（panelImage 已序列化时 Awake 跳过 AutoBind）→ 刷新时按名补绑一次。
         if (resetPotionCountText == null)
-            resetPotionCountText = FindTxt("Panel/Footer/Icon/数量");
+            resetPotionCountText = FindTxt("Panel/Footer/Icon/数量")
+                                   ?? FindTxt("Panel/Footer/icon/数量");
         if (resetPotionCountText != null)
-            resetPotionCountText.text = "×" + potionHave;
+            resetPotionCountText.text = "×" + (data != null ? data.TownBagCount(TalentSystem.ItemForgetPotion) : 0);
 
-        bool canReset = TalentSystem.CanReset(out _) && TalentSystem.HasForgetPotion(out _);
+        var talents = data != null ? data.talents : null;
+        int unlocked = TalentDefs.LeftUnlockedCount(talents);
+        bool canBuy = unlocked < TalentDefs.Left.Length
+                      && TalentSystem.CanUnlockLeft(unlocked + 1, out _);
         if (resetButton != null)
         {
-            resetButton.gameObject.SetActive(canReset);
-            resetButton.interactable = canReset;
+            resetButton.gameObject.SetActive(canBuy);
+            resetButton.interactable = canBuy;
         }
         if (resetButtonGray != null)
         {
-            resetButtonGray.gameObject.SetActive(!canReset);
-            // 【2026-11-01 主人要求】灰态也要可点：点了走 OnClickReset 弹原因
-            //（右列暂无可洗天赋 / 遗忘药水不足的人设 toast），不再禁用按钮让玩家以为没反应。
+            resetButtonGray.gameObject.SetActive(!canBuy);
             resetButtonGray.interactable = true;
             // 预制体 ResetButton灰 的 sprite 引用悬空（guid 全库无 meta，AGENTS.md §2.3）：
             // 按路径加载补真图（与主界面名牌 Icon 同一口径，不是复制资源兜底）；缺图报错不静默。
-            if (!canReset)
+            if (!canBuy)
             {
                 var img = resetButtonGray.GetComponent<Image>();
                 var graySp = Resources.Load<Sprite>("UI/Art/Talent/重置天赋灰");
@@ -271,7 +288,7 @@ public partial class TalentUI
                     img.color = Color.white;
                 }
                 else
-                    Debug.LogError("[TalentUI] 重置天赋灰.png 取不到（应在 Resources/UI/Art/Talent/），灰态按钮没图（不兜底）");
+                    Debug.LogError("[TalentUI] 重置天赋灰.png 取不到（应在 Resources/UI/Art/Talent/），一键升级灰态没图（不兜底）");
             }
         }
     }

@@ -32,7 +32,8 @@ public partial class TalentUI
         if (rightExtraRowTemplate != null) rightExtraRowTemplate.SetActive(false);
 
         // 列表只用 LayoutGroup 排，禁止手写改每个框的坐标/宽高
-        EnsureScrollContentLayout(leftContent, 4f);    // 【2026-10-14 主人拍板】左列天赋条缩小，行距 8 → 4
+        // 【2026-11-19 三列网格】左列改 GridLayoutGroup 固定 3 列（原单列 VerticalLayoutGroup）；右列不动。
+        EnsureGridContentLayout(leftContent, LeftGridColumns, LeftNodeW, LeftNodeH, LeftGapX, LeftGapY);   // 【第15轮·主人拍板】列距 8 不变，行距 8→24（上下拉开 3 倍）
         EnsureScrollContentLayout(rightContent, 8f);   // 右列不动
 
         for (int i = 0; i < TalentDefs.Left.Length; i++)
@@ -54,6 +55,9 @@ public partial class TalentUI
         for (int i = 0; i < TalentDefs.RightNodes.Length; )
         {
             var node = TalentDefs.RightNodes[i];
+            // 【2026-11-19 主人拍板】界面隐藏 R_F1/R_F2（流派二选一）：不生成行，右列拉成一条直线。
+            // 数据/存档保留；两个 Mutex 节点都不生成，合并行逻辑自然不再触发。
+            if (TalentDefs.IsHiddenRightNode(node.id)) { i += 1; continue; }
             var pair2 = i + 1 < TalentDefs.RightNodes.Length ? TalentDefs.RightNodes[i + 1] : null;
             bool merged = pair2 != null
                 && node.type == TalentDefs.RightNodeType.Mutex
@@ -85,15 +89,41 @@ public partial class TalentUI
         LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
-        // 以预制体表现为准：左列模板的序号/图标按预制体探出卡片左界，让出同量空间防被视口裁
-        FitLeftContentToPrefabOverhang(leftContent, _leftViews);
+        // 【2026-11-19 三列网格】左探出适配是单列时代产物，Grid 居中排版下跳过（否则会把 grid 强改左对齐）。
 
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
-        // 左右栏不再同步（2026-10-13 主人拍板「分开动」）—— 各自独立滚动，别再加回同步。
+        // 【2026-11-19 主人拍板】恢复左右双向滚动同步（覆盖 10-13「分开动」口径）。
+        WireScrollSync();
 
         _listsBuilt = true;
         WireClicks();
+    }
+
+    /// <summary>
+    /// 【2026-11-19 三列网格】左列 Content 用 GridLayoutGroup 固定列数排布（替代单列 VerticalLayoutGroup）。
+    /// 节点尺寸取 cell 固定值；若 content 已有 VerticalLayoutGroup 先移除（旧存档/旧预制体残留），避免两套 Layout 冲突。
+    /// </summary>
+    static void EnsureGridContentLayout(RectTransform content, int columns, float cellW, float cellH, float spacingX, float spacingY)
+    {
+        if (content == null) return;
+        var oldV = content.GetComponent<VerticalLayoutGroup>();
+        if (oldV != null) Destroy(oldV);
+        var grid = content.GetComponent<GridLayoutGroup>();
+        if (grid == null) grid = content.gameObject.AddComponent<GridLayoutGroup>();
+        grid.padding = new RectOffset(0, 0, 4, 4);
+        grid.spacing = new Vector2(spacingX, spacingY);
+        grid.cellSize = new Vector2(cellW, cellH);
+        grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        grid.constraintCount = Mathf.Max(1, columns);
+        grid.startCorner = GridLayoutGroup.Corner.LowerLeft;   // 【2026-11-19】L1 在最下，向上一行行开
+        grid.startAxis = GridLayoutGroup.Axis.Horizontal;
+        grid.childAlignment = TextAnchor.UpperCenter;
+
+        var fitter = content.GetComponent<ContentSizeFitter>();
+        if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
     }
 
     /// <summary>Content 用 VerticalLayoutGroup 排布；不拉伸子项宽高。spacing 由调用方按列给（左右列可不同）。</summary>
@@ -212,10 +242,54 @@ public partial class TalentUI
         scroll.verticalNormalizedPosition = 0f;
     }
 
-    // 【2026-10-13 主人拍板】「这个天赋左侧和右侧分开动吧 别一起动了」→ 删除左右栏滚动同步：
-    // 原 WireScrollSync / OnLeftScroll / OnRightScroll / _scrollSyncing（把两栏位置互相镜像）整条删掉，
-    // 两栏各滑各的。各自起始位置仍由 WireScroll 设成 0（滚到底 = 最先解锁的在视野底部）。
-    // ⚠ 别再为了「对齐」把两栏重新锁在一起。
+    // 【2026-11-19 主人拍板】左右栏双向滚动同步：滑一边另一边跟着动。
+    // _scrollSyncing 防回调死循环；【第15轮改】按「滚动像素量」1:1 对齐——两栏内容高度不同，
+    // 直接同步 normalized 会让两边速度/深浅对不上；改成像素量相同、各自到头后夹住。
+    void WireScrollSync()
+    {
+        if (leftScroll != null)
+        {
+            leftScroll.onValueChanged.RemoveAllListeners();
+            leftScroll.onValueChanged.AddListener(OnLeftScrolled);
+        }
+        if (rightScroll != null)
+        {
+            rightScroll.onValueChanged.RemoveAllListeners();
+            rightScroll.onValueChanged.AddListener(OnRightScrolled);
+        }
+    }
+
+    void OnLeftScrolled(Vector2 v)
+    {
+        if (_scrollSyncing || rightScroll == null) return;
+        float rMax = ScrollMaxOffset(rightScroll, rightContent);
+        if (rMax <= 1f) return;
+        float pix = (1f - Mathf.Clamp01(v.y)) * ScrollMaxOffset(leftScroll, leftContent);
+        _scrollSyncing = true;
+        rightScroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(pix / rMax);
+        _scrollSyncing = false;
+    }
+
+    void OnRightScrolled(Vector2 v)
+    {
+        if (_scrollSyncing || leftScroll == null) return;
+        float lMax = ScrollMaxOffset(leftScroll, leftContent);
+        if (lMax <= 1f) return;
+        float pix = (1f - Mathf.Clamp01(v.y)) * ScrollMaxOffset(rightScroll, rightContent);
+        _scrollSyncing = true;
+        leftScroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(pix / lMax);
+        _scrollSyncing = false;
+    }
+    bool _scrollSyncing;
+
+    /// <summary>该滚动区最大像素位移 = 内容高 − 视口高（视口取不到回退 content 父节点）。</summary>
+    static float ScrollMaxOffset(ScrollRect scroll, RectTransform content)
+    {
+        if (scroll == null || content == null) return 0f;
+        var vp = scroll.viewport != null ? scroll.viewport : content.parent as RectTransform;
+        if (vp == null) return 0f;
+        return Mathf.Max(0f, content.rect.height - vp.rect.height);
+    }
 
     /// <summary>右列缺 Lock 时按手做模板补一个右下角锁（不改已有坐标）。</summary>
     void EnsureRightLock(RightNodeView v)

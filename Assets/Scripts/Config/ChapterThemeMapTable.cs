@@ -10,6 +10,8 @@ public static class ChapterThemeMapTable
         public string folderName;
         public string mapName;
         public string bgFolder;
+        public string ambience;
+        public string weather;
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -46,7 +48,9 @@ public static class ChapterThemeMapTable
                 monsterChapter = monsterChapter,
                 folderName = c[2],
                 mapName = c.Length > 3 ? c[3] : "",
-                bgFolder = c.Length > 4 && !string.IsNullOrEmpty(c[4]) ? c[4] : c[2]
+                bgFolder = c.Length > 4 && !string.IsNullOrEmpty(c[4]) ? c[4] : c[2],
+                ambience = c.Length > 5 ? c[5] : "",
+                weather = c.Length > 6 ? c[6] : ""
             });
         }
         Debug.Log($"[ChapterThemeMap] 已加载 {_rows.Count} 条");
@@ -96,5 +100,21 @@ public static class ChapterThemeMapTable
             return row.folderName;
         int idx = Mathf.Clamp(gameChapter - 1, 0, GameConfig.ChapterMonsterFolders.Length - 1);
         return GameConfig.ChapterMonsterFolders[idx];
+    }
+
+    public static DayPhase GetAmbience(int gameChapter)
+    {
+        if (TryGet(gameChapter, out var row)
+            && System.Enum.TryParse<DayPhase>(row.ambience, true, out var phase))
+            return phase;
+        return DayPhase.Day;
+    }
+
+    public static WeatherType GetWeather(int gameChapter)
+    {
+        if (TryGet(gameChapter, out var row)
+            && System.Enum.TryParse<WeatherType>(row.weather, true, out var weather))
+            return weather;
+        return WeatherType.Clear;
     }
 }
