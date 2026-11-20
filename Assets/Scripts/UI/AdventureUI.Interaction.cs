@@ -837,17 +837,28 @@ public partial class AdventureUI
 
         TutorialHintUI.Ensure().Hide();
 
-        // 【2026-11-15】把本次真实消耗传给职业弹窗：点进战斗按钮当帧就真扣体力，顶条数字当场变。
-        var opts = tutorialRun
-            ? new PlayerJobSelectUI.Options
+        // 【2026-11-20 主人拍板「起名后选定职业，进战斗不用再选职业」】
+        // 进本不再弹 PlayerJobSelectUI：职业真源 = SaveData.selectedPlayerJobId（起名后首次定 / 角色页换职业写）。
+        // BattleManager 进战时 ApplyForBattle 按 GetSelected 发武器，无需在进本前再 SetSelected。
+        // 体力预扣从弹窗确认搬到这里（点进战斗按钮当帧就扣、顶条当场变）：
+        //  裂隙走 EndlessRiftRules.PrechargeStamina，主线/活动走 StaminaSystem.PrechargeForEnter；
+        //  进本由 EnterAfterJobSelect 的 TryConsumeEnter / TrySpendForAdventure 消费标志，绝不重复扣。
+        //  取消 / 中断由各自 Refund 幂等退还（AskEndlessStartChoice 弹保存点期间也保持预扣，选退出才退）。
+        if (endless)
+        {
+            if (!EndlessRiftRules.PrechargeStamina()) return;
+            AskEndlessStartChoice(EnterAfterJobSelect);
+        }
+        else
+        {
+            if (!StaminaSystem.PrechargeForEnter(enterCost))
             {
-                TutorialForceSwordFirst = true,
-                RequireSwordShield = true,
-                EnterStaminaCost = enterCost
+                ShowStaminaLackPopup(enterCost);
+                return;
             }
-            : new PlayerJobSelectUI.Options { EnterStaminaCost = enterCost };
-
-        // 先选职业，确认「进入裂隙」再扣体力进场景（引导也只在此弹一次）
+            EnterAfterJobSelect();
+        }
+        // 进本主流程（原先由职业弹窗确认后回调进来，2026-11-20 起由上方直接调用）。
         void EnterAfterJobSelect()
         {
             // 进本标记统一重设（2026-10-28）：先全清再各自立标记，防上一次残留污染（如礼物本残留误判羁绊本）
@@ -909,18 +920,9 @@ public partial class AdventureUI
             GameSceneManager.Instance?.LoadBattleScene();
         }
 
-        // 【2026-11-14 主人拍板「无限裂隙还是要选职业」】作废 10-18「裂隙不弹职业选择」旧口径：
-        // 裂隙与主线一样先弹职业三选一，选完再问「是否返回上回保存点」，最后才扣体力进场景。
-        // ⚠ 顺序不可反：AskEndlessStartChoice 弹窗期间会把 PendingEndlessRift 置 false
-        //（EndlessReset.cs:107），若先问保存点，职业选择里的体力检查/飘字会误用主线的 5 点
-        //（裂隙实际 15 点，StaminaSystem.ENDLESS_RIFT_COST）。
-        // 【2026-11-02 主人拍板】保存点确认属于**进本入口**，不是死亡当场
-        //（死亡当场只有「返回」一条路，见 BattleManager.CanOfferRevive）；
-        // 「从头开始」不再是本弹窗的选项，改由无限页右下角的重置徽章负责（每周 1 次）。
-        if (endless)
-            PlayerJobSelectUI.Show(() => AskEndlessStartChoice(EnterAfterJobSelect), opts);
-        else
-            PlayerJobSelectUI.Show(EnterAfterJobSelect, opts);
+        // 【2026-11-20】保存点确认属于进本入口（不是死亡当场）：裂隙进本先问「是否返回上回保存点」
+        // 再走 EnterAfterJobSelect；「从头开始」由无限页右下角重置徽章负责（每周 1 次）。
+        // 旧的「进本前弹职业三选一」已下线（职业改起名后首次定 / 角色页换职业），调用见上方 TryEnterBattle。
     }
 
     /// <summary>

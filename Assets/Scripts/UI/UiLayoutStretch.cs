@@ -126,6 +126,26 @@ public static class UiLayoutStretch
         ApplyEnvelopeCenter(rt, aspectRatio);
     }
 
+    /// <summary>片头视频 RawImage 专用：宽度撑满父级、高度按视频比例，屏幕更瘦长时上下留黑边、不裁左右。</summary>
+    public static void ApplyFitWidthRawImage(RectTransform rt, float aspectRatio)
+    {
+        if (rt == null) return;
+        if (aspectRatio < 0.01f)
+            aspectRatio = GameConfig.DESIGN_WIDTH / GameConfig.DESIGN_HEIGHT;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = Vector2.zero;
+        var parent = rt.parent as RectTransform;
+        float pw = parent != null ? parent.rect.width : GameConfig.DESIGN_WIDTH;
+        if (pw < 1f) pw = GameConfig.DESIGN_WIDTH;
+        rt.sizeDelta = new Vector2(pw, pw / aspectRatio);
+        var fitter = rt.GetComponent<AspectRatioFitter>();
+        if (fitter == null) fitter = rt.gameObject.AddComponent<AspectRatioFitter>();
+        fitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
+        fitter.aspectRatio = Mathf.Max(0.01f, aspectRatio);
+    }
+
     /// <summary>中心锚点铺满父级再 EnvelopeParent。</summary>
     public static void ApplyEnvelopeCenter(RectTransform rt, float aspectRatio)
     {

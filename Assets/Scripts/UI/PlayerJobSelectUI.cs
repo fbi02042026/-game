@@ -20,8 +20,14 @@ public class PlayerJobSelectUI : MonoBehaviour
     /// <summary>选职界面当前是否开着（FirstRunGuide 复弹气泡的闸门：弹窗开着时不许把气泡弹回屏上）。</summary>
     public static bool IsOpen { get; private set; }
 
+    /// <summary>【2026-11-20 主人拍板】职业弹窗双模式。默认 EnterBattle = 旧进本选职业（进本已改为不再弹，保留兼容不删）。
+    /// FirstFree = 起名后首次免费定职业；ChangeJob = 角色页钻石换职业（走 DiamondSpendGate + TryChangeJob）。</summary>
+    public enum PickMode { EnterBattle, FirstFree, ChangeJob }
+
     public struct Options
     {
+        /// <summary>模式，默认 EnterBattle（旧路径全兼容）。</summary>
+        public PickMode Mode;
         public bool TutorialForceSwordFirst;
         public bool RequireSwordShield;
         /// <summary>进入按钮文案；空 = 默认「进入裂隙」（冒险）。对战入口传「挑战」。
@@ -53,6 +59,13 @@ public class PlayerJobSelectUI : MonoBehaviour
     }
 
     Action _onEnterRift;
+    /// <summary>【2026-11-20】非进本模式（首次定职 / 换职业）选中后的回调，参数是选中的职业。</summary>
+    Action<PlayerJobId> _onPicked;
+    /// <summary>【2026-11-20 拍板 / 11-21 修正】首次定职：每个职业首次被选中时各回调一次（弹该职业介绍），
+    /// 同一职业重复点不再弹；换选没弹过的职业照样弹。仅 FirstFree 模式触发。</summary>
+    Action<PlayerJobId> _onFirstSelect;
+    /// <summary>【2026-11-21 主人拍板】已弹过介绍的职业集合：每个职业各一次，Open 时清空。</summary>
+    readonly HashSet<PlayerJobId> _introShownJobs = new HashSet<PlayerJobId>();
     Options _opts;
     GameObject _root;
     Button _refreshBtn;
@@ -73,6 +86,32 @@ public class PlayerJobSelectUI : MonoBehaviour
     public static void Show(Action onEnterRift, Options opts = default)
     {
         Ensure().Open(onEnterRift, opts);
+    }
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】起名后首次免费定职业：选中即 SetSelected（唯一职业真源），不扣钻石、不进本。
+    /// 用于引导剧情起名之后，让玩家自己选职业（不再强制剑盾），并告知后期可换。
+    /// </summary>
+    public static void ShowFirstPick(Action<PlayerJobId> onPicked, Action<PlayerJobId> onFirstSelect = null)
+    {
+        Ensure().Open(null, new Options
+        {
+            Mode = PickMode.FirstFree,
+            EnterLabel = "确定职业",
+        }, onPicked, onFirstSelect);
+    }
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】角色页「切换职业」：选中后走钻石二次确认门 → TryChangeJob
+    /// （扣 500 钻 + 清右列退 80% + 切真源）。取消/失败弹窗不关，成功由 TryChangeJob 内部刷新。
+    /// </summary>
+    public static void ShowChangeJob(Action<PlayerJobId> onPicked)
+    {
+        Ensure().Open(null, new Options
+        {
+            Mode = PickMode.ChangeJob,
+            EnterLabel = "确认转职",
+        }, onPicked);
     }
 
     static PlayerJobSelectUI Ensure()
@@ -128,12 +167,15 @@ public class PlayerJobSelectUI : MonoBehaviour
         GameFonts.ApplyToHierarchy(transform);
     }
 
-    void Open(Action onEnterRift, Options opts)
+    void Open(Action onEnterRift, Options opts, Action<PlayerJobId> onPicked = null, Action<PlayerJobId> onFirstSelect = null)
     {
         // 【2026-11-15】上次进本流程若中断（没走到消费标志），预扣的体力在这里对账退还，幂等。
         EndlessRiftRules.RefundPrechargedStamina();
         StaminaSystem.RefundEnterPrecharge();
         _onEnterRift = onEnterRift;
+        _onPicked = onPicked;
+        _onFirstSelect = onFirstSelect;
+        _introShownJobs.Clear();   // 【2026-11-21】每次开界面重置「每职业各弹一次」记录
         _opts = opts;
         _selected = null;
         _refreshUsed = false;
@@ -164,7 +206,8 @@ public class PlayerJobSelectUI : MonoBehaviour
 
         // 【2026-10-18 主人拍板】默认勾选上次职业：每次出战都重新三选一再点「进入裂隙」太重复，
         // 非引导局自动选中存档里的上次职业，玩家直接点「进入裂隙」就行；引导局不动（必须亲手选剑盾）。
-        if (!opts.TutorialForceSwordFirst)
+        // 【2026-11-20】首次定职 / 换职业两种新模式不自动勾选：换职业选中当前职业没有意义，必须玩家自己挑。
+        if (!opts.TutorialForceSwordFirst && opts.Mode == PickMode.EnterBattle)
         {
             var last = PlayerJobDefs.GetSelected();
             if ((!_opts.RequireSwordShield || last == PlayerJobId.SwordShield)
@@ -191,7 +234,13 @@ public class PlayerJobSelectUI : MonoBehaviour
         // 两行挤压发糊。文案/字号在这里统一设，预制体文件不动；只作用于 Hint 这一个节点。
         if (_hint != null)
         {
-            _hint.text = HintText;
+            // 【2026-11-20 主人拍板】首次定职 / 换职业两种非进本模式：告知玩家职业可后期更换。
+            if (_opts.Mode == PickMode.FirstFree)
+                _hint.text = "选择职业，后期可更换职业";
+            else if (_opts.Mode == PickMode.ChangeJob)
+                _hint.text = "选择要转成的职业（消耗钻石）";
+            else
+                _hint.text = HintText;
             _hint.fontSize = HintFontSize;
         }
         if (!_fromPrefab && _title != null)
@@ -654,6 +703,13 @@ public class PlayerJobSelectUI : MonoBehaviour
             return;
         }
         _selected = job;
+        // 【2026-11-20 拍板 / 11-21 主人修正】首次定职：每个职业首次被选中时各弹一拍该职业介绍，
+        // 同一职业重复点不再弹；换选没弹过的职业照样弹。回调不置空，改由 _introShownJobs 去重。只作用 FirstFree 模式。
+        if (_opts.Mode == PickMode.FirstFree && _onFirstSelect != null && !_introShownJobs.Contains(job))
+        {
+            _introShownJobs.Add(job);
+            _onFirstSelect(job);
+        }
         RefreshCardsVisual();
         UpdateEnterInteractable();
         if (_opts.TutorialForceSwordFirst && job == PlayerJobId.SwordShield)
@@ -711,6 +767,7 @@ public class PlayerJobSelectUI : MonoBehaviour
             ApplyCardSelectVisual(c, sel, hasSel);
         }
         UpdateLastPickBadges();
+        UpdateSuggestBadges();
     }
 
     /// <summary>
@@ -751,6 +808,51 @@ public class PlayerJobSelectUI : MonoBehaviour
         var t = CreateText(go.transform, "Label", "上次选择", 19, TextAnchor.MiddleCenter);
         Stretch(t.rectTransform);
         t.color = new Color(1f, 0.9f, 0.45f, 1f);
+        return go.transform;
+    }
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】「建议」角标（红底白字）：首次定职时给被建议职业（剑盾卫士）的卡片右上角挂「建议」二字，
+    /// 和引导台词「头回下裂隙，我建议你报剑盾」呼应。只作用 FirstFree 模式；位置沿用「上次选择」角标的右上角锚点，
+    /// 两种角标不会同时出现（首次定职是新号、无 lastPick）。运行时创建、不动预制体。
+    /// </summary>
+    void UpdateSuggestBadges()
+    {
+        bool show = _opts.Mode == PickMode.FirstFree;
+        for (int i = 0; i < _cards.Count; i++)
+        {
+            if (i >= _offer.Count) continue;
+            var cardTf = _cards[i].Button != null ? _cards[i].Button.transform : null;
+            if (cardTf == null) continue;
+            bool want = show && _offer[i] == PlayerJobId.SwordShield;
+            var badge = FindDeep(cardTf, "SuggestBadge");
+            if (badge == null && want)
+                badge = CreateSuggestBadge(cardTf);
+            if (badge != null)
+                badge.gameObject.SetActive(want);
+        }
+    }
+
+    /// <summary>建一颗右上角「建议」小角标：金边红底图 + 金字、短条，锚死卡片右上角（与 LastPickBadge 同位置，互斥出现）。
+    /// 【2026-11-20 主人拍板】参考每日登录「限定」角标：底条缩短、字改金黄 20 号。
+    /// 【2026-11-21 主人拍板】底图改用每日登录「限定字底」原图；底图为原图时 Image 必须 Color.white，不再叠红 tint。</summary>
+    static Transform CreateSuggestBadge(Transform card)
+    {
+        var go = new GameObject("SuggestBadge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(card, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-2f, -2f);
+        rt.sizeDelta = new Vector2(64f, 34f);   // 缩短：112×36 → 对齐「限定」角标 64×34（不动）
+        var img = go.GetComponent<Image>();
+        img.sprite = Resources.Load<Sprite>("UI/Art/每日登录/每日登录_0003_限定字底");
+        img.color = Color.white;   // 底图自带颜色，叠红 tint 会染脏金边
+        img.raycastTarget = false;
+
+        var t = CreateText(go.transform, "Label", "建议", 20, TextAnchor.MiddleCenter);
+        Stretch(t.rectTransform);
+        t.color = new Color(1f, 0.9f, 0.5f, 1f);   // 金黄字（同「限定」角标）
         return go.transform;
     }
 
@@ -859,6 +961,53 @@ public class PlayerJobSelectUI : MonoBehaviour
         if (_opts.RequireSwordShield && _selected.Value != PlayerJobId.SwordShield)
         {
             UIManager.Instance?.ShowToast("请先选择剑盾卫士");
+            return;
+        }
+
+        // 【2026-11-20 主人拍板】双模式：非进本的两条路径在这里分流，绝不走下面的体力/进本逻辑。
+        // ① 首次免费定职业：选中即 SetSelected（唯一真源），不扣钻石、不进本。
+        // ② 换职业：先走 DiamondSpendGate 二次确认，确认回调里调 TryChangeJob
+        //   （扣 500 钻 + 清右列退 80% + SetSelected，全在那一处事务里，本类绝不重复扣费/切职业）。
+        if (_opts.Mode == PickMode.FirstFree)
+        {
+            var picked = _selected.Value;
+            PlayerJobDefs.SetSelected(picked);
+            var cb = _onPicked;
+            _onPicked = null;
+            Hide();
+            cb?.Invoke(picked);
+            return;
+        }
+        if (_opts.Mode == PickMode.ChangeJob)
+        {
+            PlayerJobId target = _selected.Value;
+            var current = PlayerJobDefs.GetSelected();
+            if (target == current)
+            {
+                UIManager.Instance?.ShowToast("当前已是该职业");
+                return;
+            }
+            string fromName = PlayerJobDefs.Get(current).DisplayName;
+            string toName = PlayerJobDefs.Get(target).DisplayName;
+            DiamondSpendGate.Request(
+                "更换职业",
+                $"确定从「{fromName}」转为「{toName}」？\n右列天赋将清空并按 80% 返还天赋石，左列金币天赋保留。",
+                TalentSystem.CHANGE_JOB_DIAMOND_COST,
+                () =>
+                {
+                    if (TalentSystem.TryChangeJob(target, out string reason))
+                    {
+                        var cb = _onPicked;
+                        _onPicked = null;
+                        Hide();
+                        cb?.Invoke(target);
+                    }
+                    else if (!string.IsNullOrEmpty(reason))
+                    {
+                        UIManager.Instance?.ShowToast(reason);
+                    }
+                },
+                okLabel: "确认转职");
             return;
         }
 

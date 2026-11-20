@@ -227,6 +227,24 @@ public static class PlayerJobDefs
     }
 
     /// <summary>
+    /// 【2026-11-21 主人拍板】战斗 HUD <b>玩家槽</b>职业角标：显示玩家所选职业的专属 icon
+    /// （UI/Icons/玩家职业icon/{剑盾,游侠,法师,...}，每职业各一张，能区分具体职业）。
+    /// 与四分类徽标 <see cref="TryLoadCombatBadgeIcon"/> 分工：四分类只给佣兵槽用；玩家槽用本出口，
+    /// 别再让游侠/狂战/重武都显示成同一把「物攻」剑（主人说的「职业角标没同步」就是这个）。
+    /// 职业名取 <c>IconResourcePath</c> 末段，不写死；缺图 ReportMissing 露白框、不静默兜底。
+    /// </summary>
+    public static Sprite TryLoadPlayerJobIcon(PlayerJobId id)
+    {
+        string file = IconFileName(Get(id));
+        if (string.IsNullOrEmpty(file)) return null;
+        string path = "UI/Icons/玩家职业icon/" + file;
+        var sp = Resources.Load<Sprite>(path);
+        if (sp != null) return sp;
+        DeviceParity.ReportMissing(path, "玩家职业角标");
+        return null;
+    }
+
+    /// <summary>
     /// 职业标取图：编辑器优先读美术源目录 <see cref="IconArtFolder"/>，真机回退 Resources/UI/JobSelect/{名}。
     /// 只返回 Sprite，不改 UI 的尺寸与位置（Image 的 RectTransform / preserveAspect 由 prefab 决定）。
     /// </summary>

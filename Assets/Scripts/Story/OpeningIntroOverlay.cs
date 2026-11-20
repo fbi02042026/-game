@@ -24,6 +24,8 @@ public class OpeningIntroOverlay : MonoBehaviour
     AspectRatioFitter _aspectFitter;
     bool _skipRequested;
     bool _bgmMutedForCutscene;
+    bool _firstFrameShown;
+    VideoPlayer.FrameReadyEventHandler _frameReadyHandler;
     bool _fpsBoosted;
     int _prevTargetFps;
     int _prevVSync;
@@ -145,12 +147,6 @@ public class OpeningIntroOverlay : MonoBehaviour
         var canvas = gameObject.AddComponent<Canvas>();
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.FullscreenFx);
 
-        var scaler = gameObject.GetComponent<CanvasScaler>();
-        if (scaler != null)
-        {
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 1f;
-        }
         gameObject.AddComponent<GraphicRaycaster>();
 
         _group = gameObject.AddComponent<CanvasGroup>();
@@ -172,9 +168,9 @@ public class OpeningIntroOverlay : MonoBehaviour
         _rawImage = videoGo.GetComponent<RawImage>();
         _rawImage.color = Color.white;
         _rawImage.raycastTarget = false;
-        UiLayoutStretch.ApplyEnvelopeRawImage(_rawImage.rectTransform, 9f / 16f);
+        UiLayoutStretch.ApplyFitWidthRawImage(_rawImage.rectTransform, 9f / 16f);
         _aspectFitter = videoGo.GetComponent<AspectRatioFitter>();
-        _aspectFitter.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        _aspectFitter.aspectMode = AspectRatioFitter.AspectMode.WidthControlsHeight;
         _aspectFitter.aspectRatio = 9f / 16f;
 
         if (adoptedRt != null)
@@ -224,6 +220,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         IsFinished = false;
         // 复用预热播放器时它已是最终配置且 prepared，别再 Prepare（重复 Prepare 会重新解码 → 黑屏几秒）。
         if (!_videoPlayer.isPrepared) _videoPlayer.Prepare();
+        Debug.Log("[IntroDiag] PrepareStart@" + Time.realtimeSinceStartup.ToString("F3") + " prepared=" + _videoPlayer.isPrepared);
         float prepareT = 0f;
         while (!_videoPlayer.isPrepared && prepareT < 10f && !_skipRequested)
         {
@@ -241,16 +238,18 @@ public class OpeningIntroOverlay : MonoBehaviour
             yield break;
         }
 
+        Debug.Log("[IntroDiag] Prepared@" + Time.realtimeSinceStartup.ToString("F3") + " wall=" + prepareT.ToString("F2") + " prepared=" + _videoPlayer.isPrepared);
         ApplyPreparedVideoSize();
         EnableVideoAudioTrack();
         if (_videoPlayer.texture != null)
             _rawImage.texture = _videoPlayer.texture;
 
         _videoPlayer.Play();
+        Debug.Log("[IntroDiag] Play@" + Time.realtimeSinceStartup.ToString("F3") + " length=" + _videoPlayer.length.ToString("F2"));
 
-        // 起播预滚（卡顿修复）：头 0.6 秒是解码器预热 + 城镇首帧渲染/弹窗初始化重活的高发期，
-        // 直接出画面就会一顿一顿。先藏画面并静音，让纯黑垫住预滚窗口，窗口过后画面、声音一起出，
-        // 音视频时钟不受影响。窗口内点按仍可跳过（跳过直接收尾，不再走淡出）。
+        // 首帧门控（替代写死的 0.6 秒预滚）：Play 后视频时钟立即跑、首帧解码有不确定延迟，
+        // 固定时长去覆盖它，短了露黑帧、长了吃开头。改成首帧真正就绪（frameReady）才露画面、
+        // 开声音，黑屏窗口随真实首帧收敛。超时是防线：事件不来也不能永久黑屏，报警后照常放行。
         if (!_skipRequested)
         {
             Color vidCol = _rawImage != null ? _rawImage.color : Color.white;
@@ -259,17 +258,35 @@ public class OpeningIntroOverlay : MonoBehaviour
             if (_videoAudio != null)
                 _videoAudio.mute = true;
 
-            float settle = 0.6f;
-            float st = 0f;
-            while (st < settle && !_skipRequested && _videoPlayer.isPlaying)
+            _firstFrameShown = false;
+            _frameReadyHandler = (src, frameIdx) =>
             {
-                st += Time.unscaledDeltaTime;
+                if (frameIdx < 0) return;
+                _firstFrameShown = true;
+                Debug.Log("[IntroDiag] FirstFrameEvent@" + Time.realtimeSinceStartup.ToString("F3") + " frameIdx=" + frameIdx);
+            };
+            _videoPlayer.sendFrameReadyEvents = true;
+            _videoPlayer.frameReady += _frameReadyHandler;
+
+            float gateT = 0f;
+            const float gateMax = 2f;
+            while (!_firstFrameShown && !_skipRequested && _videoPlayer.isPlaying && gateT < gateMax)
+            {
+                gateT += Time.unscaledDeltaTime;
                 if (Clicked()) _skipRequested = true;
                 yield return null;
             }
+            bool timedOut = !_firstFrameShown && !_skipRequested;
+            Debug.Log("[IntroDiag] FirstFrameGateEnd@" + Time.realtimeSinceStartup.ToString("F3") + " wall=" + gateT.ToString("F2") + " frame=" + _videoPlayer.frame + " shown=" + _firstFrameShown + " timeout=" + timedOut + " skip=" + _skipRequested);
+            if (timedOut)
+                Debug.LogWarning("[OpeningIntro] 首帧事件超时(" + gateMax.ToString("F1") + "s)，强制露画面；请检查 VideoPlayer.frameReady 是否正常触发");
+
+            _videoPlayer.frameReady -= _frameReadyHandler;
+            _videoPlayer.sendFrameReadyEvents = false;
+            _frameReadyHandler = null;
 
             if (_videoAudio != null)
-                _videoAudio.mute = !GameAudio.AudioEnabled; // 还原音频开关状态
+                _videoAudio.mute = !GameAudio.AudioEnabled;
             if (_rawImage != null && !_skipRequested)
                 _rawImage.color = vidCol;
 
@@ -357,7 +374,7 @@ public class OpeningIntroOverlay : MonoBehaviour
         if (_aspectFitter != null)
             _aspectFitter.aspectRatio = ar;
         if (_rawImage != null)
-            UiLayoutStretch.ApplyEnvelopeRawImage(_rawImage.rectTransform, ar);
+            UiLayoutStretch.ApplyFitWidthRawImage(_rawImage.rectTransform, ar);
         if (_renderTexture == null || _renderTexture.width != (int)w || _renderTexture.height != (int)h)
             RecreateRenderTexture((int)w, (int)h); // 尺寸没变就不重建，消掉起播第一下顿卡
     }

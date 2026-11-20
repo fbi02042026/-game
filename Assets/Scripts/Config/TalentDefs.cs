@@ -42,7 +42,8 @@ public static class TalentDefs
         MoveSpeed,
         Custom,
         EliteDamage,     // 对精英 / Boss 的伤害加成（百分点，8 = +8%）
-        AttackPercent    // 【2026-10-18 主人拍板】利刃改百分比：最终攻击（含装备）+5/10/15%，结算在装备之后
+        AttackPercent,   // 【2026-10-18 主人拍板】利刃改百分比：最终攻击（含装备）+5/10/15%，结算在装备之后
+        AoeRadius        // 【2026-11-20 三职业天赋分表】法师「溅射」：AOE 半径加成百分点（10 = +10%）。写入 AttrType.AoeRadius，由 CareerSkillExecutor.DealArea 乘 skill.aoeRadius
     }
 
     public enum Side
@@ -107,6 +108,11 @@ public static class TalentDefs
         public string id;
         public string name;
         public RightNodeType type;
+        /// <summary>
+        /// 职业归属（2026-11-20 三职业分表）：all = 三职业通用 / sword|mage|ranger = 对应职业专属。
+        /// 换职业时清右列（复用洗点退费）后，同一 id 在新职业表里取到的是新职业的名字/效果，存档不串。
+        /// </summary>
+        public string job = "all";
         /// <summary>解锁需要的**人物等级**门槛（2026-11-05 拍板：语义由「左列已点数」改为此，配表列名 unlockLeftIndex 不变）。</summary>
         public int unlockLeftIndex;
         public int maxLevel;
@@ -176,13 +182,78 @@ public static class TalentDefs
     }
 
     public static readonly LeftNode[] Left;
-    /// <summary>右列 12 节点（来自 talent_right.csv，缺表回退硬编码）。</summary>
-    public static readonly TalentRightNode[] RightNodes;
+    /// <summary>
+    /// 右列全量表（三职业所有节点，来自 talent_right.csv，缺表回退硬编码）。仅供内部过滤，外部禁止直接遍历。
+    /// </summary>
+    static readonly TalentRightNode[] AllRightNodes;
+    /// <summary>
+    /// 当前职业可见的右列节点视图（2026-11-20 三职业分表）。
+    /// 全项目遍历右列一律走这里：只含 job=all 的通用节点 + 当前所选职业的专属节点。
+    /// 换职业后 SetSelected 改了存档职业，本视图自动切到新职业那套，无需任何调用点感知。
+    /// 当前无存档时回退剑盾（与 PlayerJobDefs.GetSelected 一致）。
+    /// </summary>
+    public static TalentRightNode[] RightNodes => RightNodesFor(PlayerJobDefs.GetSelected());
 
     static TalentDefs()
     {
         Left = BuildLeft();
-        RightNodes = BuildRightNodes();
+        AllRightNodes = BuildRightNodes();
+    }
+
+    /// <summary>按职业取右列节点视图（唯一取表口）。job=all 通用节点 + 该职业专属节点，按原表顺序。</summary>
+    public static TalentRightNode[] RightNodesFor(PlayerJobId job)
+    {
+        if (AllRightNodes == null) return EmptyRightNodes;
+        if (_jobViewCache.TryGetValue(job, out var cached)) return cached;
+        string token = JobToken(job);
+        var list = new List<TalentRightNode>(AllRightNodes.Length);
+        for (int i = 0; i < AllRightNodes.Length; i++)
+        {
+            var n = AllRightNodes[i];
+            if (n == null) continue;
+            if (string.IsNullOrEmpty(n.job) || n.job == "all" || n.job == token) list.Add(n);
+        }
+        // 【2026-11-20 三职业分表】index 必须按「视图内行号」重排：
+        // TalentUI 用 node.index-1 定位当前职业视图的行（_pendingRowIndex / onRightChoiceRequested），
+        // 而全量表 index 是三职业混排的物理行号（加职业专属节点后会 > 视图行数）。
+        // 这里手工浅拷贝只覆盖 index，其余字段/引用共享，绝不改全量表本体。
+        //（不用 MemberwiseClone：它是 object 的 protected 成员，静态类 TalentDefs 无权调用，会 CS1540。）
+        var view = new TalentRightNode[list.Count];
+        for (int i = 0; i < list.Count; i++)
+        {
+            var src = list[i];
+            view[i] = new TalentRightNode
+            {
+                index = i + 1,        // 视图内 1-based 行号
+                id = src.id,
+                name = src.name,
+                type = src.type,
+                job = src.job,
+                unlockLeftIndex = src.unlockLeftIndex,
+                maxLevel = src.maxLevel,
+                mutexGroup = src.mutexGroup,
+                costByLevel = src.costByLevel,   // 引用共享，运行期不变
+                options = src.options,           // 引用共享，运行期不变
+            };
+        }
+        _jobViewCache[job] = view;   // 表运行期不变，缓存视图避免 UI 循环里反复分配
+        return view;
+    }
+
+    static readonly TalentRightNode[] EmptyRightNodes = new TalentRightNode[0];
+    static readonly System.Collections.Generic.Dictionary<PlayerJobId, TalentRightNode[]> _jobViewCache =
+        new System.Collections.Generic.Dictionary<PlayerJobId, TalentRightNode[]>();
+
+    /// <summary>PlayerJobId → CSV job 列字面量。只映射 3 个开放职业；其余职业不取专属节点（只见 all）。</summary>
+    static string JobToken(PlayerJobId job)
+    {
+        switch (job)
+        {
+            case PlayerJobId.SwordShield: return "sword";
+            case PlayerJobId.Mage: return "mage";
+            case PlayerJobId.Ranger: return "ranger";
+            default: return "__none__";
+        }
     }
 
     /// <summary>
@@ -457,7 +528,7 @@ public static class TalentDefs
         for (int i = 1; i < rows.Count; i++)
         {
             var c = rows[i];
-            if (c == null || c.Length < 11) continue;
+            if (c == null || c.Length < 11) continue;   // 前 11 列必需；job 为第 12 列，缺列按 all 兼容老表
             string id = c[0].Trim();
             if (string.IsNullOrEmpty(id)) continue;
 
@@ -471,6 +542,8 @@ public static class TalentDefs
                 maxLevel = GameTableCsv.TryInt(c, 4, 1),
                 mutexGroup = GameTableCsv.IsWildcard(c[5]) ? "" : c[5].Trim(),
                 costByLevel = SplitInts(c[6]),
+                // 第 12 列 job：all/sword/mage/ranger；通配或缺列按 all（老表兼容）
+                job = c.Length > 11 && !GameTableCsv.IsWildcard(c[11]) ? c[11].Trim().ToLowerInvariant() : "all",
             };
             if (node.maxLevel < 1) node.maxLevel = 1;
             node.costByLevel = PadCost(node.costByLevel, node.maxLevel);
@@ -587,6 +660,7 @@ public static class TalentDefs
             id = id,
             name = name,
             type = type,
+            job = "all",   // 硬编码回退表：与当前 talent_right.csv 的通用节点保持一致
             unlockLeftIndex = unlock,
             maxLevel = max,
             mutexGroup = mutex,
@@ -811,6 +885,7 @@ public static class TalentDefs
             case AttrKind.MoveSpeed: return "移速";
             case AttrKind.SkillCooldown: return "技能冷却";
             case AttrKind.EliteDamage: return "精英伤害";
+            case AttrKind.AoeRadius: return "溅射范围";
             default: return "";
         }
     }

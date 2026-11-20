@@ -38,5 +38,9 @@ public enum AttrType
         // 2026-10-21 主人拍板：装备「减伤」词条真源 = 最终减伤（0.08 = 减伤 8%）。
         // 旧口径把 DMG_RED 错接成 Defense 百分比（物防×1.08），名义 8% 在 80 防时实际只减 3.4% 且对魔伤零效果。
         // 不登记基础值（恒 0），装备词条加算叠加；消费点 DamageFormula.FinalHit。
-        DamageReduce
+        DamageReduce,
+        // 2026-11-20 三职业天赋分表：法师「溅射」——AOE 半径加成倍率（0.1 = +10% 范围）。
+        // 只由右列 AttrKind.AoeRadius 天赋写入、CareerSkillExecutor.DealArea 消费（乘 skill.aoeRadius）。
+        // 追加在末尾，不改变既有枚举值，避免序列化错位。
+        AoeRadius
 }

@@ -436,7 +436,9 @@ public class FirstRunGuide : MonoBehaviour
 
     IEnumerator CoFirstBattle()
     {
-        yield return CoPoint("选个顺眼的职业，点「开始冒险」。进了裂隙，这步就算你过关了。",
+        // 【2026-11-21 主人拍板】11-20 起职业改起名后首次定、进本不再弹职业窗，
+        // 原「选个顺眼的职业」是下线流程残留；这里只留「点开始冒险」引导，保留傲娇尾巴。
+        yield return CoPoint("职业报备好了，点「开始冒险」下裂隙。进了裂隙，这步就算你过关了。",
             () => AdventurePageOpen() ? ButtonRect(AdventureStartBtn()) : NavRect(MainNavTab.Adventure),
             InBattleOrLeaving,
             false, 0f,   // 【2026-11-04】不自动走

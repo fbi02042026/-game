@@ -27,6 +27,7 @@ public partial class CharacterUI
 
         EnsureBackpackEntry();
         EnsureBoardEntry();
+        EnsureJobSwitchEntry();
         EnsureBagPageButtons();
         if (flipPortraitButton != null)
         {
@@ -77,6 +78,62 @@ public partial class CharacterUI
             return;
         }
         skillSelect.Show();
+    }
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板「角色界面右侧加一个切换职业的按钮」】
+    /// 复用现成的 BuildSideBtn 在右列运行时建按钮（不碰 prefab / meta，只传纵向 y，与看板 -270 / 背包 -180 同列 90 间距）。
+    /// 点击走 PlayerJobSelectUI 的换职业双模式（钻石二次确认 + TryChangeJob 退 80%）；成功后 RefreshAll 同步装备栏/属性/立绘。
+    /// </summary>
+    void EnsureJobSwitchEntry()
+    {
+        if (jobSwitchButton == null && talentButton != null)
+        {
+            Transform parent = talentButton.transform.parent;   // Content/Stage/RightButtons
+            if (parent != null)
+            {
+                BuildSideBtn(parent, "JobSwitchButton", "切换职业", -360f, new Color(0.55f, 0.42f, 0.2f, 1f));
+                jobSwitchButton = parent.Find("JobSwitchButton")?.GetComponent<Button>();
+            }
+        }
+        if (jobSwitchButton != null)
+        {
+            jobSwitchButton.onClick.RemoveAllListeners();
+            jobSwitchButton.onClick.AddListener(OpenJobChange);
+            // 【2026-11-20 主人换图】用主人放进 Resources 的「切换职业」图标替掉纯色块；
+            // 只换 Sprite / 不碰 prefab / 不写尺寸。等比缩放 preserveAspect，绝不拉伸。
+            var art = jobSwitchButton.GetComponent<Image>();
+            if (art != null)
+            {
+                var sp = Resources.Load<Sprite>("UI/NavCharacter/切换职业");
+                if (sp != null)
+                {
+                    art.sprite = sp;
+                    art.color = Color.white;   // 有图后去掉原纯色块的染色
+                    art.preserveAspect = true;
+                    // 图是带边框的完整按钮外观（双人头像+箭头，语义已足），
+                    // 清掉运行时建的纯文字占位，避免文字压在图上（铁律：真图进槽先清占位）。
+                    var label = jobSwitchButton.transform.Find("Label");
+                    if (label != null) label.gameObject.SetActive(false);
+                }
+                else
+                {
+                    Debug.LogError("[CharacterUI] 切换职业按钮图标缺失：Resources/UI/NavCharacter/切换职业.png。" +
+                                   "请确认该图 Texture Type = Sprite (2D and UI)，否则加载不到。");
+                }
+            }
+        }
+    }
+
+    void OpenJobChange()
+    {
+        // 【2026-11-20 主人拍板】按钮常显；没通第1章第5关时点击只提示，不弹职业界面。
+        if (!TalentSystem.CanChangeJobByProgress(out string reason))
+        {
+            UIManager.Instance?.ShowToast(reason);
+            return;
+        }
+        PlayerJobSelectUI.ShowChangeJob(_ => RefreshAll());
     }
 
     /// <summary>

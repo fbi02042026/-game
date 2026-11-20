@@ -104,7 +104,8 @@ public class CharacterEquipBar : MonoBehaviour
 
         BindTabs(root);
 
-        if (_container != null) EnsureArrows(_container);
+        // 【2026-11-21 主人拍板】角色页装备栏只显示当前职业：左右切职业箭头不再创建
+        //（三职业标签在 BindTabs 里隐藏）。真正换职业走右侧「切换职业」按钮，装备栏不再提供切换预览。
         BindEntry(entryButton);
         _idx = IndexOf(PlayerJobDefs.GetSelected());
         RefreshCurrent();
@@ -208,6 +209,11 @@ public class CharacterEquipBar : MonoBehaviour
                 Debug.LogError($"[CharacterEquipBar] 标签文本「{t.text}」无法映射职业（需含 剑/法/游），该标签未绑定");
                 continue;
             }
+
+            // 【2026-11-21 主人拍板】三个职业标签去掉，只显示当前职业的装备：
+            // 整块标签节点运行时隐藏（不动 prefab、不删节点/组件）。下面的绑定逻辑照跑，
+            // 保证 _tabJobs 仍填满、RefreshCurrent 的状态切换不出 LogError；父节点隐藏即整体不可见。
+            child.gameObject.SetActive(false);
 
             // 2026-11-13 主人拍板：选中/未选中两张图是主人在 prefab 里手摆好的同名节点，
             // 代码只切显隐，绝不给它们换图 / 改色 / 改文字。缺图 = LogError 报出，不造图不兜底。

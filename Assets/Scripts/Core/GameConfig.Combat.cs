@@ -1441,6 +1441,17 @@ public static partial class GameConfig
     // 不动全局 firePointOffset（英雄普攻/散射箭共用，改了会一起挪）。想再调直接改这个值。
     public const float CAREER_ORB_FIRE_FORWARD = 0.8f;  // 沿当前朝向额外前移的世界单位
 
+    // ===== 三职业自带技「技能精通」形态差异（2026-11-20 主人拍板）=====
+    // 精通判定 = R_DUAL（技能精通）右列节点等级 > 0，见 CareerSkillExecutor.IsCareerMastered。
+    // 精通后一律走现有正式数值（箭数/命中读 player_skills.csv，盾/法球大小读上文倍率），不削弱现状；
+    // 未精通读下列弱化值 —— 玩家点了「技能精通」天赋，形态从弱化版切到现在的完整版。
+    // 【主人原话】「没精通前盾小，精通后盾大了一倍就是现在的大小」「游侠一开始射3个箭，精通后6个」
+    // 「法师一开始小法球打3个，精通后大的打5个」；盾/法球大小以现值为精通后基准，只加未精通弱化档。
+    public const int   CAREER_SCATTER_UNMASTERED_ARROWS = 3;       // 未精通散射箭数（精通后读 CSV projectileCount=5）
+    public const int   CAREER_ORB_UNMASTERED_MAX_TARGETS = 3;      // 未精通法球命中数（精通后读 CSV aoeMaxTargets=4）
+    public const float CAREER_ORB_UNMASTERED_SCALE_MUL = 1f;       // 未精通法球大小（精通后 = CAREER_ORB_SCALE_MUL=2）
+    public const float CAREER_CHARGE_UNMASTERED_SHIELD_MUL = 0.5f; // 未精通盾 = 精通后尺寸 × 0.5（撞击框随盾尺寸自动推导）
+
     // ---- 受击后退（2026-11-05 主人拍板：普通怪受击小退；精英/Boss 免击退；它们打玩家/俇兵把人打退）----
     public const float KNOCKBACK_MONSTER = 0.35f; // 普通怪受击退移（世界单位）
     public const float KNOCKBACK_ALLY = 0.7f;     // 精英/Boss 命中玩家/俇兵的击退移（世界单位）

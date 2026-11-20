@@ -530,6 +530,12 @@ public class AttrSystem
                 // 消费点 Monster.TakeDamage：inDamage *= (1f + bonus)。
                 AddAttr(AttrType.EliteDamage, fx.value * 0.01f, false);
                 break;
+            case TalentDefs.AttrKind.AoeRadius:
+                // 【2026-11-20 法师「溅射」天赋】配表填百分点（10 = +10%），存成倍率 0.1（加算）。
+                // AoeRadius 无基础值（恒 0），必须加算不能乘算（乘算 0×(1+v)=0 点了等于没点）。
+                // 消费点 CareerSkillExecutor.DealArea：radius = skill.aoeRadius × (1 + 本加成)。
+                AddAttr(AttrType.AoeRadius, fx.value * 0.01f, false);
+                break;
             case TalentDefs.AttrKind.WeaponSwordShield:
             case TalentDefs.AttrKind.WeaponHeavy:
             case TalentDefs.AttrKind.WeaponRangedMagic:

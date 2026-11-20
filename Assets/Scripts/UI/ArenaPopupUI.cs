@@ -722,15 +722,9 @@ public class ArenaPopupUI : MonoBehaviour
             return;
         }
         _pendingRowIdx = rowIdx;
-        // 2026-10-29 主人拍板：选职业直接调独立界面（prefab 里的 JobSelect 节点已删）。
-        // PlayerJobSelectUI 在回调前会 PlayerJobDefs.SetSelected(选中职业)，回调里凭 GetSelected() 取回。
-        // 【2026-10-30 主人拍板】按钮文案=「挑战」；StaminaFree=对战不查体力（对战走次数）——
-        // 不传的话体力<5 时会被冒险体力闸门拦下，表现为「点击无反应」（主人实测踩坑）。
-        PlayerJobSelectUI.Show(OnArenaJobPicked, new PlayerJobSelectUI.Options
-        {
-            EnterLabel = "进入挑战",
-            StaminaFree = true,
-        });
+        // 【2026-11-20 主人拍板「进战斗不用再选职业」】不再弹 PlayerJobSelectUI。
+        // 职业真源 = PlayerJobDefs.GetSelected()（起名后首次定 / 角色页钻石换职业写），进战 ApplyForBattle 按它发武器。
+        OnArenaJobPicked();
     }
 
     /// <summary>PlayerJobSelectUI「进入」回调：取回刚选的职业走竞技场挑战流程。</summary>

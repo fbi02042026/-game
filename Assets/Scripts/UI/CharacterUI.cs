@@ -23,6 +23,7 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
     public Transform leftButtonRoot; // 主人在预制体里把 LeftSkillButton 改名为 LeftButton；该组现在内含「背包」按钮，禁止整体隐藏
     Button backpackEntryButton;     // 「背包」入口：优先取预制体 Content/Stage/LeftButton/背包，缺失时才运行时生成
     Button boardEntryButton;        // 运行时创建的「看板」入口，挂在天赋按钮同父节点下方（背包之后）
+    Button jobSwitchButton;         // 【2026-11-20 主人拍板】运行时创建的「切换职业」入口，挂在右列看板下方
 
     [Header("展示")]
     public Image portraitImage;

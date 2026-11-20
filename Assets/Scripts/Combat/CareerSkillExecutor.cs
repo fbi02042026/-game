@@ -31,6 +31,20 @@ public static class CareerSkillExecutor
         return false;
     }
 
+    /// <summary>
+    /// 【2026-11-20 三职业天赋分表】自带技「精通」形态判定 —— 全技能唯一入口。
+    /// 真源 = 右列「技能精通」节点 R_DUAL 的等级 &gt; 0；换职业清右列（复用洗点退 80%）后自动归零，
+    /// 新职业需重新点精通才拿到完整形态，与「退 80% 重新解锁」口径一致。
+    /// 后续若把精通挪到职业专属第一槽节点，只改这里一处常量即可，三个演出协程感知不到。
+    /// 无存档（存档未初始化）时回退 false = 未精通形态。
+    /// </summary>
+    const string CareerMasteryNodeId = "R_DUAL";
+    static bool IsCareerMastered()
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        return data != null && TalentDefs.GetRightNodeLevel(data.talents, CareerMasteryNodeId) > 0;
+    }
+
     public static bool Cast(MonoBehaviour runner, PlayerJobId job, string skillId)
     {
         var hero = Hero.Instance;
@@ -53,17 +67,19 @@ public static class CareerSkillExecutor
 
         SkillCastNotifyController.PushPlayerSkill(skillId, skill.skillName);
 
+        // 【2026-11-20 精通形态】施放瞬间算一次精通状态（整段演出内不变），传给三个协程。
+        bool mastered = IsCareerMastered();
         // 演出类型读职业真源，不按职业枚举硬编码分叉。
         switch (PlayerJobDefs.Get(job).CareerSkillKind)
         {
             case CareerSkillKind.Charge:
-                runner.StartCoroutine(CoCharge(hero, skill, target));
+                runner.StartCoroutine(CoCharge(hero, skill, target, mastered));
                 break;
             case CareerSkillKind.Scatter:
-                runner.StartCoroutine(CoScatter(hero, skill, target));
+                runner.StartCoroutine(CoScatter(hero, skill, target, mastered));
                 break;
             case CareerSkillKind.Orb:
-                runner.StartCoroutine(CoOrb(hero, skill, target));
+                runner.StartCoroutine(CoOrb(hero, skill, target, mastered));
                 break;
             default:
                 Debug.LogError($"[CareerSkill] 职业 {job} 未登记自带技能演出，拒绝释放: {skillId}");
@@ -91,7 +107,7 @@ public static class CareerSkillExecutor
     }
 
     // —— 剑盾：分段破阵冲锋 —— 撞到一簇怪就顿一下、撞开，再继续往前 ——
-    static IEnumerator CoCharge(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target)
+    static IEnumerator CoCharge(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target, bool mastered)
     {
         Vector3 start = hero.transform.position;
         // 【2026-11-14 曾拍板「只往一个方向冲、恒 +X」；2026-11-15 主人推翻：要往玩家冲的方向】
@@ -130,7 +146,8 @@ public static class CareerSkillExecutor
         // 半盾（pixelfx impacts/shield-block）= 独立世界对象，坐标每帧同步英雄受击点（CoChargeSlide 的 follow 参数）；
         // 基础尺寸写在预制体上（localScale 与角色关系见该预制体），本类只叠 2026-11-15 的调整倍率，不写第二份尺寸数值。
         // 收尾在 CoCharge 末尾统一销毁，绝不留到冲锋之后。
-        GameObject chargeShield = SpawnChargeShield(hero, faceDir);
+        // 【2026-11-20 精通形态】精通=现尺寸；未精通=现尺寸×0.5（盾小一半）。撞击判定框在下方按盾的实例世界尺寸推导，自动跟随缩小。
+        GameObject chargeShield = SpawnChargeShield(hero, faceDir, mastered);
         // 【2026-11-14 主人「底部要跟玩家脚底持平」+「护盾只是跟着玩家往前走不要上下移动」】
         // spawn 那一刻 go 正摆在受击点上，量一次「锚点 → sprite 最低点」的世界距离（已含预制体缩放），
         // 再按「脚底 + 这段距离 − 帧底透明边」定一个固定 Y，整个冲锋过程只跟 X、Y 一律不重算
@@ -258,7 +275,7 @@ public static class CareerSkillExecutor
     /// 不走池：本特效的存活期等于一次冲锋协程（0.5~3s 不定），提前回收会和池的定时释放互抢，
     /// 因此与 SkillRegistry.PlaySkillVfx 无 BattleVFXSystem 分支同口径，直接 Instantiate + 结束时 Destroy。
     /// </summary>
-    static GameObject SpawnChargeShield(Hero hero, int faceDir)
+    static GameObject SpawnChargeShield(Hero hero, int faceDir, bool mastered)
     {
         if (hero == null || hero.isDead) return null;
         var prefab = SkillRegistry.Instance != null
@@ -274,7 +291,9 @@ public static class CareerSkillExecutor
         // 朝向用世界 scale.x 正负定（Sprite 镜像），不依赖任何父级
         Vector3 baseScale = prefab.transform.localScale;
         // 【2026-11-15 主人「盾再小 10%」】只叠倍率，不碰 prefab；贴脚的两处测量读实例缩放，自动跟随。
-        float s = GameConfig.CAREER_CHARGE_SHIELD_SCALE_MUL;
+        // 【2026-11-20 精通形态】精通=现倍率(0.9)；未精通再×0.5 = 盾小一半（主人「没精通前盾小，精通后就是现在的大小」）。
+        float s = GameConfig.CAREER_CHARGE_SHIELD_SCALE_MUL
+            * (mastered ? 1f : GameConfig.CAREER_CHARGE_UNMASTERED_SHIELD_MUL);
         go.transform.localScale = new Vector3(
             Mathf.Abs(baseScale.x) * s * (faceDir < 0 ? -1f : 1f), baseScale.y * s, baseScale.z * s);
         // 【2026-11-14 主人报「冲撞的特效没出来」】不挂到英雄节点下：SPUM 玩家预制体的 UnitRoot 上带
@@ -541,7 +560,7 @@ public static class CareerSkillExecutor
     }
 
     // —— 游侠：一次齐射多条独立箭道（结构照 Monster.CoFanVolley），每条飞到自己的终点再结算 ——
-    static IEnumerator CoScatter(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target)
+    static IEnumerator CoScatter(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target, bool mastered)
     {
         float delay = GameConfig.RANGED_FIRE_RELEASE_DELAY_RANGER;
         if (delay > 0.001f) yield return new WaitForSeconds(delay);
@@ -557,8 +576,12 @@ public static class CareerSkillExecutor
         float baseAngle = Mathf.Atan2(baseDir.y, baseDir.x) * Mathf.Rad2Deg;
         float flyDist = Mathf.Min(baseDir.magnitude, GameConfig.CAREER_SCATTER_RANGE);
 
-        int count = Mathf.Max(1, skill.projectileCount);
-        Debug.Log($"[CareerSkill] 散射箭 演出开始 {count} 条箭道");
+        // 【2026-11-20 精通形态】精通=配表箭数(5)；未精通=3 条（主人「一开始射3个箭，精通后6个」——以现配表为精通基准，未精通弱化）。
+        // 角度步长 GameConfig.CAREER_SCATTER_ANGLE_STEP 不变，箭少则扇面窄、箭多则扇面宽，天然区分。
+        int count = mastered
+            ? Mathf.Max(1, skill.projectileCount)
+            : Mathf.Max(1, GameConfig.CAREER_SCATTER_UNMASTERED_ARROWS);
+        Debug.Log($"[CareerSkill] 散射箭 演出开始 {count} 条箭道 mastered={mastered}");
         var hitCount = new Dictionary<UnitBase, int>();
         float baseDamage = BuildDamage(hero, skill);
 
@@ -600,7 +623,7 @@ public static class CareerSkillExecutor
     }
 
     // —— 法师：巨型法球沿朝向飞一段距离后自爆，范围伤害 + 强击退 ——
-    static IEnumerator CoOrb(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target)
+    static IEnumerator CoOrb(Hero hero, SkillSystem.ActiveSkill skill, UnitBase target, bool mastered)
     {
         Vector3 fire = hero.GetFirePosition();
         int facing = hero.GetVfxFacingDir();
@@ -637,12 +660,19 @@ public static class CareerSkillExecutor
         // 前移量不超过净飞行距离，避免起点被推过爆点让法球往回飞。
         float roomAhead = Mathf.Max(0f, (end.x - fire.x) * facing);
         fire += Vector3.right * facing * Mathf.Min(GameConfig.CAREER_ORB_FIRE_FORWARD, roomAhead);
-        float scale = GameConfig.CAREER_ORB_SCALE_MUL;
-        Debug.Log($"[CareerSkill] 大法球 演出开始 scale={scale:0.0} fireX={fire.x:0.00}");
+        // 【2026-11-20 精通形态】精通=现大小(倍率2)、命中配表数(4)；未精通=小法球(倍率1)、命中 3
+        //（主人「一开始小法球打3个，精通后大的打5个」——以现配表为精通基准，未精通弱化；命中数随 scale 一起降）。
+        float scale = mastered
+            ? GameConfig.CAREER_ORB_SCALE_MUL
+            : GameConfig.CAREER_ORB_UNMASTERED_SCALE_MUL;
+        int maxTargets = mastered
+            ? skill.aoeMaxTargets
+            : GameConfig.CAREER_ORB_UNMASTERED_MAX_TARGETS;
+        Debug.Log($"[CareerSkill] 大法球 演出开始 scale={scale:0.0} maxTargets={maxTargets} mastered={mastered} fireX={fire.x:0.00}");
         BattleVFXSystem.Instance.PlaySkillProjectile(
             VfxFaction.Ally, fire, end, facing, target != null ? target.transform : null,
             AttackVfxKit.Orb, null, scale, GameConfig.CAREER_ORB_SPEED_MUL,
-            () => DealArea(hero, skill, lockedEnd, GameConfig.CAREER_SKILL_KNOCKBACK),
+            () => DealArea(hero, skill, lockedEnd, GameConfig.CAREER_SKILL_KNOCKBACK, maxTargets),
             // 只给本发职业技能传技能 id（player_skills.csv 的 career_orb）选 3 号专属套；
             // 普攻法球不传，仍走旧名 Base。
             caster: hero, impactScaleMul: scale * GameConfig.CAREER_ORB_IMPACT_SCALE_MUL, skillId: "career_orb");
@@ -655,24 +685,34 @@ public static class CareerSkillExecutor
             hero.attr, hero.IsMagicDamageDealer());
     }
 
-    static void DealArea(Hero hero, SkillSystem.ActiveSkill skill, Vector3 center, float knockDist)
+    /// <summary>maxTargetsOverride：精通形态传进来的命中数（未精通 3 / 精通读配表）；&lt;=0 时回退配表值。</summary>
+    static void DealArea(Hero hero, SkillSystem.ActiveSkill skill, Vector3 center, float knockDist, int maxTargetsOverride)
     {
         var bm = BattleManager.Instance;
         if (bm == null || bm.monsters == null || hero == null) return;
+        // 【2026-11-20 法师「溅射」天赋】英雄的 AoeRadius 加成（右列天赋写入，0.1 = +10%）放大法球爆炸半径。
+        // 只作用于本方法（法师大法球专属）；其它 AOE 技能（星落/天雷/重斩）走各自演出，不吃这个加成。
+        float radius = skill.aoeRadius;
+        if (hero.attr != null)
+        {
+            float aoeBonus = hero.attr.GetAttr(AttrType.AoeRadius);
+            if (aoeBonus > 0f) radius *= (1f + aoeBonus);
+        }
         var list = new List<UnitBase>();
         for (int i = 0; i < bm.monsters.Count; i++)
         {
             var m = bm.monsters[i];
             if (m == null || m.isDead) continue;
             if (!GameConfig.IsInCombatViewport(m)) continue;
-            if (Vector2.Distance(center, m.transform.position) > skill.aoeRadius) continue;
+            if (Vector2.Distance(center, m.transform.position) > radius) continue;
             list.Add(m);
         }
-        if (skill.aoeMaxTargets > 0 && list.Count > skill.aoeMaxTargets)
+        int maxTargets = maxTargetsOverride > 0 ? maxTargetsOverride : skill.aoeMaxTargets;
+        if (maxTargets > 0 && list.Count > maxTargets)
         {
             list.Sort((a, b) => Vector2.Distance(center, a.transform.position)
                 .CompareTo(Vector2.Distance(center, b.transform.position)));
-            list.RemoveRange(skill.aoeMaxTargets, list.Count - skill.aoeMaxTargets);
+            list.RemoveRange(maxTargets, list.Count - maxTargets);
         }
         float baseDamage = BuildDamage(hero, skill);
         for (int i = 0; i < list.Count; i++)

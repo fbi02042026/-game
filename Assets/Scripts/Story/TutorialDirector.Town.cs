@@ -135,7 +135,8 @@ public partial class TutorialDirector
         // 「开始冒险」交给首次强制软引导（FirstRunGuide.FirstBattle）统一呈现；
         // 那一步已经走过/跳过时才退回原来的硬提示，避免两层指引同时出现打架。
         if (!GuideCovers(FirstRunGuide.GuideStep.FirstBattle))
-            TutorialHintUI.Ensure().ShowHard("点下面的「开始冒险」，选好职业就出发去裂隙啦～", highlight);
+            // 【2026-11-21 主人拍板】进本不再弹职业窗（11-20 下线），"选好职业"是残留，去掉。
+            TutorialHintUI.Ensure().ShowHard("点下面的「开始冒险」，出发去裂隙啦～", highlight);
     }
 
     IEnumerator TownFirstEntryRoutine()
@@ -248,13 +249,35 @@ public partial class TutorialDirector
         StoryDirector.Ensure().Play(beats, () => done = true, keepSceneArt: true);
         while (!done) yield return null;
 
-        if (!StoryProgress.HasPlayerName())
+        // 【2026-11-21 主人拍板】中途退出恢复：起过名但没定职业、且引导对话没走完（tutorialIntroDone=false）
+        // 时退出再进，名字已写盘会让 justNamed=false → 误命中下方「老档补标记」直接跳过选职业。
+        // 这里把这类「半途而废的新号」的名字清掉，让它和全新玩家完全一样：会长剧情→起名→选职业整段重走。
+        // 真老档（intro 已走完）不命中；已定职业/已打引导也不命中；全新玩家本来就无名字、不命中。
+        {
+            var abortData = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            if (abortData != null && StoryProgress.HasPlayerName()
+                && !abortData.playerJobChosen && !StoryProgress.TutorialIntroDone
+                && !StoryProgress.TutorialDone)
+            {
+                abortData.playerDisplayName = "";
+                abortData.playerNameChosen = false;
+                SaveSystem.Instance.Save();
+                Debug.Log("[Tutorial] 检测到起名后未定职业即退出，已清空名字重走起名+选职业流程");
+            }
+        }
+
+        // 【2026-11-20】justNamed 记录「是否本次新起名」，供后面首次定职业区分新玩家/老档。
+        bool justNamed = !StoryProgress.HasPlayerName();
+        if (justNamed)
         {
             bool named = false;
             PlayerNamingUI.Show(() => named = true);
             while (!named) yield return null;
         }
 
+        // 【2026-11-20 主人拍板】首次定职业从「起名后直接弹」挪到下方赛琳报备段：
+        // 由前台先用剧情问「想报备什么职业去裂隙」，玩家再选，有引导有代入感。
+        // justNamed 留给赛琳段区分新号（弹选职）/ 老档（补标记不弹）。
         // 2026-09-28 主人要求：起名后会长补一句送客台词
         {
             string playerName = StoryProgress.GetPlayerName();
@@ -271,6 +294,84 @@ public partial class TutorialDirector
             done = false;
             StoryDirector.Ensure().Play(sendOff, () => done = true, keepSceneArt: true);
             while (!done) yield return null;
+        }
+
+        // 【2026-11-20 主人拍板】首次定职业挪到前台赛琳段：先由赛琳用剧情问「想报备什么职业去裂隙」，
+        // 玩家再在职业界面三选一（免费、不强制剑盾），选完接着播下面的三件事提示，有引导有代入感。
+        // 老档迁移：名字早就选过、但没 playerJobChosen 标志 → 视为已定职业，默默补标记、不插这段。
+        {
+            var jobData = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            bool needFirstPick = jobData != null && !jobData.playerJobChosen && justNamed;
+            if (jobData != null && !jobData.playerJobChosen && !justNamed)
+            {
+                jobData.playerJobChosen = true;
+                SaveSystem.Instance.Save();
+            }
+
+            if (needFirstPick)
+            {
+                // 赛琳开场引导：公事公办的报备口吻（她的人设=前台，慢燃线 Tier-1 投放口）
+                bool askDone = false;
+                var askBeats = new List<StoryBeat>
+                {
+                    StoryDirector.Solo("赛琳",
+                        $"{StoryProgress.GetPlayerName()}，先别急着走。\n下裂隙前得报备职业——你想以什么身份下去？",
+                        StoryPortraits.ReceptionistSitting)
+                        .Bg(StoryBackgrounds.GuildHall),
+                    // 【2026-11-20 主人拍板】职业介绍挪到「选中某职业后」再弹一拍（见下方 ShowFirstPick 的第二回调），
+                    // 选前不再连念三个职业（剧情框小、连着念玩家看着累）。选前只留问话 + 建议 + 日后可换三拍。
+                    // 建议那拍保留：玩家还没选时给建议才有意义；口吻=前台公事公办带傲娇（人设真源 GlobalToastUI.Persona）。
+                    StoryDirector.Solo("赛琳",
+                        "头回下裂隙，我建议你报剑盾。\n当然，报备写谁是你的事，你自己定。",
+                        StoryPortraits.ReceptionistSitting)
+                        .Bg(StoryBackgrounds.GuildHall)
+                        .SkipReveal(),
+                    // 【2026-11-20 主人拍板】「日后可换职业、要花钻石」改由前台小姐（赛琳）说：
+                    // 放在报备问句之后、三选一之前，正好安抚玩家「放心选」。文案只说「花点钻石」，
+                    // 不写死 500，避免调价时和 CHANGE_JOB_DIAMOND_COST 两处漂移。SkipReveal 同场景续说。
+                    StoryDirector.Solo("赛琳",
+                        "职业若不称心，日后也能换——\n到角色界面花点钻石，自己办。",
+                        StoryPortraits.ReceptionistSitting)
+                        .Bg(StoryBackgrounds.GuildHall)
+                        .SkipReveal(),
+                };
+                StoryDirector.Ensure().Play(askBeats, () => askDone = true, keepSceneArt: true);
+                while (!askDone) yield return null;
+
+                // 【2026-11-20 修「前台说完不弹选职业界面」】报备段用 keepSceneArt:true 播完只收对话框/立绘，
+                // 剧情窗仍留在 Effects 顶层(13000)且全屏 Dim + 大厅背景还在，会把 Default 层(910) 的职业弹窗整块盖住
+                // 并吃掉点击。命名界面早就这么收（PlayerNamingUI.DisableDialogueRaycasts），首次定职这步漏了。
+                // 这里 Hide 掉剧情窗；紧接着的 afterNaming 剧情开播时 PrepareCanvas 会 SetActive(true) 自动恢复，不影响后续。
+                DialogueUI.Instance?.Hide();
+
+                // 【2026-11-20 主人拍板】首次定职流程分两段：
+                // ① 选前（上面 askBeats）：问话 + 建议 + 日后可换；
+                // ② 选后：玩家首次点选某职业时，回调只「记录」该职业；介绍剧情交给主协程阻塞播放完再放行。
+                bool jobPicked = false;
+                PlayerJobId? introPicked = null;
+                PlayerJobSelectUI.ShowFirstPick(_ =>
+                {
+                    var d = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+                    if (d != null) d.playerJobChosen = true;
+                    jobPicked = true;
+                }, picked => introPicked = picked);   // 记录选中职业，不在回调里直接 Play
+
+                // 介绍框必须在主协程里消费 introPicked 触发（Show 战斗引导框，非阻塞、不切场景）：
+                // 回调侧只置 introPicked，不直接 Show，「哪个职业弹」的去重集中在 PlayerJobSelectUI._introShownJobs。
+                // 【11-21 修正】每个职业各弹一次：回调侧按职业去重，这里逐次消费 introPicked（不再全局只弹一次）。
+                // 条件带 introPicked：即便玩家同帧点了确定，也要先消费掉已触发的这次介绍再放行。
+                while (!jobPicked || introPicked.HasValue)
+                {
+                    if (introPicked.HasValue)
+                    {
+                        var picked = introPicked.Value;
+                        introPicked = null;   // 消费一次；同职业是否再弹由回调侧 _introShownJobs 判
+                        yield return PlayFirstPickIntroAndWait(picked);
+                    }
+                    else
+                        yield return null;
+                }
+            }
         }
 
         var afterNaming = new List<StoryBeat>
@@ -290,6 +391,39 @@ public partial class TutorialDirector
         done = false;
         StoryDirector.Ensure().Play(afterNaming, () => done = true, keepSceneArt: true);
         while (!done) yield return null;
+    }
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】首次定职：玩家选某职业后弹一拍该职业介绍，只弹一次。
+    /// 介绍改用战斗引导框（TutorialHintUI 软引导）：抬层压住选职业弹窗、浮在界面上不切剧情场景，
+    /// 5 秒自动收；不阻塞主协程——玩家看完可直接点「确定职业」。选前三拍赛琳剧情不动。
+    /// 技能名对齐 CareerSkillId：剑盾=破阵冲锋 / 游侠=散射 / 法师=火球；只报定位+技能，数值真源在 GameConfig.CAREER_*。
+    /// </summary>
+    IEnumerator PlayFirstPickIntroAndWait(PlayerJobId picked)
+    {
+        string line;
+        switch (picked)
+        {
+            case PlayerJobId.SwordShield:
+                line = "你报剑盾？血厚能扛，自带「破阵冲锋」\n——新人报这个，我省心。";
+                break;
+            case PlayerJobId.Ranger:
+                line = "你报游侠？远程「散射」一次三箭。\n别光顾着射——我可不捞人哦。";
+                break;
+            case PlayerJobId.Mage:
+                line = "你报法师？「火球」范围轰、身板脆\n——新手我可不推荐。";
+                break;
+            default:
+                yield break;   // 其余职业当前不开放，不弹
+        }
+        // 【2026-11-20 主人拍板】选职业的介绍改用战斗引导框，不再是赛琳剧情对白：
+        // 软引导不挡点击，抬层到选职业弹窗(910)之上，浮在界面上、5 秒自动收。
+        // 不 yield 等它收——玩家可立即点「确定职业」往下走，引导框自行消失，不阻塞主协程。
+        var hint = TutorialHintUI.Ensure();
+        hint.SetSortOrderOnce(GameConfig.UiSort.TownConfirm + 10);
+        hint.SetBannerNoTargetYRatioOnce(0.37f);   // 【2026-11-21 主人拍板】框中心 82%→87%，上移露出「选择职业」标题
+        hint.Show(line, null, 5f);   // 【2026-11-21 主人拍板】8→5 秒：选完职业后引导框更快消失
+        yield break;
     }
 
     IEnumerator PlayOpeningIntroIfNeeded()

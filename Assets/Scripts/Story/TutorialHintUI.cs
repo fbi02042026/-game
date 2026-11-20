@@ -95,6 +95,11 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     int _sortBoostOnce;
     /// <summary>
+    /// 【2026-11-21 主人拍板】一次性无目标横幅高度比例：仅下一次 Show 的 PlaceBanner(null) 用，
+    /// 默认 0（= 现有 0.32f 观感零变化）；Hide 自动还原。只调「选职业介绍」这一条，其余引导零影响。
+    /// </summary>
+    float _bannerNoTargetYRatioOnce;
+    /// <summary>
     /// 【2026-11-16】一次性「气泡尖角朝上」：整条 banner 用 localScale.y=-1 镜像（尖角从底部挪到顶部），
     /// 气泡摆到目标下方、尖角朝上指上方按钮；文字节点再 localScale.y=-1 反向补翻保正立。Hide 自动还原。
     /// 0/false = 尖角朝下（现有全部引导的默认，观感零变化）。
@@ -117,6 +122,12 @@ public class TutorialHintUI : MonoBehaviour
     public void SetSortOrderOnce(int sortingOrder)
     {
         _sortBoostOnce = sortingOrder;
+    }
+
+    /// <summary>【2026-11-21】一次性无目标横幅高度比例：下一次 Show 生效，Hide 还原；0 = 用默认 0.32f。</summary>
+    public void SetBannerNoTargetYRatioOnce(float ratio)
+    {
+        _bannerNoTargetYRatioOnce = ratio;
     }
 
     /// <summary>【2026-11-16】一次性尖角朝上：下一次气泡底图上下翻转、尖角指上方目标；Hide 后自动还原。</summary>
@@ -624,6 +635,7 @@ public class TutorialHintUI : MonoBehaviour
         ApplyDefaultTextStyle();        // 【2026-11-08 方案 A】一次性字样式到此为止（自动隐藏也走这里）
         _bannerSpriteOverride = null;   // 【2026-10-31】一次性自定义底框到此为止（自动隐藏也走这里）
         _sortBoostOnce = 0;             // 【2026-11-16】一次性抬层同上：Hide 即还原默认层级
+        _bannerNoTargetYRatioOnce = 0f; // 【2026-11-21】一次性无目标横幅高度比例：Hide 还原默认 0.32f
         _bubblePointUpOnce = false;     // 【2026-11-16】一次性尖角朝上同上
         // 【2026-11-16】banner 的 localScale 由下方 636 行还原；文字补翻节点须在此显式还原，防串到下一条引导。
         if (_label != null) _label.rectTransform.localScale = Vector3.one;
@@ -922,7 +934,10 @@ public class TutorialHintUI : MonoBehaviour
 
         if (!target.HasValue)
         {
-            _bannerRt.anchoredPosition = new Vector2(x, root.rect.height * 0.32f);
+            // 【2026-11-21 主人拍板】选职业介绍要把横幅上移一点，用一次性比例出口，只此一条生效；
+            // 0 = 走原默认 0.32f，其余引导观感零变化。
+            float yRatio = _bannerNoTargetYRatioOnce > 0f ? _bannerNoTargetYRatioOnce : 0.32f;
+            _bannerRt.anchoredPosition = new Vector2(x, root.rect.height * yRatio);
             return;
         }
 

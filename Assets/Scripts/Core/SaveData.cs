@@ -423,6 +423,10 @@ public class SaveData
 
     /// <summary>进战所选玩家职业（PlayerJobId）</summary>
     public int selectedPlayerJobId = 0;
+    /// <summary>【2026-11-20 主人拍板】是否在起名后已亲手定过职业。
+    /// false → 引导剧情起名后弹首次免费选职业；老档名字已选过的视为已定（见 TutorialDirector 的迁移兜底），
+    /// 避免老玩家重进被弹。换职业不改这个标志（只写 selectedPlayerJobId）。</summary>
+    public bool playerJobChosen = false;
 
     /// <summary>隐藏经验等级（不对玩家展示；驱动掉落权重）</summary>
     public int hiddenLevel = 1;

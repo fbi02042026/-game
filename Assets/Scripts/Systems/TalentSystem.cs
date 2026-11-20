@@ -25,6 +25,34 @@ public static class TalentSystem
     public const string ItemForgetPotion = "item_forget_potion";
 
     /// <summary>
+    /// 【2026-11-20 主人拍板】钻石换职业的花费（账号级）。UI 确认文案与扣费都读这一处，禁止另写数字。
+    /// 换职业 = 扣钻石 + 清右列退 80% 天赋石（左列金币天赋不动）+ 切职业真源。
+    /// </summary>
+    public const long CHANGE_JOB_DIAMOND_COST = 500;
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】换职业的关卡门槛：通关「第 1 章第 5 关」后才允许换。
+    /// 判定走主线进度真源 <c>SaveData.HasStageCleared(chapter, stageIndex0)</c>；stageIndex0 为 0 基，故第 5 关 = 4。
+    /// 🔴 主人要求「可以改，到时看测试进度」——测试期要调门槛只改这两个数，不动判定代码。
+    /// 🔴 只判进度、不清进度：换职业全程不碰 clearedStages，关卡记录天然保留。
+    /// </summary>
+    public const int CHANGE_JOB_UNLOCK_CHAPTER = 1;
+    public const int CHANGE_JOB_UNLOCK_STAGE_INDEX0 = 4;
+
+    /// <summary>换职业关卡门槛是否已达成（唯一判定出口）。未达标 reason 给 UI 直接 toast。</summary>
+    public static bool CanChangeJobByProgress(out string reason)
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null || !data.HasStageCleared(CHANGE_JOB_UNLOCK_CHAPTER, CHANGE_JOB_UNLOCK_STAGE_INDEX0))
+        {
+            reason = $"通关第{CHANGE_JOB_UNLOCK_CHAPTER}章第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁切换职业";
+            return false;
+        }
+        reason = null;
+        return true;
+    }
+
+    /// <summary>
     /// 下一次洗点消耗的遗忘药水数（2026-10-27 主人拍板阶梯计费）：
     /// 第 1-3 次各 1 个、第 4-6 次各 2 个、第 7 次起各 3 个（不再继续涨）。
     /// 次数真源 = <see cref="SaveData.respecCount"/>（已完成洗点次数，本类 TryRespecRight 是唯一写入口）。
@@ -410,6 +438,25 @@ public static class TalentSystem
     }
 
     /// <summary>
+    /// 【洗点 / 换职业共用】清右列节点并按 80% 算出应退天赋石（向下取整）——退费计算的唯一出口，禁止第二份 0.8。
+    /// 只清右列（左列金币天赋不动）；含 JobChoice 的 _job 后缀键。调用方负责 Add 退款与 Save/刷新。
+    /// ⚠ 换职业务必在 SetSelected **之前**调用：RightNodes 按当前职业取视图，切了职业就读不到旧职业节点。
+    /// </summary>
+    static int ClearRightAndRefundCore(SaveData data)
+    {
+        int totalSpent = 0;
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var node = TalentDefs.RightNodes[i];
+            int lv = TalentDefs.GetRightNodeLevel(data.talents, node.id);
+            if (lv > 0) totalSpent += TalentDefs.RightNodeTotalSpent(node, lv);
+            data.talents.Remove(node.id);
+            data.talents.Remove(node.id + "_job");
+        }
+        return (int)(totalSpent * 0.8f); // 向下取整
+    }
+
+    /// <summary>
     /// 洗右列：清除所有右列节点的等级（含 JobChoice 的已选职业），退还已投入天赋石的 80%（向下取整）。
     /// 左列不可洗。
     /// 【2026-10-27 主人拍板】消耗走阶梯（1/1/1 → 2/2/2 → 3…），每成功洗点一次 respecCount +1 ——
@@ -429,17 +476,7 @@ public static class TalentSystem
         }
         data.respecCount++;
 
-        int totalSpent = 0;
-        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
-        {
-            var node = TalentDefs.RightNodes[i];
-            int lv = TalentDefs.GetRightNodeLevel(data.talents, node.id);
-            if (lv > 0) totalSpent += TalentDefs.RightNodeTotalSpent(node, lv);
-            data.talents.Remove(node.id);
-            data.talents.Remove(node.id + "_job");
-        }
-
-        int refund = (int)(totalSpent * 0.8f); // 向下取整
+        int refund = ClearRightAndRefundCore(data);
         if (refund > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, refund, save: true, notify: true);
 
@@ -454,6 +491,75 @@ public static class TalentSystem
     // UI 复用：旧 CanReset / TryReset 改为洗右列入口
     public static bool CanReset(out string reason) => CanRespecRight(out reason);
     public static bool TryReset(out string reason) => TryRespecRight(out reason);
+
+    /// <summary>
+    /// 【2026-11-20 主人拍板】钻石换职业事务（账号级，**不是**每局进战选职业）。
+    /// 收口在这里做，UI 只需先走 DiamondSpendGate.Request 二次确认、确认回调里调本方法。
+    ///
+    /// <para>顺序不可换：</para>
+    /// <para>① 先按**旧职业视图**清右列 + 算退 80% 天赋石（ClearRightAndRefundCore 必须在 SetSelected 之前，
+    /// RightNodes 读的是当前职业视图，切了就读不到旧节点）；② TrySpendDiamond 扣费（唯一扣费出口）；</para>
+    /// <para>③ 退款 + 背包行回落（save:false，先攒齐内存改动）；④ SetSelected 切职业真源
+    /// （内部 Save 一次，此时状态已完整，避免半截盘；换表由 RightNodes 按新职业过滤自动生效）；</para>
+    /// <para>⑤ RecalcAttr 重算 + 落盘兜底 + HUD/天赋页刷新。</para>
+    /// <para>左列金币天赋全程不动。失败在任何一步之前 return，不产生半截状态。</para>
+    /// </summary>
+    public static bool TryChangeJob(PlayerJobId target, out string reason)
+    {
+        reason = null;
+        if (!PlayerJobDefs.IsPlayable(target))
+        {
+            reason = "该职业暂未开放";
+            return false;
+        }
+        // 【2026-11-20 主人拍板】关卡门槛：没通第1章第5关就不许换（事务级 fail closed，防 UI 绕过）。
+        if (!CanChangeJobByProgress(out reason)) return false;
+        var data = SaveSystem.Instance?.Data;
+        if (data == null)
+        {
+            reason = "无存档";
+            return false;
+        }
+        PlayerJobId old = PlayerJobDefs.GetSelected();
+        if (old == target)
+        {
+            reason = "当前已是该职业";
+            return false;
+        }
+        if (ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond) < CHANGE_JOB_DIAMOND_COST)
+        {
+            reason = "钻石不足";
+            return false;
+        }
+
+        // ① 旧职业视图下清右列 + 算退款（此时还没切职业，RightNodes = 旧职业表）
+        int refund = ClearRightAndRefundCore(data);
+
+        // ② 扣钻石（Diamond 唯一扣费出口，fail closed）
+        if (!ResourceWallet.TrySpendDiamond(CHANGE_JOB_DIAMOND_COST, "更换职业", save: false, notify: false))
+        {
+            reason = "钻石扣除失败";
+            return false;
+        }
+
+        // ③ 退款 + 背包行回落（都 save:false，先攒齐所有内存改动）
+        if (refund > 0)
+            ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, refund, save: false, notify: false);
+        SyncBackpackRows(data);   // 清掉 R_BAG → 背包行回落 3
+
+        // ④ 切职业真源（单一出口）。SetSelected 内部会 Save 一次 ——
+        // 此时钻石/天赋/退款/背包已全部改完，这次落盘就是完整状态，不留半截盘。
+        PlayerJobDefs.SetSelected(target);
+
+        // ⑤ 重算 + 落盘兜底 + 刷新（换表由 RightNodes 按新职业过滤自动生效）
+        Hero.Instance?.RecalcAttr();
+        SaveSystem.Instance.Save();
+        GuildHallUI.RefreshAllHudStatic();
+        if (TalentUI.Instance != null) TalentUI.Instance.RefreshAll();
+        UIManager.Instance?.ShowToast($"已转为{PlayerJobDefs.Get(target).DisplayName}，返还天赋石 {refund}");
+        Debug.Log($"[TalentSystem] 换职业 {old} → {target}，花钻石 {CHANGE_JOB_DIAMOND_COST}，返还天赋石 {refund}");
+        return true;
+    }
 
     public static bool IsLeftUpgradeable(int index0, IDictionary<string, int> talents)
     {

@@ -1199,21 +1199,17 @@ public class MercFavorUI : MonoBehaviour
         if (d == null || string.IsNullOrEmpty(_currentHireId)) return;
         // 一次性：未开放 / 已通关都不进本（按钮已置灰，这里双保险）
         if (!MercFavorSystem.IsBondOpen(d, _currentHireId) || MercFavorSystem.IsBondCleared(d, _currentHireId)) return;
-        string hireId = _currentHireId;   // 回调里界面可能已关，先捕获真值
-        // 【T9】选职必须在切场景之前（PlayerJobDefs.ApplyForBattle 按「当前所选职业」发装）。
-        // 取消不进本、不扣体力；Options 每次 Open 都重设，避免上次对战的「挑战」文案残留。
-        PlayerJobSelectUI.Show(() =>
-        {
-            // ResetPendingFlags 会清掉所有 Pending，标记必须在回调里重立（照 AdventureUI.Interaction 口径）
-            AdventureUI.ResetPendingFlags();
-            AdventureUI.PendingBondDungeon = true;
-            AdventureUI.PendingBondHireId = hireId;
-            AdventureUI.PendingBattleDifficulty = MercFavorDefs.BondDungeonDifficulty;
-            AdventureUI.PendingBattleChapter = MercFavorDefs.BondDungeonChapter;
-            Destroy(gameObject);
-            if (GameSceneManager.Instance != null) GameSceneManager.Instance.LoadBattleScene();
-            else Debug.LogError(LogTag + "找不到 GameSceneManager，羁绊副本进本失败");
-        }, new PlayerJobSelectUI.Options { EnterLabel = "进入羁绊", StaminaFree = true });
+        // 【2026-11-20 主人拍板「进战斗不用再选职业」】不再弹 PlayerJobSelectUI。
+        // 职业真源 = PlayerJobDefs.GetSelected()（起名后首次定 / 角色页换职业写），进战 ApplyForBattle 按它发装。
+        // ResetPendingFlags 会清掉所有 Pending，标记在这里重立（照 AdventureUI.Interaction 口径）。
+        AdventureUI.ResetPendingFlags();
+        AdventureUI.PendingBondDungeon = true;
+        AdventureUI.PendingBondHireId = _currentHireId;
+        AdventureUI.PendingBattleDifficulty = MercFavorDefs.BondDungeonDifficulty;
+        AdventureUI.PendingBattleChapter = MercFavorDefs.BondDungeonChapter;
+        Destroy(gameObject);
+        if (GameSceneManager.Instance != null) GameSceneManager.Instance.LoadBattleScene();
+        else Debug.LogError(LogTag + "找不到 GameSceneManager，羁绊副本进本失败");
     }
 
     void Close()

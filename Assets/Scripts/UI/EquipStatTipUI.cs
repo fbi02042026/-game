@@ -79,7 +79,7 @@ public class EquipStatTipUI : MonoBehaviour
         _panel = new GameObject("Panel", typeof(RectTransform), typeof(Image));
         _panel.transform.SetParent(transform, false);
         var pImg = _panel.GetComponent<Image>();
-        pImg.color = new Color(0.12f, 0.12f, 0.15f, 0.96f);   // 深色半透明底（同 BackpackItemActionUI 观感）
+        pImg.color = new Color(0.30f, 0.22f, 0.15f, 0.80f);   // 半透明偏褐底（2026-11-21 主人拍板）
         pImg.raycastTarget = false;                            // 不吃射线，别挡住下面的格子/按钮
         _panelRt = _panel.GetComponent<RectTransform>();
         _panelRt.anchorMin = new Vector2(0.5f, 0.5f);
