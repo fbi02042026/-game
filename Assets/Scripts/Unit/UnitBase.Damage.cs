@@ -157,6 +157,10 @@ public partial class UnitBase
             else
             {
                 bm.RecordDamageTaken(finalDamage);
+                // 【批次4 T4 友军救场】实际扣血之后查一次濒死阈值（玩家/友军 ≤40%），
+                // 命中与否由 BattleManager 内部门禁 + 本关一次旗判定（不每帧轮询，每次受伤查一次）。
+                if (isAlly)
+                    bm.TryTriggerRescueOnWounded(this);
                 if (isAlly)
                 {
                     float maxHp = attr != null ? Mathf.Max(1f, attr.GetAttr(AttrType.MaxHp)) : 1f;

@@ -10,6 +10,21 @@ public partial class BattleManager
     internal void OnMonsterDead(UnitBase monster)
     {
         InvalidateAliveMonsterCache();
+
+        // ===== 修点②（2026-11-20 二次拍板⑤）：机器人死亡奖励分支 =====
+        // Mercenary 不走下面的 Monster 分支（m==null 直接 return，只有缓存清理生效）：
+        // 友方机器人（救场/入场救援生成）零奖励零计数，只走上面的缓存清理；
+        // 敌方机器人（敌对乱入生成）当怪处理：击杀计数 + 击杀任务 + 掉卷轴（按难度分档）。
+        if (monster is Mercenary)
+        {
+            Mercenary mc = (Mercenary)monster;
+            if (mc.isAlly) return;   // 友方：什么都不发，直接 return（缓存清理已在开头做过）
+            RunStats.KillCount++;
+            SaveSystem.Instance?.Data?.CountKill(false);   // 机器人非 Boss，照下方 :29 Monster 分支口径传 false
+            GrantIntruderScrollReward();
+            return;
+        }
+
         Monster m = monster as Monster;
         if (m == null) return;
 
@@ -159,6 +174,35 @@ public partial class BattleManager
             if (!Rules.SkipWaveAnnounce && _waveAnnounceCo == null && !_allWavesSpawned)
                 StartCoroutine(CoCheckWaveClearNextFrame());
         }
+    }
+
+    // ===== 修点②（2026-11-20 二次拍板⑤）：敌对乱入机器人掉卷轴 =====
+    /// <summary>掉卷轴数量按难度分档（0 普通 / 1 困难 / 2 噩梦），三档同类型（普通招募卷）数量递增；实测可调。</summary>
+    static readonly int[] IntruderScrollCount = { 1, 2, 3 };
+
+    /// <summary>
+    /// 敌对乱入机器人死亡掉「普通招募卷」：不进金币、不新开奖励系统。
+    /// 库存唯一出口 = SaveData.mercScrollCommon（SaveData.cs:876，与 Boss 掉卷 Settlement.cs:250 同字段；
+    /// mercScrollRare 已折算废弃，mercScrollLegendary 是高级档不适用「同类型」口径）。
+    /// 提示照现有掉落 toast 风格（Boss 掉卷 Settlement.cs:260 / 精英击破 MonsterDeath.cs:23）简短一行。
+    /// </summary>
+    void GrantIntruderScrollReward()
+    {
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data == null)
+        {
+            Debug.LogError("[BattleManager.MonsterDeath] 敌对乱入卷轴奖励：SaveSystem.Instance/Data 为空，未发放（BattleManager.MonsterDeath.cs GrantIntruderScrollReward）");
+            return;
+        }
+        int diff = BattleDifficulty;
+        if (diff < 0 || diff >= IntruderScrollCount.Length)
+        {
+            Debug.LogError($"[BattleManager.MonsterDeath] 敌对乱入卷轴奖励：未知难度 {diff}，未发放（BattleManager.MonsterDeath.cs GrantIntruderScrollReward）");
+            return;
+        }
+        int count = IntruderScrollCount[diff];
+        data.mercScrollCommon += count;
+        GlobalToastUI.ShowFlythrough($"敌对乱入掉落 普通招募卷×{count}");
     }
 
     IEnumerator CoCheckWaveClearNextFrame()

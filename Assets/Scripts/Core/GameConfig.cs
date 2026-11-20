@@ -278,6 +278,7 @@ public static partial class GameConfig
         float visual = Random.Range(MONSTER_SCALE_MIN, MONSTER_SCALE_MAX);
         if (isBoss) visual *= BOSS_SCALE_MULTIPLIER;
         else if (isElite) visual *= ELITE_SCALE_MULTIPLIER;
+        else visual *= MONSTER_NORMAL_SCALE_MUL; // 2026-11-20 普通小怪整体放大20%（精英/Boss 不变）
         return visual;
     }
 

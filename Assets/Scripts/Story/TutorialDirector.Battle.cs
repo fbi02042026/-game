@@ -436,6 +436,7 @@ public partial class TutorialDirector
     IEnumerator CoWaitMercAvatarTap(TutorialHintUI hint, BattleUI ui, float timeoutSec = 60f)
     {
         _mercAvatarTapped = false;
+        WaitingMercAvatarTap = true;   // 【2026-11-20】开闸：仅这一步允许点头像
         var slotRt = (ui != null && ui.mercSlot1 != null && ui.mercSlot1.root != null)
             ? ui.mercSlot1.root.transform as RectTransform : null;
         hint.ShowHard("点一点新伙伴的头像。什么底细，本小姐可都替你打听好了。", slotRt);
@@ -447,6 +448,7 @@ public partial class TutorialDirector
         }
         if (!_mercAvatarTapped)
             Debug.LogWarning("[Tutorial] 等玩家点佣兵头像超时（60s），放行继续流程");
+        WaitingMercAvatarTap = false;  // 【2026-11-20】关闸：引导其它时刻点头像一律吞掉
     }
 
     static void HaltUnit(UnitBase u)

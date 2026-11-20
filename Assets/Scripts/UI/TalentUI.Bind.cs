@@ -27,6 +27,9 @@ public partial class TalentUI
             Debug.LogError("[TalentUI] 节点缺 " + UnlockFxNodeName + " 粒子（模板应有）：" + (go != null ? go.name : "null"));
             return null;
         }
+        // 🔴 只 Stop 不够：playOnAwake 在每次 GameObject 重新激活时都会再播一遍（Prewarm/Hide/Show）。
+        // 直接把运行实例的标志关掉，之后只有 PlayUnlockFx 能播；不写 prefab。
+        fx.playOnAwake = false;
         fx.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         return fx;
     }

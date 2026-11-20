@@ -6,7 +6,7 @@ using UnityEngine.UI;
 /// 全屏 UI Image + <c>Battle/NightVignette</c> Shader（DeepSeek 交付，Assets/Shaders/BattleNightVignette.shader），
 /// 中心透明（玩家光圈）四周压暗；中心每帧跟随玩家屏幕 UV，半径由 <see cref="BattleAtmosphere.LightRadiusWorld"/>
 /// 唯一驱动（对外暴露 <see cref="SetRadius"/>，遮罩挖洞与 T4 显隐判定同源同半径）；
-/// 相位切换 1.5~3s 插值 alpha/色调；排序取 <see cref="GameConfig.UiSort.BattleAmbience"/>(928) 在 HUD(950) 之下，
+/// 相位切换 1.5~3s 插值 alpha/色调；排序取 <see cref="GameConfig.UiSort.BattleNightVignette"/>(90)：只压场景(10/15/50~82)、停在底部面板(100)之下 → 面板独立不被压暗，
 /// raycastTarget=false 不挡操作；绝不开第二相机（历史黑屏教训）。
 /// 非 DDOL：随 Battle 场景销毁；白天全透时自动关掉 Image 省一次全屏 pass。
 /// </summary>
@@ -36,14 +36,14 @@ public class DayNightOverlay : MonoBehaviour
     /// <summary>边缘过渡宽度，单位与 _Radius 相同（屏幕高度比例）。</summary>
     const float Softness = 0.06f;
     /// <summary>LightRadiusWorld 读不到时的兜底（与 T2 默认值同源，避免除零/全黑）。</summary>
-    const float DefaultRadiusWorld = 3.2f;
+    const float DefaultRadiusWorld = 2.88f;
     /// <summary>炼狱章号：夜相压暗红（§2 定稿「7炼狱=夜(暗红压暗)」）。</summary>
     const int HellChapter = 7;
 
-    /// <summary>相位目标色：RGB=压暗色调，A=圈外峰值压暗强度（§2：夜≈0.42 冷蓝）。</summary>
+    /// <summary>相位目标色：RGB=压暗色调，A=圈外峰值压暗强度（§2：夜≈0.5 冷蓝）。</summary>
     static readonly Color DayTarget   = new Color(0.06f, 0.10f, 0.22f, 0f);     // 白天：全透（不压暗）
     static readonly Color DuskTarget  = new Color(0.34f, 0.18f, 0.10f, 0.26f);  // 黄昏：轻度暖压（数值待主人手感微调）
-    static readonly Color NightTarget = new Color(0.06f, 0.10f, 0.22f, 0.42f);  // 夜：冷蓝 0.42（定稿值）
+    static readonly Color NightTarget = new Color(0.06f, 0.10f, 0.22f, 0.5f);   // 夜：冷蓝 0.5（主人 2026-11-20 拍板再暗一点）
     static readonly Color HellTarget  = new Color(0.32f, 0.08f, 0.06f, 0.45f);  // 炼狱夜：暗红（数值待主人手感微调）
 
     static Material _vignetteMat;
@@ -175,7 +175,7 @@ public class DayNightOverlay : MonoBehaviour
         return bm != null && bm.CurrentChapter == HellChapter;
     }
 
-    /// <summary>建全屏 UI Image（Canvas 排序 UiSort.BattleAmbience，在 HUD 之下）。Shader 缺失只报错不兜底（铁律：露白）。</summary>
+    /// <summary>建全屏 UI Image（Canvas 排序 UiSort.BattleNightVignette=90，只压场景、不压底部面板）。Shader 缺失只报错不兜底（铁律：露白）。</summary>
     bool Build()
     {
         _built = true;
@@ -205,8 +205,8 @@ public class DayNightOverlay : MonoBehaviour
 
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        // 排序 928（UiSort.BattleAmbience）：压住单位(15)/特效(50)，被 HUD(950) 压住 → 血条/技能不被压暗
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleAmbience, UICanvasSetup.ResolveUiCamera());
+        // 排序 90（UiSort.BattleNightVignette）：压住场景 map(10)/单位(15)/特效(50~82)，停在底部面板(100)之下 → 头像/抽奖/装备栏夜战不被压暗
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleNightVignette, UICanvasSetup.ResolveUiCamera());
         return true;
     }
 

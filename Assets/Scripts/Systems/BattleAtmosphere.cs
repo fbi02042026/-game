@@ -33,7 +33,7 @@ public class BattleAtmosphere : MonoBehaviour
     public WeatherType Weather { get; private set; } = WeatherType.Clear;
 
     /// <summary>视野半径（世界单位）唯一真源：T3 遮罩挖洞与 T4 显隐判定共用此值。主人按手感调这一个数即可。</summary>
-    public float LightRadiusWorld = 3.2f;
+    public float LightRadiusWorld = 2.88f;
 
     public event Action<DayPhase, WeatherType> OnChanged;
 

@@ -11,6 +11,15 @@ public partial class Monster
     MonsterTargetingPolicy _targetingPolicy = MonsterTargetingPolicy.Distance;
     public MonsterTargetingPolicy TargetingPolicy => _targetingPolicy;
 
+    // 【2026-11-20 主人拍板】词条怪吐槽改「进屏后再说」：刷怪时 Arm，AIUpdate 检测进屏消费一次。
+    bool _affixBanterArmed;
+    public void ArmAffixBanter() => _affixBanterArmed = true;
+
+    // 【2026-11-20 主人拍板】近战小怪开打站定后稍微分散：复用 Hero 的车道容错偏移（换目标抽一次固定 ±Y，
+    // 幅度 LANE_ALIGN_TOLERANCE=0.12 < 近战出手闸 MELEE_LANE_ALIGN_TOL=0.22，不影响普攻）。
+    // 只给普通近战小怪开；精英/Boss 走原样，不碰其演出。
+    protected override bool UseLaneAlignTolerance => !_isBossUnit && !_eliteWave;
+
     // 【2026-10-14 主人拍板】Boss 多段切换索敌策略：每隔 BOSS_TARGET_SHIFT_INTERVAL 按
     // Distance→SquishyJob→LowHp 轮换；目标真变了就在新目标头顶弹红色「锁」（BossTargetMark）。
     float _bossTargetShiftCd;
@@ -63,6 +72,19 @@ public partial class Monster
 
     protected override void AIUpdate()
     {
+        // 【2026-11-20 主人拍板】词条怪吐槽等进屏再说：刷出瞬间怪还在屏外，立刻说会「说完半天没看见怪」。
+        // 每帧检测：已武装且身体进入可视区（pad=0，贴边即算）→ 说一次并卸下武装，之后不再触发。
+        if (_affixBanterArmed)
+        {
+            BattleManager.GetBattleVisibleX(out float affixVMin, out float affixVMax, 0f);
+            float ax = MoveRoot != null ? MoveRoot.position.x : transform.position.x;
+            if (ax <= affixVMax && ax >= affixVMin)
+            {
+                _affixBanterArmed = false;
+                MonsterAffixBanter.OnAffixMonsterEnterScreen(this);
+            }
+        }
+
         // 【2026-10-20 主人拍板】瞬移遁走冷却倒计时：放最开头，入场/冻场/演出各分支都照常流动
         if (_blinkCd > 0f)
             _blinkCd = Mathf.Max(0f, _blinkCd - Time.deltaTime);

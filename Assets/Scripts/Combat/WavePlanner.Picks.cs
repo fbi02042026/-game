@@ -278,6 +278,19 @@ public partial class WavePlanner
         {
             spriteIndexOverride = PickWaveSpriteIndex(availableSprites, stageIdx, pool, slotIndex, usedSprites,
                 waveIndex, stageType);
+
+            // 【2026-11-20 主人拍板】每波保底至少两种怪：本波已用精灵只有 1 种、且可用池 >=2 种时，
+            // 把当前这只换成没用过的精灵。修「全近战波在 1/2 号池里只剩 1 号一种」的清一色问题；
+            // 只对非 Boss 普通波生效，池里本就只有 1 种时无从换、保持原样。
+            if (usedSprites != null && usedSprites.Count == 1 && availableSprites.Count > 1 &&
+                usedSprites.Contains(spriteIndexOverride) && !wantBoss)
+            {
+                var unused = availableSprites.Where(s => !usedSprites.Contains(s)).ToList();
+                if (unused.Count > 0)
+                    spriteIndexOverride = ConfigManager.Instance != null
+                        ? ConfigManager.Instance.PickWeightedSpriteIndex(unused, stageIdx)
+                        : unused[Random.Range(0, unused.Count)];
+            }
             int pickedSprite = spriteIndexOverride;
             template = pool.Find(m => !m.isBoss && m.spriteIndex == pickedSprite);
             if (template == null)

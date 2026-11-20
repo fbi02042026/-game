@@ -25,6 +25,12 @@ public partial class TutorialDirector : Singleton<TutorialDirector>
     public bool ShowMercHud => SlotMachineSystem.TutorialMercDrawn;
     public bool WaitingEvacuate { get; set; }
     public bool SkillUsedThisStep { get; private set; }
+    /// <summary>
+    /// 引导正停在「点佣兵头像看新伙伴」那一步（CoWaitMercAvatarTap 期间）。
+    /// BattleUI.OnMercAvatarClicked 据此放行头像点击；其余引导时刻点头像一律吞掉，
+    /// 避免详情弹窗盖住引导（2026-11-20 主人报「引导让点开始战斗，误点头像弹窗、引导却停在原地」）。
+    /// </summary>
+    public bool WaitingMercAvatarTap { get; private set; }
     /// <summary>引导战斗：仅 heal 步骤允许点头像放技能。</summary>
     public bool AllowBattleSkillClick { get; private set; }
 

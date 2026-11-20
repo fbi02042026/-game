@@ -13,6 +13,13 @@ public class WaveData
     public bool isBossWave;
     public bool spawned;
     public int aliveCount;
+    // ===== T2 敌对乱入（按剧情节点打标；不增波数、不改 monsterCount）=====
+    /// <summary>本波替换为敌对乱入机器人的槽位数（0 = 无）；命中槽位 i &lt; 本值时改走机器人生成。</summary>
+    public int intruderSlotCount;
+    /// <summary>本波触发的乱入事件 id（null/空 = 无；给 T3 剧情挂点与日志用）。</summary>
+    public string intruderEventId;
+    /// <summary>IntruderEventDirector 抽好的机器人 AssetId（顺序对应槽位 0..N-1，供 Execute 生成用）。</summary>
+    public string[] intruderAssetIds;
     /// <summary>有效时（&gt; -900）作为交战/夹击锚点 X。</summary>
     public float engageAnchorX = -999f;
     /// <summary>左右交替进场（宝箱/佣兵埋伏）。普通波保持右侧。</summary>

@@ -318,6 +318,38 @@ public partial class WavePlanner
                 spawned = false,
                 aliveCount = 0
             };
+            // ===== T2 敌对乱入·按剧情节点打标（唯一分派出口 = IntruderEventDirector）=====
+            // Plan 阶段拿得到 CurrentChapter，但拿不到显式 storyNode 回调，故按 T0 口径拼 "preBattle:"+CurrentChapter
+            // 作为节点键；triggerNode 的 waveN 与本波序号 i+1 对齐（wave1 = 第 1 波 = 索引 0）。
+            // 后续若改成真正的剧情回调节点，这里换成回调传入的 storyNode 即可，勿在别处另写查表。
+            if (formalMain && !bm.IsTutorialRun)
+            {
+                string intruderNode = "preBattle:" + CurrentChapter;
+                if (IntruderEventDirector.TryGetIntruderForNode(intruderNode, out var intruderEv)
+                    && intruderEv.chapter == CurrentChapter)
+                {
+                    // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 整块跳过：
+                    // 不打标 → Execute 不替换怪，剧情钩子查不到事件自然不播。Plan 为运行期（战斗开始时经
+                    // BattleManager 调用），读 SaveSystem 安全（Entry 链 BattleManager.Waves.cs:754 同款）；
+                    // data 为空视为未看（老档兼容，fail-open 与既有语义一致）。
+                    var intruderSave = SaveSystem.Instance?.Data;
+                    bool intruderSeen = intruderSave != null && intruderSave.HasIntruderStorySeen(intruderEv.eventId);
+                    string trig = intruderEv.triggerNode;
+                    bool waveHit = !string.IsNullOrEmpty(trig)
+                        && trig.StartsWith("wave", System.StringComparison.OrdinalIgnoreCase)
+                        && int.TryParse(trig.Substring(4), out int intruderWaveNo)
+                        && intruderWaveNo == i + 1;
+                    if (waveHit && !intruderSeen)
+                    {
+                        wave.intruderEventId = intruderEv.eventId;
+                        wave.intruderSlotCount = Mathf.Min(intruderEv.replaceCount, wave.monsterCount);
+                        int intruderSeed = CurrentChapter * 1000 + stageIdx;
+                        if (IntruderEventDirector.TryPickIntruderForNode(intruderNode, intruderSeed, out var pickedIds))
+                            wave.intruderAssetIds = pickedIds;
+                        GamePerf.Log($"[Intruder] Ch{CurrentChapter} 第{i + 1}波打标 event={intruderEv.eventId} slots={wave.intruderSlotCount} seed={intruderSeed}");
+                    }
+                }
+            }
             // 原型接管进场方向 / 出怪间隔 / 人数上限 / 近远编成 / 精英额度
             // 【2026-10-22 主人拍板 v4.1】正式精英关的第 1-8 波不挂精英模式原型（普通关编成同款：无原型）；
             // 末波照常挂精英池原型。原「全波挂精英池原型」路径保留退役。

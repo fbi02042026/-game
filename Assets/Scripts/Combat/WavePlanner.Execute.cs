@@ -144,6 +144,12 @@ public partial class WavePlanner
 
             if (wave == null || BattleLootMode.Active)
                 yield break;
+            // ===== T2 敌对乱入：目标波前 intruderSlotCount 个槽位改走机器人（不增波数、不吞怪数）=====
+            // 放在词条/模板选择之前：避免 continue 吞掉 affix 预选槽，或遗留 SetPendingBias 未清。
+            // 解析/生成失败会 LogError 并回落普通怪，保证本波怪数与非目标波一致。
+            if (wave != null && wave.intruderSlotCount > 0 && i < wave.intruderSlotCount
+                && TrySpawnIntruderMercenary(wave, i, waveIndex, stageIdx, engageBaseX, waveSpacing, spawnZ))
+                continue;
 
             // Boss 关变体「双护法」：本波最前 N 个名额是精英亲卫（非 Boss 模板），Boss 本体最后出场
             bool guardSlot = wave.isBossWave && wave.bossGuardCount > 0 && i < wave.bossGuardCount;
@@ -285,8 +291,9 @@ public partial class WavePlanner
             {
                 ForceEnableMonsterRenderers(m.transform);
                 wave.aliveCount++;
-                // 【2026-10-26 词缀怪】词缀怪出场 → 玩家吐槽介绍一句（每种词缀每关一次）
-                MonsterAffixBanter.OnAffixMonsterSpawned(m);
+                // 【2026-10-26 词缀怪 / 2026-11-20 改】吐槽台词改为进屏后再说：这里只武装，
+                // 真正说话在 Monster.AIUpdate 检测身体进入可视区后触发（贴边即算，说完就能看见怪）。
+                m.ArmAffixBanter();
             }
         }
 
@@ -538,5 +545,60 @@ public partial class WavePlanner
             }
         }
         root.gameObject.SetActive(true);
+    }
+
+    /// <summary>
+    /// T2 敌对乱入：把一个槽位换成敌方佣兵（机器人冒险者）。复用竞技场 SpawnEnemyMercenary 链路，
+    /// 只进 bm.monsters、不进 _activeMercs；🔴 四条记账自己补，缺一会导致「怪清不完 / 不掉金币 / 不算击杀任务」。
+    /// 返回 false = 数据或生成失败（已 LogError），调用方回落普通怪，不吞怪数。
+    /// </summary>
+    bool TrySpawnIntruderMercenary(WaveData wave, int slot, int waveIndex, int stageIdx,
+        float engageBaseX, float waveSpacing, float spawnZ)
+    {
+        var ids = wave.intruderAssetIds;
+        if (ids == null || slot >= ids.Length || string.IsNullOrEmpty(ids[slot]))
+        {
+            Debug.LogError($"[Intruder] 波 {waveIndex + 1} 槽位 {slot} 的 intruderAssetIds 缺失/越界（event={wave.intruderEventId}）");
+            return false;
+        }
+        string assetId = ids[slot];
+        string hireId = MercRosterDefs.ResolveHireId(assetId);
+        if (string.IsNullOrEmpty(hireId))
+        {
+            Debug.LogError($"[Intruder] assetId={assetId} → hireId 解析失败（MercRosterDefs.ResolveHireId 返回 null）");
+            return false;
+        }
+        var mm = MercenaryManager.Instance;
+        if (mm == null)
+        {
+            Debug.LogError("[Intruder] MercenaryManager.Instance 为空，敌对乱入单位不生成");
+            return false;
+        }
+
+        float lane = BattleLaneBounds.LaneSlot(slot, wave.monsterCount);
+        var pos = new Vector3(engageBaseX + slot * waveSpacing + Random.Range(-0.22f, 0.22f),
+            UnitBase.GROUND_Y + lane,
+            wave.spawnAnchor != null ? wave.spawnAnchor.position.z : spawnZ);
+        // T0 表无乱入单位等级/星级字段：按章节+关序给确定性值（数值口径待主人确认，本批不造配置）。
+        int level = Mathf.Clamp(CurrentChapter * 5 + stageIdx, 1, 60);
+        int star = Mathf.Clamp(1 + CurrentChapter / 2, 1, 5);
+
+        Mercenary merc = mm.SpawnEnemyMercenary(hireId, pos, level, star);
+        if (merc == null)
+        {
+            Debug.LogError($"[Intruder] SpawnEnemyMercenary 失败 hireId={hireId}（见上方日志）");
+            return false;
+        }
+        merc.isAlly = false;          // 显式再置一次（SpawnEnemyMercenary 内部 L409 已设）
+        merc.Face(-1);                // 面向玩家半场（左），照 ArenaEnemySpawner L258
+        merc.SetPartyIndex(slot);     // 车道偏移按队内序错开（同 L257）
+
+        // 🔴 记账四件套（缺一会导致怪清不完 / 不掉金币 / 不算击杀任务）
+        merc.OnDead += OnMonsterDead;      // 普通怪 Execute L516
+        bm.monsters.Add(merc);             // 普通怪 Execute L517 / 竞技场 L276
+        _totalMonstersSpawnedThisStage++;  // 普通怪 Execute L518 / 竞技场 L277
+        bm.InvalidateAliveMonsterCache();  // 普通怪 Execute L519 / 竞技场 L278
+        wave.aliveCount++;                 // 普通怪 Execute L287
+        return true;
     }
 }

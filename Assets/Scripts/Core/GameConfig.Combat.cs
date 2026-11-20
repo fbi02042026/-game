@@ -62,6 +62,12 @@ public static partial class GameConfig
         /// </summary>
         public const int BattleAmbience = 928;
         /// <summary>
+        /// 【2026-11-20 主人拍板「黑夜不能压面板，面板要独立」】昼夜径向暗图专用层：
+        /// 只压场景（map 10 / 单位 15 / 特效 <=82），停在底部面板(100)之下 → 头像、抽奖按钮、装备栏夜战不被压暗。
+        /// 面板独立靠的是暗图让路；不再抬面板 Canvas 去躲暗图（两条嵌套 Canvas 同为 935 会排序冲突、吞掉头像与抽奖内容）。
+        /// </summary>
+        public const int BattleNightVignette = 90;
+        /// <summary>
         /// 【2026-10-20 主人报「技能槽怎么又跑到前面来了」】恢复关「生命恢复」弹窗。
         /// 技槽嵌套 Canvas 固定抬在 BattlePopup 之上（=921），弹窗用 920 会被技槽穿到前面；
         /// 且恢复关已改为在关卡界面上直接弹（不进战斗），须同时盖住关卡图(880)与老虎机(900)。
@@ -130,6 +136,9 @@ public static partial class GameConfig
     /// <summary>小怪整体缩小 30%（主人 2026-09-26 定）：在原有 MIN/MAX 之上乘 0.7，不写死新数值。
     /// 精英仍乘 ELITE_SCALE_MULTIPLIER（Normal : Elite 保持 1 : 1.3）；Boss 除外，见下。</summary>
     public const float MONSTER_SMALL_SHRINK = 0.7f;
+    /// <summary>普通小怪整体放大 20%（主人 2026-11-20 拍板）。只作用于普通怪 rootScale，精英/Boss 走各自倍率不变。
+    /// 放在 MONSTER_SCALE_MIN/MAX 之上乘，不写死新数值。</summary>
+    public const float MONSTER_NORMAL_SCALE_MUL = 1.2f;
     /// <summary>Boss 是否参与 MONSTER_SMALL_SHRINK 缩小。
     /// 【2026-10-20 主人拍板「boss有点大 锁小30%」】打开此开关 = Boss 与小怪同吃 ×0.7（覆盖
     /// 2026-09-26「Boss 先不缩」的旧口径）。true = 不再把 0.7 除回去，Boss 视觉体型整体缩 30%。
@@ -149,7 +158,19 @@ public static partial class GameConfig
     /// 只影响视觉（本体 localPosition），移动/判定仍走 _bodyRoot。量级参考：怪根 scale≈2.6~4.5、阴影宽≈0.9。
     /// 【2026-11-15 主人口径「浮空的距离减一半」】0.3 → 0.15。
     /// </summary>
-    public const float MONSTER_AIR_HOVER = 0.15f;
+    /// 空中怪按档上抬（主人 2026-11-20 拍板、17:55 再拍板「减少一半」）：这是【世界单位】的视觉抬升，
+    /// 三档 0.1 / 0.25 / 0.4（= 原 0.2/0.5/0.8 减半，对应约 10/25/40 屏幕像素）。
+    /// 【2026-11-20 修】ApplyAirHoverOffset 会先除以 MoveRoot 根缩放再写 localPosition.y —— 否则被 3~8 倍
+    /// 根缩放放大成 Boss 抬 6.5 世界单位（飞出屏幕、视觉与判定脱节、打不到）。
+    /// 阴影由 ApplyAirHoverOffset 反向补偿留地面，不跟着抬。</summary>
+    public const float MONSTER_AIR_HOVER = 0.1f;
+    public const float MONSTER_AIR_HOVER_ELITE = 0.25f;
+    public const float MONSTER_AIR_HOVER_BOSS = 0.4f;
+    /// <summary>空中怪漂浮缓动（2026-11-20 主人「站立和行走加上下缓动表示漂浮」）：
+    /// 幅度是【世界单位】，绕 hover 基线上下正弦浮动，各体型视觉一致（写 local 前除以根缩放）。
+    /// 周期 = 2π / MONSTER_AIR_BOB_SPEED ≈ 3.5s；每只怪按实例 id 错开相位，避免整齐划一。</summary>
+    public const float MONSTER_AIR_BOB_AMP_WORLD = 0.06f;
+    public const float MONSTER_AIR_BOB_SPEED = 1.8f;
     // 2026-09-21：精英/Boss 体型倍率已迁 combat_tuning 表（可运行时调）。
     // 【2026-10-10 主人拍板】精英 1.3 → 2.0（「精英的大小应该放大几倍」）；Boss 等比 1.6 → 2.6 保持 Boss > 精英。
     public static float ELITE_SCALE_MULTIPLIER => CombatTuningTable.Get("ELITE_SCALE_MULTIPLIER", 2.0f);

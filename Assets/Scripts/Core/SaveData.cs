@@ -481,6 +481,21 @@ public class SaveData
     [NonSerialized] public HashSet<string> seenClueIds = new HashSet<string>();
     public List<StringIdEntry> seenEndingEntries = new List<StringIdEntry>();
     [NonSerialized] public HashSet<string> seenEndingIds = new HashSet<string>();
+    /// <summary>乱入/救场类剧情已看集合（2026-11-20 批次4 T8 存档级一次性）：key = 事件 id（EV01…）。</summary>
+    public List<StringIdEntry> intruderStorySeenEntries = new List<StringIdEntry>();
+    [NonSerialized] public HashSet<string> intruderStorySeenKeys = new HashSet<string>();
+
+    /// <summary>该乱入/救场剧情是否已看过（key=eventId；老档无记录 = 未看，兼容）。</summary>
+    public bool HasIntruderStorySeen(string key)
+        => !string.IsNullOrEmpty(key) && intruderStorySeenKeys != null && intruderStorySeenKeys.Contains(key);
+
+    /// <summary>标记该乱入/救场剧情已看过（开播即记，跳过也算看过；防多周目重播同一段）。</summary>
+    public void MarkIntruderStorySeen(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return;
+        intruderStorySeenKeys ??= new HashSet<string>();
+        intruderStorySeenKeys.Add(key);
+    }
     /// <summary>酒馆靠窗座位的累计查看次数，第 5 次发放线索页 C26。</summary>
     public int tavernSeatViewCount = 0;
 
@@ -1135,6 +1150,7 @@ public class SaveData
         completedSideIds = ToIdSet(completedSideEntries);
         seenClueIds = ToIdSet(seenClueEntries);
         seenEndingIds = ToIdSet(seenEndingEntries);
+        intruderStorySeenKeys = ToIdSet(intruderStorySeenEntries);   // 【批次4 T8】乱入/救场剧情已看集合重建（ToIdSet 自带 null 兼容，旧档 Entries=null -> 空集）
 
         claimedLogMileageLevels = new HashSet<int>();
         for (int i = 0; i < claimedLogMileageLevelEntries.Count; i++)
@@ -2482,6 +2498,7 @@ public class SaveData
         completedSideEntries = FromIdSet(completedSideIds);
         seenClueEntries = FromIdSet(seenClueIds);
         seenEndingEntries = FromIdSet(seenEndingIds);
+        intruderStorySeenEntries = FromIdSet(intruderStorySeenKeys);   // 【批次4 T8】乱入/救场剧情已读镜像（双写口径，同 seenClue/seenEnding）
         logMileageGrantEntries = FromIdSet(logMileageGrantedKeys);
 
         claimedLogMileageLevelEntries = new List<IntIdEntry>(claimedLogMileageLevels.Count);

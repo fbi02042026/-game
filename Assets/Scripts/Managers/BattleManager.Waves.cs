@@ -357,6 +357,16 @@ public partial class BattleManager
             StopCoroutine(_firstWaveHardFallbackCo);
             _firstWaveHardFallbackCo = null;
         }
+        // 修点①：首波乱入剧情协程一并停（换关/撤离不残留）；_preBattleStoryPlaying 上面已复位，
+        // _intruderStoryShownThisStage 由 ResetWaveProgress 清（StopCoroutine 不跑 finally，此处必须手动置空句柄）
+        if (_intruderStoryCo != null)
+        {
+            StopCoroutine(_intruderStoryCo);
+            _intruderStoryCo = null;
+        }
+        // 批次4（T5/T6 撤场兜底）：救场小队随换关/撤离/收尾撤场——🔴 不带到结算/下一关。
+        // 正常路径已在波末收口（TickRescueSquadWaveEnd）撤过，这里幂等兜住中断路径。
+        DespawnRescueSquad();
     }
     /// <summary>无视走路门槛，立刻刷下一波；失败则紧急造怪（不依赖配置/图集）</summary>
     void ForceSpawnFirstWaveNow() => Planner.ForceSpawnFirstWaveNow();
@@ -375,6 +385,9 @@ public partial class BattleManager
         SyncKillComboHaste();
         CombatJuice.ResetComboToast();
         _firstWaveSpawned = false;
+        _intruderStoryShownThisStage = false;   // 修点①（T8 关卡级口径）：换关允许下一关的首波乱入剧情再播
+        _rescueShownThisStage = false;          // 批次4 T8（关卡级）：换关允许下一关再触发友军救场
+        _rescueWaveEndHandled = false;          // 批次4 T8（关卡级）：波末成败/撤场闸随换关复位
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
         _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
@@ -389,6 +402,12 @@ public partial class BattleManager
     void ScheduleFirstWaveSpawn()
     {
         if (_firstWaveSpawned) return;
+        // ===== 修点①（2026-11-20 二次拍板④）首波链剧情钩子 =====
+        // 首波（triggerNode=wave1 的 EV03）走本链同步刷出，不经 CoAnnounceThenSpawnNextWave
+        //（那只管第 2 波起，:1134）——在此插同类三件套剧情，播完才刷首波。
+        // 命中时协程接管本次调度（含失败重试），这里直接让路；_intruderStoryCo 进行中也幂等让路。
+        if (_intruderStoryCo != null) return;
+        if (TryStartIntruderStoryBeforeFirstWave()) return;
         TrySpawnFirstWaveOnce();
         if (_firstWaveSpawned || _firstWaveSpawnCo != null) return;
         _firstWaveSpawnCo = StartCoroutine(FirstWaveSpawnRetry());
@@ -399,6 +418,377 @@ public partial class BattleManager
         yield return new WaitForSecondsRealtime(0.35f);
         _firstWaveSpawnCo = null;
         TrySpawnFirstWaveOnce();
+    }
+
+    // ===== 修点①（2026-11-20 二次拍板④）：首波敌对乱入剧情（EV03 triggerNode=wave1）=====
+    // 首波由 ScheduleFirstWaveSpawn → TrySpawnFirstWaveOnce 同步刷出，不经 CoAnnounceThenSpawnNextWave；
+    // 在首波刷怪点前同步阻塞播剧情，三件套（try/catch + StopPlaying + 300s unscaled 看门狗）照
+    // CoAnnounceThenSpawnNextWave 的 T3 分支（:1180-1206）同款。
+    /// <summary>本关已播过首波乱入剧情（开播即记，含跳过/异常）；换关在 ResetWaveProgress 清（T8 关卡级口径）。</summary>
+    bool _intruderStoryShownThisStage;
+    /// <summary>首波乱入剧情协程句柄：进行中 ScheduleFirstWaveSpawn 幂等让路；换关/撤离随 StopBattleSpawnCoroutines 停。</summary>
+    Coroutine _intruderStoryCo;
+
+    /// <summary>命中 preBattle:章 的 Intruder 事件且门禁全过 → 起剧情协程并接管本次首波调度（返回 true）。</summary>
+    bool TryStartIntruderStoryBeforeFirstWave()
+    {
+        // 门禁照 CoAnnounce 分支（CoAnnounceThenSpawnNextWave 内 intruderGate）同款写法
+        if (!(IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
+              && !IsArena && !IsActivityDungeon && !IsEndlessRift)) return false;
+        if (_intruderStoryShownThisStage) return false;
+        bool hasEvent = false;
+        IntruderEventTable.Row evRow = default;
+        try { hasEvent = IntruderEventDirector.TryGetIntruderForNode("preBattle:" + CurrentChapter, out evRow); }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 首波乱入事件查询异常，直接放行首波: " + e.Message);
+            return false;
+        }
+        if (!hasEvent) return false;
+        // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 不播（放行首波），
+        // 与 Plan 不打标口径一致；首波链独立查表、不走 wave 打标，必须在此自查存档。data 为空视为未看。
+        var intruderData = SaveSystem.Instance?.Data;
+        if (intruderData != null && intruderData.HasIntruderStorySeen(evRow.eventId)) return false;
+        _intruderStoryCo = StartCoroutine(CoPlayIntruderStoryBeforeFirstWave(evRow.eventId));
+        return true;
+    }
+
+    /// <summary>播完（或跳过/异常/超时）后才刷首波；刷怪失败沿用 FirstWaveSpawnRetry 原节奏，不改时序。</summary>
+    IEnumerator CoPlayIntruderStoryBeforeFirstWave(string intruderEventId)
+    {
+        _intruderStoryShownThisStage = true;   // 开播即记（与战前剧情 MarkPreStorySeen 同口径）：跳过/异常也不重播
+        // 压住 CoFirstWaveHardFallback：其闸门在等 _preBattleStoryPlaying（CoFirstWaveHardFallback 开头 while），
+        // 不置 true 的话点「开始战斗」后 2.2s 硬刷会在剧情播到一半时抢跑首波。播完按原值归还。
+        bool preBattleStoryWasPlaying = _preBattleStoryPlaying;
+        _preBattleStoryPlaying = true;
+        try
+        {
+            bool done = false;
+            BattleEntryDraftPanel.Hide();   // 幂等：防抽奖按钮盖住对话窗（CoAnnounce 分支同款）
+            bool playing = false;
+            try
+            {
+                // storyKey 传节点名（与 Plan 阶段查表节点一致）；本批剧情只有一种，按章节分派台词
+                playing = IntruderStoryBeats.TryPlayIntruder(CurrentChapter, "preBattle:" + CurrentChapter, () => done = true);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning("[BattleManager] 首波敌对乱入剧情播放异常，放行首波: " + e.Message);
+                // 剧情可能已开播（timeScale 被压 0 / 对话窗停在半句）：强制收掉再放行，绝不卡 timeScale=0
+                StoryDirector.Ensure().StopPlaying();
+                var dlg = DialogueUI.Instance;
+                if (dlg != null) dlg.Hide();
+                playing = false;
+            }
+            if (playing)
+            {
+                // 批次5 修2：开播即 Mark（防同关重进重播；多周目由 Plan 不打标 + 首波链自查存档兜底）
+                SaveSystem.Instance?.Data?.MarkIntruderStorySeen(intruderEventId);
+                float watchdog = 0f;
+                while (!done && watchdog < 300f)
+                {
+                    watchdog += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                if (!done) Debug.LogWarning("[BattleManager] 首波敌对乱入剧情 5 分钟未完成，强制放行首波");
+            }
+        }
+        finally
+        {
+            _preBattleStoryPlaying = preBattleStoryWasPlaying;
+            _intruderStoryCo = null;
+            TrySpawnFirstWaveOnce();
+            if (!_firstWaveSpawned && _firstWaveSpawnCo == null)
+                _firstWaveSpawnCo = StartCoroutine(FirstWaveSpawnRetry());
+        }
+    }
+
+    // ============================================================
+    // 批次4（2026-11-20 T4/T5/T6/T9）：友军救场 + 入场救援
+    // ============================================================
+    // T4 触发链：UnitBase.Damage.cs 实际扣血后 → TryTriggerRescueOnWounded（门禁+Boss波+阈值+一次旗）
+    //   → CoRescueArrival（剧情三件套）→ SpawnRescueSquad(满血 1f)。
+    // T6 入场救援：BattleStartSequenceCoroutine 提前槽（战前剧情同槽）→ CoEntryRescueBeforeFirstWave
+    //   → 剧情 → SpawnRescueSquad(0.4 低血起步) → 首波照常刷。
+    // 波末：Update 通关检测点 TickRescueSquadWaveEnd —— T5 直接撤场；T6 先谢幕剧情再撤场（不拦结算）。
+    // 撤场兜底：StopBattleSpawnCoroutines（换关/撤离/收尾）→ DespawnRescueSquad，不带到结算/下一关。
+    // 🔴 不调 UnlockMerc（临时入队不算已拥有，照 RunDraftDirector.cs:583 引导分支口径）。
+    // 🔴 友方机器人死亡零奖励口径在 MonsterDeath 已处理，本批不碰。
+
+    /// <summary>T4 濒死阈值（主人 2026-11-18 拍板 40%；实测过频再单独拍板调，不私自改）。</summary>
+    internal const float RescueHpRatio = 0.4f;
+    /// <summary>固定救场小队（2026-11-20 拍板①）：加百列 H023 剑盾 / 艾拉 H015 游侠 / 塞拉 H012 水系法，squadId="SQ_MAIN"。</summary>
+    static readonly string[] RescueSquadHireIds = { "H023", "H015", "H012" };
+    const float RescueSpawnAheadBase = 2.2f;   // 救场小队生成点：玩家前方基线
+    const float RescueSpawnAheadStep = 1.1f;   // 队内成员错位间距
+
+    /// <summary>T4 本关已触发旗：命中即置 true 不再查；换关在 ResetWaveProgress 清（T8 关卡级口径）。</summary>
+    bool _rescueShownThisStage;
+    /// <summary>当前在场的是不是 T6 入场救援（true=波末判成败后撤场；false=T5 救场，波末直接撤场）。</summary>
+    bool _rescueEntryMode;
+    /// <summary>波末成败/撤场只走一次的闸（Update 通关检测点可能多帧命中）。</summary>
+    bool _rescueWaveEndHandled;
+    /// <summary>在场救场小队（T5/T6 共用生成撤场链）。</summary>
+    readonly List<Mercenary> _rescueSquad = new List<Mercenary>();
+    /// <summary>救场/谢幕剧情协程句柄；换关/撤离随 StopBattleSpawnCoroutines 停。</summary>
+    Coroutine _rescueStoryCo;
+
+    /// <summary>Boss 波进行中（读现有 WaveData.isBossWave 标记，不新造判据）。</summary>
+    bool IsBossWaveActive => _activeWaveIndex >= 0 && _waves != null && _activeWaveIndex < _waves.Count
+        && _waves[_activeWaveIndex] != null && _waves[_activeWaveIndex].isBossWave;
+
+    /// <summary>
+    /// T4 触发判定（唯一调用点：UnitBase.Damage.cs RecordDamageTaken 之后，玩家/友军每次受伤查一次，不每帧轮询）。
+    /// 全部满足才触发：Boss 波进行中 + 该单位血量 ≤40% 且未死 + 本关未触发过 + 门禁全过 + 表里有 Rescue 事件。
+    /// </summary>
+    public void TryTriggerRescueOnWounded(UnitBase unit)
+    {
+        if (_rescueShownThisStage) return;              // 本关一次旗：命中过就不再查（最廉价的先查）
+        if (!isInBattle || _stageCleared || _runClosed) return;
+        // 门禁（复用 Settlement.cs:267-380 现成出口）：主线正式关 / 支线岛才可能触发；
+        // 显式排除 引导 / 羁绊 / 竞技场 / 活动副本 / 裂隙。
+        if (!(IsFormalMainRun || IsSideIsland)) return;
+        if (IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) return;
+        if (!IsBossWaveActive) return;                  // 只在 Boss 波进行中触发
+        if (unit == null || unit.attr == null) return;
+        if (unit.currentHp <= 0f) return;               // 已到致死一击的不算（死亡走各自流程，不和复活链叠加）
+        float maxHp = Mathf.Max(1f, unit.attr.GetAttr(AttrType.MaxHp));
+        if (unit.currentHp / maxHp > RescueHpRatio) return;
+        // 事件匹配：主线按章（EV01=Rescue/preBattle:1 → chapter=1）；支线岛按岛（EV04=Rescue/island:2 → islandId=2）
+        IntruderEventTable.Row row;
+        bool has = IsSideIsland
+            ? IntruderEventDirector.TryGetRescueForIsland(SideIslandId.ToString(), out row)
+            : IntruderEventDirector.TryGetRescueForChapter(CurrentChapter, out row);
+        if (!has) return;
+        // 批次5 修1：存档级一次性（§一.8「全篇 3-5 次」拍板）——该救场剧情已看过 → 直接放行：
+        // 不触发、不置旗、不播。eventId 天然隔离主线 EV01 / 支线岛 EV04；data 为空视为未看（老档兼容）。
+        var rescueData = SaveSystem.Instance?.Data;
+        if (rescueData != null && rescueData.HasIntruderStorySeen(row.eventId)) return;
+        _rescueShownThisStage = true;   // 命中即置"本关已触发"，不再查
+        rescueData?.MarkIntruderStorySeen(row.eventId);   // 开播即 Mark（照 Entry :775 口径：跳过也算看过）
+        _rescueStoryCo = StartCoroutine(CoRescueArrival());
+    }
+
+    /// <summary>
+    /// T5 救场剧情 → onDone 才生成友军（剧情期间战斗已被 StoryDirector 暂停正好当演出）。
+    /// 三件套照 CoAnnounceThenSpawnNextWave 的 T3 分支：try/catch + StopPlaying + 300s 看门狗；异常也放行（友军照常入场）。
+    /// </summary>
+    IEnumerator CoRescueArrival()
+    {
+        bool done = false;
+        BattleEntryDraftPanel.Hide();   // T9：防抽奖按钮盖住对话窗（Settlement.cs:387 同款）
+        bool playing = false;
+        try
+        {
+            playing = IntruderStoryBeats.TryPlayRescue(
+                IsSideIsland ? 0 : CurrentChapter,
+                IsSideIsland ? SideIslandId.ToString() : null,
+                () => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 友军救场剧情播放异常，友军照常入场: " + e.Message);
+            StoryDirector.Ensure().StopPlaying();
+            var dlg = DialogueUI.Instance;
+            if (dlg != null) dlg.Hide();
+            playing = false;
+        }
+        if (playing)
+        {
+            float watchdog = 0f;
+            while (!done && watchdog < 300f)
+            {
+                watchdog += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!done) Debug.LogWarning("[BattleManager] 友军救场剧情 5 分钟未完成，强制放行友军入场");
+        }
+        SpawnRescueSquad(1f, entryMode: false);   // 救场友军满血入场
+        _rescueStoryCo = null;
+    }
+
+    /// <summary>生成救场小队（T5 满血 1f / T6 低血 startHpRatio=0.4）。固定三人同一支队伍，不随机。</summary>
+    void SpawnRescueSquad(float hpRatio, bool entryMode)
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null) { Debug.LogError("[BattleManager] 救场小队生成失败：MercenaryManager.Instance 为空"); return; }
+        if (hero == null) { Debug.LogError("[BattleManager] 救场小队生成失败：hero 为空"); return; }
+        _rescueEntryMode = entryMode;
+        float heroX = UnitBase.GetCombatX(hero);
+        float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
+        int spawned = 0;
+        for (int i = 0; i < RescueSquadHireIds.Length; i++)
+        {
+            var merc = SpawnRescueSquadMember(mm, RescueSquadHireIds[i],
+                new Vector3(heroX + RescueSpawnAheadBase + i * RescueSpawnAheadStep, UnitBase.GROUND_Y, z),
+                hpRatio);
+            if (merc != null) { _rescueSquad.Add(merc); spawned++; }
+        }
+        Debug.Log($"[BattleManager] 救场小队入场 hpRatio={hpRatio:0.##} entryMode={entryMode} spawned={spawned}/3");
+    }
+
+    /// <summary>
+    /// 单个救场友军生成链（照 SpawnTutorialMercAt 的步骤，身份改用花名册真值）：
+    /// SpawnMercenary(AssetId) → 挂技能/真名/真 hireId → 进 allyUnits → 挂死亡 → 计贡献 → 按比例起步血量。
+    /// 🔴 不调 UnlockMerc —— 临时入队不算已拥有（RunDraftDirector.cs:583 引导分支同口径）。
+    /// </summary>
+    Mercenary SpawnRescueSquadMember(MercenaryManager mm, string hireId, Vector3 pos, float hpRatio)
+    {
+        if (!MercRosterDefs.TryGetByHireId(hireId, out var def) || string.IsNullOrEmpty(def.AssetId))
+        {
+            Debug.LogError($"[BattleManager] 救场友军花名册查不到 hireId={hireId}（fail-closed 不生成，不兜底造人）");
+            return null;
+        }
+        // SpawnMercenary 只认 AssetId（mercId 口径）；hireId 由下方 SetHireId 补挂并按需重建基底（共用 asset 的行，如 H015/H005 共用 gongshou101）
+        var merc = mm.SpawnMercenary(def.AssetId, pos, 1);
+        if (merc == null)
+        {
+            Debug.LogError($"[BattleManager] 救场友军生成失败 hireId={hireId} assetId={def.AssetId}");
+            return null;
+        }
+        merc.SetupBattleSkills(def.ActiveSkillId, def.PassiveSkillId);
+        merc.SetDisplayName(def.Name);
+        merc.SetHireId(hireId);
+        if (!allyUnits.Contains(merc))
+            allyUnits.Add(merc);
+        merc.OnDead += OnMercenaryDead;
+        RunStats.EnsureAlly(GetAllyMvpKey(merc), GetAllyMvpDisplayName(merc));
+        float maxHp = merc.attr != null ? merc.attr.GetAttr(AttrType.MaxHp) : 100f;
+        merc.currentHp = Mathf.Max(1f, maxHp * Mathf.Clamp01(hpRatio));
+        ExtendCameraMaxX(pos.x + 6f);
+        return merc;
+    }
+
+    /// <summary>
+    /// 波末收口（T5 撤场 / T6 成败判定 + 撤场）。唯一调用点：Update 的通关检测块（所有波刷完 + 场上无活怪），
+    /// 即 Boss 波结束、StartStageClearRewardSequence 之前 —— 谢幕剧情播在撤场前，结算不被拦截。
+    /// </summary>
+    void TickRescueSquadWaveEnd()
+    {
+        if (_rescueWaveEndHandled || _rescueSquad.Count == 0) return;
+        _rescueWaveEndHandled = true;
+        if (!_rescueEntryMode)
+        {
+            DespawnRescueSquad();   // T5：本波结束直接撤场，无谢幕剧情
+            return;
+        }
+        _rescueStoryCo = StartCoroutine(CoRescueOutcomeThenDespawn());   // T6：先成败剧情再撤场
+    }
+
+    /// <summary>T6 谢幕（2026-11-20 三次拍板）：播点在 Update 通关检测点（必然我方已赢）→ 统一「救援成功·受伤版」剧情（小队受伤没死，无死亡暗示）→ 撤场。不拦结算。</summary>
+    IEnumerator CoRescueOutcomeThenDespawn()
+    {
+        Debug.Log("[BattleManager] 入场救援波末：我方已赢 → 播救援成功谢幕（受伤口径）");
+        bool done = false;
+        BattleEntryDraftPanel.Hide();   // T9 同款
+        bool playing = false;
+        try
+        {
+            playing = IntruderStoryBeats.TryPlayRescueOutcome(() => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 入场救援谢幕剧情播放异常，直接撤场放行结算: " + e.Message);
+            StoryDirector.Ensure().StopPlaying();
+            var dlg = DialogueUI.Instance;
+            if (dlg != null) dlg.Hide();
+            playing = false;
+        }
+        if (playing)
+        {
+            float watchdog = 0f;
+            while (!done && watchdog < 300f)
+            {
+                watchdog += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!done) Debug.LogWarning("[BattleManager] 入场救援谢幕剧情 5 分钟未完成，强制撤场放行结算");
+        }
+        DespawnRescueSquad();
+        _rescueStoryCo = null;
+    }
+
+    /// <summary>
+    /// 撤场：逐个 DespawnMercenary（MercenaryManager.cs:539，同时清 _activeMercs 与 allyUnits 并销毁实体）。
+    /// 阵亡成员的 GameObject 已随死亡动画 Destroy（Mercenary.OnDeathRelease），假 null 直接跳过。
+    /// 调用点：波末收口 / StopBattleSpawnCoroutines（换关/撤离/收尾）—— 撤场后场上无残留、不带到结算/下一关。
+    /// </summary>
+    void DespawnRescueSquad()
+    {
+        if (_rescueStoryCo != null)
+        {
+            StopCoroutine(_rescueStoryCo);
+            _rescueStoryCo = null;
+        }
+        if (_rescueSquad.Count == 0) return;
+        var mm = MercenaryManager.Instance;
+        for (int i = 0; i < _rescueSquad.Count; i++)
+        {
+            var m = _rescueSquad[i];
+            if (m == null) continue;   // 阵亡已销毁（Unity 假 null）
+            if (mm != null) mm.DespawnMercenary(m);
+            else Destroy(m.gameObject);
+        }
+        _rescueSquad.Clear();
+        Debug.Log("[BattleManager] 救场小队已撤场（无残留）");
+    }
+
+    /// <summary>
+    /// T6 入场救援：进 Boss 关先播「撞见小队被围攻」剧情 → onDone 生成 3 名低血友军（startHpRatio=0.4）→ 首波照常刷。
+    /// 挂点 = BattleStartSequenceCoroutine 提前槽（CoPreBattleStoryThenFirstWave 之后同槽，不另开新时机）。
+    /// 一次性：存档级 intruderStorySeenKeys（key=eventId），多周目不重播同一段（已看则整段不触发）。
+    /// </summary>
+    IEnumerator CoEntryRescueBeforeFirstWave()
+    {
+        // 门禁：主线正式关专属；引导/羁绊/竞技场/活动副本/裂隙零触发；难度局不写存档级标记（NormalOnlyContentAllowed 口径）
+        if (!IsFormalMainRun || IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) yield break;
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) yield break;
+        // 触发关：该章 Boss 关（关 10 / stageIdx0=9 大 Boss，走 ActProgressionDefs 单一出口，不自写判据）
+        if (currentStage == null || currentStage.type != StageType.Boss) yield break;
+        int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
+        if (ActProgressionDefs.BossKindOfStage(stageIdx0) != 2) yield break;
+        // 查表：Entry 一律挂 preBattle:章（2026-11-20 拍板⑥）
+        IntruderEventTable.Row row;
+        bool has = false;
+        try { has = IntruderEventDirector.TryGetEntryForNode("preBattle:" + CurrentChapter, out row); }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 入场救援事件查询异常，跳过: " + e.Message);
+            yield break;
+        }
+        if (!has) yield break;
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && data.HasIntruderStorySeen(row.eventId)) yield break;   // 多周目不重播
+
+        bool done = false;
+        BattleEntryDraftPanel.Hide();   // T9 同款
+        bool playing = false;
+        try
+        {
+            playing = IntruderStoryBeats.TryPlayEntry(CurrentChapter, row.storyKey, () => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 入场救援剧情播放异常，友军照常入场: " + e.Message);
+            StoryDirector.Ensure().StopPlaying();
+            var dlg = DialogueUI.Instance;
+            if (dlg != null) dlg.Hide();
+            playing = false;
+        }
+        if (playing)
+        {
+            // 开播即记存档（MarkPreStorySeen 同口径：跳过也算看过，防同段重播）
+            data?.MarkIntruderStorySeen(row.eventId);
+            float watchdog = 0f;
+            while (!done && watchdog < 300f)
+            {
+                watchdog += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!done) Debug.LogWarning("[BattleManager] 入场救援剧情 5 分钟未完成，强制放行友军入场");
+        }
+        float hp = row.startHpRatio > 0f ? row.startHpRatio : RescueHpRatio;   // 表值优先，缺省 0.4（拍板③）
+        SpawnRescueSquad(hp, entryMode: true);
     }
 
     /// <summary>首波刷怪（含兜底）；成功才标记 _firstWaveSpawned</summary>
@@ -566,6 +956,10 @@ public partial class BattleManager
         if (entryStoryEarly)
         {
             yield return CoPreBattleStoryThenFirstWave();
+            // 批次4 T6 入场救援（同槽处理，不另开新时机）：Boss 关先播「撞见小队被围攻」剧情
+            // → onDone 生成 3 名低血友军（0.4）→ 之后的抽奖分流 / 首波时序一字不动。
+            // Boss 关必中 entryStoryEarly（ShouldOfferBossBlessing 对 Boss 关恒 true），提前槽即唯一入口。
+            yield return CoEntryRescueBeforeFirstWave();
             yield return CoBossStageBlessingChoice();
             BattleEntryDraftPanel.Instance?.SetDrawLocked(false);   // 剧情播完才恢复可抽
         }
@@ -1167,6 +1561,47 @@ public partial class BattleManager
                 if (!bondDone) Debug.LogWarning("[BattleManager] 羁绊副本 Boss 前剧情 5 分钟未完成，强制放行 Boss 波");
             }
 
+            // ===== T3 敌对乱入：目标波开打前播剧情，播完才刷怪 =====
+            // 门禁复用现成出口：只在线性正式主线放行；引导 / 羁绊 / 竞技场 / 活动副本 / 裂隙 零触发。
+            bool intruderWave = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
+                                && _waves[nextIdx] != null
+                                && !string.IsNullOrEmpty(_waves[nextIdx].intruderEventId)
+                                && _waves[nextIdx].intruderSlotCount > 0;
+            bool intruderGate = IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
+                                && !IsArena && !IsActivityDungeon && !IsEndlessRift;
+            if (intruderWave && intruderGate)
+            {
+                bool done = false;
+                BattleEntryDraftPanel.Hide();   // 幂等：防抽奖按钮盖住对话窗（Settlement.cs:387 同款）
+                bool playing = false;
+                try
+                {
+                    // eventId 仅作 storyKey 传入（本批剧情只有一种，按章节分派台词）
+                    playing = IntruderStoryBeats.TryPlayIntruder(CurrentChapter, _waves[nextIdx].intruderEventId, () => done = true);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogWarning("[BattleManager] 敌对乱入剧情播放异常，放行本波: " + e.Message);
+                    // 剧情可能已开播（timeScale 被压 0 / 对话窗停在半句）：强制收掉再放行，绝不卡 timeScale=0
+                    StoryDirector.Ensure().StopPlaying();
+                    var dlg = DialogueUI.Instance;
+                    if (dlg != null) dlg.Hide();
+                    playing = false;
+                }
+                if (playing)
+                {
+                    // 批次5 修2：开播即 Mark（防同关重进重播；多周目由 Plan 不打标兜底）
+                    SaveSystem.Instance?.Data?.MarkIntruderStorySeen(_waves[nextIdx].intruderEventId);
+                    float intruderWatchdog = 0f;
+                    while (!done && intruderWatchdog < 300f)
+                    {
+                        intruderWatchdog += Time.unscaledDeltaTime;
+                        yield return null;
+                    }
+                    if (!done) Debug.LogWarning("[BattleManager] 敌对乱入剧情 5 分钟未完成，强制放行本波");
+                }
+            }
+
             yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
         }
         finally
@@ -1451,6 +1886,8 @@ public partial class BattleManager
             && !_portalActive && !_stageCleared && !_rewardSequenceStarted
             && !SuppressStageClear)
         {
+            // 批次4 波末收口：Boss 波结束 → T5 撤场 / T6 谢幕剧情+撤场（播在结算前，只播剧情不拦结算）
+            TickRescueSquadWaveEnd();
             StartStageClearRewardSequence();
         }
 

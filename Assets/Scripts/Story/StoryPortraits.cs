@@ -27,6 +27,14 @@ public static class StoryPortraits
     /// <summary>老板娘：酒馆 NPC。2026-10-15 起用专属立绘（酒吧老板娘.png，经 MercPortraitSprites landlady 通道）。</summary>
     public const string Innkeeper = "innkeeper";
 
+    // —— 乱入事件·敌对反派三人组（2026-11-20 主人供立绘三张并授权改名；MercStand 文件名即 id）——
+    /// <summary>独眼老雷：强盗三人组·重武大哥（战斗模板 zhongzhan201，见 IntruderPicker）。</summary>
+    public const string BanditBoss = "bandit_boss";
+    /// <summary>夜薇：强盗三人组·女法师（战斗模板 fashi202）。</summary>
+    public const string BanditWitch = "bandit_witch";
+    /// <summary>阿刃：强盗三人组·狂战小弟（战斗模板 kuangzhan201）。</summary>
+    public const string BanditBlade = "bandit_blade";
+
     /// <summary>
     /// 已定案「不做正式立绘」的角色。这类角色**连占位图都不铺**，剧情里只出名字 + 对话框，
     /// 不会在结局里出现一张写着 ID 的灰盒子。

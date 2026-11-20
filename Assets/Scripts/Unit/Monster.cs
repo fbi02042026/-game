@@ -27,6 +27,15 @@ public partial class Monster : UnitBase
     /// 保证池化复用多次 Init 不累积偏移。NaN 判定用 float.IsNaN。
     /// </summary>
     float _airShadowBaseY = float.NaN;
+    /// <summary>
+    /// 【2026-11-20 漂浮缓动】空中怪 Visual 根的 hover 基线（local y，NaN=陆地怪不飘）。
+    /// 每帧在 LateUpdate 写 基线 + sin*幅度；影子用基线反补偿、判定走 _bodyRoot，都不跟浮动。
+    /// </summary>
+    float _airHoverBobBaseY = float.NaN;
+    /// <summary>漂浮振幅（local 单位，由世界振幅÷根缩放得到，各体型视觉一致）。</summary>
+    float _airHoverBobAmpLocal;
+    /// <summary>漂浮相位（按实例 id 错开，避免全场同步起伏）。</summary>
+    float _airHoverBobPhase;
     Transform _visualRoot;
 
     /// <summary>???????? Body????Body ?????????/summary>
@@ -273,6 +282,18 @@ public partial class Monster : UnitBase
     /// <summary>叠怪数字等仍用旧 Sprite 血条时才需要；现用 MonsterHealthBar 时可忽略。</summary>
     protected void LateUpdate()
     {
+        // 【2026-11-20 主人「空中怪站立和行走加上下的缓动表示漂浮」】
+        // 只动 Visual 根 y（基线 + 正弦），站立/行走/受击都自然带着飘；判定根 _bodyRoot 与影子不动。
+        // 相位按实例 id 错开，避免整屏怪齐刷刷一起起伏。陆地怪基线 NaN，直接跳过。
+        if (!float.IsNaN(_airHoverBobBaseY))
+        {
+            float bob = Mathf.Sin(Time.time * GameConfig.MONSTER_AIR_BOB_SPEED + _airHoverBobPhase)
+                        * _airHoverBobAmpLocal;
+            float y = _airHoverBobBaseY + bob;
+            if (Mathf.Abs(transform.localPosition.y - y) > 0.0001f)
+                transform.localPosition = new Vector3(transform.localPosition.x, y, transform.localPosition.z);
+        }
+
         SyncSkillChargeBar();   // 【2026-11-14】头顶充能条：只给精英/Boss，普通小怪无节点
         if (_stackLabelRoot != null && _stackLabelRoot.gameObject.activeSelf)
             RefreshStackLabelLayout();

@@ -39,6 +39,12 @@ public class WeatherVfxController : MonoBehaviour
     const float HoldLifetime = 600f;
     /// <summary>预制体发射圆半径（RainLight / SnowSpinny 的 ShapeModule m_Scale 均为 4）。</summary>
     const float EmitRadiusWorld = 4f;
+    /// <summary>
+    /// 发射器整体上移量（世界单位）：2026-11-20 主人报「下雨节点偏下、地图上看不到，往上移就行，下雪一样」。
+    /// 生成（SpawnLooping）与每帧跟随（Recenter）<b>两处都要加</b>——Recenter 每帧写 y，只改生成处会被立刻覆盖。
+    /// 不动倍率、不动预制体；调高度只改这个数。
+    /// </summary>
+    const float EmitterYOffset = 6f;
 
     /// <summary>每类天气首次遭遇提示（进程级一次，§2/T7）。</summary>
     static bool _rainToastDone;
@@ -173,6 +179,7 @@ public class WeatherVfxController : MonoBehaviour
         }
         var cam = Camera.main;
         Vector3 pos = cam != null ? cam.transform.position : transform.position;
+        pos.y += EmitterYOffset;   // 2026-11-20：雨雪整体上移（与 Recenter 同一把尺子）
         // PlayPreparedVfx：池化取实例 + 修粒子(排序 SORT_VFX+5) + Play + ScheduleRelease(HoldLifetime 到期回池)
         var go = vfx.PlayPreparedVfx(prefab, pos, 1, HoldLifetime, ComputeCoverScale(), prepareParticles: true);
         if (go == null) return null;
@@ -207,7 +214,7 @@ public class WeatherVfxController : MonoBehaviour
         return Mathf.Clamp(need / EmitRadiusWorld, 0.5f, 5f);
     }
 
-    /// <summary>每帧把发射器摆到相机视口中心（CameraFollow 跟玩家，雨雪框必须跟着走）。</summary>
+    /// <summary>每帧把发射器摆到相机视口中心并上移 EmitterYOffset（CameraFollow 跟玩家，雨雪框必须跟着走）。</summary>
     void FollowCamera()
     {
         var cam = Camera.main;
@@ -222,7 +229,7 @@ public class WeatherVfxController : MonoBehaviour
         if (go == null) return;
         Vector3 p = go.transform.position;
         p.x = camPos.x;
-        p.y = camPos.y;
+        p.y = camPos.y + EmitterYOffset;   // 2026-11-20：雨雪整体上移（与 SpawnLooping 同一把尺子）
         go.transform.position = p;   // z 保持 PlayPreparedVfx 摆好的值（排序层/Order 已管先后）
     }
 

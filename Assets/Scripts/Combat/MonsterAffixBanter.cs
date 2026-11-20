@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 【2026-10-26 词缀怪】词缀怪吐槽气泡：
-/// ① 词缀怪出场时玩家头顶说一句介绍（每种词缀每关只说一次）；
+/// ① 词缀怪进入屏幕时玩家头顶说一句介绍（每种词缀每关只说一次）；
 /// ② 荆棘反伤打到玩家时吐槽一句「为啥打他一下我疼一下」（每关一次）。
 /// 台词全部走 C# 常量（纪律 11：叙事文案不入表）；调性按 2026-10-16 拍板的年轻人口径。
 /// 气泡走 BattleHeadTalkUI（说话人 = 玩家本体）；气泡正在显示时不抢，宁可这次不说。
@@ -35,8 +35,8 @@ public static class MonsterAffixBanter
         _saidThornsHurt = false;
     }
 
-    /// <summary>词缀怪刷出后调（CoSpawnWaveMonsters）：按首个词缀挑一句介绍。</summary>
-    public static void OnAffixMonsterSpawned(Monster m)
+    /// <summary>【2026-11-20 改】词缀怪进入可视屏后调（Monster.AIUpdate 检测进屏）：按首个词缀挑一句介绍。</summary>
+    public static void OnAffixMonsterEnterScreen(Monster m)
     {
         // 【2026-11-01 主人拍板「无限关卡不要出现剧情」】裂隙里不冒对话气泡
         var bm = BattleManager.Instance;

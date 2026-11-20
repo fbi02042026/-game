@@ -536,6 +536,9 @@ public partial class Monster
         else
             MonsterAffix.RollAndAttach(this, _chapter, _isBossUnit || _eliteWave);
         _bossPhaseShiftBusy = false;
+        // 【2026-11-20】对象池复用复位：词条台词进屏武装 + 并道偏移重抽，防上一只残留。
+        _affixBanterArmed = false;
+        ClearLaneAlignBias();
         _skillId = SkillRegistry.Instance != null
             ? SkillRegistry.Instance.GetMonsterSkillId(template, eliteWave, _isBossUnit, _attackStyle)
             : null;
@@ -689,7 +692,7 @@ public partial class Monster
             Debug.LogWarning($"[Monster] ???????: ??{monsterChapter}, ??{effectiveSpriteIndex}??????????");
 
         EnsureFootShadow();
-        ApplyAirHoverOffset(bossUnit);
+        ApplyAirHoverOffset(bossUnit, eliteWave);
         // 2026-10-06 主人要求：把「运行中的真实尺寸」抄一份给他对照调预制体（只读，每局只做一次）
         // 2026-10-17 上线稳定优先：一次性探针已完成使命，真机不再执行，仅编辑器保留
 #if UNITY_EDITOR
@@ -702,27 +705,47 @@ public partial class Monster
     /// 空中怪（monster_stats.airUnit=1）：本体在移动根下上抬 GameConfig.MONSTER_AIR_HOVER，
     /// 脚下阴影按 _airShadowBaseY 基线反向补偿 —— 阴影留在地面、身体浮空。
     /// 陆地怪：本体 y 归零，阴影回到基线、正常贴在脚下。
-    /// 【2026-11-10 主人拍板「活动副本里的怪不要有空中的」「陆地就是和影子在正常脚下」】
-    /// 活动副本内一律按陆地处理（不改配表、不换模板），只有其它玩法保留浮空表现。
-    /// 【2026-11-15 主人口径】① 第 10 层（及 10 的倍数）裂隙大 BOSS 按地面单位处理：不改配表、
-    ///   不换模板，只关掉本玩法的浮空；第 2 章主线里同一张 airUnit=1 的怪保持原样；
-    ///   ② 浮空距离减半（MONSTER_AIR_HOVER 0.3→0.15）；③ 阴影必须落在地面。
+    /// 【2026-11-20 主人拍板「空中就是空中的」】取消两条历史强制落地例外——
+    /// ① 11-10「活动副本里不要空中」；② 11-15「裂隙第10层大 BOSS 落地」。
+    /// 现在只要配表 airUnit=1，任何玩法（含活动副本 / 裂隙大 BOSS）都保持浮空；阴影仍按基线反补偿留在地面。
     /// 幂等：阴影按基线绝对定位（不是每次叠加偏移），池化复用多次 Init 不累积。
     /// </summary>
-    void ApplyAirHoverOffset(bool bossUnit)
+    void ApplyAirHoverOffset(bool bossUnit, bool eliteWave = false)
     {
-        var bm = BattleManager.Instance;
-        bool activityGrounded = bm != null && bm.IsActivityDungeon;
-        // 只让大 BOSS 本体落地，同层小怪仍按各自 airUnit 走。
-        // bossUnit 由 Init 传入：此处 _isBossUnit 尚未赋值（在 LoadSprite 之后），不能用它判。
-        bool endlessBigBossGrounded = bm != null && bm.IsEndlessRift && bossUnit
-            && GameConfig.IsEndlessBigBossStage(bm.EndlessRiftStage);
-        bool air = !activityGrounded && !endlessBigBossGrounded && config != null && config.airUnit;
-        float hover = air ? GameConfig.MONSTER_AIR_HOVER : 0f;
+        // 【2026-11-20「空中就是空中的」】不再按玩法强制落地：配表 airUnit=1 就浮空。
+        bool air = config != null && config.airUnit;
+        // 2026-11-20 按体型档上移：普通 0.1 / 精英 0.25 / Boss 0.4（世界单位，17:55 减半），阴影不跟着抬。
+        float hover = 0f;
+        if (air)
+        {
+            if (bossUnit) hover = GameConfig.MONSTER_AIR_HOVER_BOSS;
+            else if (eliteWave) hover = GameConfig.MONSTER_AIR_HOVER_ELITE;
+            else hover = GameConfig.MONSTER_AIR_HOVER;
+        }
 
+        // 【2026-11-20 修「空中怪打不到、走过去再回头砍」】hover 是【世界单位】的视觉抬升。
+        // MoveRoot 根缩放 3~8 倍，旧写法把它当 local 单位直接写 localPosition.y → 世界抬升被放大成
+        // 普通 0.63 / 精英 2.6 / Boss 6.5（Boss 整只抬出屏幕，相机半高仅 5.4）；而索敌/出手判定走
+        // 未抬高的 _bodyRoot → 视觉在天上、判定在地上，看着就是打不到。这里先除根缩放还原成 world。
+        float moveRootLossy = Mathf.Max(0.001f, Mathf.Abs(MoveRoot.lossyScale.y));
+        float localHover = hover / moveRootLossy;
         // 本体 y 绝对归位（覆盖 EnsureBodyRoot / RectTransform 分支 / 复用残留的任何值）
-        if (Mathf.Abs(transform.localPosition.y - hover) > 0.0001f)
-            transform.localPosition = new Vector3(transform.localPosition.x, hover, transform.localPosition.z);
+        if (Mathf.Abs(transform.localPosition.y - localHover) > 0.0001f)
+            transform.localPosition = new Vector3(transform.localPosition.x, localHover, transform.localPosition.z);
+
+        // 【2026-11-20 漂浮缓动】记录基线供 LateUpdate 每帧起伏：世界幅度换 local（各体型一致）；
+        // 相位按实例 id 错开（同一波怪不同步）。陆地怪基线置 NaN 关闭浮动。
+        if (air)
+        {
+            _airHoverBobBaseY = localHover;
+            _airHoverBobAmpLocal = GameConfig.MONSTER_AIR_BOB_AMP_WORLD / moveRootLossy;
+            _airHoverBobPhase = (transform.GetInstanceID() & 0x7fff) * 0.001f;
+        }
+        else
+        {
+            _airHoverBobBaseY = float.NaN;
+            _airHoverBobAmpLocal = 0f;
+        }
 
         if (!air)
         {
@@ -744,13 +767,11 @@ public partial class Monster
         Transform shadow = FindFootShadowNode(transform);
         if (shadow == null) return; // EnsureFootShadow 已对缺失阴影 fail-closed，这里不重复报
         if (float.IsNaN(_airShadowBaseY)) _airShadowBaseY = shadow.localPosition.y;
-        // 【2026-11-15 修】本体 local y 上抬 hover 的世界位移 = hover × MoveRoot.lossyScale.y
-        //（MoveRoot 缩放约 2.6~4.5）。旧写法只除阴影父链 lossyScale，漏乘移动根这一项，
-        // 补偿量小了 3~4 倍 → 阴影跟着身体一起飘在半空。这里按「世界位移 ÷ 阴影父链缩放」精确反算回地面。
-        float moveRootLossy = Mathf.Max(0.001f, Mathf.Abs(MoveRoot.lossyScale.y));
+        // 阴影反补偿：hover 本身就是世界位移（上面已按根缩放换算），这里按「世界位移 ÷ 阴影父链缩放」
+        // 反算回地面，影子贴地不跟着飘。moveRootLossy 在上方本体抬升处已算好，复用。
         float parentLossy = shadow.parent != null ? shadow.parent.lossyScale.y : transform.lossyScale.y;
         float ls = Mathf.Max(0.001f, Mathf.Abs(parentLossy));
-        float worldLift = hover * moveRootLossy;
+        float worldLift = hover;
         Vector3 lp = shadow.localPosition;
         shadow.localPosition = new Vector3(lp.x, _airShadowBaseY - worldLift / ls, lp.z);
     }

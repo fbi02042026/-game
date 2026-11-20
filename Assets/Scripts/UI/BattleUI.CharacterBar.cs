@@ -217,6 +217,16 @@ public partial class BattleUI : MonoBehaviour
 
     void OnMercAvatarClicked(int index)
     {
+        // 【2026-11-20 主人报「引导让我点开始战斗，误点头像弹出弹窗、引导却停在原地」】
+        // 引导局里只放行「点新伙伴头像」那一步；其余时刻误点头像一律吞掉 + 轻提示，
+        // 不让详情弹窗盖住正在指路的引导。非引导局完全不受影响。
+        var tutorialDir = TutorialDirector.Instance;
+        if (TutorialDirector.IsTutorialBattle &&
+            (tutorialDir == null || !tutorialDir.WaitingMercAvatarTap))
+        {
+            GlobalToastUI.Show("先跟着引导点，别乱翻人家底细～");
+            return;
+        }
         if (!RunLoadout.IsActive) return;              // 不在局内（旧存档战斗）：没有出战名单可看
         var mercs = RunLoadout.Mercs();
         if (mercs == null || index >= mercs.Count || mercs[index] == null) return;   // 槽还没抽到人：正常态
