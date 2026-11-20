@@ -38,7 +38,10 @@ public static class NewGameReset
         MercFavorUI.PendingOpenAfterBattleHireId = null;
         // 2026-11-12 升级弹窗队列是进程级 static，清档必须清
         LevelUpPopup.ResetForNewGame();
+        // 【2026-11-20 天赋自检】天赋入口红点「本次登录已看」也是进程级 static：
+        // 不清的话新档在本次登录内不再亮红点（定义 TalentSystem.cs:126，置位 TalentUI.cs:287）。
+        TalentSystem.TalentDotSeenThisSession = false;
 
-        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列）");
+        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列/天赋红点）");
     }
 }

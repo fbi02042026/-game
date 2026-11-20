@@ -20,7 +20,7 @@ public partial class TalentUI
             closeButton.onClick.AddListener(Hide);
         }
         // 【2026-11-19 主人拍板】重置天赋退场，Footer 原重置按钮位（亮/灰两个态）换成「一键升级」：
-        // 灰态点击同样进 OnClickBuyAll，由里面的拦截原因（金币不够 / 等级不够 / 已点满）给 toast。
+        // 灰态点击同样进 OnClickBuyAll，由里面的拦截原因（金币不够 / 天赋石不足 / 等级不够 / 已点满）给 toast。
         // 洗点链路（OnClickReset / OpenResetConfirm / TalentSystem.TryRespecRight）保留为死代码，无入口。
         if (resetButton != null)
         {
@@ -447,10 +447,19 @@ public partial class TalentUI
             GlobalToastUI.Show(reason, true);
             return;
         }
-        onRightChoiceRequested?.Invoke(_pendingNode.index, chosenJob1Based);
+        var chosenNode = _pendingNode;   // CloseChoicePopup 会清 _pendingNode，先留引用给粒子
+        onRightChoiceRequested?.Invoke(chosenNode.index, chosenJob1Based);
         CloseChoicePopup();
         RefreshAll();
-        GlobalToastUI.Show("已激活：" + RightNodeName(_pendingNode), true);
+        // 【2026-11-20】单点解锁粒子：只此一条调用，一键 DoBuyAll 不经过这里。
+        for (int i = 0; i < _rightViews.Count; i++)
+        {
+            var v = _rightViews[i];
+            if (v == null || v.node == null || v.node.id != chosenNode.id) continue;
+            PlayUnlockFx(v.unlockFx);
+            break;
+        }
+        GlobalToastUI.Show("已激活：" + RightNodeName(chosenNode), true);
     }
 
     void CloseChoicePopup()

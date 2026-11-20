@@ -36,14 +36,22 @@ public partial class TalentUI
         EnsureGridContentLayout(leftContent, LeftGridColumns, LeftNodeW, LeftNodeH, LeftGapX, LeftGapY);   // 【2026-11-19 主人拍板】列距 8 不变，行距 36→54（再大 50%）
         EnsureScrollContentLayout(rightContent, 8f);   // 右列先建骨架，下方按左列总高覆盖 spacing
 
-        for (int i = 0; i < TalentDefs.Left.Length; i++)
+        // 【2026-11-20 主人拍板】开启/点亮顺序按连线走蛇形：左→右、右→左、左→右……
+        // 数据 index = 解锁顺序，必须落在连线的第 i 个视觉槽位；GridLayoutGroup 的 child 顺序是
+        // 视觉 row-major（每行左→右、自下而上），奇数行左右镜像。只改视觉映射，存档/解锁/等级门槛一律不动。
+        for (int k = 0; k < TalentDefs.Left.Length; k++) _leftViews.Add(null);
+        for (int slot = 0; slot < TalentDefs.Left.Length; slot++)
         {
+            int row = slot / TalentDefs.LeftPerRow;
+            int vcol = slot % TalentDefs.LeftPerRow;
+            int i = row * TalentDefs.LeftPerRow
+                    + (row % 2 == 0 ? vcol : (TalentDefs.LeftPerRow - 1 - vcol));
             var go = Instantiate(leftNodeTemplate, leftContent);
             go.name = "LeftNode_" + (i + 1);
             go.SetActive(true);
             PrepareListItemUnderContent(go.transform as RectTransform, leftContent, LeftNodeW, LeftNodeH);
             var view = BindLeftNode(go, i);
-            _leftViews.Add(view);
+            _leftViews[i] = view;
             int idx = i;
             view.button?.onClick.AddListener(() => OnClickLeft(idx));
         }

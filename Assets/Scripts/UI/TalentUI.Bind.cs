@@ -10,9 +10,44 @@ using UnityEngine.UI;
 public partial class TalentUI
 {
 
+    /// <summary>模板内解锁粒子节点名（左右模板一致，主人已加）。集中一处，绑定与播放共用。</summary>
+    const string UnlockFxNodeName = "shengjieffect";
+
+    /// <summary>
+    /// 【2026-11-20】绑定期取粒子引用并立即停掉：prefab 里 playOnAwake=1，
+    /// 列表实例化出 80+13 个节点时会全部自动播一遍。StopEmittingAndClear 连已发射的也清掉。
+    /// 找不到就 LogError（不兜底），以主人已加节点为准。
+    /// </summary>
+    static ParticleSystem FindAndStopUnlockFx(GameObject go)
+    {
+        var tf = go != null ? go.transform.Find(UnlockFxNodeName) : null;
+        var fx = tf != null ? tf.GetComponent<ParticleSystem>() : null;
+        if (fx == null)
+        {
+            Debug.LogError("[TalentUI] 节点缺 " + UnlockFxNodeName + " 粒子（模板应有）：" + (go != null ? go.name : "null"));
+            return null;
+        }
+        fx.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        return fx;
+    }
+
+    /// <summary>
+    /// 【2026-11-20】单点解锁成功的粒子反馈唯一出口；一键升级不调用此方法。
+    /// 先 StopEmittingAndClear 再 Play，保证连续点击不叠加残影。
+    /// </summary>
+    static void PlayUnlockFx(ParticleSystem fx)
+    {
+        if (fx == null) return;   // 绑定期已 LogError，这里不再重复刷日志
+        fx.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        fx.Play();
+    }
+
     LeftNodeView BindLeftNode(GameObject go, int index0)
     {
         var v = new LeftNodeView { index = index0 + 1, root = go };
+        // 【2026-11-20】解锁粒子：取一次缓存 + 立即停。prefab 两个 shengjieffect 都是 playOnAwake=1，
+        // 不 Stop 的话进页面实例化 80 个左节点就会齐播一遍；只有单点解锁成功才允许 Play。
+        v.unlockFx = FindAndStopUnlockFx(go);
         v.button = go.GetComponent<Button>() ?? go.GetComponentInChildren<Button>(true);
         v.icon = go.transform.Find("Icon")?.GetComponent<Image>()
                  ?? go.transform.Find("icon")?.GetComponent<Image>()
@@ -87,7 +122,10 @@ public partial class TalentUI
             return;
         }
 
-        bool rowStart = index0 % TalentDefs.LeftPerRow == 0;
+        // 【2026-11-20 主人拍板】Lv 固定在视觉左端：蛇形后奇数行左端=data 末列（文本行号仍按 data index）。
+        int dataRow = index0 / TalentDefs.LeftPerRow;
+        int dataCol = index0 % TalentDefs.LeftPerRow;
+        bool rowStart = (dataRow % 2 == 0) ? (dataCol == 0) : (dataCol == TalentDefs.LeftPerRow - 1);
         // 非行首格：整块等级标记隐藏（不占位、不写空串留白块）
         v.orderText.gameObject.SetActive(rowStart);
         if (!rowStart)
@@ -117,6 +155,8 @@ public partial class TalentUI
             visualIndex = visualIndex0,
             root = go
         };
+        // 【2026-11-20】同上：右列粒子绑定时即停，杜绝列表构建时齐播。
+        v.unlockFx = FindAndStopUnlockFx(go);
         v.titleText = go.transform.Find("TitleText")?.GetComponent<Text>();
         v.costText = go.transform.Find("CostText")?.GetComponent<Text>();
         v.lockIcon = go.transform.Find("Lock")?.GetComponent<Image>();

@@ -257,17 +257,27 @@ public static class TalentSystem
     /// <summary>能否解锁某右列节点（level 0 → 1）。互斥/分批/双修前置都在这里判定。</summary>
     public static bool CanUnlockRightNode(string id, out string reason)
     {
+        var data = SaveSystem.Instance?.Data;
+        return CanUnlockRightNode(data != null ? data.talents : null,
+                                  data != null ? data.talentPoints : 0, id, out reason);
+    }
+
+    /// <summary>
+    /// 【2026-11-20 一键升级】带快照判定的唯一口径：真实购买与一键升级预览共用这一份规则。
+    /// 预览传克隆出来的 talents / 余额，不改存档；正常调用仍走上面的两参重载。
+    /// </summary>
+    public static bool CanUnlockRightNode(IDictionary<string, int> talents, int talentStones, string id, out string reason)
+    {
         reason = null;
         var node = TalentDefs.GetRightNodeById(id);
         if (node == null) { reason = "无效节点"; return false; }
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) { reason = "无存档"; return false; }
+        if (talents == null) { reason = "无存档"; return false; }
 
-        int level = TalentDefs.GetRightNodeLevel(data.talents, id);
+        int level = TalentDefs.GetRightNodeLevel(talents, id);
         if (level > 0) { reason = "已解锁"; return false; }
 
         // 任务4：互斥组已有其它节点则点不了
-        if (TalentDefs.IsRightNodeMutexLocked(node, data.talents)) { reason = "互斥：已选其它流派"; return false; }
+        if (TalentDefs.IsRightNodeMutexLocked(node, talents)) { reason = "互斥：已选其它流派"; return false; }
 
         // 【2026-11-19 主人拍板】R_DUAL 原「主流派满5级」前置已改挂等级门槛
         //（自身 unlockLeftIndex=9（2026-11-19 起），见下方等级判断）；流派节点已界面隐藏，不再依赖 R_F1/R_F2。
@@ -278,7 +288,7 @@ public static class TalentSystem
         { reason = $"等级达到{node.unlockLeftIndex}级后解锁"; return false; }
 
         if (node.costByLevel == null || node.costByLevel.Length < 1) { reason = "配置错误"; return false; }
-        if (data.talentPoints < node.costByLevel[0]) { reason = ReasonNoStones; return false; }
+        if (talentStones < node.costByLevel[0]) { reason = ReasonNoStones; return false; }
         return true;
     }
 
@@ -312,13 +322,22 @@ public static class TalentSystem
     /// <summary>能否把某右列节点从当前等级 +1。受等级上限（任务3）与天赋石限制。</summary>
     public static bool CanUpgradeRightNode(string id, out string reason)
     {
+        var data = SaveSystem.Instance?.Data;
+        return CanUpgradeRightNode(data != null ? data.talents : null,
+                                   data != null ? data.talentPoints : 0, id, out reason);
+    }
+
+    /// <summary>
+    /// 【2026-11-20 一键升级】带快照判定的唯一口径：真实购买与一键升级预览共用这一份规则。
+    /// </summary>
+    public static bool CanUpgradeRightNode(IDictionary<string, int> talents, int talentStones, string id, out string reason)
+    {
         reason = null;
         var node = TalentDefs.GetRightNodeById(id);
         if (node == null) { reason = "无效节点"; return false; }
-        var data = SaveSystem.Instance?.Data;
-        if (data == null) { reason = "无存档"; return false; }
+        if (talents == null) { reason = "无存档"; return false; }
 
-        int level = TalentDefs.GetRightNodeLevel(data.talents, id);
+        int level = TalentDefs.GetRightNodeLevel(talents, id);
         if (level <= 0) { reason = "请先解锁"; return false; }
         if (level >= node.maxLevel) { reason = "已满级"; return false; }
 
@@ -333,7 +352,7 @@ public static class TalentSystem
         }
 
         if (node.costByLevel == null || level >= node.costByLevel.Length) { reason = "配置错误"; return false; }
-        if (data.talentPoints < node.costByLevel[level]) { reason = ReasonNoStones; return false; }
+        if (talentStones < node.costByLevel[level]) { reason = ReasonNoStones; return false; }
         return true;
     }
 

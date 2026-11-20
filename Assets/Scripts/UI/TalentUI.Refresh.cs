@@ -91,25 +91,24 @@ public partial class TalentUI
             // 【2026-11-19 正方形格子】红点贴图标右上角（图标居中半径48、格子半宽58 → 右上角内缩约10）。
             // 【2026-11-19 主人拍板】红点离图标再近 2px：偏移 -12→-14（anchor 右上、负得越多越往图标靠）。
             SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-14f, -14f));
-            // 【第15轮·主人拍板】竖向不再只连 S 形折返端：每列上下相邻节点都直连（上下之间都要
-            // 看到连线），顶行上方没有节点才藏；横线仍只连左邻居（col 0 不画）。
+            // 【2026-11-20 主人拍板】连线跟随蛇形点亮：横线连视觉左邻居、竖线只画在每行末端，
+            // 拼成一条「左→右、右→左……」的连贯路径；顶行上方无节点才藏。详见下方两处判断。
+            int row = i / TalentDefs.LeftPerRow;
             int col = i % TalentDefs.LeftPerRow;
             bool hasNodeAbove = i + TalentDefs.LeftPerRow < _leftViews.Count;
             if (v.line != null)
             {
-                // 横线画在节点左侧：col 1/2 显示连左邻居，col 0 不画。
-                bool showH = col > 0;
+                // 【2026-11-20 主人拍板】蛇形后奇数行视觉左右镜像：横线画在视觉非左端
+                //（偶数行 data col>0 / 奇数行 data col<末列），几何仍按节点自身算，连左邻居。
+                bool showH = (row % 2 == 0) ? (col > 0) : (col < TalentDefs.LeftPerRow - 1);
                 v.line.gameObject.SetActive(showH);
                 if (showH) v.line.color = on ? Color.white : NodeLinkOffTint;
             }
             if (v.lineV != null)
             {
-                // 【2026-11-19 主人拍板·参考图】竖线蛇形交替：这一行连左列(col 0)、下一行连右列(末列)，
-                // 行行交替（横线连左邻居口径不变）；几何由主人预制体定，长度随行距自动变长。
-                int row = i / TalentDefs.LeftPerRow;
-                bool showV = hasNodeAbove && (row % 2 == 1
-                    ? col == 0
-                    : col == TalentDefs.LeftPerRow - 1);
+                // 【2026-11-20 主人拍板】竖线统一画在每行 data 末列：蛇形后它恰是偶数行视觉右端 /
+                // 奇数行视觉左端，正好把「上一行末端 → 下一行首端」接成一条连贯蛇形。
+                bool showV = hasNodeAbove && col == TalentDefs.LeftPerRow - 1;
                 v.lineV.gameObject.SetActive(showV);
                 if (showV) v.lineV.color = on ? Color.white : NodeLinkOffTint;
             }
@@ -251,8 +250,8 @@ public partial class TalentUI
 
     /// <summary>
     /// 【2026-11-19 主人拍板】重置天赋退场，Footer 重置按钮位换成「一键升级」，本函数改为刷一键升级的亮/灰：
-    /// 亮 = 能买下一个左列天赋（CanUnlockLeft 已含顺序 / 人物等级 / 金币三重口径）；灰 = 买不动，仍可点，
-    /// 点了走 OnClickBuyAll 弹具体原因（金币不够 / 等级不够 / 已点满）。函数名保留（调用点只有 RefreshAll）。
+    /// 亮 = 左列能买或右列能解锁/升级（真源 HasBuyAllTarget）；灰 = 两边都买不动，仍可点，
+    /// 点了走 OnClickBuyAll 弹具体原因（金币不够 / 天赋石不足 / 等级不够 / 已点满）。函数名保留（调用点只有 RefreshAll）。
     /// 药水计数节点（Footer/icon）随重置退场已在预制体隐藏，补绑写值降级为无害兜底（找不到不报错）。
     /// </summary>
     void RefreshResetButton()
@@ -264,43 +263,19 @@ public partial class TalentUI
         if (resetPotionCountText != null)
             resetPotionCountText.text = "×" + (data != null ? data.TownBagCount(TalentSystem.ItemForgetPotion) : 0);
 
-        var talents = data != null ? data.talents : null;
-        int unlocked = TalentDefs.LeftUnlockedCount(talents);
-        bool canBuy = unlocked < TalentDefs.Left.Length
-                      && TalentSystem.CanUnlockLeft(unlocked + 1, out _);
+        // 【2026-11-20 主人拍板】一键升级含右列：左列能买或右列能解锁/升级都算亮；
+        // 真值共用 HasBuyAllTarget（内部复用 TalentSystem 快照判定），不在这里另写一套。
+        bool canBuy = HasBuyAllTarget(data);
+        // 【2026-11-20 主人拍板】亮/灰两个按钮已合并为单个 shengji：底图用预制体自带的
+        //（主人已在 Inspector 换好），代码不再按路径覆盖；只按「能不能买」压暗颜色表达灰态。
+        // 按钮恒显示、恒可点：灰态点进去由 OnClickBuyAll 弹具体原因（金币不够 / 天赋石不足 / 等级不够 / 已点满）。
         if (resetButton != null)
         {
-            // 【2026-11-19 主人拍板】一键升级亮态用主人指定的「确定按钮.png」（见随附素材）：预制体亮态
-            // sprite 引用悬空（旧 guid 全库无 meta），新图 guid 是 56 字符不能落 prefab 引用——按路径加载补图，
-            // 与下面灰态补图同一口径；缺图报错不静默。
-            var litImg = resetButton.GetComponent<Image>();
-            var litSp = Resources.Load<Sprite>("UI/Art/Common/确定按钮");
-            if (litImg != null && litSp != null)
-            {
-                litImg.sprite = litSp;
-                litImg.color = Color.white;
-            }
-            else
-                Debug.LogError("[TalentUI] 确定按钮.png 取不到（应在 Resources/UI/Art/Common/），一键升级亮态没图（不兜底）");
-            resetButton.gameObject.SetActive(canBuy);
-            resetButton.interactable = canBuy;
-        }
-        if (resetButtonGray != null)
-        {
-            resetButtonGray.gameObject.SetActive(!canBuy);
-            resetButtonGray.interactable = true;
-            // 【2026-11-19 主人拍板】一键升级亮/灰两态统一用主人指定的「确定按钮.png」（见随附素材）：
-            // 无条件补图（不藏在 if(!canBuy) 里，避免显隐切换时序导致偶发显示旧图/空图）；
-            // 预制体两态 sprite 引用悬空，按路径加载；灰态只压暗色区分"暂不可买"，形状与亮态一致。缺图报错不静默。
-            var img = resetButtonGray.GetComponent<Image>();
-            var graySp = Resources.Load<Sprite>("UI/Art/Common/确定按钮");
-            if (img != null && graySp != null)
-            {
-                img.sprite = graySp;
-                img.color = new Color(0.55f, 0.55f, 0.55f, 1f);
-            }
-            else
-                Debug.LogError("[TalentUI] 确定按钮.png 取不到（应在 Resources/UI/Art/Common/），一键升级灰态没图（不兜底）");
+            var img = resetButton.GetComponent<Image>();
+            if (img != null)
+                img.color = canBuy ? Color.white : new Color(0.55f, 0.55f, 0.55f, 1f);
+            resetButton.gameObject.SetActive(true);
+            resetButton.interactable = true;
         }
     }
 

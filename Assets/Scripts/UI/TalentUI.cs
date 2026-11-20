@@ -165,6 +165,8 @@ public partial class TalentUI : MonoBehaviour
         public Text upgradeCostText;
         /// <summary>【2026-10-13 主人拍板】左列序号 L1…L40（贴在卡片左端，Iconbg 左边那块空位）。</summary>
         public Text orderText;
+        /// <summary>【2026-11-20】模板内的解锁粒子 shengjieffect，绑定时取一次并 Stop；单点解锁才 Play。</summary>
+        public ParticleSystem unlockFx;
     }
 
     class RightNodeView
@@ -190,6 +192,8 @@ public partial class TalentUI : MonoBehaviour
         public Button button;
         /// <summary>2026-09-29：右上角红色「新」字（节点刚开通、还没点过才显示，点了就消失）。</summary>
         public Text newTag;
+        /// <summary>【2026-11-20】模板内的解锁粒子 shengjieffect，绑定时取一次并 Stop；单点解锁才 Play。</summary>
+        public ParticleSystem unlockFx;
     }
 
     void Awake()

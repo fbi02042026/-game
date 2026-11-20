@@ -61,7 +61,9 @@ public partial class TalentUI
     void EnsureBubbleSprites()
     {
         // 【2026-11-19 主人拍板】卡底=浅色羊皮纸框（AdventureLog/Frames/字底），按钮左右列统一=确定按钮
-        _bubbleCardSpr = BubbleSprite(ref _bubbleCardSpr, "UI/AdventureLog/Frames/字底", "气泡卡底");
+        // 【2026-11-20 主人拍板】底图换「像素风空白对话框指针」：素材已做九宫格（spriteBorder），
+        // 卡片尺寸/缩放/内部排版一律不动，只换这张底图，由九宫格自动适配现有大小。
+        _bubbleCardSpr = BubbleSprite(ref _bubbleCardSpr, "UI/Art/Common/像素风空白对话框指针", "气泡卡底");
         _bubblePillSpr = BubbleSprite(ref _bubblePillSpr, "UI/Talent/天赋_0006_属性底", "标题胶囊");
         _bubbleGoldBtnSpr = BubbleSprite(ref _bubbleGoldBtnSpr, "UI/Art/Common/确定按钮", "确定按钮");
         _bubbleGoldIconSpr = BubbleSprite(ref _bubbleGoldIconSpr, "UI/Icons/Common/icon_gold", "金币图标");
@@ -98,6 +100,19 @@ public partial class TalentUI
         {
             Debug.LogError("[TalentUI] 气泡卡卡底素材缺失，弹不出气泡卡: " + rootName);
             return cached;   // root == null，调用方判空静默（不退化成直接买）
+        }
+
+        // 【2026-11-20 主人拍板】优先克隆预制体模板 BubbleCardTemplate（主人可在 Inspector 里改排版/换图），
+        // 克隆失败/没这个节点才退回下面的运行时建树，保证旧行为不破。模板本身默认隐藏，克隆后改名并激活。
+        var tpl = transform.Find("BubbleCardTemplate");
+        if (tpl != null)
+        {
+            var clone = Instantiate(tpl.gameObject, transform);
+            clone.name = rootName;
+            clone.SetActive(true);
+            var refs = BindBubbleTemplate(clone, onDimClose, onOk, btnSpr, coinSpr);
+            if (refs.root != null) return refs;
+            Destroy(clone);   // 绑定失败：清掉残件，走下面的运行时建树兜底
         }
 
         var root = CreateRect(transform, rootName);
@@ -207,5 +222,67 @@ public partial class TalentUI
         want.x = Mathf.Clamp(want.x, -cv.width * 0.5f + halfW + margin, cv.width * 0.5f - halfW - margin);
         want.y = Mathf.Clamp(want.y, -cv.height * 0.5f + halfH + margin, cv.height * 0.5f - halfH - margin);
         refs.box.anchoredPosition = want;
+    }
+
+    /// <summary>
+    /// 【2026-11-20】绑定预制体模板克隆体：按节点名取引用、补图（模板 sprite 全空，走路径加载，不依赖 prefab guid）、
+    /// 接线（Dim 关闭 / 按钮确认）、套弹窗 Canvas。节点缺失只 LogError 并返回 root==null，由调用方退回运行时建树。
+    /// </summary>
+    CostBubbleRefs BindBubbleTemplate(GameObject clone, UnityAction onDimClose, UnityAction onOk,
+        Sprite btnSpr, Sprite coinSpr)
+    {
+        var refs = new CostBubbleRefs { root = clone };
+        var dimGo = clone.transform.Find("Dim")?.gameObject;
+        var boxRt = clone.transform.Find("Box") as RectTransform;
+        if (dimGo == null || boxRt == null)
+        {
+            Debug.LogError("[TalentUI] 气泡卡模板缺 Dim/Box，退回运行时建树: " + clone.name);
+            refs.root = null;
+            return refs;
+        }
+        // 全屏遮罩接线（真模态 raycast=1，由预制体 Dim 保证；点空白关闭）
+        var dimBtn = dimGo.GetComponent<Button>() ?? dimGo.AddComponent<Button>();
+        dimBtn.onClick.RemoveAllListeners();
+        dimBtn.onClick.AddListener(onDimClose);
+        // 弹窗 Canvas：模板没挂 Canvas（避免预制体里嵌 Canvas 的层级坑），克隆后补上同级设置
+        var canvas = clone.GetComponent<Canvas>() ?? clone.AddComponent<Canvas>();
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.TownPopup, UICanvasSetup.ResolveUiCamera());
+        if (clone.GetComponent<GraphicRaycaster>() == null) clone.AddComponent<GraphicRaycaster>();
+        Stretch(dimGo.GetComponent<RectTransform>());
+        Stretch(clone.GetComponent<RectTransform>());
+
+        // 卡底（九宫格拉伸按预制体 Box 的尺寸/缩放，代码不碰）
+        var boxImg = boxRt.GetComponent<Image>();
+        if (boxImg != null) { boxImg.sprite = _bubbleCardSpr; boxImg.color = Color.white; boxImg.type = Image.Type.Sliced; }
+        // 顶部大图标（sprite 空，填值时才设）
+        var head = boxRt.Find("HeadIcon")?.GetComponent<Image>();
+        if (head != null) { head.sprite = null; head.color = new Color(1f, 1f, 1f, 0f); head.preserveAspect = true; }
+        // 胶囊标题
+        var pill = boxRt.Find("Pill")?.GetComponent<Image>();
+        if (pill != null) pill.sprite = _bubblePillSpr;
+        var pillText = boxRt.Find("Pill/Label")?.GetComponent<Text>();
+        // 描述
+        var desc = boxRt.Find("DescText")?.GetComponent<Text>();
+        // 资源行图标 + 文字
+        var costIcon = boxRt.Find("CostIcon")?.GetComponent<Image>();
+        if (costIcon != null) { costIcon.sprite = coinSpr; costIcon.preserveAspect = true; }
+        var cost = boxRt.Find("CostText")?.GetComponent<Text>();
+        // 按钮底图 + 接线 + 文字
+        var okImg = boxRt.Find("UnlockButton")?.GetComponent<Image>();
+        if (okImg != null) okImg.sprite = btnSpr;
+        var okBtn = boxRt.Find("UnlockButton")?.GetComponent<Button>();
+        if (okBtn == null) { Debug.LogError("[TalentUI] 气泡卡模板缺 UnlockButton/Button: " + clone.name); refs.root = null; return refs; }
+        okBtn.onClick.RemoveAllListeners();
+        okBtn.onClick.AddListener(onOk);
+        var okLabel = boxRt.Find("UnlockButton/Label")?.GetComponent<Text>();
+
+        refs.box = boxRt;
+        refs.name = pillText;
+        refs.desc = desc;
+        refs.okLabel = okLabel;
+        refs.cost = cost;
+        refs.head = head;
+        clone.SetActive(false);
+        return refs;
     }
 }

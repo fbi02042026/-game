@@ -89,6 +89,14 @@ public partial class TalentUI
             return;
         }
         RefreshAll();
+        // 【2026-11-20】单点解锁/升级粒子：只此一条调用，一键 DoBuyAll 不经过这里。
+        for (int i = 0; i < _rightViews.Count; i++)
+        {
+            var v = _rightViews[i];
+            if (v == null || v.node == null || v.node.id != node.id) continue;
+            PlayUnlockFx(v.unlockFx);
+            break;
+        }
     }
 
     void CloseRightCard()

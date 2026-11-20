@@ -49,9 +49,11 @@ public partial class TalentUI
         sumMagicDefText = FindTxt("Panel/Footer/SumDef1");
         sumCritText = FindTxt("Panel/Footer/SumCrit");
         sumAtkSpdText = FindTxt("Panel/Footer/SumAtkSpd");
-        resetButton = transform.Find("Panel/Footer/ResetButton")?.GetComponent<Button>();
-        resetButtonGray = transform.Find("Panel/Footer/ResetButton灰")?.GetComponent<Button>()
-                          ?? transform.Find("Panel/Footer/ResetButtonGray")?.GetComponent<Button>();
+        // 【2026-11-20 主人拍板】亮/灰两个重置按钮已合并为单个 shengji（Panel/Footer/shengji）：
+        // 亮/灰由 RefreshResetButton 在同一按钮上改色表达，不再有 resetButtonGray 第二态。
+        resetButton = transform.Find("Panel/Footer/shengji")?.GetComponent<Button>()
+                      ?? transform.Find("Panel/Footer/ResetButton")?.GetComponent<Button>();
+        resetButtonGray = null;   // 字段保留（兼容旧引用），单按钮方案不再使用
         // 【2026-11-19 主人拍板】重置天赋退场：Footer/icon 药水计数容器已在预制体隐藏（m_IsActive 0），
         // 找不到属预期，不再报错；RefreshResetButton 里的补绑写值保留为无害兜底。
         // （注：预制体节点实际名是小写 icon，历史路径 "Icon" 一直匹配不上——两个路径都兜。）
@@ -99,6 +101,13 @@ public partial class TalentUI
     /// </summary>
     void EnsureFooterBindings()
     {
+        // 【2026-11-20 修·一键升级无反应】本函数 Awake 里无条件调用；而 AutoBindFromHierarchy
+        // 只在 panelImage==null 才跑（prefab 里 panelImage 已拖好 ⇒ 生产路径永远跳过），
+        // 所以 shengji 的绑定必须放这里。prefab 里 resetButton 序列化为 fileID:0（旧 ResetButton 已删），
+        // 不补绑就恒 null → WireClicks 跳过 → 点击无反应。
+        if (resetButton == null)
+            resetButton = transform.Find("Panel/Footer/shengji")?.GetComponent<Button>();
+
         if (sumMagicText == null)
             sumMagicText = FindTxt("Panel/Footer/SumAttack1");
         if (sumMagicDefText == null)
