@@ -2148,6 +2148,16 @@ public partial class BattleManager
         // 看起来像打徽记本只给金币（徽记其实只在 GrantStageGrowDrops 里走 Toast，不进奖励格）。
         // 活动副本产出各自有发放链（金币本走逐怪分摊），一律不吃主线关卡金。
         int stageGold = IsActivityDungeon ? 0 : StageGoldDefs.CurrentStageGold();
+        // 【2026-11-21】右列 R_STGOLD「结算金币」：通关关卡金 ×(1 + 加成%)，三职业通用。
+        // 与 R_GOLD「敛财」（局内击杀掉币）维度错开——这里只放大局外结算的关卡金。
+        // kind=Custom 按 id 直读等级；数值真源 = talent_right.csv 的 R_STGOLD optValues（10/20/30 百分点）。
+        {
+            var sgNode = TalentDefs.GetRightNodeById("R_STGOLD");
+            var sgData = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            if (sgNode != null && sgData != null && sgData.talents != null
+                && sgData.talents.TryGetValue("R_STGOLD", out int sgLv) && sgLv > 0)
+                stageGold = Mathf.RoundToInt(stageGold * (1f + Mathf.Clamp01(sgNode.EffectValue(sgLv, 0) / 100f)));
+        }
         if (stageGold > 0 && !IsSideIsland && !IsArena)   // 支线岛不发主线关卡金——岛金=goldReward，走岛结算链；
                                                           // 竞技场（2026-10-30 拍板）打赢不发金币，按关结算金一并停发
             _runStageGoldPending += stageGold;

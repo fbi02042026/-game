@@ -275,6 +275,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
             SpawnMercenaries();
         }
 
+        // 【2026-11-21 宠物战斗】上阵宠物出场（内部限正式主线+非引导；竞技场/裂隙/活动本不触发）。
+        DeployDeployedPet();
+
         // 【2026-11-05 难度隔离·必修】续局兜底章号必须读真源，不再读 maxUnlockedChapter 兼容缓存：
         // 那是「最远可达章」，误标/缓存脏了会把玩家摆回前面的篇（正是「打完 11-1 回城变 5-4」的成因链路）。
         // 难度局按该难度自己的真源落位（CurrentChapterToAdvanceAtDiff），普通局按普通真源。

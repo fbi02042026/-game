@@ -647,6 +647,13 @@ public static class TalentDefs
         // 消费点唯一 = BattleManager.OnMonsterDead 的 killGold（普通/精英/Boss 三档一起放大）。
         list.Add(HNode(16, "R_GOLD", "敛财", RightNodeType.Attr, 40, 5, "",
             new[] { 10, 25, 45, 75, 120 }, AttrKind.Custom, new[] { 10f, 20f, 30f, 40f, 50f }, "gold", "敛财"));
+        // 【2026-11-21】R_EXP「经验加成」/ R_STGOLD「结算金币」：三职业通用，门槛 10/15 级。
+        // kind=Custom 不走属性系统，按 id 直读等级：经验在 LevelSystem.AddStageClearExp 乘算，
+        // 结算金币在 BattleManager 结算 stageGold 处乘算（与 R_GOLD 局内掉币错开维度）。
+        list.Add(HNode(17, "R_EXP", "经验加成", RightNodeType.Attr, 10, 3, "",
+            new[] { 14, 30, 52 }, AttrKind.Custom, new[] { 10f, 20f, 30f }, "exp", "经验加成"));
+        list.Add(HNode(18, "R_STGOLD", "结算金币", RightNodeType.Attr, 15, 3, "",
+            new[] { 14, 30, 52 }, AttrKind.Custom, new[] { 10f, 20f, 30f }, "stgold", "结算金币"));
         return list.ToArray();
     }
 

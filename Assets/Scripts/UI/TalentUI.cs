@@ -25,8 +25,8 @@ public partial class TalentUI : MonoBehaviour
     const float RightRowH = 126f;     // 兜底行高：同上（当前右模板 150）
     const float LeftNodeW = 116f;     // 左列格子宽（三列网格 cell 宽）；原单列 258.6
     const float RightRowW = 269.2f;
-    // 【2026-11-19 主人拍板】右列天赋卡先小 30%、再大 10%：预制体 Opt_0 scale=1 → 运行时 0.77（连线/卡顶计算读 localScale 自动跟随）
-    const float RightIconScale = 0.77f;
+    // 【2026-11-21 主人拍板】右列天赋图标再放大 10%：0.77 → 0.847（连线/卡顶计算读 localScale 自动跟随）
+    const float RightIconScale = 0.847f;
     const int LeftGridColumns = 3;    // 左列网格列数（与 TalentDefs.LeftPerRow 一致）
     // 【2026-11-19 自适应】网格间距提成常量：左列竖线长度要按「格高+行距」算，间距只能有一处真源。
     const float LeftGapX = 8f;

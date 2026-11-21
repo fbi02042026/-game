@@ -2603,6 +2603,63 @@ public class SaveData
             list.Add(new StringIdEntry { id = ids[i] });
         return list;
     }
+
+    // === 宠物系统存档（2026-11-21 新增，最小增量；与佣兵好感互不干扰）===
+    /// <summary>已解锁/已购买条目 id 列表（含本体与皮肤；默认狗由代码视为恒解锁，不入列）。</summary>
+    public List<StringIdEntry> petUnlocked = new List<StringIdEntry>();
+    /// <summary>当前上阵条目 id（本体或皮肤 id；空 = 未上阵）。</summary>
+    public string petDeployedId = "";
+    /// <summary>每只宠物的喂养次数（5 次/亲密度星，15 次满）；键 = 本体 id。</summary>
+    public List<StringIntEntry> petFeedCounts = new List<StringIntEntry>();
+    /// <summary>累计看广告次数（灰狼解锁计数，与现有 adXxx 计数互不干扰）。</summary>
+    public int petAdWatchCount = 0;
+    /// <summary>满星礼物盒：上次领取的日期 key（跨天刷新，本地日期）。</summary>
+    public string petGiftDayKey = "";
+    /// <summary>测试用一键全解锁开关（只由宠物界面的调试按钮/F8 切换，正式包不暴露入口）。
+    /// 打开时 IsPetUnlocked 恒真，关掉即回到真实存档解锁状态（不往 petUnlocked 里写脏数据）。
+    /// ⚠ 读取处（IsPetUnlocked）也在 UNITY_EDITOR || DEVELOPMENT_BUILD 条件编译内：
+    /// Release 正式包不会编译这段逻辑，字段值再真也无效。字段本身保留只为存档结构稳定（铁律 18 死字段不清理）。</summary>
+    public bool petDebugAllUnlocked = false;
+
+    /// <summary>宠物是否已解锁（默认狗恒解锁）。</summary>
+    public bool IsPetUnlocked(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if (petDebugAllUnlocked) return true;   // 测试开关：全部视为已解锁（Release 包不编译此行）
+#endif
+        if (id == "dog") return true;
+        if (petUnlocked == null) return false;
+        for (int i = 0; i < petUnlocked.Count; i++)
+            if (petUnlocked[i] != null && petUnlocked[i].id == id) return true;
+        return false;
+    }
+
+    /// <summary>解锁一只宠物（幂等；不自动存档，由调用方统一存）。</summary>
+    public void UnlockPet(string id)
+    {
+        if (string.IsNullOrEmpty(id) || IsPetUnlocked(id)) return;
+        petUnlocked ??= new List<StringIdEntry>();
+        petUnlocked.Add(new StringIdEntry { id = id });
+    }
+
+    /// <summary>某本体已喂养次数（皮肤与本体共享，键统一用本体 id）。</summary>
+    public int GetPetFeedCount(string bodyId)
+    {
+        if (string.IsNullOrEmpty(bodyId) || petFeedCounts == null) return 0;
+        for (int i = 0; i < petFeedCounts.Count; i++)
+            if (petFeedCounts[i] != null && petFeedCounts[i].id == bodyId) return petFeedCounts[i].value;
+        return 0;
+    }
+
+    public void SetPetFeedCount(string bodyId, int n)
+    {
+        if (string.IsNullOrEmpty(bodyId)) return;
+        petFeedCounts ??= new List<StringIntEntry>();
+        for (int i = 0; i < petFeedCounts.Count; i++)
+            if (petFeedCounts[i] != null && petFeedCounts[i].id == bodyId) { petFeedCounts[i].value = n; return; }
+        petFeedCounts.Add(new StringIntEntry { id = bodyId, value = n });
+    }
 }
 
 [Serializable]

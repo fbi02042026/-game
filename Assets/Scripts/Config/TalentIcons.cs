@@ -91,6 +91,22 @@ public static class TalentIcons
             // 【2026-11-14 主人拍板】新增「敛财」（击杀掉币 +10%/级）—— 语义就是聚敛财富，直接用同名的敛财图。
             // 同批把「背包扩容」从敛财.png 换到它本来该用的背包+1.png：敛财图让给金币节点，背包节点不再图文不符。
             case "敛财":      return Load(TalentRoot + "敛财.png");
+            // 【2026-11-21】新增两节点图标（复用项目现成图，未新造资源）：
+            // 「经验加成」= 双剑+上箭头（成长/提升），取磨砺.png；「结算金币」= 金币堆+%号（收益），取勤俭持家.png。
+            // 两图 Resources/Art 源副本一致、无其它引用；走 case 而非同名，避免改节点名影响存档/配表。
+            case "经验加成":  return Load(TalentRoot + "磨砺.png");
+            case "结算金币":  return Load(TalentRoot + "勤俭持家.png");
+            // 【2026-11-21】三职业专属右列节点补图标（此前走 default 找不到同名图 → LogError+白框）：
+            // 复用项目现成图，不新造资源。剑盾=剑盾专精(剑+蓝金盾，真正的防御图)、游侠=疾行(带翼疾行靴)、
+            // 法系=魔法专精(法杖+魔法书)，冲锋精通=力量爆发(冲击)、散射精通=弱点洞察(与「致命一击」同图)。
+            // 初版曾把「坚韧.png」当盾牌配给坚壁，实际那张是烤鸡腿+绿箭头（体力/恢复语义），已改正。
+            case "坚壁":      return Load(TalentRoot + "剑盾专精.png");
+            case "疾风":      return Load(TalentRoot + "疾行.png");
+            case "溅射":
+            case "奥术":
+            case "法球精通":  return Load(TalentRoot + "魔法专精.png");
+            case "冲锋精通":  return Load(TalentRoot + "力量爆发.png");
+            case "散射精通":  return Load(TalentRoot + "弱点洞察.png");
             // 利刃 / 体魄 / 精准 / 迅捷 / 疾行 / 凝神：图标与节点同名，走下边 default 直取。
 
             default:

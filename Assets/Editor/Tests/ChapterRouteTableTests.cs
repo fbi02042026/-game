@@ -125,7 +125,9 @@ public class ChapterRouteTableTests
     public void Regression_A_OneGrandOnly_Chapter2StaysLocked()
     {
         var d = new SaveData();
-        FillStages(d, 1, 0, ActProgressionDefs.SubsPerGrandOf(1) - 1);   // 只通第 1 座大关
+        // 路线 B（2026-11-01 塌缩）后每章只有 1 座大关，所以「只通一座大关」= 整篇通。
+        // 本条回归的本意是「未整篇通关不得解锁下一章」→ 用「差最后一节」表达未整篇。
+        FillStages(d, 1, 0, ActProgressionDefs.StageCountOf(1) - 1 - 1);
         Assert.IsFalse(d.HasTrulyClearedChapter(1), "未覆盖全篇小关 → 不算真通关");
         Assert.IsFalse(d.IsChapterUnlocked(1), "真通关才是解锁来源 → 第1篇还不该标已解锁");
         Assert.IsFalse(ChapterRouteTable.CanEnter(2, d), "第 2 篇必须仍锁（误标来源已删除）");
@@ -147,7 +149,8 @@ public class ChapterRouteTableTests
     [Test]
     public void Regression_C_After11_1_NextIs11_2_NormalHardNightmare()
     {
-        // 普通(0) / 困难(1) / 噩梦(2) 三组同口径：都要保证「打完 11-1 后落位仍在第 2 篇，下一关 = 11-2」。
+        // 普通(0) / 困难(1) / 噩梦(2) 三组同口径：保证「打完第 2 篇第 1 关后落位仍在第 2 篇，下一关 = 第 2 关」，
+        // 整篇通关后落位推进到第 3 篇。（方法名沿用 2026-11-05 旧编号 11-1/11-2，口径已改为一章 10 关。）
         foreach (int diff in new[] { 0, 1, 2 })
         {
             var d = new SaveData();
@@ -178,16 +181,16 @@ public class ChapterRouteTableTests
             Assert.IsFalse(d.HasStageClearedAtDiff(2, 1, diff),
                 $"难度{diff}：11-2 未通 → 下一关开打 {ActProgressionDefs.GlobalStageLabel(2, 1)}");
 
-            // 补齐第 1 座大关剩余小节 → 已通大关数 = 1，下一关跨到大关 2 的首节。
+            // 补齐第 2 篇剩余小节 → 第 2 篇整篇通关（路线 B：每章 1 座大关 = 10 节）→ 落位推进到第 3 篇，下一关 = 3-1。
             if (diff == 0) FillStages(d, 2, 1, subs - 1);
             else FillStagesAtDiff(d, diff, 2, 1, subs - 1);
 
             Assert.AreEqual(1, d.DerivedGrandProgressFromClearedStagesAtDiff(2, diff),
-                $"难度{diff}：第 2 篇第 1 座大关全清 → 已通大关数 1");
-            Assert.AreEqual(2, ChapterRouteTable.CurrentChapterToAdvanceAtDiff(diff, d),
-                $"难度{diff}：第 1 座大关全清后仍在本篇");
-            Assert.IsFalse(d.HasStageClearedAtDiff(2, subs, diff),
-                $"难度{diff}：下一关开打 {ActProgressionDefs.GlobalStageLabel(2, subs)}（第 2 座大关首节尚未通关）");
+                $"难度{diff}：第 2 篇整篇全清 → 已通大关数 1");
+            Assert.AreEqual(3, ChapterRouteTable.CurrentChapterToAdvanceAtDiff(diff, d),
+                $"难度{diff}：第 2 篇整篇通关后落位推进到第 3 篇");
+            Assert.IsFalse(d.HasStageClearedAtDiff(3, 0, diff),
+                $"难度{diff}：下一关开打 {ActProgressionDefs.GlobalStageLabel(3, 0)}（第 3 篇首节尚未通关）");
 
             // 难度隔离：难度局不得写普通真源，也不得串到另一档难度。
             if (diff > 0)
@@ -289,7 +292,8 @@ public class ChapterRouteTableTests
             int normalUnlocked = d.clearedChapterIds.Count;
             int normalTruly = d.trulyClearedChapterIds.Count;
 
-            FillStagesAtDiff(d, diff, 1, 0, ActProgressionDefs.SubsPerGrandOf(1) - 1);   // 只通第 1 座大关
+            // 路线 B 后每章 1 座大关，「只通一座大关」即整篇 → 用「差最后一节」表达未整篇通关。
+            FillStagesAtDiff(d, diff, 1, 0, ActProgressionDefs.StageCountOf(1) - 1 - 1);
 
             Assert.IsFalse(d.HasTrulyClearedChapterAtDiff(1, diff), $"难度{diff}：只通 1 座大关 ≠ 整篇通关");
             Assert.IsFalse(ChapterRouteTable.CanEnterAtDiff(2, diff, d), $"难度{diff}：第 2 篇必须仍锁");

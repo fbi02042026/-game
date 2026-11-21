@@ -28,6 +28,7 @@ public partial class CharacterUI
         EnsureBackpackEntry();
         EnsureBoardEntry();
         EnsureJobSwitchEntry();
+        // 宠物入口不在这里建：它按背包顶边定位，必须等 ShowPage 里 EnsureBagAlwaysOpen(Fit) 之后再建
         EnsureBagPageButtons();
         if (flipPortraitButton != null)
         {

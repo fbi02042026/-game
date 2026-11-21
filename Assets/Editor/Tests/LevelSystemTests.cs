@@ -36,7 +36,8 @@ public class LevelSystemTests
 
     /// <summary>
     /// 数值锚点（2026-11-05 口径）：经验曲线与关卡经验供给是配套的，单改一处会静默漂移。
-    /// 累计 1→80 = 183,260；普通全清 730 小关供给 169,260 → 只到 77 级，差 14,000 到满级。
+    /// 累计 1→80 = 183,260；普通全清 80 关（路线 B：8 章 × 10 关）供给 17,760 → 只到 29 级，
+    /// 差 165,500 到满级（靠日常/难度档/裂隙补，主线不再是满级主来源）。
     /// </summary>
     [Test]
     public void ExpCurve_TotalAndSupply_Anchored()
@@ -56,10 +57,10 @@ public class LevelSystemTests
             stages += subStages;
             supply += subStages * perStage;
         }
-        Assert.AreEqual(730, stages, "普通难度全清小关数 = 730（8 章 × 10 关 × 5/8/10…节）");
-        Assert.AreEqual(169260, supply, "普通难度全清总经验供给 = 169,260");
+        Assert.AreEqual(80, stages, "普通难度全清关数 = 80（路线 B：8 章 × 1 座大关 × 10 关）");
+        Assert.AreEqual(17760, supply, "普通难度全清总经验供给 = 17,760");
 
-        // 用同一条曲线消化这笔供给：应停在 77 级
+        // 用同一条曲线消化这笔供给：应停在 29 级
         int levelReached = 1;
         int expInLevel = supply;
         while (levelReached < LevelSystem.MaxLevel
@@ -68,9 +69,9 @@ public class LevelSystemTests
             expInLevel -= LevelSystem.GetExpForLevel(levelReached);
             levelReached++;
         }
-        Assert.AreEqual(77, levelReached, "普通全清供给 169,260 只能到 77 级");
-        Assert.AreEqual(2326, expInLevel, "77 级余量 = 2,326");
-        Assert.AreEqual(14000, cumToMax - supply, "普通全清后距满级还差 14,000 经验（靠日常/难度档补）");
+        Assert.AreEqual(29, levelReached, "普通全清供给 17,760 只能到 29 级");
+        Assert.AreEqual(50, expInLevel, "29 级余量 = 50");
+        Assert.AreEqual(165500, cumToMax - supply, "普通全清后距满级还差 165,500 经验（靠日常/难度档/裂隙补）");
     }
 
     [Test]

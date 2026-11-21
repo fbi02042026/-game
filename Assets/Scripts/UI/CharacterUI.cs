@@ -264,6 +264,8 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         RefreshAll();
         // 【2026-10-26 主人拍板「背包要常显」】随身仓库进页直接摊开（不再是点「背包」按钮才开的弹层）
         EnsureBagAlwaysOpen();
+        // 2026-11-21：入口按背包顶边定位，必须在背包 Fit 之后建，才读得到改写后的坐标
+        EnsurePetEntry();
         EnsureEquipBar();
         EnsureStageShadow();
         // SPUM 仅离屏换装；Portrait 用玩家立绘

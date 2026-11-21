@@ -95,15 +95,15 @@ public partial class TalentUI
 
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
-        // 【2026-11-19 主人拍板·按左列行号对齐】右列三个图标从上往下对准左列从上数第 1/3/5 行（Lv6/Lv4/Lv2）：
-        // 行心距 = 左列「一格高 + 一行距」× 2（左列 3 列一「级」，隔一行对齐），
+        // 【2026-11-21 主人拍板】右列图标对准左列从上数第 1/4/7 行（隔两行一个）：
+        // 行心距 = 左列「一格高 + 一行距」× 3（原 ×2 是第 1/3/5 行，本次按主人要求改为隔两行）。
         // 不再按右列视图数均匀铺满总高（旧算法让图标落在 Lv6/中间/Lv1，与行号对不上）。
         var rightVlg = rightContent.GetComponent<VerticalLayoutGroup>();
         if (_rightViews.Count > 1 && rightVlg != null)
         {
             float tplH = rightRowTemplate.GetComponent<RectTransform>().sizeDelta.y;
             float rowH = tplH > 8f ? tplH : RightRowH;
-            rightVlg.spacing = Mathf.Max(4f, (LeftNodeH + LeftGapY) * 2f - rowH);
+            rightVlg.spacing = Mathf.Max(4f, (LeftNodeH + LeftGapY) * 3f - rowH);
         }
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
@@ -112,9 +112,10 @@ public partial class TalentUI
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
 
-        // 【2026-11-19 主人拍板·第一个往下一点】右列底部图标（R1，reverseArrangement 下 _rightViews[0] 在视野底部）
-        // 实测对齐左列 Lv2 图标中心（从上数第 5 行、从底数第 2 个 = _leftViews[1]）——只改纵向 y：
-        // 因行距已固定 2 行，R1 对准 Lv2 后 R2 自然对准 Lv4（从上第 3 行）、R3 对准 Lv6（从上第 1 行）。
+        // 【2026-11-21 主人拍板】右列底部图标（R1，reverseArrangement 下 _rightViews[0] 在视野底部）
+        // 基准仍是实测锚点 _leftViews[1]（Lv2，从底数第 2 个）——只改纵向 y，基准不动：
+        // 行距已由「隔 1 行」改为「隔 2 行」（×3），R1 锚在 Lv2 后，上面各行按新行心距自然顺延，
+        // 形成第 1/4/7 行各一个图标的节奏（具体落点由行距公式决定，不写死坐标）。
         // 从两边图标的世界 y 现读差值，换算到父节点本地坐标后补进每个右列行的 Opt_0（所有行同模板），不写死手摆坐标。
         if (_leftViews.Count > 1 && _rightViews.Count > 0)
         {

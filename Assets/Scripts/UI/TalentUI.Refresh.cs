@@ -225,7 +225,9 @@ public partial class TalentUI
 
         if (v.root != null) v.root.SetActive(true);
         SetRowGray(v.root, locked ? 0.72f : 1f);
-        SetRowRedDot(v.root, ref v.redDot, false);   // 【2026-11-19 主人拍板】右列不要红点（节点保留，恒隐藏）
+        // 【2026-11-21 主人拍板】右列「可升级且天赋石够」显示行内红点（canAct 已含可解锁/可升级+货币够判定）。
+        // 推翻 11-19「右列不要红点」口径；走 RedDot 统一出口（见 SetRowRedDot）。
+        SetRowRedDot(v.root, ref v.redDot, canAct);
         // 【2026-11-19 主人拍板】右列红色「新」标记也退场（截图里右上角的红点即它）；节点保留恒隐藏。
         SetRowNewTag(v.root, ref v.newTag, false);
         // 【2026-10-17 主人要求】锁定行也保持可点：点了弹具体开启条件（等级达到几级 / 互斥），

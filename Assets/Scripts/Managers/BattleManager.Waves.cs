@@ -1326,6 +1326,10 @@ public partial class BattleManager
         if (CountAliveMonsters() > 0) return;
         if (_waveAnnounceCo != null) return;
 
+        // 【2026-11-21 宠物剧情】1-3 第一波清完插叙（内部限定正式主线 + sub0==2 + 未播过）。
+        // 返回 true = 已启动插叙、本次出兵取消；播完回调会重进本方法走正常出兵（钩子已触发不再重播）。
+        if (TryPetRescueInterlude()) return;
+
         // 【2026-10-21 主人拍板】恢复关下线后血线口子消失 → 普通战斗波清完时全队回血（WaveClearHealRatio）。
         // 本方法是权威波清点：MonsterDeath.CoCheckWaveClearNextFrame 与 Update 清波检测两路都汇聚到这里，
         // _waveAnnounceCo 闸门保证每波只回一次；末波/Boss 波清完走 StartStageClearRewardSequence 通关链，

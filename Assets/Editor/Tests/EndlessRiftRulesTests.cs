@@ -189,7 +189,8 @@ public class EndlessRiftRulesTests
     [Test]
     public void EndlessRewardTalentMul_OnlyBossTier()
     {
-        Assert.AreEqual(1, GameConfig.EndlessRewardTalentMul(2), "普通层天赋石 ×1");
+        // 2026-11-15 口径：普通层天赋石 1→0，天赋石只归 10 层 BOSS 档
+        Assert.AreEqual(0, GameConfig.EndlessRewardTalentMul(2), "普通层不发天赋石（只归 10 层档）");
         Assert.AreEqual(0, GameConfig.EndlessRewardTalentMul(5), "精英层不发天赋石（归 10 层档）");
         Assert.AreEqual(0, GameConfig.EndlessRewardTalentMul(15), "精英层不发天赋石");
         Assert.AreEqual(3, GameConfig.EndlessRewardTalentMul(10), "BOSS 层天赋石 ×3");
@@ -217,7 +218,8 @@ public class EndlessRiftRulesTests
         GameConfig.EndlessEliteBadge(125, out job, out tier);
         Assert.AreEqual("剑盾", job); Assert.AreEqual("传奇", tier);   // 再一轮升高级
         GameConfig.EndlessEliteBadge(155, out job, out tier);
-        Assert.AreEqual("重武", job); Assert.AreEqual("传奇", tier);   // 表尾外推：轮换续推、档位封顶
+        // 表尾外推：表最后一条徽记行是 145（法师/传奇），155 差 1 个 5 层档 → 轮换续推 1 位 = 牧师，档位封顶传奇
+        Assert.AreEqual("牧师", job); Assert.AreEqual("传奇", tier);
         Assert.AreEqual(5, GameConfig.EndlessEliteBadgeCount(5), "打一次给 5 个");
     }
 

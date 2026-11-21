@@ -233,6 +233,16 @@ public static class LevelSystem
         }
         int exp = baseExp + Mathf.Max(0, chapter - 1) * perChapter;
 
+        // 【2026-11-21】右列 R_EXP「经验加成」：通关经验 ×(1 + 加成%)，三职业通用。
+        // kind=Custom 不走属性系统，按 id 直读等级；数值真源 = talent_right.csv 的 R_EXP optValues（10/20/30 百分点）。
+        // 加成作用于本关经验、返回值含加成 → 结算「获得经验 +N」显示的就是实际发放量（唯一出口，不另算）。
+        {
+            var expNode = TalentDefs.GetRightNodeById("R_EXP");
+            if (expNode != null && data.talents != null
+                && data.talents.TryGetValue("R_EXP", out int expTalentLv) && expTalentLv > 0)
+                exp = Mathf.RoundToInt(exp * (1f + Mathf.Clamp01(expNode.EffectValue(expTalentLv, 0) / 100f)));
+        }
+
         // 【2026-11-12 主人拍板】真打完一关 = 攒着的日常升级可以展示了：
         // 把 LevelUpPopup 的延后账搬进待弹队列，回城（Town 就绪 / 结算奖励播完）一起弹。
         LevelUpPopup.FlushDeferredIntoQueue();
