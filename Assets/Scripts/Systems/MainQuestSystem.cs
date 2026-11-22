@@ -342,6 +342,7 @@ public static class MainQuestSystem
     static int NeedOf(MainQuestDef def)
     {
         if (def.type == MainQuestType.ClearStage) return 1;
+        if (def.type == MainQuestType.GuideLogReached) return 1;
         return def.targetCount > 0 ? def.targetCount : 1;
     }
 
@@ -399,6 +400,9 @@ public static class MainQuestSystem
                 int cur = (int)Math.Min(d.talentClickTotal, int.MaxValue);
                 return Math.Max(0, cur - Baseline(def.id + "_click", cur));
             }
+
+            case MainQuestType.GuideLogReached:
+                return d.guideStep >= (int)FirstRunGuide.GuideStep.LogReward ? 1 : 0;
         }
         return 0;
     }
@@ -434,6 +438,12 @@ public static class MainQuestSystem
     public static void NotifyTalk(string npcId)
     {
         BumpCount(def => def.type == MainQuestType.TalkNpc && def.param == npcId);
+    }
+
+    /// <summary>引导游标到达日志页时推进「第一份委托」：唯一公开出口，内部仍走 BumpCount。</summary>
+    public static void RefreshGuideTask()
+    {
+        BumpCount(def => def.type == MainQuestType.GuideLogReached);
     }
 
     // NotifyStory（WatchStory 完成回调）已删（2026-11-01 主人拍板「不要回顾剧情这个模式」）：

@@ -39,6 +39,7 @@
 #               与通关关卡经验叠加不抵扣；领取即入账、升级立即弹窗、连续领取允许多级连升；奖励窗不展示经验。
 # difficulty    任务难度（0=普通 / 1=困难 / 2=噩梦；缺列或空=0；2026-11-05 新增，现有任务一律 0）
 id,category,chapter,title,desc,target_type,target_param,target_count,reward_stones,order,reward_text,note,reward_exp,reward_gold,difficulty
+C1_Q0,主线,1,第一份委托,,guide_log,0,1,0,0,,引导到达日志页即完成,55,50,0
 C1_Q1,主线,1,踏出第一步,,clear_stage,0,1,0,1,,,55,50,0
 C1_Q5,主线,1,热热身子,,clear_stages,,2,0,2,,新增密度行（前期密）,55,50,0
 C1_Q7,主线,1,打出感觉,,clear_stages,,3,0,3,,新增密度行（前期密）,55,50,0

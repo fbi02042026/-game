@@ -372,9 +372,67 @@ def check_g8_ui_single_writer():
         err(name, "主线/支线任务弹窗的 taskLayout: true 应恰好 2 处，实为 %d；"
                   "排版会被改回通用布局" % quest.count("taskLayout: true"))
 
+
+# ---------------------------------------------------------------------------
+# G9 金币/钻石单一写入者（2026-11-22 建）
+#     唯一出口：Assets/Scripts/Systems/ResourceWallet.cs 的
+#     ResourceWallet.Add(ResourceType, long, ...) / GrantMercGold；钻石扣费走
+#     TrySpendDiamond。全项目 242 处调用都走它，不存在散落写入。
+#     本闸门只堵增量：存量一律不扫（G6 同款口径，避免误报历史代码），新写的 C#
+#     不许再出现「存档对象 . 金币/钻石字段 直接赋值/累加」——绕过钱包的发放会
+#     丢掉上限/溢出转邮件/埋点/每日金币计数/统一 toast，是典型的「改好又坏」复发点。
+#     正确写法：ResourceWallet.Add(ResourceType.Gold, amount, ...) /
+#     ResourceWallet.GrantMercGold(...)（佣兵币）/ TrySpendDiamond(...)（扣钻石）。
+#     局部变量 totalGold/bonusGold/currentGold/gotGold/needGold/costGold 的 += 是
+#     纯计算、合法；mail/reward/r/v 等对象的 diamond 字段是奖励数据包而非玩家存档，
+#     同样不报。
+# ---------------------------------------------------------------------------
+def check_g9_wallet_single_writer():
+    name = "G9 金币/钻石单一写入者"
+    # totalGold 是 SaveData 专属金币字段名，任意对象前缀都视为存档写入；
+    # diamond 需配合明确的存档对象前缀，避免把 mail.diamond / r.diamond 这类
+    # 奖励数据包字段误判成存档写入。=(?!=) 排除 == 比较。
+    pat = re.compile(
+        r"\.\s*totalGold\s*(?:\+=|-=|\*=|/=|=(?!=))"
+        r"|\b(?:SaveSystem\s*\.\s*Instance\s*\.\s*Data|SaveData(?:\s*\.\s*Current)?"
+        r"|playerData|saveData|save|data|sd|current|curData)"
+        r"\s*\.\s*(?:diamond|gold)\s*(?:\+=|-=|\*=|/=|=(?!=))"
+    )
+    try:
+        r = subprocess.run(["git", "diff", "HEAD", "-U0", "--", "*.cs"], cwd=ROOT,
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        added = [l[1:] for l in r.stdout.splitlines()
+                 if l.startswith("+") and not l.startswith("+++")]
+    except Exception:
+        added = []
+
+    new_files = []
+    try:
+        r2 = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"], cwd=ROOT,
+                            capture_output=True, text=True, encoding="utf-8", errors="replace")
+        new_files = [f.strip() for f in r2.stdout.splitlines() if f.strip().endswith(".cs")]
+    except Exception:
+        pass
+
+    for fn in new_files:
+        p = os.path.join(ROOT, fn)
+        if os.path.exists(p):
+            with open(p, encoding="utf-8-sig") as f:
+                added.extend(f.read().splitlines())
+
+    for l in added:
+        s = l.strip()
+        # 注释里提到存档字段不算真实写入（G2/G5/G6 都踩过注释误报的坑）
+        if s.startswith("//") or s.startswith("*") or s.startswith("/*"):
+            continue
+        if pat.search(l):
+            warn(name, "本次改动新增了绕过 ResourceWallet 的存档金币/钻石写入：%s —— "
+                       "发放请走 ResourceWallet.Add/GrantMercGold，扣钻石走 TrySpendDiamond" % s[:100])
+
+
 CHECKS = [check_g1_job_icon, check_g2_singleton, check_g3_prefab,
           check_g4_fallback_inventory, check_g5_new_singleton, check_g6_new_playerprefs,
-          check_g7_ui_fit_location, check_g8_ui_single_writer]
+          check_g7_ui_fit_location, check_g8_ui_single_writer, check_g9_wallet_single_writer]
 
 
 def main():

@@ -23,6 +23,7 @@ public enum MainQuestType
     /// <summary>本章累计通关 targetCount 关（2026-10-26 密度行：打几次就能推进一点主线）。
     /// 进度基线 = 首次评估时本章已通关数，见 MainQuestSystem.ProgressOf。</summary>
     ClearStages = 5,
+    GuideLogReached = 6,
 }
 
 /// <summary>
@@ -154,6 +155,7 @@ public static class MainQuestDefs
             case "watch_story": return MainQuestType.WatchStory;
             case "recruit_merc": return MainQuestType.RecruitMerc;
             case "upgrade_talent": return MainQuestType.UpgradeTalent;
+            case "guide_log": return MainQuestType.GuideLogReached;
             default:
                 Debug.LogError("[MainQuest] quest.csv 未知 target_type: " + s + "（按 ClearStage 处理）");
                 return MainQuestType.ClearStage;
@@ -200,6 +202,8 @@ public static class MainQuestDefs
                 return "招募 " + Math.Max(1, def.targetCount) + " 人";
             case MainQuestType.UpgradeTalent:
                 return "点 " + Math.Max(1, def.targetCount) + " 次天赋";
+            case MainQuestType.GuideLogReached:
+                return "到冒险日志看看";
             default:
                 return "";
         }

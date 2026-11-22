@@ -51,7 +51,7 @@ public class TutorialHintUI : MonoBehaviour
     /// 红线：不改预制体/场景，字号一律由代码统一指定 ——
     /// Build()（代码搭 UI）与 TryBindFromHierarchy()（走预制体）两条路径都必须用这个值。
     /// </summary>
-    const int HintFontSize = 34;
+    const int HintFontSize = 32;
     /// <summary>
     /// 通用引导默认字色（浅黄 #FCFDBE）。Build() / TryBindFromHierarchy() /
     /// ApplyDefaultTextStyle() 三处共用这一个真值 —— 样式还原不许在别处再抄一份色值。

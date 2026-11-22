@@ -94,6 +94,7 @@
 ## 2. 开工 / 提交前（每台机器都要做）
 
 1. 提交前必跑 `Tools/EnsureMeta.py`。
+   提交前必跑 `Tools/Guardrails.py`（防复发闸门 G1–G9，共 9 条）；有 ERROR 必须修掉才能提交。
    **2026-10-14 主人拍板：不再跑 `Tools/CheckDanglingRefs.py` 断链检测**——检测报的缺图实际都有图，属误报，以后任何机器都不要跑这个检测。
 2. **新拖的图必须连同 `.meta` 一起提交**——图不入库，guid 引用就是空中楼阁，换机或重启必空。
 3. **56 字符 guid：一律不管，全部走路径加载**（2026-10-23 主人拍板，覆盖 2026-10-14「点对点修 guid」例外）：
@@ -189,5 +190,6 @@
 |---|---|
 | `Tools/ScanGuid56.py` | 扫 56 字符 guid（**2026-10-14 起非必要不跑**：默认不处理，仅个别图拖不进 prefab 时点对点修） |
 | `Tools/EnsureMeta.py` | 检查资源是否都带 `.meta` |
+| `Tools/Guardrails.py` | 防复发闸门，提交前必跑，ERROR 必须清零 |
 | `Tools/RewireDailyLoginFull.py` | 每日登录弹窗槽位还原（一次性，已执行） |
 

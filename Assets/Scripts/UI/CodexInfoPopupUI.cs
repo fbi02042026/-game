@@ -10,8 +10,8 @@ using UnityEngine.UI;
 public class CodexInfoPopupUI : MonoBehaviour
 {
     public const string PrefabPath = "Prefabs/Town/CodexInfoPopup";
-    /// <summary>【2026-11-12 主人拍板】任务详情「前往」按钮复用游戏里现成的偏蓝色通用按钮（无字，100×33）。</summary>
-    const string GoButtonSpritePath = "UI/Art/Common/复活按钮";
+    /// <summary>【2026-11-22 主人拍板】任务详情「前往」按钮复用游戏里现成的确定按钮底图（无字）。</summary>
+    const string GoButtonSpritePath = "UI/Art/Common/确定按钮";
 
     public static CodexInfoPopupUI Instance { get; private set; }
 
@@ -338,10 +338,10 @@ public class CodexInfoPopupUI : MonoBehaviour
                 ub.onClick.RemoveAllListeners();
                 ub.onClick.AddListener(OnClickUnlock);
                 if (unlockButtonLabel != null) unlockButtonLabel.text = unlockText;
-                // 【2026-11-12 主人拍板】「前往」用游戏里现成的偏蓝色通用按钮底图，
+                // 【2026-11-22 主人拍板】「前往」用游戏里现成的确定按钮底图，
                 // 白字「前往」由 unlockButtonLabel 写；「解锁」仍走冒险日志「字底」原样。
                 // 每次 Show 都重设，避免同一弹窗实例在两种按钮间切换时残留上一张图。
-                // 取不到蓝色图直接 LogError，不兜底。
+                // 取不到按钮底图直接 LogError，不兜底。
                 var ubImg = ub.GetComponent<Image>();
                 if (ubImg != null)
                 {

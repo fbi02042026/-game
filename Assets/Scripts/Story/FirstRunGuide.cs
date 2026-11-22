@@ -576,24 +576,26 @@ public class FirstRunGuide : MonoBehaviour
         Advance(GuideStep.Tavern, null);
     }
 
-    // ---- 6) 【2026-11-22 主人追加】冒险日志领里程奖励 + 去里程商店看看 ----
-    // 两拍：底栏「日志」进日志页 → 侧栏徽记开里程商店。不用 tapToAdvance 强推，
-    // 完成判据 = 玩家点中高亮洞（_holeTriggered）/ 页面已开；绑定失败按 CoPoint 既有口径跳过防死锁。
+    // ---- 6) 【2026-11-22 主人追加】冒险日志领「第一份委托」奖励 ----
+    // 两拍：底栏「日志」进日志页（默认停主线页）→ 高亮 C1_Q0 行的可领取按钮。
+    // 第一拍完成即时 RefreshGuideTask 让任务达成；完成判据 = 玩家点中高亮洞（_holeTriggered）/ 已领奖；
+    // 绑定失败按 CoPoint 既有口径跳过防死锁。
 
     IEnumerator CoLogReward()
     {
-        yield return CoPoint("打着了就别光顾着乐——点底栏「日志」，本小姐在那儿给你留了点东西。",
+        yield return CoPoint("先点底栏「日志」——本小姐在那儿留了份委托，别让人家说第二遍！",
             () => NavRect(MainNavTab.Log),
             () => _holeTriggered || LogPageOpen(),
             false, 0f);
+        MainQuestSystem.RefreshGuideTask();   // 日志页已到：让 C1_Q0 立即达成，可领取按钮出现
 
-        yield return CoPoint("看见那个徽记没？点开里程商店，有能领的就领——别浪费本小姐一番心意。",
-            MileageShopEmblemRect,
-            () => _holeTriggered || MileageShopOpen(),
+        yield return CoPoint("看见主线页顶上那份「第一份委托」没？右边「可领取」的按钮，点它把奖励拿了——哼，才不是特意给你留的呢！",
+            ClaimButtonRect,
+            () => _holeTriggered || QuestRewardClaim.IsClaimedMain("C1_Q0"),
             false, 0f);
 
         Hide();
-        FinishStep(GuideStep.LogReward, "里程奖励引导");
+        FinishStep(GuideStep.LogReward, "第一份委托领奖引导");
     }
 
     /// <summary>认识老板娘：直接复用主线的老板娘文案（与任务面板里点出来的那一套同源）。</summary>
@@ -821,6 +823,15 @@ public class FirstRunGuide : MonoBehaviour
         if (log == null || !IsVisibleHierarchy(log.gameObject)) return null;
         var t = TownSharedChrome.FindDeep(log.transform, "Root/Frame/Sidebar/Emblem") as RectTransform;
         return IsVisibleHierarchy(t != null ? t.gameObject : null) ? t : null;
+    }
+
+    /// <summary>【2026-11-22 加固】按任务 id 精确取「第一份委托」的可领取按钮。
+    /// 旧写法遍历所有行找第一个激活的 ClaimButton —— 多个任务同时可领时会指到别人身上。
+    /// 现在只认 AdventureLogUI 按 questId 命中的那一行；不可见/不可领返回 null，按 CoPoint 既有口径跳过。</summary>
+    static RectTransform ClaimButtonRect()
+    {
+        var btn = AdventureLogUI.QuestClaimButtonRect("C1_Q0");
+        return IsVisibleHierarchy(btn != null ? btn.gameObject : null) ? btn : null;
     }
 
     /// <summary>里程商店面板是否可见：面板节点由 AdventureLogPhase3Panel 运行时 Ensure 创建。</summary>

@@ -78,6 +78,9 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     string _probeBody;
     readonly List<GameObject> _tabSelectGems = new List<GameObject>();
     readonly List<GameObject> _spawnedRows = new List<GameObject>();
+    /// <summary>【2026-11-22】当前已渲染行的原始快照（下标与 _spawnedRows 一一对应）。
+    /// 给 QuestClaimButtonRect() 按任务 id 精确定位用；ApplyRowState 里对 Claimable 的置 false 是值拷贝，不污染这里。</summary>
+    readonly List<LogRow> _rowData = new List<LogRow>();
     LogTab _tab = LogTab.MainStory;
     bool _preloaded;
     bool _bound;
@@ -869,12 +872,6 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 var v = views[i];
                 totalCount++;
                 if (v.done) doneCount++;
-                // 【2026-11-19 主人拍板】冒险日志主线页只列「当前该做的 + 已完成的」，
-                // 未完成且非当前的任务先隐藏：NPC 对话任务只有 isCurrent 才触发（PendingTalkQuest
-                // 只认 CurrentView），若这里仍列出非当前任务，玩家「看到任务→去做了却没反应」。
-                // 统计 totalCount/doneCount 照旧全量累加（进度条反映真实完成度，不受隐藏影响）。
-                // 🔴 不能用 v.isCurrent：ChapterViews 每章各标一条，未到章节也会露出一条。
-                if (!v.done && (current == null || v.def.id != current.def.id)) continue;
                 bool reachable = ch <= curChapter;   // 未推到的章节行整体锁定（先做完前面的）
                 string how = MainQuestDefs.AutoDesc(v.def);
                 string name = string.IsNullOrEmpty(v.def.title) ? how : v.def.title;
@@ -1183,6 +1180,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     {
         if (_rowTemplate == null || _listContent == null) return;
 
+        // 【2026-11-22】行数据快照：下标与 _spawnedRows 严格一一对应。
+        // QuestClaimButtonRect() 据此按 questId 精确命中目标行 —— 多个任务同时可领取时，
+        // 绝不靠「第一个激活的 ClaimButton」猜（那样会指到别人的领奖按钮）。
+        _rowData.Clear();
+        _rowData.AddRange(rows);
+
         // 行数一致时复用已有行，只更新文本与点击回调。
         // 之前每次切页都整批 Destroy + Instantiate（几十行），是底栏切页卡顿的大头之一。
         if (_spawnedRows.Count == rows.Count && rows.Count > 0)
@@ -1214,6 +1217,25 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             WireRowClick(go, rows[i]);
             _spawnedRows.Add(go);
         }
+    }
+
+    /// <summary>【2026-11-22 加固】按任务 id 精确取主线页该行的「可领取」按钮。
+    /// 真源是 RebuildRows 缓存的 _rowData + _spawnedRows（同下标），多个任务同时可领也只命中指定 id。
+    /// 非主线页 / 任务不可领 / 行或按钮不可见 → 返回 null，调用方按既有口径跳过，不兜底。</summary>
+    public static RectTransform QuestClaimButtonRect(string questId)
+    {
+        var self = Instance;
+        if (self == null || self._tab != LogTab.MainStory || string.IsNullOrEmpty(questId)) return null;
+        for (int i = 0; i < self._rowData.Count && i < self._spawnedRows.Count; i++)
+        {
+            var d = self._rowData[i];
+            if (!d.QuestMain || d.QuestId != questId || !d.Claimable) continue;
+            var row = self._spawnedRows[i];
+            if (row == null || !row.activeInHierarchy) continue;
+            var btn = row.transform.Find("Progress/ClaimButton") as RectTransform;
+            if (btn != null && btn.gameObject.activeInHierarchy) return btn;
+        }
+        return null;
     }
 
     void WireRowClick(GameObject go, LogRow data)
@@ -1402,6 +1424,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 var lines = new List<string>();
                 if (v != null && v.need > 1) lines.Add("进度 " + v.progress + "/" + v.need);
                 if (def.chapter > MainQuestSystem.CurrentChapter()) lines.Add("先完成当前章节的任务");
+                var curView = MainQuestSystem.CurrentView();
+                if (curView == null || curView.def.id != questId) lines.Add("先完成前面的任务才能前往");
                 lore = string.Join("\n", lines);
             }
             // 【2026-11-12 主人拍板】任务详情补「前往」：只给当前该做的那一条显示，
