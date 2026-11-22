@@ -80,6 +80,8 @@ public static class ContentPaths
         public const string RunTrack = "Data/Tables/run_track";
         /// <summary>无限裂隙奖励分配表（CSV → .bytes，见 endless_reward.csv）。缺表时 EndlessRewardTable 回退公式行（= 当前拍板硬编码）。</summary>
         public const string EndlessReward = "Data/Tables/endless_reward";
+        /// <summary>城镇入口大地图派遣掉落表（CSV → .bytes，见 slg_drop.csv）。加载器 SlgDropTable.cs。</summary>
+        public const string SlgDrop = "Data/Tables/slg_drop";
     }
 
     public static class Icons

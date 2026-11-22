@@ -202,6 +202,7 @@ public partial class AdventureUI
         // 【2026-10-23 主人新布局】入口节点搬到 RightContent/主线 下。
         // 【2026-10-31】门槛改走 FeatureUnlock.WorldMapOpen（第 1 座大关通关 = D1）——它是主线导航，
         // B2 后若还挂「通第 1 章」= 50 小关，首日连地图都打不开。
+        // 【2026-11-22 主人拍板】入口搬到主界面（SlgTownEntryUI），这颗旧图标恢复整体隐藏原状。
         bool show = IsMainMode(_selectedMode)
                     && FeatureUnlock.WorldMapOpen(SaveSystem.Instance?.Data);
         // 【2026-11-01 主人拍板】世界地图点击无反应 + 入口字挡图，先整体隐藏（要恢复删掉下一行即可）
@@ -226,6 +227,7 @@ public partial class AdventureUI
     /// <summary>世界地图入口解锁后，在按钮下挂「点击世界地图」脉冲引导；点开一次永久关闭。</summary>
     void RefreshWorldMapGuide()
     {
+        // 【2026-11-22】入口搬主界面后这颗按钮恢复隐藏，引导永远不亮；条件原样保留不删（整体隐藏中）。
         bool need = IsMainMode(_selectedMode)
                     && FeatureUnlock.WorldMapOpen(SaveSystem.Instance?.Data)
                     && !PlayerPrefs.HasKey(WorldMapGuideDoneKey);

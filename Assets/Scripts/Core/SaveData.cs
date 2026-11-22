@@ -84,6 +84,36 @@ public class ArenaBattleRecord
     public bool isDefense;
 }
 
+/// <summary>
+/// 城镇入口 · 大地图行军单（2026-11-22 升级：真实计时 + 广告加速）。
+/// 一支派出去的队伍 = 一条；胜负按战力比先算好存进 Rewards，到达后 UI 只做血条演出。
+/// JsonUtility 可序列化；旧存档没有 slgMarches → 空列表，兼容。
+/// </summary>
+[Serializable]
+public class SlgMarchEntry
+{
+    public string pointId;
+    /// <summary>队伍 hireId（3 名闲置佣兵）。</summary>
+    public List<string> squad = new List<string>();
+    /// <summary>出发 Unix 秒。</summary>
+    public int departUnix;
+    /// <summary>到达 Unix 秒（= depart + 行军时长；广告加速会改这个）。</summary>
+    public int arriveUnix;
+    /// <summary>true=通商（安全半额），false=攻打/占矿/打怪。</summary>
+    public bool peaceful;
+    /// <summary>是否已结算入账（到达且占领倒计时完成后置 true，防重复领奖）。</summary>
+    public bool settled;
+    // ── 出发时按战力比算好的结算快照（演出只可视化，不改数值）──
+    public float powerRate;
+    public int merit, ore, stones, food;
+    /// <summary>出发时按 slg_drop.csv 掷定的道具掉落快照（id=item_defs id，value=数量）。结算时经 ItemGrantSystem 入随身仓库；JsonUtility 可序列化。</summary>
+    public List<StringIntEntry> dropItems = new List<StringIntEntry>();
+    /// <summary>战斗胜负演出用：我方最终血量系数 0~1（胜高败低）。</summary>
+    public float myHpFinal = 1f;
+    /// <summary>敌方最终血量系数 0~1。</summary>
+    public float enemyHpFinal = 0f;
+}
+
 [Serializable]
 public class SaveData
 {
@@ -919,6 +949,20 @@ public class SaveData
     public List<StringIntEntry> mercOutStarEntries = new List<StringIntEntry>();
     [NonSerialized] public Dictionary<string, int> mercOutStars = new Dictionary<string, int>();
 
+    // === 城镇入口 · 大地图 V1（2026-11-22）===
+    // 独立资源，不与主线货币互通（SLG 不产钻石、战功/石材/矿不换主线货币，见设计案红线）。
+    public int slgMerit = 0;            // 战功
+    public int slgOre = 0;              // 矿
+    public int slgStones = 0;           // 石材
+    public int slgFood = 0;             // 粮草
+    /// <summary>初始粮草只发一次（老档缺字段=false → 首次进入补 SlgDefs.InitialFoodGrant，之后不再补）。</summary>
+    public bool slgFoodGranted = false;
+    // key = SlgDefs.PointDef.Id，value = 冷却到期 Unix 秒（<= 当前时间 = 可再派）
+    public List<StringIntEntry> slgPointCdEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> slgPointCd = new Dictionary<string, int>();
+    /// <summary>在途/待结算行军单（真实计时 + 广告加速；到达未结算的会持续保留，跨Session）。旧档兼容。</summary>
+    public List<SlgMarchEntry> slgMarches = new List<SlgMarchEntry>();
+
     /// <summary>查佣兵局外星（hireId；没有记录 = 0 星，旧存档兼容）。</summary>
     public int GetMercOutStar(string hireId)
     {
@@ -1230,6 +1274,15 @@ public class SaveData
                 mercGrowItems[e.id] = e.value;
             }
         }
+
+        // 【2026-11-22 城镇入口 V1】大地图冷却重建：旧存档没有这两个列表 → 空字典 = 全部可派，兼容
+        slgPointCd = new Dictionary<string, int>();
+        if (slgPointCdEntries != null)
+            for (int i = 0; i < slgPointCdEntries.Count; i++)
+            {
+                var e = slgPointCdEntries[i];
+                if (e != null && !string.IsNullOrEmpty(e.id)) slgPointCd[e.id] = e.value;
+            }
 
         // 【2026-10-22 施工单 T7】局外星重建：旧存档没有 mercOutStarEntries → 空字典 = 全员 0 星，兼容
         mercOutStars = new Dictionary<string, int>();
@@ -2548,6 +2601,12 @@ public class SaveData
         mercGrowItemEntries = new List<StringIntEntry>(mercGrowItems.Count);
         foreach (var kv in mercGrowItems)
             mercGrowItemEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+
+        // 【2026-11-22 城镇入口 V1】大地图冷却镜像落盘（字典 → entries）
+        slgPointCd ??= new Dictionary<string, int>();
+        slgPointCdEntries = new List<StringIntEntry>(slgPointCd.Count);
+        foreach (var kv in slgPointCd)
+            slgPointCdEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
         // 【2026-10-22 施工单 T7】局外星镜像落盘
         mercOutStars ??= new Dictionary<string, int>();

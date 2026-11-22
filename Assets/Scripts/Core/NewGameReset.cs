@@ -38,6 +38,9 @@ public static class NewGameReset
         MercFavorUI.PendingOpenAfterBattleHireId = null;
         // 2026-11-12 升级弹窗队列是进程级 static，清档必须清
         LevelUpPopup.ResetForNewGame();
+        // 2026-11-22 城镇入口大地图是 DDOL 静态 Canvas，清档必须一起销毁重建
+        SlgMapUI.ResetForNewGame();
+        SlgKingdomUI.ResetForNewGame();   // 天空王国城堡地图界面同款 DDOL Canvas
         // 【2026-11-20 天赋自检】天赋入口红点「本次登录已看」也是进程级 static：
         // 不清的话新档在本次登录内不再亮红点（定义 TalentSystem.cs:126，置位 TalentUI.cs:287）。
         TalentSystem.TalentDotSeenThisSession = false;

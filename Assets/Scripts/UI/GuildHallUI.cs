@@ -701,6 +701,9 @@ public class GuildHallUI : MonoBehaviour
         // RunEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 小游戏合集入口：运行时克隆每日登录按钮落到右列列尾，点击打开合集弹窗。
         MiniGameHubEntryUI.EnsureInGuildHall(dailyLoginButton);
+        // 城镇入口·大地图（2026-11-22 主人拍板：入口从关卡界面搬到主界面）：运行时克隆每日登录按钮
+        // 落到右列列尾，点击打开天空王国城堡地图界面（点城门进大地图）；未通关第 1 章第 10 关整颗隐藏。
+        SlgTownEntryUI.EnsureInGuildHall(dailyLoginButton);
         // 切换人物按钮：主界面预制体 HallScene 下的 Turn 节点（主人 2026-10-16 加的），点击随机换看板人物
         EnsureTurnButton();
         // 商店入口：2026-10-31 主人拍板「商店功能删掉」→ ShopUI / ShopSystem 已整体删除，

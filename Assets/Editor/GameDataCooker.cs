@@ -79,6 +79,7 @@ public class GameDataCooker : IPreprocessBuildWithReport
         CookBossStageVariant();
         CookQuest();
         CookRunTrack();
+        CookSlgDrop();
         if (ContentProtection.Enabled)
             CookFingerprint();
         else
@@ -311,6 +312,8 @@ public class GameDataCooker : IPreprocessBuildWithReport
     }
     /// <summary>跑酷配表（地形 / 数值 / 7 种波次模板）：run_track.csv → .bytes，加载器 RunTrackTable.cs。</summary>
     static void CookRunTrack() { CookTableFromSource(ContentPaths.Source.Tables + "/run_track.csv", null, "run_track"); }
+    /// <summary>城镇入口大地图派遣掉落表（近/远 × 点位类型 × 章节）：slg_drop.csv → .bytes，加载器 SlgDropTable.cs。</summary>
+    static void CookSlgDrop() { CookTableFromSource(ContentPaths.Source.Tables + "/slg_drop.csv", null, "slg_drop"); }
     static void CookTableFromSource(string sourceCsv, string legacyResourcesPath, string outName)
     {
         string csv = null;

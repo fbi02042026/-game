@@ -1,0 +1,20 @@
+﻿# slg_drop：城镇入口·大地图派遣掉落表（2026-11-22 新建）
+# 🔴 掉落道具 ID 必须与主线 item_defs.csv 同源——玩家在 SLG 掉的道具就是主线在用的天赋石/附魔石/招募卷/碎片，
+#    进「角色页随身仓库」，不新造第二套道具体系。itemId 填错 = ItemGrantSystem LogError，不静默兜底。
+# distTier = near / far / *（通配）。阈值 SlgDefs.NearDistMax=300px：距玩家城堡 ≤300=近，>300=远。
+# pointType = Mine / Monster / City / *（通配），与 SlgDefs.PointType 枚举名一致。
+# chapter   = 关联主线章节（点位 Continent），0 = 通配。后期扩大陆时加对应章节行即可，不用改代码。
+# rate      = 每次派遣独立判定一次的概率（0~1）；通商(peaceful)命中率减半，数量不变。
+# countMin/countMax = 命中时数量区间（含端点）；战败（战力比 < 0.8）整次不掷掉落。
+# 设计口径：近处稳但只出普通材料；远处才有附魔石/招募卷/本命碎片——给玩家跑远的动机。
+distTier,pointType,chapter,itemId,rate,countMin,countMax,note
+near,Monster,1,item_mat_decompose,0.60,1,2,近距野怪·分解材料(主线强化材料同款)
+near,Monster,1,item_talent_stone,0.10,1,1,近距野怪·少量天赋石(主线同款)
+near,Mine,1,item_mat_decompose,0.75,1,2,近距矿·分解材料
+near,City,1,item_talent_stone,0.20,1,1,近距城·天赋石
+far,Mine,1,item_enchant_stone,0.45,1,1,远矿·附魔石(主线附魔同款)
+far,Mine,1,item_scroll_merc_common,0.08,1,1,远矿·普通招募卷(主线酒馆同款)
+far,Monster,1,item_enchant_stone,0.25,1,1,远怪·附魔石
+far,Monster,1,item_frag_H001,0.12,1,1,远怪·马库斯碎片(主线升星同款；换碎片只改此行)
+far,City,1,item_scroll_merc_common,0.18,1,1,远城·普通招募卷
+far,City,1,item_frag_H011,0.10,1,1,远城·路加碎片(初始佣兵，主线升星同款)
