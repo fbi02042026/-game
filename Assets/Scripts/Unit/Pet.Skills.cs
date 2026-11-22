@@ -17,7 +17,7 @@ using UnityEngine;
 /// </summary>
 public partial class Pet
 {
-    const float SKILL_OPENING_DELAY = 6f;      // 开场先让普攻走一轮，不一进场就放
+    const float SKILL_OPENING_DELAY = 2f;      // 开场暖机（11-22 主人「没看到放技能」：6s→2s，让技能更早露面）
     const float SKILL_RETRY_INTERVAL = 0.3f;   // 无目标/冻场时的重试节流
 
     Coroutine _skillLoopCo;
@@ -56,6 +56,16 @@ public partial class Pet
             }
             var target = FindNearestEnemyOnField();
             if (target == null || target.isDead)
+            {
+                yield return new WaitForSeconds(SKILL_RETRY_INTERVAL);
+                continue;
+            }
+
+            // 11-22：灰狼裂爪是三段近身挥爪，却对全场任意距离的怪照放 → 老远就播攻击动画。
+            // 技能路径补进距硬闸（普攻早有 IsInBasicAttackRange，只有技能这条漏了）。
+            // 闸按各自身 AttackRange 算：wolf 近战短闸、wolf_demon 远程长闸（_skillKey 归一到本体 wolf，
+            // 但 GetEffectiveAttackRange 仍读各自属性），远处目标等待走近再放，不空挥。
+            if (_skillKey == "wolf" && !IsInBasicAttackRange(target))
             {
                 yield return new WaitForSeconds(SKILL_RETRY_INTERVAL);
                 continue;

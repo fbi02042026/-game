@@ -10,6 +10,12 @@ using UnityEngine.UI;
 /// </summary>
 public static class SlgTownEntryUI
 {
+    /// <summary>
+    /// 入口总开关（2026-11-22 主人拍板：主界面入口先隐藏）。
+    /// 当前为 false —— 本体逻辑全部保留，置 true 即恢复（同 MiniGameEntryUI.EntryEnabled 模式）。
+    /// </summary>
+    public const bool EntryEnabled = false;
+
     /// <summary>运行时生成的入口节点名（RightBar 下，与每日登录同父）。</summary>
     public const string NodeName = "SlgMapButton";
 
@@ -25,6 +31,8 @@ public static class SlgTownEntryUI
     /// <summary>在右列补「大地图」入口。可重复调用（已有则只重新接线 + 重算位置，不重建）。</summary>
     public static void EnsureInGuildHall(Button dailyLoginButton)
     {
+        if (!EntryEnabled) return;   // 先隐藏：不生成、不接线（同 MiniGameEntryUI 模式）
+
         if (dailyLoginButton == null)
         {
             Debug.LogError("[SlgTownEntry] 每日登录按钮为空，无法定位右列，入口未生成");

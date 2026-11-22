@@ -67,9 +67,38 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// </summary>
     public static bool IsOpen => _inst != null && _inst._root != null && _inst._root.activeSelf;
 
+    /// <summary>
+    /// 【2026-11-21 主人报「战斗结束后这个界面还带出到冒险界面」】战斗收尾时关掉本弹窗：
+    /// 本弹窗是 DDOL 独立 Canvas，CoShow 只等点击或超时，切场景不自关。
+    /// 口径与 MercObtainPopupUI.CloseIfOpen 一致 —— 没开着就空操作，不新建实例。
+    /// </summary>
+    public static void CloseIfOpen()
+    {
+        if (_inst != null && _inst._root != null && _inst._root.activeSelf)
+            _inst.Hide();
+    }
+
     System.Action<bool> _onDone;
     bool _answered;
     bool _answer;
+    // 【2026-11-22 主人报「宠物剧情被这个弹窗挡住没看到」】剧情开播要立刻收本弹窗并放行抽奖协程，
+    // 不能只 SetActive(false)（那会让 CoShow 挂满 60s 才回调）。存下本次的 newEq/oldEq，
+    // 供 CloseForStory 走与超时同一条 AutoPickByPower 结算。
+    EquipInstance _pendingNew;
+    EquipInstance _pendingOld;
+
+    /// <summary>
+    /// 【2026-11-22】剧情开播时收起本弹窗并立即结算：按战力自动选一件，CoShow 下一帧自然结束并回调 onDone。
+    /// 没开着就空操作（无实例/未激活），不新建、不影响其它流程。口径与 CloseIfOpen 一致。
+    /// </summary>
+    public static void CloseForStory()
+    {
+        var ui = _inst;
+        if (ui == null || ui._root == null || !ui._root.activeSelf || ui._pendingNew == null) return;
+        ui._answer = AutoPickByPower(ui._pendingNew, ui._pendingOld);
+        ui._answered = true;
+        ui.Hide();
+    }
 
     /// <summary>
     /// 弹窗并等玩家选择。超时或异常都返回 false（= 留着旧的）。
@@ -88,6 +117,8 @@ public class EquipReplaceConfirmUI : MonoBehaviour
 
         ui._answered = false;
         ui._answer = false;
+        ui._pendingNew = newEq;   // 【2026-11-22】供 CloseForStory 剧情强制收窗时按战力自动结算
+        ui._pendingOld = oldEq;
         // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001 盖着本弹窗，
         // 弹窗打开瞬间先收掉正在播的头顶气泡；在屏期间新台词由 BattleHeadTalkUI.CoPlayLine 入口闸拦掉。
         if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
@@ -180,6 +211,20 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         BindRefs();
         Wire();
         if (_root != null) _root.SetActive(false);
+    }
+
+    // 【2026-11-22 解耦】订阅剧情开播：剧情只广播事件，本弹窗自己决定收起并结算，
+    // 剧情系统不再直接点名 EquipReplaceConfirmUI（防将来换弹窗/改剧情时漏改这里）。
+    void OnEnable()
+    {
+        // 只让真实例订阅：Awake 里被判定重复而 Destroy 的实例，_inst 不指向它，
+        // 它这一帧仍会走 OnEnable —— 挡掉，防止同事件触发两次 CloseForStory。
+        if (_inst == this) StoryDirector.StoryStarted += CloseForStory;
+    }
+
+    void OnDisable()
+    {
+        StoryDirector.StoryStarted -= CloseForStory;
     }
 
     void OnDestroy()

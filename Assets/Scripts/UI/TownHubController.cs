@@ -13,6 +13,13 @@ public class TownHubController : MonoBehaviour
     /// <summary>从战斗撤离等回城后，进 Town 自动打开冒险页。</summary>
     public static bool PendingOpenAdventure;
 
+    /// <summary>
+    /// 进镇预热是否已收起。片头等它结束再起播，避免与 AdventureUI.ShowPage/ApplyAdventureFit
+    /// 的同步重活并发——那会占满主线程、把 VideoPlayer 帧推进饿死（片头黑屏几秒）。
+    /// 无 controller 视为已收，片头不必等。
+    /// </summary>
+    public static bool WarmupDone => Instance == null || Instance._warmupDone;
+
     static GameObject _tavernPrefabCache;
     static GameObject _adventurePrefabCache;
 
@@ -97,6 +104,7 @@ public class TownHubController : MonoBehaviour
         if (!_pagesPreloaded)
             PreloadAllPages();
         ConsumePendingAdventure();
+        PetFeatureGuide.TryConsumeOnTown();   // 1-3 首通宠物功能引导（回城后开冒险页阶段，引导内部等预热完成）
         TapTapRatePopup.ConsumePendingPrompt();   // 章末通关回城后弹好评引导（2026-10-25 主人拍板，每日最多一次）
         ArenaPopupUI.ConsumePendingOpen();        // 竞技场战斗返回 → 回到竞技场界面（2026-10-31 主人拍板）
         MercFavorUI.ConsumePendingOpen();         // 【T11】羁绊副本返回 → 回到好感界面，不跳冒险页

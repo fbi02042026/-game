@@ -26,7 +26,8 @@ using UnityEngine.UI;
 /// 触发 = LevelSystem 通关结算升级（经验唯一入口 = 完成关卡，主线/支线才给），见 LevelSystem.AddStageClearExp。
 /// 【2026-10-25 主人拍板「战斗结束回到冒险界面才触发」】结算时刻只挂起（QueueForTown），
 /// Town 场景就绪后由 TownSceneBootstrap 调 FlushPending 弹出；中途退游戏挂起即丢（等级已落盘，只丢演出）。
-/// 2026-11-12 起改为一级一窗队列，连升不再合并
+/// 【2026-11-22 主人拍板「对 合并」】连升合并成一窗（1→3 一次弹完），推翻 11-12 的「一级一窗不合并」口径。
+/// 队列仍逐条弹（多次不同来源的升级不叠窗），但每次升级区间整段入队一条，成长按 delta 显示。
 /// 【2026-11-12 主人拍板「一登录就升级」】日常任务 / 回城补发的升级走 DeferUntilBattle 延后账：
 /// 登录瞬间 DailyTaskSystem.Settle 会发每日登录等经验，直接入队就会被进镇那次 FlushPending 弹出来；
 /// 改成先攒着，等 AddStageClearExp 打完一关才搬进待弹队列 —— 经验照发、等级照涨，只把演出推迟。
@@ -45,7 +46,8 @@ public static class LevelUpPopup
 
     // —— 挂起账（2026-10-25 主人拍板「战斗结束回到冒险界面才触发」）——
     // 结算时刻战斗里不弹，只记账；Town 就绪（TownSceneBootstrap 收尾）统一吐出。
-    // 【2026-11-12 主人拍板】一级一窗、逐个弹：每次升级按级拆成一条挂起，绝不合并成「4→7」一段。
+    // 【2026-11-22 主人拍板「对 合并」】连升整段入一条挂起（before→after 一窗弹完，如 1→3），
+    // 推翻 11-12 「绝不合并成 4→7」；不同来源的多次升级仍按入队顺序逐条弹，不叠窗。
     static readonly Queue<KeyValuePair<int, int>> _pending = new Queue<KeyValuePair<int, int>>();
 
     // —— 延后账（【2026-11-12 主人拍板】「一登录就升级」的修法）——
@@ -61,14 +63,14 @@ public static class LevelUpPopup
     static int _jobCursor;
 
     /// <summary>
-    /// 每级一条挂起，Town 就绪后逐个弹，玩家点黑幕关闭才弹下一条；
-    /// 中途退游戏挂起即丢（等级已落盘，只丢演出）
+    /// 【2026-11-22 主人拍板「对 合并」】整段升级入一条挂起（before→after 一窗弹完，如 1→3）；
+    /// Town 就绪后弹出，玩家点黑幕关闭才弹下一条（不同来源的多次升级仍逐条）；
+    /// 中途退游戏挂起即丢（等级已落盘，只丢演出）。Show 内第二行已按 delta 显示成长。
     /// </summary>
     public static void QueueForTown(int beforeLevel, int afterLevel)
     {
         if (afterLevel <= beforeLevel) return;
-        for (int lv = beforeLevel; lv < afterLevel; lv++)
-            _pending.Enqueue(new KeyValuePair<int, int>(lv, lv + 1));
+        _pending.Enqueue(new KeyValuePair<int, int>(beforeLevel, afterLevel));
     }
 
     /// <summary>
@@ -80,8 +82,8 @@ public static class LevelUpPopup
     public static void DeferUntilBattle(int beforeLevel, int afterLevel)
     {
         if (afterLevel <= beforeLevel) return;
-        for (int lv = beforeLevel; lv < afterLevel; lv++)
-            _deferred.Enqueue(new KeyValuePair<int, int>(lv, lv + 1));
+        // 与 QueueForTown 同口径（2026-11-22 合并）：一整段入一条，演出时一窗显示。
+        _deferred.Enqueue(new KeyValuePair<int, int>(beforeLevel, afterLevel));
     }
 
     /// <summary>
@@ -106,7 +108,7 @@ public static class LevelUpPopup
         Show(e.Key, e.Value);
     }
 
-    /// <summary>弹恭喜升级（升级前 beforeLevel → 升级后 afterLevel）。一次只弹一级；连升由队列逐条弹。</summary>
+    /// <summary>弹恭喜升级（升级前 beforeLevel → 升级后 afterLevel）。连升整段一窗（2026-11-22 合并）；不同来源的多次升级由队列逐条弹。</summary>
     public static void Show(int beforeLevel, int afterLevel)
     {
         var prefab = Resources.Load<GameObject>(PrefabPath);
@@ -186,7 +188,7 @@ public static class LevelUpPopup
         _host = null;
     }
 
-    /// <summary>玩家点黑幕：关掉当前这一级，队列还有就弹下一条（一级一窗，不合并、不覆盖）。</summary>
+    /// <summary>玩家点黑幕：关掉当前这一窗，队列还有下一段升级就弹下一条（连升已合并为一窗，不同来源不叠窗）。</summary>
     static void OnDimClicked()
     {
         Close();

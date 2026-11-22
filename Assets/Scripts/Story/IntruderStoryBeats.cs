@@ -15,10 +15,25 @@ using UnityEngine;
 /// </summary>
 public static class IntruderStoryBeats
 {
-    /// <summary>敌对乱入剧情入口。返回 true = 已交给 StoryDirector 播放；播放失败已回调 onDone。</summary>
+    /// <summary>
+    /// 敌对乱入剧情入口。返回 true = 已交给 StoryDirector 播放；播放失败已回调 onDone。
+    /// 【2026-11-22 主人拍板】强盗贯穿8章递进，台词按实际出场人数/成员选版：
+    /// 单人章(1小弟/2大哥/4女法)各自单人对白；双人章(3/5/6)双人对白；三人章(7/8)用三人对白。
+    /// 出场成员真源 = IntruderPicker.BanditIdsForChapter，台词人数必须与之一致，禁三人对白配单人穿帮。
+    /// </summary>
     public static bool TryPlayIntruder(int chapter, string storyKey, Action onDone)
     {
-        var beats = chapter == 3 ? BuildCh3Beats() : BuildGenericBeats(chapter);
+        List<StoryBeat> beats;
+        switch (chapter)
+        {
+            case 1:  beats = BuildBladeSolo(chapter); break;   // 小弟初遇
+            case 2:  beats = BuildBossSolo(chapter); break;    // 大哥单挑
+            case 3:  beats = BuildBladeBossDuo(chapter); break;// 小弟+大哥
+            case 4:  beats = BuildWitchSolo(chapter); break;   // 女法初遇
+            case 5:  beats = BuildWitchBladeDuo(chapter); break; // 远近搭配
+            case 6:  beats = BuildBossWitchDuo(chapter); break; // 坦法搭配
+            default: beats = BuildGenericBeats(chapter); break; // 7/8 三人组
+        }
         StoryPortraits.Warmup(StoryPortraits.Player, BanditBoss, BanditWitch, BanditBlade);
         Debug.Log($"[IntruderStory] 敌对乱入剧情 chapter={chapter} storyKey={storyKey} beats={beats.Count}");
 
@@ -33,22 +48,64 @@ public static class IntruderStoryBeats
         return true;
     }
 
-    /// <summary>第 3 章 · 翡翠秘境：路标是新的，石门上的旧字一闪一闪；强盗三人组拦路（批次6 三人对白版）。</summary>
-    static List<StoryBeat> BuildCh3Beats()
-    {
-        return new List<StoryBeat>
-        {
-            StoryDirector.Narration("藤蔓后面闪出三个人影，一身冒险者行头，却一个比一个不像活人。"),
-            StoryDirector.Solo("夜薇", "这条岔路归我们管了。掉头，或者躺下——选一个。", BanditWitch),
-            StoryDirector.Solo("阿刃", "薇姐别废话，我手痒三天了，就等贴脸开大这波。", BanditBlade),
-            StoryDirector.Solo("独眼老雷", "急什么。来，先把牌子看仔细——正面：此路可通；背面：进去的，没一个回来过。", BanditBoss),
-            StoryDirector.Solo("你", "我勒个豆？！谁家路标还搞双面的啊！", StoryPortraits.Player),
-            StoryDirector.Narration("你接过牌子翻来覆去看了个遍——两行字都是新刻的，刀口还没磨平。"),
-            StoryDirector.Solo("你", "行吧，那我就当这个「第一个回来的」。", StoryPortraits.Player),
-        };
-    }
+    // ===== 2026-11-22 递进对白：按出场成员选版，语气沿用原三人组人设（老雷压场/夜薇算账/阿刃莽） =====
 
-    /// <summary>其它章节的通用版（批次6 三人对白版，不含 ch3 专属意象）；后续按章节细化时替换本函数。</summary>
+    /// <summary>第1章 · 阿刃单人（小弟初遇）：独行莽汉拦路，给玩家一个低压力的初次强盗遭遇。</summary>
+    static List<StoryBeat> BuildBladeSolo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration($"第 {chapter} 章的路口，一个提着大剑的家伙堵在道中间，看架势是来拦路的。"),
+        StoryDirector.Solo("阿刃", "站住。这条道我罩的，想过？先问我手里的家伙同不同意。", BanditBlade),
+        StoryDirector.Solo("你", "我勒个豆？！就你一个也敢拦？", StoryPortraits.Player),
+        StoryDirector.Solo("阿刃", "一个够不够，打过就知道。手痒三天了，正好拿你开开张。", BanditBlade),
+    };
+
+    /// <summary>第2章 · 老雷单人（大哥单挑）：压场老大哥，单体硬敌。</summary>
+    static List<StoryBeat> BuildBossSolo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration($"第 {chapter} 章的路口，独眼大汉抱臂站着，气势比上回那个小弟沉得多。"),
+        StoryDirector.Solo("独眼老雷", "又来一个。前面不让你过——不服气，就试试。", BanditBoss),
+        StoryDirector.Solo("你", "上回那个小弟说这条路他罩的，你又是哪位？", StoryPortraits.Player),
+        StoryDirector.Solo("独眼老雷", "他罩？他连自己都罩不住。我才是这条道的规矩。", BanditBoss),
+    };
+
+    /// <summary>第3章 · 阿刃+老雷双人（小弟+大哥）：保留翡翠秘境双面路标意象。</summary>
+    static List<StoryBeat> BuildBladeBossDuo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration("藤蔓后面闪出两个人影，一身冒险者行头，却一个比一个不像活人。"),
+        StoryDirector.Solo("阿刃", "雷哥别废话，我手痒三天了，就等贴脸开大这波。", BanditBlade),
+        StoryDirector.Solo("独眼老雷", "急什么。来，先把牌子看仔细——正面：此路可通；背面：进去的，没一个回来过。", BanditBoss),
+        StoryDirector.Solo("你", "我勒个豆？！谁家路标还搞双面的啊！", StoryPortraits.Player),
+        StoryDirector.Solo("你", "行吧，那我就当这个「第一个回来的」。", StoryPortraits.Player),
+    };
+
+    /// <summary>第4章 · 夜薇单人（女法初遇）：远程法系，换个威胁类型。</summary>
+    static List<StoryBeat> BuildWitchSolo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration($"第 {chapter} 章的路口，一名女法师隔老远就站定了，手里法球转得正欢。"),
+        StoryDirector.Solo("夜薇", "别急着冲。先礼后兵——留下买路财，或者留下命。", BanditWitch),
+        StoryDirector.Solo("你", "隔着这么远说话，是怕我碰到你？", StoryPortraits.Player),
+        StoryDirector.Solo("夜薇", "聪明。可惜聪明人一般也跑得最快——你试试能不能跑过我的法球。", BanditWitch),
+    };
+
+    /// <summary>第5章 · 夜薇+阿刃双人（远近搭配）：一个远一个近，第一次配合压力。</summary>
+    static List<StoryBeat> BuildWitchBladeDuo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration($"第 {chapter} 章的路口，一个法师一个莽汉，一远一近把路堵得严实。"),
+        StoryDirector.Solo("夜薇", "这条道归我们管了。你往前一步，我就当你是来交钱的。", BanditWitch),
+        StoryDirector.Solo("阿刃", "薇姐跟他磨什么，我先上——你负责别让他跑就行。", BanditBlade),
+        StoryDirector.Solo("你", "一个远的一个近的……行，我倒要看看你们怎么配合。", StoryPortraits.Player),
+    };
+
+    /// <summary>第6章 · 老雷+夜薇双人（坦法搭配）：一个扛一个法，硬仗预演。</summary>
+    static List<StoryBeat> BuildBossWitchDuo(int chapter) => new List<StoryBeat>
+    {
+        StoryDirector.Narration($"第 {chapter} 章的路口，独眼大汉挡在前面，女法师立在他身后。"),
+        StoryDirector.Solo("独眼老雷", "前面不让你过。要动手，先过我这关。", BanditBoss),
+        StoryDirector.Solo("夜薇", "他在前面顶着，我在后面算账——你最好一次就能解决两个。", BanditWitch),
+        StoryDirector.Solo("你", "一坦一法？这回是动真格的了。", StoryPortraits.Player),
+    };
+
+    /// <summary>第7/8章 · 三人组通用版（完整阵容，强度峰）；不含早期专属意象。</summary>
     static List<StoryBeat> BuildGenericBeats(int chapter)
     {
         return new List<StoryBeat>

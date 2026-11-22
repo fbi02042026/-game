@@ -17,9 +17,10 @@ using UnityEngine.UI;
 /// 所以<b>一律</b>用 <c>Resources.LoadAll&lt;Sprite&gt;</c> 按路径加载后覆盖 sprite ——
 /// 预制体里那组节点即使 sprite 悬空也能正常显示（铁律：代码不依赖 prefab 里的 sprite guid）。</para>
 ///
-/// <para><b>排布</b>：与 <c>PlayerPowerHud.PaintNumber</c>（战斗界面战力数字的唯一拼法）同款
-/// 「按位取子图、整行水平居中」，每个位的宽高跟子图原始像素走（「1」窄、「8」宽，与战斗界面一致）；
-/// <b>纵向 y 一律沿用预制体里主人摆的值</b>，代码不碰（不抢美术排版）。</para>
+/// <para><b>排布</b>：按位取子图、每个位的宽高跟子图原始像素走（「1」窄、「8」宽，与战斗界面一致）；
+/// <b>纵向 y 一律沿用预制体里主人摆的值</b>，代码不碰（不抢美术排版）。
+/// <b>横向从标题右侧起排</b>（2026-11-22，见 <see cref="DigitStartX"/>）——
+/// 战斗界面 <c>PlayerPowerHud</c> 是「整行居中」，本弹窗标题与数字并排同一父节点，居中会压到标题上，故口径不同。</para>
 /// </summary>
 public static class MercPowerBadge
 {
@@ -35,6 +36,16 @@ public static class MercPowerBadge
 
     /// <summary>数字之间的字距（像素），与战斗界面 <c>PlayerPowerHud.FrameDigitTracking</c> 同值。</summary>
     const float Tracking = 2f;
+
+    /// <summary>
+    /// 【2026-11-22 主人拍板】数字行起排 x（容器本地像素，首个数字左边缘）。
+    /// 标题 zhandouli 在 x=0、宽 258、pivot 中心 → 字的 alpha 右边缘实测约 129（图集切片 258 宽、右侧无透明留白）。
+    /// 起点 137 = 贴标题右侧留约 8 间距。实测数字子图左右无透明留白，故视觉间距 = DigitStartX - 129。
+    /// 2026-11-22 二次微调：160（间距 31）主人仍嫌远 → 收到 137（间距 8）。
+    /// 旧代码照搬战斗界面的「整行居中」，把数字压回 x≈0 撞上标题，这里改回从标题右侧起排。
+    /// 战斗界面 PlayerPowerHud 的居中口径不动。
+    /// </summary>
+    const float DigitStartX = 137f;
 
     static Sprite _title;
     static readonly Sprite[] _digits = new Sprite[10];
@@ -108,12 +119,9 @@ public static class MercPowerBadge
 
         int shown = Mathf.Min(count, slots.Length);
 
-        // 先量总宽（含字距）才能把整行居中：数字位 anchor/pivot 都是中心（预制体里这么摆的）
-        float totalW = 0f;
-        for (int i = 0; i < shown; i++) totalW += _digits[_buf[i]].rect.width + Tracking;
-        totalW -= Tracking;
-
-        float x = -totalW * 0.5f;
+        // 【2026-11-22 主人拍板】数字从标题右侧起排，不再整行居中（居中会压到 x=0 的标题上）。
+        // 起点见 DigitStartX（标题字右边缘实测约 129，留约 8 间距，贴字右边不粘连）。
+        float x = DigitStartX;
         for (int slot = 0; slot < shown; slot++)
         {
             var sp = _digits[_buf[shown - 1 - slot]];   // 高位在左：缓存是倒序的

@@ -30,6 +30,12 @@ public partial class PetUI : MonoBehaviour
     public static bool IsOpen { get; private set; }
     static PetUI _instance;
 
+    // ---- 宠物功能引导只读出口（2026-11-22）：高亮锚点 + 叫声气泡定位，不改任何节点 ----
+    /// <summary>上阵/喂养按钮（引导高亮用）。</summary>
+    internal static RectTransform DeployBtnRect => _instance != null ? _instance._deployBtn as RectTransform : null;
+    /// <summary>宠物模型展示节点（气泡浮在其上方）。</summary>
+    internal static Transform PetArtAnchor => _instance != null ? _instance._petArt : null;
+
     // ── 绑定（Bind.cs 填充）──
     Transform _panel;
     Button _closeBtn;

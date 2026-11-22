@@ -59,6 +59,11 @@ public class StoryBeat
 /// <summary>播 DialogueUI 台词序列。城镇/战斗共用。</summary>
 public class StoryDirector : Singleton<StoryDirector>
 {
+    // 【2026-11-22 解耦】剧情开播事件：剧情系统只广播「我开始了」，不认得任何具体弹窗类。
+    // 谁该在剧情时收起（装备替换弹窗等）自己订阅；订阅/退订在订阅方 OnEnable/OnDisable 配对。
+    // 用项目现成的 static event Action 模式（MainQuestSystem / BattleLootMode 同款），不引入 SO 资产。
+    public static event Action StoryStarted;
+
     DialogueUI _ui;
     Coroutine _play;
     float _savedTimeScale = 1f;
@@ -206,6 +211,8 @@ public class StoryDirector : Singleton<StoryDirector>
         SpeechBubbleTalker.SetSuppressed(true);
         PauseGame();
         HideBattleSkillBar();
+        // 【2026-11-22 解耦】广播开播事件，由该收起的弹窗自己订阅处理（剧情不认得具体弹窗类）。
+        StoryStarted?.Invoke();
         var ui = EnsureUi();
         // 【2026-11-13 主人拍板「有剧情背景就用剧情背景，没有就直接用黑色半透」】背景底统一两口径：
         // · 默认剧情：开播先把对话窗自带的 Dim（黑色半透）拉起来兜底 —— 有背景图时

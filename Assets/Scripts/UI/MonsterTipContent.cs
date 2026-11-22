@@ -56,7 +56,11 @@ public static class MonsterTipContent
         // —— 第一段：战力速览（生命按章首实战值，与 Monster.Init 的倍率链同源）——
         // 攻击/生命挤一行、攻击方式另起一行：两条语义不同，且 Boss 那行（BOSS · 攻击 22 · 生命 900）
         // 与攻击方式放一起会超过正文净宽 382px。
-        float hpScale = GameConfig.GetStatScale(gameChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL;
+        // 【2026-11-22 主人拍板「图鉴尽量对齐」】补上动态难度的静态基准（+10%），
+        // 只吃 GetPreviewScale（不含按局的失败放水/橡皮筋/送暖——图鉴在城镇看，没有「当前哪一关」上下文）。
+        // 注意本行仍是示意值：不含波次/偏差层/后期加强/词缀，攻击列也仍取原始表值，不改既有结构。
+        float hpScale = GameConfig.GetStatScale(gameChapter, 0) * GameConfig.MONSTER_HP_GLOBAL_MUL
+            * AdaptiveDifficulty.GetPreviewScale();
         float shownHp = cfg.baseHp * hpScale;
         string styleName = StyleName(MonsterAttackStyleTable.Get(monsterChapter, cfg.spriteIndex));
         var sb = new StringBuilder();

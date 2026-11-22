@@ -44,8 +44,10 @@ public class FirstRunGuide : MonoBehaviour
         Talent = 4,
         /// <summary>酒馆 → 认识老板娘。</summary>
         Tavern = 5,
+        /// <summary>【2026-11-22 主人追加】引导去冒险日志领里程奖励、去里程商店看看。</summary>
+        LogReward = 6,
         /// <summary>游标抵达这里＝全部完成。</summary>
-        Done = 6,
+        Done = 7,
     }
 
     // ============================================================
@@ -301,7 +303,24 @@ public class FirstRunGuide : MonoBehaviour
         if (Instance != null && Instance.IsFinished) return;
         var ui = Ensure();
         if (ui == null) return;
+        ui.ReconcileStep();
         ui.StartDrive();
+    }
+
+    /// <summary>【2026-11-22 主人报「引导点冒险进战斗后退出了，再进没强制从上步继续，能点别的界面」】
+    /// 根因：点「开始冒险」进战斗的瞬间 CoPoint 走「场景切走」分支即判完成，FirstBattle 游标
+    /// 已被推进到 Talent 并落盘；玩家中途退出教学战（杀进程 / 退出游戏）时 TutorialBattleCleared
+    /// 不会置位，下次回城游标停在 Talent，而 CanRun(Talent) 要求 TutorialBattleCleared → 恒 false，
+    /// Drive 每帧 Hide，主界面没人管 → 玩家能随便点别的界面。
+    /// 这里在回城时校正：教学战没通关却已越过首战 → 退回 FirstBattle，强制接着引导「点开始冒险」。
+    /// 正常通关路径（TutorialBattleCleared=true）与已出师档一律早退，不受影响。</summary>
+    void ReconcileStep()
+    {
+        if (StoryProgress.TutorialDone || StoryProgress.TutorialBattleCleared) return;
+        if (_stepIndex <= (int)GuideStep.FirstBattle) return;
+        _stepIndex = (int)GuideStep.FirstBattle;
+        Persist();
+        Debug.Log("[Guide] 教学战未通关但游标已越过首战 → 退回 FirstBattle 强制续引导");
     }
 
     void StartDrive()
@@ -369,6 +388,7 @@ public class FirstRunGuide : MonoBehaviour
                     // CoTavern/CoPlayLandlady 原样保留不删，以后想恢复酒馆步骤再说。
                     SkipStep(GuideStep.Tavern, "酒馆步骤已取消（2026-10-16 主人拍板）");
                     break;
+                case GuideStep.LogReward: yield return CoLogReward(); break;   // 【2026-11-22 主人追加】
                 default: yield break;
             }
 
@@ -399,6 +419,7 @@ public class FirstRunGuide : MonoBehaviour
                 return StoryProgress.TutorialIntroDone;
             case GuideStep.Talent:
             case GuideStep.Tavern:
+            case GuideStep.LogReward:
                 return StoryProgress.TutorialBattleCleared;
             case GuideStep.QuestBar:
                 // 方案 B：纯文字第 2 步，不需要任务条实物存在，故不依赖 TutorialBattleCleared。
@@ -425,7 +446,7 @@ public class FirstRunGuide : MonoBehaviour
     IEnumerator CoAdventure()
     {
         TryFallbackNav(MainNavTab.Adventure);
-        yield return CoPoint("点下面的「冒险」。第一关很短……有我在，放心走。",
+        yield return CoPoint("点下面的「冒险」。先去新人关卡试试身手，有我在，放心走。",
             () => NavRect(MainNavTab.Adventure),
             AdventurePageOpen,
             false, 0f);   // 【2026-11-04】不自动走
@@ -553,6 +574,26 @@ public class FirstRunGuide : MonoBehaviour
 
         yield return CoPlayLandlady();
         Advance(GuideStep.Tavern, null);
+    }
+
+    // ---- 6) 【2026-11-22 主人追加】冒险日志领里程奖励 + 去里程商店看看 ----
+    // 两拍：底栏「日志」进日志页 → 侧栏徽记开里程商店。不用 tapToAdvance 强推，
+    // 完成判据 = 玩家点中高亮洞（_holeTriggered）/ 页面已开；绑定失败按 CoPoint 既有口径跳过防死锁。
+
+    IEnumerator CoLogReward()
+    {
+        yield return CoPoint("打着了就别光顾着乐——点底栏「日志」，本小姐在那儿给你留了点东西。",
+            () => NavRect(MainNavTab.Log),
+            () => _holeTriggered || LogPageOpen(),
+            false, 0f);
+
+        yield return CoPoint("看见那个徽记没？点开里程商店，有能领的就领——别浪费本小姐一番心意。",
+            MileageShopEmblemRect,
+            () => _holeTriggered || MileageShopOpen(),
+            false, 0f);
+
+        Hide();
+        FinishStep(GuideStep.LogReward, "里程奖励引导");
     }
 
     /// <summary>认识老板娘：直接复用主线的老板娘文案（与任务面板里点出来的那一套同源）。</summary>
@@ -771,6 +812,26 @@ public class FirstRunGuide : MonoBehaviour
 
     static bool AdventurePageOpen() => IsVisibleHierarchy(AdventureUI.Instance?.gameObject);
 
+    // 【2026-11-22 主人追加·里程奖励引导】日志页与里程商店入口（节点路径与 AdventureLogUI 绑定处同源）。
+    static bool LogPageOpen() => IsVisibleHierarchy(AdventureLogUI.Instance?.gameObject);
+
+    static RectTransform MileageShopEmblemRect()
+    {
+        var log = AdventureLogUI.Instance;
+        if (log == null || !IsVisibleHierarchy(log.gameObject)) return null;
+        var t = TownSharedChrome.FindDeep(log.transform, "Root/Frame/Sidebar/Emblem") as RectTransform;
+        return IsVisibleHierarchy(t != null ? t.gameObject : null) ? t : null;
+    }
+
+    /// <summary>里程商店面板是否可见：面板节点由 AdventureLogPhase3Panel 运行时 Ensure 创建。</summary>
+    static bool MileageShopOpen()
+    {
+        var log = AdventureLogUI.Instance;
+        if (log == null) return false;
+        var root = TownSharedChrome.FindDeep(log.transform, "Phase3Root");
+        return IsVisibleHierarchy(root != null ? root.gameObject : null);
+    }
+
     // 【2026-10-19 修复】单帧可见判定会被进镇预热「点亮一帧再藏」骗到（TownHubController.CoWarmupPages
     // 每次进镇都把角色页闪现一帧）：角色步骤被假完成/跳过 → 玩家看不到「角色」高亮（没有抠图和手指）。
     // 改为连续可见 0.5s 才算开页；切后台恢复/重启重进时的时序抖动也不再误判。
@@ -811,6 +872,7 @@ public class FirstRunGuide : MonoBehaviour
         else if (tab == MainNavTab.Adventure) btn = nav.adventureButton;
         else if (tab == MainNavTab.Character) btn = nav.characterButton;
         else if (tab == MainNavTab.Tavern) btn = nav.tavernButton;
+        else if (tab == MainNavTab.Log) btn = nav.logButton;   // 【2026-11-22 里程奖励引导】
         return ButtonRect(btn);
     }
 

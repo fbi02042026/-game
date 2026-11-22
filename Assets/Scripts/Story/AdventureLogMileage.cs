@@ -87,6 +87,12 @@ public static class AdventureLogMileage
     public static bool CanClaimLevel(int level)
     {
         if (level < 2 || level > MaxLevel) return false;
+        // 【2026-11-22 主人拍板「不是该职业不能买其他职业的装备武器」「显示但置灰」】
+        // Lv2 唯一奖励 = 暮火之杖（法师主手武器，见上方 LevelRewards Lv2 只发杖），非法师一律不可领。
+        // 真源 = PlayerJobDefs.GetSelected()（选定职业唯一出口），不按职业名/数组下标猜。
+        // 其它等级是金币 / 天赋石 / 称号，无职业限制，不受影响。
+        // 这里同时是 UI 置灰（Phase3Panel FillShopRow 的 can）与领奖出口（ClaimLevel）的真源，一处改两处生效。
+        if (level == 2 && PlayerJobDefs.GetSelected() != PlayerJobId.Mage) return false;
         if (GetLevel() < level) return false;
         return !IsLevelClaimed(level);
     }
@@ -271,6 +277,10 @@ public static class AdventureLogMileage
     public static bool CanClaimWeaponMilestone(WeaponMilestone m)
     {
         if (string.IsNullOrEmpty(m.GrantKey) || IsWeaponMilestoneClaimed(m.GrantKey)) return false;
+        // 【2026-11-22 主人拍板「不是该职业不能买其他职业的装备武器」「显示但置灰」】
+        // 当前里程武器奖励只有钢骨盾（剑盾副手；弓奖励 2026-11-02 已移除），非剑盾职业不可领。
+        // 判据走 GrantKey 唯一标识，不按下标猜；与 CanClaimLevel 同口径，UI 置灰 + 出口校验共用。
+        if (m.GrantKey == ShieldGrantKey && PlayerJobDefs.GetSelected() != PlayerJobId.SwordShield) return false;
         return TotalEarned >= m.NeedPoints;
     }
 

@@ -435,6 +435,7 @@ public partial class BattleManager
         // 门禁照 CoAnnounce 分支（CoAnnounceThenSpawnNextWave 内 intruderGate）同款写法
         if (!(IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
               && !IsArena && !IsActivityDungeon && !IsEndlessRift)) return false;
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
         if (_intruderStoryShownThisStage) return false;
         bool hasEvent = false;
         IntruderEventTable.Row evRow = default;
@@ -549,6 +550,7 @@ public partial class BattleManager
         // 显式排除 引导 / 羁绊 / 竞技场 / 活动副本 / 裂隙。
         if (!(IsFormalMainRun || IsSideIsland)) return;
         if (IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) return;
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return;   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
         if (!IsBossWaveActive) return;                  // 只在 Boss 波进行中触发
         if (unit == null || unit.attr == null) return;
         if (unit.currentHp <= 0f) return;               // 已到致死一击的不算（死亡走各自流程，不和复活链叠加）
@@ -1220,6 +1222,9 @@ public partial class BattleManager
     void SetPartyWalkAnim(bool walking)
     {
         SetUnitWalkAnim(hero, walking);
+        // 宠物跟队伍一起播进场走/停走（宠物动画走 PlayAnim 状态名，不用 UnitAnimation 参数）
+        var pet = GetDeployedPet();
+        if (pet != null) pet.SetPartyWalking(walking);
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
         if (mercs == null) return;
         for (int i = 0; i < mercs.Count; i++)
@@ -1258,6 +1263,18 @@ public partial class BattleManager
             GameConfig.SetWorldPosition(hero.gameObject, heroPos);
             hero.facingDir = 1;
             EnsureSpritesEnabled(hero.transform);
+        }
+
+        // 宠物跟队伍一起摆位（2026-11-22）：进驻场时同 hero 从左侧一起走入，不再提前站在战场上。
+        // 必须与 hero 同批摆，故放在 mercs==null 早退之前；偏移复用 DeployDeployedPet 的 PET_FOLLOW_OFFSET。
+        var pet = GetDeployedPet();
+        if (pet != null)
+        {
+            if (pet.rb != null) pet.rb.velocity = Vector2.zero;
+            GameConfig.AttachToUnitRoot(pet.transform);
+            GameConfig.SetWorldPosition(pet.gameObject, new Vector3(heroX - PET_FOLLOW_OFFSET, UnitBase.GROUND_Y, z));
+            if (pet.facingDir != 1) pet.Face(1);
+            EnsureSpritesEnabled(pet.transform);
         }
 
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
@@ -1572,7 +1589,8 @@ public partial class BattleManager
                                 && !string.IsNullOrEmpty(_waves[nextIdx].intruderEventId)
                                 && _waves[nextIdx].intruderSlotCount > 0;
             bool intruderGate = IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
-                                && !IsArena && !IsActivityDungeon && !IsEndlessRift;
+                                && !IsArena && !IsActivityDungeon && !IsEndlessRift
+                                && NormalOnlyContentAllowed(BattleDifficulty);   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
             if (intruderWave && intruderGate)
             {
                 bool done = false;

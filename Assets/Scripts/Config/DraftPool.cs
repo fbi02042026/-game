@@ -507,6 +507,13 @@ public static class DraftPool
         // 【2026-10-20 主人拍板】本批三张互不重名；同时避开本局已抽中的装备模板
         //（连续两次抽奖不再出「同一个武器数值都一样」，见 NoteDrawnEquip / ResetDrawnEquipTemplates）。
         var batchSeen = new HashSet<string>(_drawnEquipTemplateIds);
+        // 【2026-11-22 主人报「抽到的和现在穿的一样、战力还-1」】当前穿戴装备的模板也进去重集合：
+        // 初始武器不是抽奖发出的、从没进过 NoteDrawnEquip，导致首抽就可能抽到同模板同数值的武器。
+        var wornNow = BattleBagSystem.InstanceQuiet != null
+            ? BattleBagSystem.InstanceQuiet.GetEquippedItems() : null;
+        if (wornNow != null)
+            foreach (var w in wornNow)
+                if (w != null && !string.IsNullOrEmpty(w.templateId)) batchSeen.Add(w.templateId);
 
         for (int i = 0; i < CardCount; i++)
         {
@@ -516,15 +523,22 @@ public static class DraftPool
             try
             {
                 // 撞同模板就重掷洗开；池子只剩同一把时最后一次强收 —— 宁可重复也不减卡、不卡流程。
+                // 【2026-11-22 方案 b】初始/当前穿的那件已是玩家手上的基准，抽到的必须严格更好：
+                // 除「模板没撞车」外，再加一条「换装净差 > 0」判据（与卡面战力/弹窗同一真值
+                // EquipSwapPowerDelta），保证抽到的装备战力严格为正，不再出现「同名同数值、战力 -1」。
+                // 引导局 tutorialFixed 是确定性生成（原值即 > 初始），豁免这条判据，保持每次战力一致。
                 for (int attempt = 0; attempt < 5; attempt++)
                 {
                     var one = ConfigManager.Instance.GetRandomEquipInstances(
                         1, blacksmith, 0, st, GameConfig.RIFT_DROP_ATTR_BONUS, false, chapter, tutorialFixed, forceAtLeastRare,
                         BattleManager.InstanceQuiet != null ? BattleManager.InstanceQuiet.BattleDifficulty : 0);
                     if (one == null || one.Count == 0 || one[0] == null) { eq = null; break; }
-                    eq = one[0];
-                    bool fresh = batchSeen.Add(eq.templateId);
-                    if (fresh || attempt >= 4) break;
+                    var candidate = one[0];
+                    // 加成要在算战力前打上（原来在循环外 Boost），否则判据看到的是未 ×1.3 的数值。
+                    BoostDraftWeapon(candidate);
+                    bool fresh = batchSeen.Add(candidate.templateId);
+                    bool strictlyBetter = tutorialFixed || PowerCalc.EquipSwapPowerDelta(candidate) > 0;
+                    if ((fresh && strictlyBetter) || attempt >= 4) { eq = candidate; break; }
                 }
             }
             catch (System.Exception e)
@@ -532,7 +546,8 @@ public static class DraftPool
                 Debug.LogWarning("[DraftPool] 装备卡生成失败: " + e.Message);
             }
             if (eq == null) break;
-            BoostDraftWeapon(eq);
+            // 2026-11-22：BoostDraftWeapon 已移入上方重掷循环（必须在算 EquipSwapPowerDelta 前加成），
+            // 此处不再重复调用，否则主手攻击 ×1.3 会被打两次。
 
             var rar = MapRarity(eq.rarity);
             pool.Add(new WeightedCard

@@ -467,6 +467,9 @@ public partial class BattleManager
         // 连败≥3 回城后由前台小姐姐说句安慰（TownHubController.CoDefeatComfort 消费）
         if (isDeath) TavernEggState.RegisterDeath();
         else TavernEggState.RegisterEvacuate();
+        // 【2026-11-22 动态难度】该关连续失败 +1（真源 AdaptiveDifficulty，只写状态不算倍率）。
+        // 与彩蛋连败计数分开：彩蛋是全局、这里是按关卡 key；撤离不计失败。
+        if (isDeath) AdaptiveDifficulty.OnStageFailed();
 
         // 裂缝口径：局内装备/武器退出清空，不带出城镇
         BattleBagSystem.Instance?.ClearRunEquipment();

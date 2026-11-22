@@ -706,7 +706,8 @@ public partial class AdventureUI
         // 无限裂隙不播剧情（2026-10-18 主人拍板）：大厅开场剧情只挂在主线冒险入口
         // 活动副本同样不播（2026-10-23 活动一拆二：金币/徽记都是单场战斗，不该被剧情拦一道）
         if (StoryProgress.TutorialDone && !StoryProgress.Chapter1IntroDone
-            && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode) && !IsActivityMode(_selectedMode))
+            && _selectedChapter <= 1 && !IsEndlessMode(_selectedMode) && !IsActivityMode(_selectedMode)
+            && BattleManager.NormalOnlyContentAllowed(_selectedDiff))   // 剧情只普通难度：困难/噩梦不播大厅开场
         {
             // 【2026-10-24 主人报「点开始冒险弹剧情，主界面 BGM 还在响」】
             // 根因：StoryDirector.PlayRoutine 只在战斗场景（IsBattleScene）才切剧情曲，

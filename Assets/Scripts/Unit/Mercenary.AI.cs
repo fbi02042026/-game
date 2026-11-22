@@ -9,8 +9,9 @@ public partial class Mercenary : UnitBase
 {
     /// <summary>【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
     /// 我方佣兵交战前压停步线：距目标 ≤ 有效射程 × 此比例才站桩（0.55 ≈ 走进射程一半）。
-    /// 只影响「已进攻击射程后是否继续往前走」，不改射程、攻击 CD、伤害与索敌。</summary>
-    const float MERC_ENGAGE_DIST_RATIO = 0.55f;
+    /// 只影响「已进攻击射程后是否继续往前走」，不改射程、攻击 CD、伤害与索敌。
+    /// 【2026-11-22】改 protected virtual：佣兵默认仍 0.55（行为零变化），宠物 override 成进射程即站桩。</summary>
+    protected virtual float EngageDistRatio => 0.55f;
 
     // —— 屏外走入（2026-10-31 主人拍板「竞技场敌人从屏幕外走进来，不能突然出现」）——
     // 仅敌方佣兵（isAlly=false，竞技场机器人小队）使用；己方抽卡入场走 SpawnRunMerc 的拴绳回队，不经过这里。
@@ -439,7 +440,7 @@ public partial class Mercenary : UnitBase
                     // ENGAGE_DIST_RATIO × 射程 才站桩；前压期间下面这段出手逻辑一字不动，输出不中断。
                     // 敌方竞技场机器人 / 无怪 / mustStickBack 回队 / 牧师 / 集结一律走原路径。
                     bool pressForward = isAlly && HasAliveEnemyOnField()
-                                        && distance > attackRange * MERC_ENGAGE_DIST_RATIO;
+                                        && distance > attackRange * EngageDistRatio;
                     if (pressForward)
                     {
                         if (rb != null)
@@ -591,7 +592,7 @@ public partial class Mercenary : UnitBase
 
     /// <summary>
     /// 攻击/受击硬直早退期间补一次交战前压位移。与 AIUpdate 里 pressForward 同一停步线
-    /// （MERC_ENGAGE_DIST_RATIO），同语义单一出口；不改硬直动画、不改出手、不改索敌口径。
+    /// （EngageDistRatio），同语义单一出口；不改硬直动画、不改出手、不改索敌口径。
     /// 保险：离玩家已超过拴绳半径时不再往外走，交给 UpdateHeroLeash 下一帧收队，避免脱队抖动。
     /// </summary>
     void TryEngageMoveDuringHold()
@@ -610,7 +611,7 @@ public partial class Mercenary : UnitBase
         if (enemy == null) return;
 
         float dist = Mathf.Abs(GetCombatX(this) - GetCombatX(enemy));
-        if (dist <= GetEffectiveAttackRange() * MERC_ENGAGE_DIST_RATIO) return;
+        if (dist <= GetEffectiveAttackRange() * EngageDistRatio) return;
 
         int dir = GetCombatX(enemy) > GetCombatX(this) ? 1 : -1;
         if (dir != facingDir)

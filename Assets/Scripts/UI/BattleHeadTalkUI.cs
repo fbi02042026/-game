@@ -14,6 +14,13 @@ public class BattleHeadTalkUI : MonoBehaviour
     Image _bg;
     Text _text;
     UnitBase _follow;
+    /// <summary>
+    /// 固定 UI 锚点（2026-11-22）：非 null 时气泡浮在该 UI 节点上方（宠物界面叫两声用），
+    /// 走屏幕像素偏移；null 时保持原战斗单位世界坐标跟随逻辑，一行不改。
+    /// </summary>
+    Transform _uiAnchor;
+    /// <summary>固定 UI 锚点模式下气泡底部相对锚点的抬高（屏幕像素）。纵向偏移可留（铁律20）。</summary>
+    const float UiAnchorLiftPx = 96f;
     Coroutine _co;
     bool _skipTyping;
     bool _advance;
@@ -148,6 +155,22 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     public Coroutine PlayLine(UnitBase speaker, string content, float hold = -1f)
     {
+        _uiAnchor = null;   // 战斗单位跟随模式：现有调用行为零改变
+        return BeginLine(speaker, content, hold);
+    }
+
+    /// <summary>
+    /// 固定 UI 锚点模式（2026-11-22 宠物界面「叫两声」）：气泡浮在 anchor 节点上方。
+    /// 与 <see cref="PlayLine"/> 共用 _co / 打字机 / 排序层，天然互斥打断，不新增第二套气泡。
+    /// </summary>
+    public Coroutine PlayLineAt(Transform anchor, string content, float hold = -1f)
+    {
+        _uiAnchor = anchor;
+        return BeginLine(null, content, hold);
+    }
+
+    Coroutine BeginLine(UnitBase speaker, string content, float hold)
+    {
         if (_co != null)
         {
             StopCoroutine(_co);
@@ -163,6 +186,13 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         _co = StartCoroutine(CoPlayLine(speaker, content, hold));
         return _co;
+    }
+
+    /// <summary>可被外部直接 yield（固定 UI 锚点版，宠物叫两声串行播放用）。</summary>
+    public IEnumerator CoPlayLineAt(Transform anchor, string content, float hold = -1f)
+    {
+        _uiAnchor = anchor;
+        return CoPlayLine(null, content, hold);
     }
 
     /// <summary>可被外部直接 yield（TutorialDirector 上跑，不二次 StartCoroutine）。</summary>
@@ -260,17 +290,36 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     void RefreshFollowPosition()
     {
-        if (_root == null || !_root.gameObject.activeSelf || _follow == null) return;
+        if (_root == null || !_root.gameObject.activeSelf) return;
         var uiCam = ResolveUiCamera();
         if (uiCam == null) return;
-        Vector3 world = _follow.transform.position + new Vector3(0f, HeadOffsetY, 0f);
-        Vector3 screen = uiCam.WorldToScreenPoint(world);
-        if (screen.z <= 0f)
+
+        Vector3 screen;
+        if (_uiAnchor != null)
         {
-            screen.z = 1f;
-            screen.x = Mathf.Clamp(screen.x, Screen.width * 0.2f, Screen.width * 0.8f);
-            screen.y = Screen.height * 0.55f;
+            // 固定 UI 锚点：锚点世界坐标 → 屏幕，底部抬高一段像素浮在宠物上方（铁律20：只动纵向 y）
+            screen = uiCam.WorldToScreenPoint(_uiAnchor.position);
+            screen.y += UiAnchorLiftPx;
+            if (screen.z <= 0f)
+            {
+                screen.z = 1f;
+                screen.x = Screen.width * 0.5f;
+                screen.y = Screen.height * 0.62f;
+            }
         }
+        else
+        {
+            if (_follow == null) return;   // 原战斗跟随：无单位不定位（行为不变）
+            Vector3 world = _follow.transform.position + new Vector3(0f, HeadOffsetY, 0f);
+            screen = uiCam.WorldToScreenPoint(world);
+            if (screen.z <= 0f)
+            {
+                screen.z = 1f;
+                screen.x = Mathf.Clamp(screen.x, Screen.width * 0.2f, Screen.width * 0.8f);
+                screen.y = Screen.height * 0.55f;
+            }
+        }
+
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
             transform as RectTransform, screen, uiCam, out var local);
         var hostRt = transform as RectTransform;
@@ -296,6 +345,7 @@ public class BattleHeadTalkUI : MonoBehaviour
             _co = null;
         }
         _follow = null;
+        _uiAnchor = null;
         if (_group != null) _group.alpha = 1f;
         if (_root != null)
         {

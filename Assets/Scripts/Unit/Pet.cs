@@ -19,11 +19,37 @@ public partial class Pet : Mercenary
 {
     /// <summary>宠物高度 = 玩家高度的这个比例（用户 11-21「战斗中宠物大概是玩家一半的高度」）。</summary>
     const float PET_HEIGHT_RATIO = 0.5f;
+    /// <summary>头顶血条离模型顶部的间隙 = 宠物自身世界高度 × 此比例（11-22 按体型调节，不写死世界单位）。</summary>
+    const float HP_BAR_HEAD_GAP_RATIO = 0.12f;
+    /// <summary>移动动画倍率上下限（11-22：步频跟位移，别再出现「动画慢移动快」滑步）。</summary>
+    const float MOVE_ANIM_SPEED_MIN = 0.6f;
+    const float MOVE_ANIM_SPEED_MAX = 3f;
+    /// <summary>11-22 主人「移动动画放慢一倍」：在按位移算出的步频倍率上再乘此系数，只影响宠物腿部动画频率，不改实际位移。</summary>
+    const float PET_MOVE_ANIM_RATE = 0.5f;
+    /// <summary>
+    /// 宠物移速（11-22）：整体在玩家基准上慢 10%，主人再要求「移动再减 30%」→ 基准 0.9×0.7=0.63；
+    /// 再按外貌微调——狗/狼灵活稍快，羊迟缓稍慢。
+    /// 皮肤 id 带本体前缀，走同一系数（dog_fox/wolf_demon/goat_mushroom 跟随本体）。
+    /// </summary>
+    const float PET_MOVE_BASE_RATIO = 0.63f;  // 慢 10% 后再减 30%（0.9 × 0.7）
+    const float MOVE_RATE_DOG = 1.05f;        // 狗：灵活，比其它宠物快但仍比原速慢
+    const float MOVE_RATE_WOLF = 1.05f;       // 狼：灵活，同上
+    const float MOVE_RATE_GOAT = 0.85f;       // 羊：迟缓
+    const float MOVE_RATE_DEFAULT = 1f;       // 鸟/蜥蜴等：保持基准
+
+    // 11-22 主人拍板「宠物血条应该是绿的跟玩家一样」：真源 = 玩家血条图
+    // Assets/Resources/UI/Art/battle/血条.png 主色 RGB(78,234,57)（敌人血条.png 是红 234,57,78）。
+    // 只改本宠物实例的 fillColor，共用 MonsterHealthBar / 怪物血条零影响。
+    static readonly Color PET_HP_FILL_COLOR = new Color(78f / 255f, 234f / 255f, 57f / 255f, 1f);
 
     public string petDefId;          // PetDefs.Def.id（dog / toucan / goat / lizard / wolf + 皮肤 id）
     PetDefs.Def _def;
     bool _fled;                      // 本局已跑掉（防重复触发逃跑）
     MonsterHealthBar _hpBar;
+    // 移动动画状态：null=待重切（攻击/受击打断后），true=Walk，false=Idle。
+    bool? _petWalkState;
+    float _actionAnimHoldUntil;      // 攻击/受击 clip 播完前不切回 Walk/Idle，防动作被盖
+    int _hitFlashGen;                // 受击闪白代次：连续受击时旧的还原协程让位给新的，防提前还原
 
     protected override void Awake()
     {
@@ -66,12 +92,55 @@ public partial class Pet : Mercenary
         _hpBar = MonsterHealthBar.Create(this);
         if (_hpBar == null)
             Debug.LogWarning("[Pet] " + defId + " 头顶血条创建失败（MonsterHealthBar.Create 返回 null）");
+        else
+        {
+            _hpBar.fillColor = PET_HP_FILL_COLOR;   // 玩家同款绿（LateUpdate/受伤闪烁都从该字段回写）
+            _hpBar.ResetBar();                      // 立刻上色，避免首帧还是怪物红
+            PlaceHpBarAboveHead();                  // 2026-11-22：默认脚底锚（footDrop=-0.05）改到头顶，只动本宠物血条
+        }
+
+        // 11-22：脚下阴影改成怪物同款黑半透（宠物 prefab 自带白椭圆影子，浅色地图看不见）
+        EnsureBattleShadow();
 
         Debug.Log($"[Pet] {defId} 出场 hp={currentHp:0} atk={attr.GetAttr(AttrType.Attack):0} " +
                   $"scale={transform.localScale.x:F2} pos={transform.position}");
 
         // 专属技能循环（Pet.Skills.cs）：皮肤跟随本体同一套技能
         StartSkillLoop();
+
+        // 11-22：移动动画倍率跟实际位移走，消除「动画慢移动快」滑步。
+        // 只写 unitAnim 的 public 字段，借 UnitAnimation 每帧现成通道生效，不新增第二套 anim.speed 写入。
+        StartCoroutine(CoPetMoveAnimSpeed());
+    }
+
+    /// <summary>
+    /// 每帧按 |水平速度|/移速基准 调 moveAnimSpeedScale；无位移时回 1（UnitAnimation 站立自动回原速）。
+    /// 受击/攻击锁期间不覆盖（那两段由 UnitAnimation 用专用倍率接管）。
+    /// 11-22 补：同时按状态名直切 Walk/Idle —— 宠物 controller 无参数，unitAnim.SetMove 里的
+    /// SetBool 是空操作，移动动画状态从没切过，身体在动、动画站着 = 主人报的「滑步」。
+    /// </summary>
+    IEnumerator CoPetMoveAnimSpeed()
+    {
+        while (!_fled && !isDead && unitAnim != null)
+        {
+            yield return null;
+            if (_fled || isDead || unitAnim == null) yield break;
+            if (unitAnim.InDamagedRecovery() || unitAnim.InAttackLock) continue;
+
+            float vx = rb != null ? Mathf.Abs(rb.velocity.x) : 0f;
+            float refSpeed = Mathf.Max(0.01f, attr.GetAttr(AttrType.MoveSpeed));
+            bool moving = vx >= refSpeed * 0.05f;
+            // 接近静止时回 1（原速），只有真的在移动才按比例调速——避免站立态被压到下限倍率。
+            float baseRate = Mathf.Clamp(vx / refSpeed, MOVE_ANIM_SPEED_MIN, MOVE_ANIM_SPEED_MAX);
+            unitAnim.moveAnimSpeedScale = moving ? baseRate * PET_MOVE_ANIM_RATE : 1f;
+
+            // 状态切换（只在变化那一帧切，不每帧重播）：攻击/受击动画保持期内跳过，别把动作盖成走路。
+            if (_petWalkState != moving && Time.time >= _actionAnimHoldUntil)
+            {
+                _petWalkState = moving;
+                PlayAnim(moving ? "Walk" : "Idle");
+            }
+        }
     }
 
     void SetupPetAttributes(PetDefs.Def def)
@@ -85,7 +154,7 @@ public partial class Pet : Mercenary
         bool magic = IsMagicPet(def);
         attr.SetBaseAndCurrent(AttrType.MagicAttack, magic ? Mathf.Max(1f, def.atk) : 0f);
         attr.SetBaseAndCurrent(AttrType.AttackSpeed, GameConfig.BASE_ATTACK_SPEED);
-        attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED);
+        attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED * PET_MOVE_BASE_RATIO * GetMoveRateBySpecies(def));
         attr.SetBaseAndCurrent(AttrType.AttackRange,
             IsRangedPet(def) ? GameConfig.RangeBow * 0.75f : GameConfig.RangeSword);
         attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
@@ -99,6 +168,35 @@ public partial class Pet : Mercenary
     /// <summary>巨嘴鸟/鹦鹉、恶魔狼（换皮后远程）走弓；其余近战。</summary>
     static bool IsRangedPet(PetDefs.Def def)
         => def != null && (def.id.StartsWith("toucan") || def.id == "wolf_demon");
+
+    /// <summary>
+    /// 11-22 主人「宠物总是一边走一边攻击，没有设定攻击范围吗」：
+    /// 宠物继承佣兵的前压停步线（射程×0.55），进了射程还往前走到 55% 才站桩，看着就是边走边打。
+    /// 宠物 override 成 1f —— 一进有效射程即站桩出手，不再前压（射程/伤害/CD/索敌口径全不动）。
+    /// 只影响宠物，佣兵仍走基类默认 0.55。
+    /// </summary>
+    protected override float EngageDistRatio => 1f;
+
+    /// <summary>
+    /// 11-22 主人反复「移动还是快」的根因修复：宠物虽继承 Mercenary，但不是佣兵表的单位，
+    /// 基类 GetCombatMoveSpeed 里 isAlly && this is Mercenary 会把移速强换成玩家 Hero 的移速
+    /// （佣兵为「跟得上玩家」设计的口径），再叠掉队/冲刺/连杀倍率 —— 导致 SetupPetAttributes 里
+    /// 反复下调的 attr.MoveSpeed 根本没生效。宠物回归自身 attr.MoveSpeed 单一真源，只影响宠物，
+    /// 佣兵/玩家/怪物取速逻辑零改动。
+    /// </summary>
+    protected override float GetCombatMoveSpeed()
+        => attr != null ? attr.GetAttr(AttrType.MoveSpeed) : base.GetCombatMoveSpeed();
+
+    /// <summary>按外貌给移速系数：狗/狼灵活稍快、羊迟缓稍慢，其余保持基准。皮肤前缀跟随本体。</summary>
+    static float GetMoveRateBySpecies(PetDefs.Def def)
+    {
+        if (def == null) return MOVE_RATE_DEFAULT;
+        string id = def.id;
+        if (id.StartsWith("dog")) return MOVE_RATE_DOG;
+        if (id.StartsWith("wolf")) return MOVE_RATE_WOLF;
+        if (id.StartsWith("goat")) return MOVE_RATE_GOAT;
+        return MOVE_RATE_DEFAULT;
+    }
 
     /// <summary>技能套：法术宠→法球，远程宠→弓，其余→近战刀光（与 IsMagicPet/IsRangedPet 同源）。</summary>
     protected override AttackVfxKit GetAttackVfxKit()
@@ -178,6 +276,104 @@ public partial class Pet : Mercenary
         point = go.transform;
     }
 
+    /// <summary>
+    /// 脚下阴影改成怪物同款黑半透（2026-11-22）。
+    /// 真根因：宠物 prefab 自带的 Shadow.png 全物种 max alpha 只有 26/255（≈10% 淡灰影），
+    /// 旧版再乘 color.a=0.35 ⇒ 实际只有 3.5%，肉眼等于没有。怪物用的是满 alpha 白圆 × 黑 0.35。
+    /// 修法：只把运行时实例的 sprite 换成满 alpha 实心软边圆（与 Monster.MakeCircleSprite 同源算法），
+    /// 按原影子世界尺寸还原椭圆，再染黑 0.35；不动 prefab / meta / 节点层级 / 排序。
+    /// 缺 Shadow 节点只告警不新建（项目红线：不静默造资源）。
+    /// </summary>
+    /// <summary>阴影可见尺寸放大倍数（11-22 主人「宠物阴影太小」→「放大一倍」→「再放大一倍」）：实心圆软边让可见核心比标称小。</summary>
+    const float BATTLE_SHADOW_SIZE_SCALE = 6f;
+    /// <summary>阴影纵向压扁系数（11-22 主人「压扁一些」）：横向放大同时收高度，更像贴地椭圆。</summary>
+    const float BATTLE_SHADOW_FLATTEN = 0.6f;
+
+    void EnsureBattleShadow()
+    {
+        var srs = GetComponentsInChildren<SpriteRenderer>(true);
+        bool found = false;
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var r = srs[i];
+            if (r == null) continue;
+            if (r.name != "Shadow" && r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+            found = true;
+
+            // 换图前先量原影子的世界尺寸（从 prefab 现读、不写死），换满 alpha 圆后按它放大还原。
+            Vector2 origSize = (r.sprite != null ? (Vector2)r.bounds.size : new Vector2(0.9f, 0.3f)) * BATTLE_SHADOW_SIZE_SCALE;
+            var solid = GetSolidShadowSprite();
+            r.sprite = solid;
+            float native = solid.bounds.size.x > 0.001f ? solid.bounds.size.x : 1f;
+            float parentX = Mathf.Abs(r.transform.lossyScale.x); if (parentX < 0.001f) parentX = 1f;
+            float parentY = Mathf.Abs(r.transform.lossyScale.y); if (parentY < 0.001f) parentY = 1f;
+            r.transform.localScale = new Vector3(origSize.x / (native * parentX), origSize.y * BATTLE_SHADOW_FLATTEN / (native * parentY), 1f);
+
+            r.color = new Color(0f, 0f, 0f, 0.35f);   // 与 Monster.Visual.EnsureFootShadow 同口径
+            r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            r.sortingOrder = -20;                      // 身体部件 order 更高，影子压在最底
+        }
+        if (!found)
+            Debug.LogWarning("[Pet] " + petDefId + " prefab 无 Shadow 节点，脚下阴影未生效（不改 prefab、不新建）");
+    }
+
+    static Sprite _solidShadowSprite;
+
+    /// <summary>程序化实心软边圆阴影：与 Monster.Skills.MakeCircleSprite 同源，满 alpha 白圆，染黑后清晰可见。</summary>
+    static Sprite GetSolidShadowSprite()
+    {
+        if (_solidShadowSprite != null) return _solidShadowSprite;
+        const int S = 64;
+        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        tex.filterMode = FilterMode.Bilinear;
+        float c = (S - 1) * 0.5f;
+        for (int y = 0; y < S; y++)
+        for (int x = 0; x < S; x++)
+        {
+            float dx = (x - c) / c, dy = (y - c) / c;
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            float a = d <= 1f ? Mathf.Clamp01(1.15f - d) : 0f;
+            tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+        }
+        tex.Apply();
+        _solidShadowSprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), S);
+        return _solidShadowSprite;
+    }
+
+    /// <summary>
+    /// 血条改挂头顶（2026-11-22）：MonsterHealthBar 默认脚底锚（footDropWorld=-0.05），
+    /// 这里按宠物自身 SpriteRenderer 世界 bounds 顶部重定位；只动本宠物血条，不改共用组件。
+    /// </summary>
+    void PlaceHpBarAboveHead()
+    {
+        var srs = GetComponentsInChildren<SpriteRenderer>(true);
+        Bounds b = new Bounds();
+        bool has = false;
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var r = srs[i];
+            if (r == null || r.sprite == null || !r.enabled) continue;
+            if (r.name == "Shadow" || r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+            if (!has) { b = r.bounds; has = true; }
+            else b.Encapsulate(r.bounds);
+        }
+        if (!has)
+        {
+            Debug.LogWarning("[Pet] " + petDefId + " 头顶血条定位取不到 SpriteRenderer bounds，沿用默认脚底位");
+            return;
+        }
+
+        // 血条挂在 unit.transform 下，Create 内 ApplyCompensatedScale 已把 localScale 抵消父级 lossyScale；
+        // 故 localPosition.y 要除以父级 lossyScale.y，才落到「模型顶部 + 间隙」的世界高度。
+        float parentY = Mathf.Abs(transform.lossyScale.y);
+        if (parentY < 0.01f) parentY = 1f;
+        float topWorld = b.max.y - transform.position.y;
+        // 11-22：间隙不再写死世界单位，按宠物自身世界高度取比例——高体型离头顶远、矮体型贴近。
+        float bodyH = Mathf.Max(0.01f, b.size.y);
+        float headGap = bodyH * HP_BAR_HEAD_GAP_RATIO;
+        _hpBar.transform.localPosition = new Vector3(0f, (topWorld + headGap) / parentY, 0f);
+    }
+
     /// <summary>血条宽度随宠物体型收窄（基类默认 0.55 对半高宠物偏宽）。</summary>
     public override float GetHpBarWorldWidth()
     {
@@ -223,6 +419,13 @@ public partial class Pet : Mercenary
         Destroy(gameObject);
     }
 
+    /// <summary>队伍进场/停走同步：宠物 controller 无参数，按状态名切 Walk/Idle。</summary>
+    public void SetPartyWalking(bool walking)
+    {
+        if (_fled) return;   // 逃跑退场期间不覆盖 Walk 动画
+        PlayAnim(walking ? "Walk" : "Idle");
+    }
+
     /// <summary>按状态名直接播宠物 prefab 自带动画（controller 无参数，不能 SetTrigger）。</summary>
     void PlayAnim(string state)
     {
@@ -231,7 +434,31 @@ public partial class Pet : Mercenary
         if (string.IsNullOrEmpty(species)) return;
         string clip = species + "_" + state;
         if (anim.HasState(0, Animator.StringToHash(clip)))
+        {
             anim.Play(clip, 0, 0f);
+            // 攻击/受击：记下 clip 时长，这段时间内移动协程不许切回 Walk/Idle（否则动作被盖）。
+            // 时长从 Animator 现读，不写死；_petWalkState=null 让动作播完后强制重切一次。
+            if (state == "Attack" || state == "Hit")
+            {
+                _petWalkState = null;
+                float len = FindClipLength(clip);
+                _actionAnimHoldUntil = Time.time + len;
+            }
+        }
+    }
+
+    /// <summary>从 controller 的 clip 里按名字现读时长（Play 同帧 stateInfo 还是旧状态，不能用它）。</summary>
+    float FindClipLength(string clipName)
+    {
+        var ctrl = anim != null ? anim.runtimeAnimatorController : null;
+        if (ctrl != null)
+        {
+            var clips = ctrl.animationClips;
+            for (int i = 0; i < clips.Length; i++)
+                if (clips[i] != null && clips[i].name == clipName && clips[i].length > 0f)
+                    return clips[i].length;
+        }
+        return 0.3f;   // 读不到时的保守值，只影响动作后多久恢复走路
     }
 
     string SpeciesPrefix()
@@ -248,9 +475,43 @@ public partial class Pet : Mercenary
         PlayAnim("Attack");
     }
 
+    /// <summary>
+    /// 11-22 主人「不要受击动画，只用闪白」：宠物 prefab 自带 Animator（非程序化模式、无 SPUM），
+    /// unitAnim.PlayDamaged(false) 的两条闪白分支都不成立 → 改在这里直接闪白自身身体 SpriteRenderer，
+    /// 不播 Hit clip。只染身体（排除 Shadow），现读基准色、按原 alpha 白闪后还原，不动共用 UnitAnimation。
+    /// </summary>
     protected override void PlayHitReaction()
     {
-        PlayAnim("Hit");
+        StartCoroutine(CoPetHitFlash());
+    }
+
+    IEnumerator CoPetHitFlash()
+    {
+        int gen = ++_hitFlashGen;
+        var srs = GetComponentsInChildren<SpriteRenderer>(true);
+        var baseColors = new Color[srs.Length];
+        bool any = false;
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var r = srs[i];
+            baseColors[i] = r != null ? r.color : Color.white;
+            if (r == null || !r.enabled || r.sprite == null) continue;
+            if (r.name == "Shadow" || r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+            r.color = new Color(1f, 1f, 1f, baseColors[i].a);  // 白闪，保留原 alpha
+            any = true;
+        }
+        if (!any) yield break;
+
+        yield return new WaitForSeconds(0.1f);
+        if (gen != _hitFlashGen) yield break;   // 被后续受击接管，颜色交给新协程还原
+
+        for (int i = 0; i < srs.Length; i++)
+        {
+            var r = srs[i];
+            if (r == null) continue;
+            if (r.name == "Shadow" || r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
+            r.color = baseColors[i];
+        }
     }
 
     void OnDestroy()

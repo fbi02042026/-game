@@ -333,7 +333,13 @@ public partial class WavePlanner
                     // BattleManager 调用），读 SaveSystem 安全（Entry 链 BattleManager.Waves.cs:754 同款）；
                     // data 为空视为未看（老档兼容，fail-open 与既有语义一致）。
                     var intruderSave = SaveSystem.Instance?.Data;
-                    bool intruderSeen = intruderSave != null && intruderSave.HasIntruderStorySeen(intruderEv.eventId);
+                    // 【2026-11-22 主人拍板】强盗怪保留到困难/噩梦：剧情对话只在普通难度播（播放层已按
+                    // NormalOnlyContentAllowed 隔离），存档级「看过」一次性只管普通难度。顺主线进度打难度局时
+                    // 普通剧情标记早写过，若难度局仍认该标记 → 整波强盗不打标、变回普通怪。难度局不认标记，
+                    // 照常打标强盗三人组、直接打；普通难度原一次性口径不变。
+                    bool intruderSeen = !BattleManager.NormalOnlyContentAllowed(bm.BattleDifficulty)
+                        ? false
+                        : (intruderSave != null && intruderSave.HasIntruderStorySeen(intruderEv.eventId));
                     string trig = intruderEv.triggerNode;
                     bool waveHit = !string.IsNullOrEmpty(trig)
                         && trig.StartsWith("wave", System.StringComparison.OrdinalIgnoreCase)
@@ -343,6 +349,10 @@ public partial class WavePlanner
                     {
                         wave.intruderEventId = intruderEv.eventId;
                         wave.intruderSlotCount = Mathf.Min(intruderEv.replaceCount, wave.monsterCount);
+                        // 【2026-11-22 主人拍板】强盗和普通怪是两类，禁止同波出现：乱入波整波只出强盗。
+                        // monsterCount 压到强盗数 → Execute 循环只跑这几只、全部命中强盗分支，普通怪一个不刷；
+                        // 任务目标 / 清场记账 / 车道分配自动跟着一致（强盗记账四件套见 Execute.cs:597-601）。
+                        wave.monsterCount = wave.intruderSlotCount;
                         int intruderSeed = CurrentChapter * 1000 + stageIdx;
                         if (IntruderEventDirector.TryPickIntruderForNode(intruderNode, intruderSeed, out var pickedIds))
                             wave.intruderAssetIds = pickedIds;

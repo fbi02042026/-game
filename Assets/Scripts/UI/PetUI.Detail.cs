@@ -38,10 +38,15 @@ public partial class PetUI
         // PetArt：实例化当前宠物 prefab 播 idle（皮肤跟着换模型）
         RefreshPetArt(def);
 
-        // 属性 / 战力（只填数字，不动节点）
-        if (_hpText != null) SetText(_hpText, def.hp.ToString());
-        if (_atkText != null) SetText(_atkText, def.atk.ToString());
-        if (_defText != null) SetText(_defText, def.def.ToString());
+        // 属性 / 战力（只填数字，不动节点）。2026-11-22：叠加喂养随机属性加成（键 = 本体 id）。
+        string attrBodyId = PetDefs.IsSkin(def) ? def.skinOf : def.id;
+        var bonus = save != null ? save.GetPetAttrBonus(attrBodyId) : null;
+        int hpBonus = bonus != null ? bonus.hp : 0;
+        int atkBonus = bonus != null ? bonus.atk : 0;
+        int defBonus = bonus != null ? bonus.def : 0;
+        if (_hpText != null) SetText(_hpText, (def.hp + hpBonus).ToString());
+        if (_atkText != null) SetText(_atkText, (def.atk + atkBonus).ToString());
+        if (_defText != null) SetText(_defText, (def.def + defBonus).ToString());
         if (_powerText != null) SetText(_powerText, "战力 " + def.power);
 
         // 品质星级 1~4：Star0..3，前 qualityStar 颗点亮（只换图/色，不动位置）
@@ -64,12 +69,17 @@ public partial class PetUI
         var skinDef = PetDefs.SkinOf(bodyId);
         if (skinDef != null)
         {
+            // 皮肤槽显示「点击后的切换目标」：当前本体→显示皮肤图/皮肤名，当前皮肤→显示本体图/本体名。
+            // 主人 11-22「切换后应该显示另一个皮肤的图，现在始终固定显示一个」——旧写法恒 LoadAvatar(skinDef.id)，
+            // 无论上阵本体还是皮肤都是同一张皮图，切了看不出变化。def 已由 DisplayDef 解析为上阵条目（本体或皮肤）。
+            var switchTarget = PetDefs.IsSkin(def) ? PetDefs.Get(bodyId) : skinDef;
             if (_skinPortrait != null)
             {
                 var si = GetImage(_skinPortrait);
-                if (si != null) si.sprite = PetDefs.LoadAvatar(skinDef.id);
+                if (si != null) si.sprite = PetDefs.LoadAvatar(switchTarget != null ? switchTarget.id : skinDef.id);
             }
-            if (_skinName != null) SetText(_skinName, skinDef.name);
+            if (_skinName != null) SetText(_skinName, switchTarget != null ? switchTarget.name : skinDef.name);
+            // 锁态仍按皮肤本体是否已拥有判（切回本体不需要皮肤解锁），与显示目标无关。
             bool skinOwned = save != null && save.IsPetUnlocked(skinDef.id);
             if (_skinLock != null) _skinLock.gameObject.SetActive(!skinOwned);
         }
@@ -188,8 +198,9 @@ public partial class PetUI
         _feedCostBadge = badge;
     }
 
-    /// <summary>品质星级 1~4 的名字色，转发 RarityPalette 唯一真源：1灰白/2绿/3蓝/4橙金。</summary>
-    static Color QualityNameColor(int star)
+    /// <summary>品质星级 1~4 的名字色，转发 RarityPalette 唯一真源：1灰白/2绿/3蓝/4橙金。
+    /// 11-22 列表图标框底也转发这里，保证「框色 = 字色」同一出口，不另写映射。</summary>
+    internal static Color QualityNameColor(int star)
     {
         switch (star)
         {

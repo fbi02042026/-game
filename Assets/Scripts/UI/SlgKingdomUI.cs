@@ -4,8 +4,8 @@ using UnityEngine.UI;
 
 /// <summary>
 /// 天空王国城堡地图界面（2026-11-22 主人拍板：主界面入口 → 本界面 → 点城门 → 大地图）。
-/// 全屏展示 <see cref="SlgDefs.KingdomMapPath"/>（853×1843 竖图，contain 适配居中，黑边露底色），
-/// 底部城门位置放透明热区按钮，点击 = 关本界面 + SlgMapUI.Show()。
+/// 按宽度铺满展示 <see cref="SlgDefs.KingdomMapPath"/>（853×1843 竖图，图高溢出屏幕 → 可上下拖动浏览），
+/// 城门位置放透明热区按钮（挂在图面上随拖动移动），点击 = 关本界面 + SlgMapUI.Show()。
 /// 全代码构建（同 SlgMapUI 模式，不依赖预制体）；图片 Resources.Load 路径加载（铁律 16）。
 /// </summary>
 public static class SlgKingdomUI
@@ -17,6 +17,7 @@ public static class SlgKingdomUI
     const float GateYMin = 0.74f, GateYMax = 0.92f;
 
     static Canvas _canvas;
+    static SlgKingdomDragger _dragger;
 
     /// <summary>打开天空王国城堡地图（未解锁给提示）。</summary>
     public static void Show()
@@ -74,14 +75,15 @@ public static class SlgKingdomUI
         var map = NewImage("KingdomMap", _canvas.transform, Color.white);
         map.sprite = LoadSprite(SlgDefs.KingdomMapPath);
         map.preserveAspect = true;
-        map.raycastTarget = false;
+        map.raycastTarget = true;   // 打开射线才能接住拖动手势（原子节点城门热区仍在其上，优先命中）
         var mapRt = map.rectTransform;
         mapRt.anchorMin = mapRt.anchorMax = mapRt.pivot = new Vector2(0.5f, 0.5f);
         float sf = _canvas.scaleFactor > 0.001f ? _canvas.scaleFactor : 1f;
         float screenW = Screen.width / sf, screenH = Screen.height / sf;
         float aspect = 853f / 1843f;
-        float h = Mathf.Min(screenH, screenW / aspect);
-        float w = h * aspect;
+        // 按宽度铺满：图比屏幕高 → 上下有溢出才有可滑动空间（原 contain 完整显示，滑不动）。
+        float w = screenW;
+        float h = w / aspect;
         mapRt.sizeDelta = new Vector2(w, h);
         mapRt.anchoredPosition = Vector2.zero;
 
@@ -113,10 +115,19 @@ public static class SlgKingdomUI
             new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
             new Vector2(120f, 64f), new Vector2(16f, -40f));
         back.onClick.AddListener(Hide);
+
+        // 图面拖动：事件挂在图面自己身上（Image.raycastTarget 打开），拖完图后城门热区/提示
+        // 都是 mapRt 子节点自动跟随；返回按钮在 Canvas 根上，不受影响。
+        var dragger = map.gameObject.AddComponent<SlgKingdomDragger>();
+        dragger.content = mapRt;
+        _dragger = dragger;
     }
 
     static void OnGateClicked()
     {
+        // 拖图时手指可能正好按在城门热区上，抬起会被 Button 当成一次点击 → 误进大地图。
+        // 拖动过后的短暂静默期内吞掉这次点击（WorldMapPopup 同款口径）。
+        if (_dragger != null && _dragger.JustDragged) return;
         Hide();
         SlgMapUI.Show();
     }
@@ -178,5 +189,51 @@ public static class SlgKingdomUI
         var sp = Resources.Load<Sprite>(path);
         if (sp == null) Debug.LogError("[SlgKingdom] 缺少美术资源：" + path);
         return sp;
+    }
+}
+
+/// <summary>
+/// 城堡大图拖动手势：只平移图面（城门热区/提示是子节点自动跟随）。
+/// 图按宽度铺满、高度溢出屏幕，钳位到「图边不越过可视口」，滑到头即停。
+/// </summary>
+sealed class SlgKingdomDragger : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+{
+    public RectTransform content;
+    Vector2 _last;
+    float _lastDragTime = -10f;
+
+    /// <summary>拖动/拖后 0.25s 内为 true：给城门点击做误触抑制。</summary>
+    public bool JustDragged { get { return Time.unscaledTime - _lastDragTime < 0.25f; } }
+
+    public void OnBeginDrag(PointerEventData e)
+    {
+        _last = e.position;
+        _lastDragTime = Time.unscaledTime;
+    }
+
+    public void OnDrag(PointerEventData e)
+    {
+        if (content == null) return;
+        _lastDragTime = Time.unscaledTime;
+        var canvas = GetComponentInParent<Canvas>();
+        float factor = canvas != null && canvas.scaleFactor > 0.01f ? canvas.scaleFactor : 1f;
+        Vector2 delta = (e.position - _last) / factor;
+        _last = e.position;
+        content.anchoredPosition = Clamp(content.anchoredPosition + delta);
+    }
+
+    public void OnEndDrag(PointerEventData e) { _lastDragTime = Time.unscaledTime; }
+
+    Vector2 Clamp(Vector2 p)
+    {
+        var parent = content.parent as RectTransform;
+        if (parent == null) return p;
+        var canvas = GetComponentInParent<Canvas>();
+        float factor = canvas != null && canvas.scaleFactor > 0.01f ? canvas.scaleFactor : 1f;
+        float maxX = Mathf.Max(0f, (content.rect.width - Screen.width / factor) * 0.5f);
+        float maxY = Mathf.Max(0f, (content.rect.height - Screen.height / factor) * 0.5f);
+        p.x = Mathf.Clamp(p.x, -maxX, maxX);
+        p.y = Mathf.Clamp(p.y, -maxY, maxY);
+        return p;
     }
 }

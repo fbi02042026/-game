@@ -99,12 +99,11 @@ public partial class BattleUI : MonoBehaviour
             // 不再运行时建树 / 加载图集 —— 取不到节点由 AttachToPowerNode 自己打 Error。
             PlayerPowerHud.Ensure(hero != null ? hero.transform : null)
                           .AttachToPowerNode(playerSlot);
-            // 【2026-11-21 主人拍板】玩家槽职业角标 = 玩家所选职业的专属 icon（游侠=弓、剑盾=蓝盾剑、
-            // 法师=法杖），走 PlayerJobDefs.TryLoadPlayerJobIcon。旧版走四分类 CombatBadge，
-            // 游侠/狂战/重武都显示成同一把「物攻」剑 = 主人说的「职业角标没同步」。
-            // 佣兵槽仍走四分类 CombatBadge，两套分工别混。
+            // 【2026-11-22 主人拍板还原】玩家槽职业角标回到四分类徽标（物攻/防御/法术/恢复），
+            // 与佣兵槽同一套：玩家职业名换算到四分类后取图，唯一出口 JobIconResolver.CombatBadge。
+            // 11-21 曾改成专属武器 icon（游侠=弓、剑盾=蓝盾剑、法师=法杖），主人要求还原。
             var selJob = PlayerJobDefs.GetSelected();
-            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadPlayerJobIcon(selJob));
+            playerSlot.SetJobIcon(PlayerJobDefs.TryLoadCombatBadgeIcon(selJob));
             // 第二条 = 雷击奥义充能（开关关闭也显示 0/N 空条，不隐藏）
             RefreshPlayerUltBar();
         }

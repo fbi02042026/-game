@@ -14,6 +14,27 @@ public partial class CharacterUI
 {
     Button _petEntryButton;
 
+    /// <summary>宠物入口按钮（只读静态出口，供宠物功能引导高亮指路）。</summary>
+    internal static RectTransform PetEntryRect => Instance != null && Instance._petEntryButton != null
+        ? Instance._petEntryButton.GetComponent<RectTransform>() : null;
+
+    /// <summary>
+    /// 宠物入口点击（2026-11-22）：第 3 关营救剧情（宠物功能解锁点）还没播过时，
+    /// 只提示去第 3 关，不打开宠物界面；解锁后照常打开并通知引导推进。
+    /// </summary>
+    void OnPetEntryClicked()
+    {
+        var save = SaveSystem.Instance?.Data;
+        bool unlocked = save != null && save.HasIntruderStorySeen(PetRescueStoryBeats.SeenKey);
+        if (!unlocked)
+        {
+            GlobalToastUI.ShowPersona("宠物功能要过了第三关才开哦，先把那关打通再来找我嘛～");
+            return;
+        }
+        PetUI.Open();
+        PetFeatureGuide.NotifyPetUIOpened();
+    }
+
     void EnsurePetEntry()
     {
         if (_petEntryButton != null) return;
@@ -74,7 +95,7 @@ public partial class CharacterUI
         img.raycastTarget = true;
         var btn = go.GetComponent<Button>();
         btn.targetGraphic = img;
-        btn.onClick.AddListener(() => PetUI.Open());
+        btn.onClick.AddListener(OnPetEntryClicked);
         _petEntryButton = btn;
     }
 }

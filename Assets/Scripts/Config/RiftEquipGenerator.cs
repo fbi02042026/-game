@@ -20,20 +20,24 @@ public static class RiftEquipGenerator
     /// 【2026-10-24 主人拍板】保底稀有：true 时 roll 出「普通（白）」升档为「稀有（RARE）」，
     /// 引导局（fixedForTutorial）不生效。签名末尾默认参数，既有调用点零改动。
     /// </param>
-    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0)
+    public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0, bool capToMilestone = false)
     {
         RiftEquipTables.EnsureLoaded();
         var list = new List<EquipInstance>();
         PlayerJobId job = PlayerJobDefs.GetSelected();
         for (int i = 0; i < count; i++)
         {
-            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial, forceAtLeastRare, difficulty);
+            var inst = GenerateOne(stageType, job, blacksmithLevel, attrBonus, forceWeapon, chapter, fixedForTutorial, forceAtLeastRare, difficulty, capToMilestone);
             if (inst != null) list.Add(inst);
         }
         return list;
     }
 
-    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0)
+    /// <param name="capToMilestone">
+    /// 【2026-11-22 主人拍板「降数值 / 第一章不要有高过里程武器的」】true 时第一章武器主属性 / 火伤按
+    /// combat_tuning 上限钳位。只有关卡结算掉落调用点传 true；抽奖 / 裂隙 / 商店 / 引导一律默认 false，曲线零影响。
+    /// </param>
+    public static EquipInstance GenerateOne(StageType stageType, PlayerJobId job, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0, bool capToMilestone = false)
     {
         RiftEquipTables.EnsureLoaded();
         // 【2026-11-19 R2】难度装备系数：困难+15%/噩梦+35%温和档；只算一次，引导恒 1.0（确定性不破）。
@@ -169,6 +173,26 @@ public static class RiftEquipGenerator
             v *= difficultyMul;   // 【2026-11-19 R2】每条词条同样乘在保底平移之后
             if (TryMapAttr(id, v, job, out var bonus))
                 attrs.Add(bonus);
+        }
+
+        // 【2026-11-22 主人拍板「降数值 / 第一章不要有高过里程武器的」】
+        // 只钳第一章**关卡结算掉落**的武器（capToMilestone 由 Settlement 调用点传 true）——
+        // 抽奖 / 裂隙 / 局内商店 / 引导宝箱都传默认 false，产出曲线一字不动。
+        // 钳点放在 attrs 成型后（保底平移 + 难度系数都已落定），上限真源 = combat_tuning（缺表回退默认）。
+        // 只碰主属性（攻/魔攻）与火伤；主属性封顶后不再触发保底平移（此处在平移之后，顺序无冲突）。
+        if (capToMilestone && chapter == 1 && slot.IsWeapon && !fixedForTutorial)
+        {
+            float mainCap = GameConfig.Chapter1DropWeaponMainCap;
+            float fireCap = GameConfig.Chapter1DropWeaponFireCap;
+            for (int i = 0; i < attrs.Count; i++)
+            {
+                var a = attrs[i];
+                if (a == null) continue;
+                if (a.attrType == AttrType.Attack || a.attrType == AttrType.MagicAttack)
+                    a.value = Mathf.Min(a.value, mainCap);
+                else if (a.attrType == AttrType.FireDamage)
+                    a.value = Mathf.Min(a.value, fireCap);
+            }
         }
 
         // （slotType / visual 已上移到主属性 roll 之前 —— 方案A 武器锚模板需要先拿到模板）

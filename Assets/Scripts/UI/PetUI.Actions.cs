@@ -32,6 +32,7 @@ public partial class PetUI
         SaveSystem.Instance.Save();
         GlobalToastUI.Show(def.name + " 已上阵");
         RefreshAll();
+        PetFeatureGuide.NotifyDeployed(def.id);
     }
 
     /// <summary>解锁条件文案唯一出口：点未解锁图标、点解锁按钮共用（2026-11-21）。</summary>
@@ -128,13 +129,26 @@ public partial class PetUI
     {
         // 只有上阵中的宠物能喂（规格第五节）
         if (save.petDeployedId != def.id) return;
-        int fed = save.GetPetFeedCount(PetDefs.IsSkin(def) ? def.skinOf : def.id);
+        string bodyId = PetDefs.IsSkin(def) ? def.skinOf : def.id;
+        int fed = save.GetPetFeedCount(bodyId);
         int cost = FeedCost(fed);
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, cost, false, true)) return;
-        save.SetPetFeedCount(PetDefs.IsSkin(def) ? def.skinOf : def.id, fed + 1);
+        save.SetPetFeedCount(bodyId, fed + 1);
+
+        // 2026-11-22：喂养随机给攻/血/防其中一项 +1~3，落盘（皮肤与本体共享 bodyId）。
+        string attrName;
+        int hpAdd = 0, atkAdd = 0, defAdd = 0;
+        int roll = UnityEngine.Random.Range(0, 3);
+        int amount = UnityEngine.Random.Range(1, 4);
+        if (roll == 0) { hpAdd = amount; attrName = "血量"; }
+        else if (roll == 1) { atkAdd = amount; attrName = "攻击"; }
+        else { defAdd = amount; attrName = "防御"; }
+        save.AddPetAttrBonus(bodyId, hpAdd, atkAdd, defAdd);
+
         SaveSystem.Instance.Save();
-        GlobalToastUI.Show("喂养 " + def.name + " -" + cost + " 金币，好感 +1");
+        GlobalToastUI.Show("喂养 " + def.name + " -" + cost + " 金币，好感 +1，" + attrName + " +" + amount);
         RefreshAll();
+        PetFeatureGuide.NotifyFed(def.id);
     }
 
     /// <summary>喂养定价按亲密度星级分档：1→2星 300、2→3星 400、满星后 500（规格 16:2x）。</summary>

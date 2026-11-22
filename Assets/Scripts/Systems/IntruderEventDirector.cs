@@ -19,7 +19,7 @@ public static class IntruderEventDirector
     }
 
     /// <summary>
-    /// 分派出口：按剧情节点取「敌对乱入」事件，取固定反派三人组 AssetId（批次6，非随机）。
+    /// 分派出口：按剧情节点取「敌对乱入」事件，按章取该章强盗组合 AssetId（2026-11-22 递进拍板）。
     /// 无匹配 / 抽取失败都返回 false（正常流程，不报 Error）；assetIds 为 null 时调用方不替换。
     /// </summary>
     public static bool TryPickIntruderForNode(string storyNode, int seed, out string[] assetIds)
@@ -30,7 +30,8 @@ public static class IntruderEventDirector
         {
             if (!string.Equals(rows[i].type, "Intruder", System.StringComparison.Ordinal))
                 continue;
-            return IntruderPicker.TryPick(seed, out assetIds);
+            // 章号取表行真源（与配表 replaceCount 同章），不靠 seed 反推，避免章节判据漂移。
+            return IntruderPicker.TryPick(rows[i].chapter, seed, out assetIds);
         }
         return false;
     }

@@ -74,7 +74,7 @@ public static class PetDefs
         },
         new Def {
             id="dog_fox", name="狐大仙", skinOf="dog", avatar="狐狸", prefabPath="Animal/Animal_Fox",
-            qualityStar=1, hp=120, atk=18, def=10, power=260,
+            qualityStar=1, hp=144, atk=22, def=12, power=312,
             skill="猛扑", skillIcon="猛扑", skillDesc="追残血补刀，少量物理伤害",
             unlock=UnlockType.SkinDiamond, unlockValue=SKIN_DIAMOND_PRICE,
         },
@@ -88,7 +88,7 @@ public static class PetDefs
         },
         new Def {
             id="toucan_parrot", name="复读机", skinOf="toucan", avatar="鹦鹉", prefabPath="Bird/Bird_Parrot",
-            qualityStar=1, hp=90, atk=14, def=8, power=220,
+            qualityStar=1, hp=108, atk=17, def=10, power=264,
             skill="拾金", skillIcon="拾金", skillDesc="击杀额外掉金币，伤害很低",
             unlock=UnlockType.SkinDiamond, unlockValue=SKIN_DIAMOND_PRICE,
         },
@@ -102,7 +102,7 @@ public static class PetDefs
         },
         new Def {
             id="goat_mushroom", name="菇凉", skinOf="goat", avatar="蘑菇羊", prefabPath="Goat/Goat_Mushroom",
-            qualityStar=2, hp=260, atk=12, def=24, power=380,
+            qualityStar=2, hp=312, atk=14, def=29, power=456,
             skill="羊毛盾", skillIcon="羊毛盾", skillDesc="给队友小护盾，不做治疗",
             unlock=UnlockType.SkinDiamond, unlockValue=SKIN_DIAMOND_PRICE,
         },
@@ -116,7 +116,7 @@ public static class PetDefs
         },
         new Def {
             id="lizard_fire", name="小火炭", skinOf="lizard", avatar="火蜥蜴", prefabPath="Lizard/Lizard_Fire",
-            qualityStar=4, hp=170, atk=42, def=14, power=620,
+            qualityStar=4, hp=204, atk=50, def=17, power=744,
             skill="火球术", skillIcon="火球术", skillDesc="火球小范围法伤",
             unlock=UnlockType.SkinDiamond, unlockValue=SKIN_DIAMOND_PRICE,
         },
@@ -130,7 +130,7 @@ public static class PetDefs
         },
         new Def {
             id="wolf_demon", name="影嗷", skinOf="wolf", avatar="恶魔狼", prefabPath="Wolf/Wolf_Demon",
-            qualityStar=3, hp=200, atk=34, def=12, power=500,
+            qualityStar=3, hp=240, atk=41, def=14, power=600,
             skill="裂爪", skillIcon="裂爪", skillDesc="换皮后变远程暗影箭，同强度",
             rangedAfterSkin=true,
             unlock=UnlockType.SkinDiamond, unlockValue=SKIN_DIAMOND_PRICE,

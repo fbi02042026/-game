@@ -23,6 +23,7 @@ public partial class BattleManager
     {
         if (_petRescueHookFired) return false;
         if (!IsFormalMainRun) return false;                 // 只正式主线
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;   // 剧情只普通难度：困难/噩梦不播（与项目主线剧情统一口径）
         var cm = ChapterManager.Instance;
         if (cm == null || cm.currentChapter != 1 || cm.currentGrand != 1) return false;
         if (cm.CurrentSubIndex0 != 2) return false;         // 1-3（0 基 sub0=2）
@@ -69,6 +70,11 @@ public partial class BattleManager
             data.MarkIntruderStorySeen(PetRescueStoryBeats.SeenKey);
             SaveSystem.Instance.Save();
             Debug.Log("[PetRescue] 营救成功，预解锁 " + PetRescueStoryBeats.DogId);
+
+            // 【2026-11-22 补】兑现 PetRescueStoryBeats 头部承诺「末波精英战狗回归助战」：
+            // 营救播完即让狗中途归队进 allyUnits（与开战上阵共用 SpawnBattlePet 出口），
+            // 这样末波精英战时狗已在场、按 Pet/Skills 全套 AI 帮忙打。不写 petDeployedId。
+            DeployRescuedPet();
         }
 
         _preBattleStoryPlaying = prevGate;

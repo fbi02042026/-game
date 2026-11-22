@@ -129,11 +129,19 @@ public partial class PetUI
     void Select(int idx)
     {
         if (idx < 0 || idx >= _rowGos.Count) return;
+        var save = SaveSystem.Instance?.Data;
+        var clicked = idx < PetDefs.Bodies.Count ? PetDefs.Bodies[idx] : null;
+        // 未解锁宠物不能被选择：只弹一次解锁条件 toast，不切选中态、不刷详情。
+        // 不刷详情 = 不出它的立绘，也不进入「解锁/上阵」按钮态（detail 只跟已选项走）。
+        // 真源 IsPetUnlocked：测试全解锁开关打开时恒真，调试期照旧可选。
+        if (clicked != null && save != null && !save.IsPetUnlocked(clicked.id))
+        {
+            ShowUnlockHint(clicked, save);
+            return;
+        }
         _selectedIndex = idx;
         for (int i = 0; i < _rowSelects.Count; i++)
             if (_rowSelects[i] != null) _rowSelects[i].SetActive(i == idx);
-        // 点未解锁宠物图标 → 弹解锁条件（点「解锁」按钮时 Actions 里再弹一次）
-        ShowUnlockHint(SelectedDef, SaveSystem.Instance?.Data);
         RefreshDetail();
     }
 
@@ -149,6 +157,9 @@ public partial class PetUI
             var def = bodies[i];
             var spr = PetDefs.LoadAvatar(def.id);
             if (_rowPortraits[i] != null) _rowPortraits[i].sprite = spr;
+            // 11-22 列表图标框底按稀有度上色，色值 = 详情名字色同一出口（RarityPalette）。
+            // 只换底框 Image.color，不碰头像图/节点尺寸/锚点；未解锁宠物框同样按自身稀有度显示。
+            if (_rowBgs[i] != null) _rowBgs[i].color = QualityNameColor(def.qualityStar);
             bool unlocked = save != null && save.IsPetUnlocked(def.id);
             if (_rowLocks[i] != null) _rowLocks[i].SetActive(!unlocked);
             // 主人 11-21：未获得/未解锁的头像显示暗色（置灰），已解锁恢复原色

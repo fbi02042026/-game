@@ -21,22 +21,47 @@ public static class IntruderPicker
     /// 三档均为非 101 模板：玩家六职业 MercAssetId 全是 *101（PlayerJobDefs.cs:77-191），
     /// 救场小队 dunbing203/gongshou101/naima102（MercRosterDefs），零撞脸。
     /// </summary>
-    static readonly string[] FixedBanditAssetIds =
-    {
-        "zhongzhan201",   // 独眼老雷 · 重武大哥（稀有档重武者）
-        "fashi202",       // 夜薇 · 女法师（雷系稀有档）
-        "kuangzhan201",   // 阿刃 · 狂战小弟（稀有档狂战士）
-    };
+    const string BanditBoss = "zhongzhan201";   // 独眼老雷 · 重武大哥（稀有档重武者）
+    const string BanditWitch = "fashi202";      // 夜薇 · 女法师（雷系稀有档）
+    const string BanditBlade = "kuangzhan201";  // 阿刃 · 狂战小弟（稀有档狂战士）
 
     /// <summary>
-    /// 批次6 拍板：固定返回反派三人组（不再随机抽）。seed 保留入参仅作日志回溯，不参与抽取。
+    /// 【2026-11-22 主人拍板】强盗贯穿8章、出场组合按章递进（小弟→大哥→2人→女法→远近→坦法→三人组→三人组）。
+    /// 🔴 组合真源只此一处；intruder_event.csv 的 replaceCount 必须与本数组长度逐章一致（不一致 Execute 会槽位越界回落普通怪）。
+    /// 顺序即站位/对白出场序：老雷=大哥(坦) / 夜薇=女法(远) / 阿刃=小弟(近)。
+    /// </summary>
+    public static string[] BanditIdsForChapter(int chapter)
+    {
+        switch (chapter)
+        {
+            case 1: return new[] { BanditBlade };                         // 小弟初遇
+            case 2: return new[] { BanditBoss };                          // 大哥单挑
+            case 3: return new[] { BanditBlade, BanditBoss };             // 小弟+大哥
+            case 4: return new[] { BanditWitch };                         // 女法初遇
+            case 5: return new[] { BanditWitch, BanditBlade };            // 远近搭配
+            case 6: return new[] { BanditBoss, BanditWitch };             // 坦法搭配
+            case 7: return new[] { BanditBoss, BanditWitch, BanditBlade }; // 三人组
+            case 8: return new[] { BanditBoss, BanditWitch, BanditBlade }; // 三人组终章
+            default:
+                Debug.LogError($"[IntruderPicker] 未登记的强盗章节 chapter={chapter}，无组合（配表章节只应 1~8）");
+                return System.Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// 按章返回固定组合（不再随机抽）。seed 保留入参仅作日志回溯，不参与抽取。
     /// 下方旧随机抽取逻辑（BuildExcludedAssetIds / BuildPool / TryExcludeSquadAssetId）
     /// 保留空转（同 FORMAL_ROUND_WAVE_CUT* 先例）：若回滚随机口径可整体复用，勿删。
     /// </summary>
-    public static bool TryPick(int seed, out string[] assetIds)
+    public static bool TryPick(int chapter, int seed, out string[] assetIds)
     {
-        assetIds = (string[])FixedBanditAssetIds.Clone();
-        Debug.Log($"[IntruderPicker] 固定反派三人组 seed={seed} ids={string.Join(",", assetIds)}");
+        assetIds = BanditIdsForChapter(chapter);
+        if (assetIds == null || assetIds.Length == 0)
+        {
+            assetIds = null;
+            return false;
+        }
+        Debug.Log($"[IntruderPicker] 第{chapter}章强盗组合 seed={seed} ids={string.Join(",", assetIds)}");
         return true;
     }
 

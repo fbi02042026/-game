@@ -428,8 +428,16 @@ public partial class TutorialDirector
 
     IEnumerator PlayOpeningIntroIfNeeded()
     {
-        // 卡顿修复：Loading 刚收、城镇首帧渲染的重活压在最前几帧上，
-        // 多等 2 帧让它们落在 TownIntroVeil 纯黑上，别撞进片头起播。
+        // 【2026-11-22 片头黑屏根因修复】进镇预热 CoWarmupPages（AdventureUI.ShowPage→ApplyAdventureFit）
+        // 是与本协程并发的独立协程，重活占满主线程 1.78s，VideoPlayer 时钟在 Play 后停在 frame=0/time=0，
+        // 表现就是「黑屏几秒才出画面」。旧逻辑只等 2 帧拦不住预热。改成等预热收起后再起播，
+        // 让预热落在 TownIntroVeil 纯黑下，不撞进片头。8s 超时兜底：预热协程缺位时不永久饿死片头。
+        float warmupWait = 0f;
+        while (!TownHubController.WarmupDone && warmupWait < 8f)
+        {
+            warmupWait += Time.unscaledDeltaTime;
+            yield return null;
+        }
         yield return null;
         yield return null;
 
@@ -629,7 +637,7 @@ public partial class TutorialDirector
         }
 
         // 收尾链压轴：装备小提示（每日登录关掉之后，屏幕上始终只有一件事）
-        // 【2026-11-15】这一条比引导里的其它提示小一档：字 28、上下留白 16（框跟着矮一截）。
+        // 【2026-11-15】这一条字号比引导里的其它提示小一档：字 28；上下留白 48（2026-11-22 由 24 再翻倍，框高随留白自适应）。
         // 只经 Show 的单次 layout 传入，Hide 即清空；全局常量与其余引导一字不动。
         // 【2026-11-16】这条是对话类叙述，必须用默认对话底框（深蓝金引导底框）。箭头气泡只给提示类用。
         // 若此刻正好有「换人引导 / 可升星」箭头气泡在显示（其 5s 计时未到），它的一次性底框会串到本条上：
@@ -656,7 +664,7 @@ public partial class TutorialDirector
             {
                 FontSize = 28,
                 PadX = 40f,
-                PadY = 16f,
+                PadY = 48f,
                 LineSpacing = 1.2f,
             });
         // Show 内部遇战斗头顶台词会直接 return：没真显示出来就把一次性点击标志退掉，防串给下一条引导

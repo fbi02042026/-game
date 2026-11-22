@@ -883,6 +883,10 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         // 换下谁，先记下来（穿成功后再分解它）
         var old = GetEquippedInSlot(slot);
 
+        // 【2026-11-22 动态难度】战力增量必须在 EquipItem 之前取：穿上后当前穿戴已含新件，
+        // EquipSwapPowerDelta 差值会归零。真获得才算（开局发装 countsAsObtain=false 不算）。
+        int adaptivePowerGain = countsAsObtain ? AdaptiveDifficulty.PowerGainBeforeEquip(equip) : 0;
+
         var tmp = new BackpackItem
         {
             equip = equip,
@@ -898,6 +902,9 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
         {
             AchievementSystem.Instance?.OnObtainEquip(equip.rarity);
             AdventureLogAchievements.OnEquipPicked();
+            // 【2026-11-22 动态难度】战力涨幅达标 → 接下来两局冒险放水（真源 AdaptiveDifficulty）。
+            // 复用 countsAsObtain 闸：开局系统发装/还原不算「获得」，不触发。
+            AdaptiveDifficulty.OnEquipGained(adaptivePowerGain);
         }
 
         if (old != null && old != equip)

@@ -2207,7 +2207,9 @@ public partial class BattleManager
         // 多出的奖励件直接折金，三选一只展示 3 张
         int blacksmithLevel = TownSystem.Instance != null ? TownSystem.Instance.GetBuildingLevel(BuildingType.Blacksmith) : 1;
         List<EquipInstance> rewards = (DropsEquipment && ConfigManager.Instance != null)
-            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS, false, ch, difficulty: BattleDifficulty)
+            // 【2026-11-22 主人拍板「降数值 / 第一章不要有高过里程武器的」】唯一开启点：关卡结算掉落三选一。
+            // 抽奖（DraftPool）/ 引导宝箱 / 裂隙宝箱 / 局内商店都走同一出口但不传此参数，产出零影响。
+            ? ConfigManager.Instance.GetRandomEquipInstances(equipCount, blacksmithLevel, bonusStar, currentStage.type, GameConfig.RIFT_DROP_ATTR_BONUS, false, ch, difficulty: BattleDifficulty, capToMilestone: true)
             : new List<EquipInstance>();
 
         if (rewards != null && rewards.Count > 3)
@@ -2464,6 +2466,20 @@ public partial class BattleManager
         // 必须夹在 PersistBattleGold（关卡金先进 GoldEarned）与 OnStageComplete（写 clearedStages）之间，
         // 否则首通判定/金币差值都会少一笔（见 RecordStageRewardNoticeIfFirstClear）。
         RecordStageRewardNoticeIfFirstClear();
+        // 【2026-11-22 宠物功能引导】1-3 正式主线首次通关 → 落一个 pending，回城消费：
+        // 开冒险页 + 前台小姐告知「宠物功能已开启」+ 引导上阵/喂养。判定只认正式主线 1-3，
+        // 其它玩法（裂隙/竞技场/活动本）不触发；一次性标记写在存档，不重播。
+        // ⚠ 必须早于 OnStageComplete()——那一步会把 currentStageIndex 推进到下一关，判据会失效。
+        if (IsFormalMainRun && NormalOnlyContentAllowed(BattleDifficulty))
+        {
+            var guideCm = ChapterManager.Instance;
+            if (guideCm != null && guideCm.currentChapter == 1 && guideCm.currentGrand == 1
+                && guideCm.CurrentSubIndex0 == 2)
+                PetFeatureGuide.MarkClearedStage13();
+        }
+        // 【2026-11-22 动态难度】过关推进橡皮筋：清本关失败数 + 判定缓坡/陡坡（真源 AdaptiveDifficulty）。
+        // ⚠ 必须在 OnStageComplete() 之前——那一步会推进 currentStageIndex，key 会变成下一关。
+        AdaptiveDifficulty.OnStageCleared();
         ChapterManager.Instance?.OnStageComplete();
 
         int ch = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : CurrentChapter;
@@ -3245,6 +3261,9 @@ public partial class BattleManager
         // 2026-10-09 主人拍板：通关回城也要清掉中断快照，否则通关落盘的金币会在崩溃恢复时被重复入账
         // （金币已在 FinishStageAfterPortalReached → PersistBattleGold 落盘一次，快照不清 = 下次启动 SettleInterruptedRun 再追加一次）
         BattleStateSaver.Instance?.ClearBattleState();
+        // 【2026-11-21 主人报「战斗结束后这个界面还带出到冒险界面」】换装确认弹窗是 DDOL 独立 Canvas，
+        // 切场景不自关；收尾统一关掉它（Merc/Skill 两个获得弹窗另由抽奖面板入口关）。
+        EquipReplaceConfirmUI.CloseIfOpen();
         GameSceneManager.Instance?.ReturnToTown();
     }
 

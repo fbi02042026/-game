@@ -76,14 +76,33 @@ public class PetBattleBanter : MonoBehaviour
     static string PickCry(string petDefId)
     {
         if (string.IsNullOrEmpty(petDefId)) return null;
-        string[] cries;
-        if (petDefId.StartsWith("dog"))          cries = DogCries;
-        else if (petDefId.StartsWith("toucan"))  cries = BirdCries;
-        else if (petDefId.StartsWith("goat"))    cries = GoatCries;
-        else if (petDefId.StartsWith("lizard"))  cries = LizardCries;
-        else if (petDefId.StartsWith("wolf"))    cries = WolfCries;
-        else return null;
-        return cries[Random.Range(0, cries.Length)];
+        string[] cries = CriesOf(petDefId);
+        return cries != null && cries.Length > 0 ? cries[Random.Range(0, cries.Length)] : null;
+    }
+
+    /// <summary>叫声表按物种取（与 PickCry 共用同一真源）。</summary>
+    static string[] CriesOf(string petDefId)
+    {
+        if (string.IsNullOrEmpty(petDefId)) return null;
+        if (petDefId.StartsWith("dog"))          return DogCries;
+        if (petDefId.StartsWith("toucan"))       return BirdCries;
+        if (petDefId.StartsWith("goat"))         return GoatCries;
+        if (petDefId.StartsWith("lizard"))       return LizardCries;
+        if (petDefId.StartsWith("wolf"))         return WolfCries;
+        return null;
+    }
+
+    /// <summary>
+    /// 宠物「叫两声」台词出口（2026-11-22 宠物功能引导用）：取叫声表相邻两句，保证两声不同。
+    /// 真源仍是下面各物种常量表，不新增台词表；城镇气泡只借用叫声，不改战斗闲聊逻辑。
+    /// </summary>
+    public static string[] GetTwoCries(string petDefId)
+    {
+        string[] cries = CriesOf(petDefId);
+        if (cries == null || cries.Length == 0) return System.Array.Empty<string>();
+        int a = Random.Range(0, cries.Length);
+        int b = cries.Length > 1 ? (a + 1) % cries.Length : a;
+        return new[] { cries[a], cries[b] };
     }
 
     static readonly string[] DogCries = { "汪汪！", "汪呜——", "嗷汪！" };

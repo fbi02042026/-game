@@ -640,42 +640,26 @@ public class PlayerJobSelectUI : MonoBehaviour
         _ = isPrefabBuild;
     }
 
+    /// <summary>【2026-11-22 主人拍板】三张职业卡位置固定：剑盾 → 游侠 → 法师，不再随机切换位置。
+    /// 开/关职业的单一真源仍是 PlayerJobDefs.Playable（只定「有哪些职业」，这里只定「什么顺序」）：
+    /// 按固定顺序逐个取开放职业，未开放的跳过 —— 不写死三张卡的下标，也不另造第二份职业池。</summary>
+    static readonly PlayerJobId[] CardOrder =
+    {
+        PlayerJobId.SwordShield,
+        PlayerJobId.Ranger,
+        PlayerJobId.Mage
+    };
+
     void RollOffers(bool forceSwordFirst)
     {
         _offer.Clear();
-        // 【2026-10-11 主人拍板】只从**开放职业**里出牌（剑盾 / 法师 / 游侠），
-        // 不再从 PlayerJobDefs.All 全量池里随机 —— 单一出口：要开/关职业改 PlayerJobDefs.Playable。
-        var pool = new List<PlayerJobId>();
-        for (int i = 0; i < PlayerJobDefs.Playable.Length; i++)
-            pool.Add(PlayerJobDefs.Playable[i]);
-
-        int want = Mathf.Min(3, pool.Count);
-        if (forceSwordFirst)
-        {
-            _offer.Add(PlayerJobId.SwordShield);
-            pool.Remove(PlayerJobId.SwordShield);
-            Shuffle(pool);
-            for (int i = 0; i < want - 1 && i < pool.Count; i++)
-                _offer.Add(pool[i]);
-        }
-        else
-        {
-            Shuffle(pool);
-            for (int i = 0; i < want && i < pool.Count; i++)
-                _offer.Add(pool[i]);
-        }
+        // 【2026-11-22 主人拍板】固定顺序出牌，不再 Shuffle 随机换位。
+        // 引导局（forceSwordFirst）剑盾本就排在首位；「只能选剑盾」的拦截在 OnCardClicked / OnEnterRift
+        // 走 RequireSwordShield，与排位无关，故两种模式统一走同一套固定顺序。
+        for (int i = 0; i < CardOrder.Length; i++)
+            if (PlayerJobDefs.IsPlayable(CardOrder[i]))
+                _offer.Add(CardOrder[i]);
         _selected = null;
-    }
-
-    static void Shuffle(List<PlayerJobId> list)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
-        {
-            int j = UnityEngine.Random.Range(0, i + 1);
-            var tmp = list[i];
-            list[i] = list[j];
-            list[j] = tmp;
-        }
     }
 
     void OnRefresh()

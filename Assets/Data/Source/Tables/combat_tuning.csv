@@ -19,6 +19,9 @@ EQUIP_ATK_TIER_RARE_LO,2.6,稀有档攻击下限系数
 EQUIP_ATK_TIER_RARE_HI,3.6,稀有档攻击上限系数
 EQUIP_ATK_TIER_LEGEND_LO,4.8,传奇档攻击下限系数
 EQUIP_ATK_TIER_LEGEND_HI,6.8,传奇档攻击上限系数
+# ---- 第一章关卡掉落武器上限（2026-11-22 主人拍板「降数值 / 第一章不要有高过里程武器的」；只作用关卡结算掉落，抽奖/裂隙/商店/引导不受影响） ----
+CHAPTER1_DROP_WEAPON_MAIN_CAP,10,第一章关卡掉落武器主属性(攻/魔攻)上限（里程暮火之杖模板魔攻9.57×稀有1.15≈11，留一档余量）
+CHAPTER1_DROP_WEAPON_FIRE_CAP,7,第一章关卡掉落武器火伤词条上限（里程暮火随机火伤词条8点，留一档余量）
 # ---- 波次节奏（WavePlanner；只调波数与每波人数，不改敌人数值） ----
 AFFIX_SECOND_FROM_CHAPTER,4,精英/Boss 词缀：第几章开始有几率出 2 个词缀
 AFFIX_SECOND_CHANCE,0.3,精英/Boss 词缀：出第 2 个词缀的概率

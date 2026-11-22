@@ -103,6 +103,9 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
     void StartNewRunInternal()
     {
         Debug.Log("[BattleManager] ===== StartNewRun 开始 =====");
+        // 【2026-11-22 动态难度】消耗一局强武器送暖额度（真源 AdaptiveDifficulty）。
+        // 放在进本最前：获得当局不消耗，下一局起算「接下来两局」，放水在 GetScale 里生效。
+        AdaptiveDifficulty.OnRunStarted();
         StopBattleSpawnCoroutines();
         // 新一局：清空「章内不重复」的关卡模式记录，重新洗牌（V3.0 起模式允许重复，此处仅清压力阀）
         StageModeTable.ResetRun();

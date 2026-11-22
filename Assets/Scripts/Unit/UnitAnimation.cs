@@ -61,6 +61,13 @@ public class UnitAnimation : MonoBehaviour
     public float procMoveAmount = 0.08f;
     [Tooltip("移动倾斜角度")]
     public float procMoveTilt = 5f;
+    // clip 模式（怪物 run.anim）走路的上下起伏：run.anim 只烘焙了 x 位移+z 倾斜，没有 y 弹跳，
+    // 纯靠它走路看着像平移。这里在 LateUpdate 给 Monsters 子节点叠一条 y bob（世界单位，按根缩放换算），
+    // 只影响怪物 clip 模式，不碰 run.anim / idle.anim、不碰 AI 位移。幅度/速度与程序化模式观感对齐。
+    [Tooltip("clip 模式走路上下起伏幅度（世界单位）")]
+    public float clipWalkBobAmount = 0.06f;
+    [Tooltip("clip 模式走路上下起伏速度")]
+    public float clipWalkBobSpeed = 6f;
     [Tooltip("攻击拉伸幅度")]
     public float procAttackStretch = 0.2f;
     [Tooltip("死亡淡出时间")]
@@ -534,6 +541,34 @@ public class UnitAnimation : MonoBehaviour
         _squashUntil = Time.unscaledTime + HitSquashDur;
     }
 
+    /// <summary>
+    /// clip 模式（怪物 run.anim）走路的上下起伏：run.anim 只烘焙了 x 位移 + z 倾斜，没有 y 弹跳，
+    /// 单靠它走看着像平移。这里在 LateUpdate 把 body(Monsters 子节点) 的 localPosition.y 写成一条
+    /// 正弦 bob，压过 Animator 每帧写回的 0。必须在 LateUpdate 写才不被 Animator 抹掉。
+    /// 站定 / 攻击 / 受击 / 死亡时不写，交给 Animator 的 idle/attack/dead 片段，y 自然归零。
+    /// 只碰 body 的 y，x 位移与 z 钳制仍归 run.anim / Stabilize，AI 位移在更高层不受影响。
+    /// </summary>
+    void ApplyMonsterWalkBob()
+    {
+        if (!_monsterClipMode || !_isMoving || _isDead
+            || _attackAnimLock > 0f || _hitAnimLock > 0f)
+            return;
+        Transform body = GetMonsterBodyTransform();
+        if (body == null) return;
+
+        // 幅度是世界单位，换算成 body 的 local：body 的 localPosition 在父(Visual 根)坐标系下，
+        // 父的 lossyScale 含 MoveRoot.rootScale（普通/精英差 1.3 倍），不换算会让精英弹得更高。
+        Transform parent = body.parent;
+        float lossy = parent != null ? Mathf.Max(0.001f, Mathf.Abs(parent.lossyScale.y)) : 1f;
+        float ampLocal = clipWalkBobAmount / lossy;
+        // 相位按实例 id 错开，避免一波怪齐刷刷一起起伏。
+        float phase = Time.time * clipWalkBobSpeed + (GetInstanceID() & 0x7fff) * 0.001f;
+        float bob = Mathf.Abs(Mathf.Sin(phase)) * ampLocal;
+        Vector3 lp = body.localPosition;
+        if (Mathf.Abs(lp.y - bob) > 0.0001f)
+            body.localPosition = new Vector3(lp.x, bob, lp.z);
+    }
+
     /// <summary>把挤压系数叠到本帧最终 localScale 上。由 LateUpdate 调用，才能压过 Animator。</summary>
     void ApplyHitSquash()
     {
@@ -725,7 +760,10 @@ public class UnitAnimation : MonoBehaviour
     void LateUpdate()
     {
         if (_monsterClipMode)
+        {
             StabilizeMonsterBodyTransform();
+            ApplyMonsterWalkBob();
+        }
 
         // 受击挤压：必须在 LateUpdate 叠——Animator 会在 Update 之后重写 scale，早于此会被抹掉
         ApplyHitSquash();

@@ -286,6 +286,13 @@ public partial class Monster
         // 【2026-10-23 主人拍板「引导的不要动」】新手引导战两条线都不吃——
         // 引导局怪物（血/攻）保持 10-22 削弱批次之前的原始数值。
         bool isTutorialRun = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        // 【2026-11-22 自检收口】玩法身份只判一次：下方词缀池(414) 与后期加强(376) 共用本变量，
+        // 杜绝两处各读一次 IsFormalMainRun 将来判据漂移。
+        bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
+        // 【2026-11-22 新增】动态难度唯一出口：整体+10% / 失败3次放水 / 过关橡皮筋 / 强武器送暖
+        // 全部由 AdaptiveDifficulty.GetScale 合成（内部自行取关卡上下文），三处最终 attr 写入统一乘它。
+        // 引导局恒 1、竞技场不走本生成链，均零影响。
+        float adaptiveScale = AdaptiveDifficulty.GetScale();
         float hpGlobalMul = endlessRift || isTutorialRun ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
         // 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2（真源 GameConfig.BOSS_*_MUL）。
         // 放在最终写 attr 处，物理 / 魔法两条攻击线都吃到；非 Boss 恒 x1。
@@ -370,10 +377,21 @@ public partial class Monster
         float ch1FinalBossHpMul = devFinalStage && bossUnit && gChapter == 1
             ? GameConfig.CH1_FINAL_BOSS_HP_MUL : 1f;
 
+        // 【2026-11-22 主人拍板】1章3关起后期加强：精英/Boss(含10号小BOSS) 血×2 攻×1.5，其余小怪血攻×1.3。
+        // 判据与倍率唯一真源 GameConfig.LateGameBuffActive / LATE_*_MUL；isTutorialRun 在上方 288 行已取。
+        // 怪类判据与下方挂词缀同源：eliteWave(138) / _isBossUnit(180，含 spriteIndex>=10 的小BOSS)。
+        bool lateGameBuff = GameConfig.LateGameBuffActive(
+            chapter, stageIdx0, isTutorialRun, endlessRift, formalMainRun);
+        bool lateEliteOrBoss = eliteWave || _isBossUnit;
+        float lateHpMul = !lateGameBuff ? 1f
+            : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_HP_MUL : GameConfig.LATE_MOB_HP_MUL);
+        float lateAtkMul = !lateGameBuff ? 1f
+            : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_ATK_MUL : GameConfig.LATE_MOB_ATK_MUL);
+
         // 【2026-11-15】裂隙精英血量加倍：裂隙不走 chapterFirstHpRule 的大血量档，单独补一档。
         // 只判裂隙 + 精英槽位，Boss / 小怪 / 其它玩法一律 ×1，行为零变化。
         float endlessEliteHpMul = endlessRift && eliteWave ? GameConfig.ENDLESS_ELITE_HP_MUL : 1f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul);
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul * lateHpMul * adaptiveScale);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
         // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；
@@ -396,7 +414,6 @@ public partial class Monster
         // 表定词条怪 / 精英 / Boss 都会挂上词缀（下方挂词缀与这里共用同一份解析结果，不写第二份判定）；
         // 精英与 Boss 走 RollAndAttach 恒会掷到至少 1 个词缀，其余普通小怪不挂。
         var tableAffixes = MonsterAffixDefs.ParseAffixList(template != null ? template.tableAffix : null);
-        bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
         // 【2026-11-15 主人口径「让裂隙也刷表定词条怪」】主线正式关与无限裂隙都挂表定词缀；
         // 引导 / 活动副本 / 支线岛 / 竞技场仍不挂（它们没有词条怪配额池，护住原有体验）。
         bool affixRunAllowed = formalMainRun || endlessRift;
@@ -421,12 +438,12 @@ public partial class Monster
             float baseMagDef = (template != null && template.baseMagicDefense > 0f)
                 ? template.baseMagicDefense
                 : baseDef * GameConfig.MONSTER_MAGIC_DEF_RATIO;
-            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk);
+            attr.SetAttr(AttrType.MagicAttack, baseMagAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk * lateAtkMul * adaptiveScale);
             attr.SetAttr(AttrType.MagicDefense, baseMagDef * mobScale * devDef);
         }
         else
         {
-            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk);
+            attr.SetAttr(AttrType.Attack, baseAtk * atkScale * waveMul * GameConfig.MONSTER_DAMAGE_MULTIPLIER * atkTtkMul * earlyAtkMul * bossAtkMul * devAtk * lateAtkMul * adaptiveScale);
             attr.SetAttr(AttrType.Defense, baseDef * mobScale * devDef);
             attr.SetAttr(AttrType.MagicAttack, 0f);
             attr.SetAttr(AttrType.MagicDefense, 0f);

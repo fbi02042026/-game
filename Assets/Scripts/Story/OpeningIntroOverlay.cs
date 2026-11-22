@@ -277,7 +277,7 @@ public class OpeningIntroOverlay : MonoBehaviour
                 yield return null;
             }
             bool timedOut = !_firstFrameShown && !_skipRequested;
-            Debug.Log("[IntroDiag] FirstFrameGateEnd@" + Time.realtimeSinceStartup.ToString("F3") + " wall=" + gateT.ToString("F2") + " frame=" + _videoPlayer.frame + " shown=" + _firstFrameShown + " timeout=" + timedOut + " skip=" + _skipRequested);
+            Debug.Log("[IntroDiag] FirstFrameGateEnd@" + Time.realtimeSinceStartup.ToString("F3") + " wall=" + gateT.ToString("F2") + " frame=" + _videoPlayer.frame + " time=" + _videoPlayer.time.ToString("F2") + " tex=" + (_videoPlayer.texture != null) + " shown=" + _firstFrameShown + " timeout=" + timedOut + " skip=" + _skipRequested);
             if (timedOut)
                 Debug.LogWarning("[OpeningIntro] 首帧事件超时(" + gateMax.ToString("F1") + "s)，强制露画面；请检查 VideoPlayer.frameReady 是否正常触发");
 

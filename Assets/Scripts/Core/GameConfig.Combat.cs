@@ -971,6 +971,15 @@ public static partial class GameConfig
         : rarityId == "LEGEND" ? CombatTuningTable.Get("EQUIP_ATK_TIER_LEGEND_HI", 6.8f)
         : CombatTuningTable.Get("EQUIP_ATK_TIER_NORMAL_HI", 2.0f);
 
+    // ===== 【2026-11-22 主人拍板「降数值 / 第一章不要有高过里程武器的」】第一章关卡掉落武器上限 =====
+    // 真源 combat_tuning 表，缺表回退默认值（= 改动前不钳的上限值，行为不变可随时回退）。
+    // 只在关卡结算掉落调用点（BattleManager.Settlement 传 capToMilestone:true）生效，
+    // 抽奖 / 裂隙宝箱 / 局内商店 / 引导宝箱沿用 GenerateOne 默认 false，曲线一字不动。
+    /// <summary>第一章关卡掉落武器主属性（攻 / 魔攻）上限。默认 10 = 里程暮火之杖模板魔攻 9.57×稀有系数附近。</summary>
+    public static float Chapter1DropWeaponMainCap => CombatTuningTable.Get("CHAPTER1_DROP_WEAPON_MAIN_CAP", 10f);
+    /// <summary>第一章关卡掉落武器火伤词条上限。默认 7 = 略低于里程暮火随机火伤 8 点。</summary>
+    public static float Chapter1DropWeaponFireCap => CombatTuningTable.Get("CHAPTER1_DROP_WEAPON_FIRE_CAP", 7f);
+
     // ===== 2026-09-21：以下 15 项已迁 combat_tuning 表，默认值 = 原硬编码值（零行为变化）=====
     /// <summary>精英额外 TTK 血量倍率（叠在章节系数上）</summary>
     public static float ELITE_TTK_HP_MUL => CombatTuningTable.Get("ELITE_TTK_HP_MUL", 1.15f);
@@ -1168,6 +1177,25 @@ public static partial class GameConfig
         // 表内 8 章直查；第 9 章及以后（越界续算篇）按尾档 0.75（与 chapter_stat_scale 越界同口径：不抛错续算）
         return ch <= ChapterAtkMulTable.Length ? ChapterAtkMulTable[ch - 1] : ChapterAtkMulTable[ChapterAtkMulTable.Length - 1];
     }
+
+    // 【2026-11-22 主人拍板】1章3关起（含全部玩法 + 裂隙）后期加强，判据与倍率的唯一出口。
+    // 精英 / 小BOSS(10号) / 真Boss(11,12)：血×2 攻×1.5；其余小怪（含 3~6 号表定词条怪）血攻各 ×1.3。
+    // 门槛：主线 chapter>1 或 (chapter==1 && stageIdx0>=2)（stageIdx0 0 起，2 = 第3关）；
+    //       裂隙无「1章3关」映射，作为后期内容恒吃；活动副本/支线岛/竞技场等非主线玩法同样恒吃。
+    // 引导局恒不吃（沿用既有「引导的不要动」口径）。
+    public const float LATE_ELITE_BOSS_HP_MUL = 2f;
+    public const float LATE_ELITE_BOSS_ATK_MUL = 1.5f;
+    public const float LATE_MOB_HP_MUL = 1.3f;
+    public const float LATE_MOB_ATK_MUL = 1.3f;
+
+    public static bool LateGameBuffActive(int chapter, int stageIdx0, bool isTutorialRun, bool endlessRift, bool formalMainRun)
+    {
+        if (isTutorialRun) return false;
+        if (endlessRift || !formalMainRun) return true;
+        if (chapter > 1) return true;
+        return chapter == 1 && stageIdx0 >= 2;
+    }
+
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
     public const int EQUIP_CHOOSE_COUNT = 3; // 每关结束三选一装备
     public const int MAX_EQUIP_SLOT = 7; // 身上装备槽位数量：头/胸/手/脚/披风/主手/副手（已改为包内同部位唯一，无穿戴槽）

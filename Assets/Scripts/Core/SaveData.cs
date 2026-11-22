@@ -16,6 +16,27 @@ public class StringIdEntry
     public string id;
 }
 
+/// <summary>JsonUtility 可序列化的宠物喂养随机属性加成条目（键 = 本体 id）。</summary>
+[Serializable]
+public class PetAttrBonusEntry
+{
+    public string id;
+    public int hp;
+    public int atk;
+    public int def;
+}
+
+/// <summary>JsonUtility 可序列化的动态难度橡皮筋阶段条目（键 = 玩法 mode，2026-11-22）。</summary>
+[Serializable]
+public class AdaptiveRubberEntry
+{
+    public string mode;
+    /// <summary>0 无 / 1 过关后缓坡 / 2 陡坡反超。</summary>
+    public int phase;
+    /// <summary>当前阶段剩余关数。</summary>
+    public int left;
+}
+
 /// <summary>JsonUtility 可序列化的 int id 条目。</summary>
 [Serializable]
 public class IntIdEntry
@@ -2670,6 +2691,11 @@ public class SaveData
     public string petDeployedId = "";
     /// <summary>每只宠物的喂养次数（5 次/亲密度星，15 次满）；键 = 本体 id。</summary>
     public List<StringIntEntry> petFeedCounts = new List<StringIntEntry>();
+    /// <summary>
+    /// 宠物喂养随机属性加成（2026-11-22 新增）：每次喂养给攻/血/防其中一项 +1~3，累计落盘。
+    /// 键 = 本体 id（皮肤与本体共享，口径同 petFeedCounts）。JsonUtility 自动序列化，无需镜像。
+    /// </summary>
+    public List<PetAttrBonusEntry> petAttrBonuses = new List<PetAttrBonusEntry>();
     /// <summary>累计看广告次数（灰狼解锁计数，与现有 adXxx 计数互不干扰）。</summary>
     public int petAdWatchCount = 0;
     /// <summary>满星礼物盒：上次领取的日期 key（跨天刷新，本地日期）。</summary>
@@ -2719,6 +2745,44 @@ public class SaveData
             if (petFeedCounts[i] != null && petFeedCounts[i].id == bodyId) { petFeedCounts[i].value = n; return; }
         petFeedCounts.Add(new StringIntEntry { id = bodyId, value = n });
     }
+
+    /// <summary>某本体的喂养随机属性加成（只读；无记录返回空条目，调用方不持有引用）。</summary>
+    public PetAttrBonusEntry GetPetAttrBonus(string bodyId)
+    {
+        if (string.IsNullOrEmpty(bodyId) || petAttrBonuses == null) return null;
+        for (int i = 0; i < petAttrBonuses.Count; i++)
+            if (petAttrBonuses[i] != null && petAttrBonuses[i].id == bodyId) return petAttrBonuses[i];
+        return null;
+    }
+
+    /// <summary>
+    /// 累加某本体的喂养属性加成（2026-11-22）。hp/atk/def 传增量（可为 0），皮肤与本体共享键由调用方保证。
+    /// </summary>
+    public void AddPetAttrBonus(string bodyId, int hp, int atk, int def)
+    {
+        if (string.IsNullOrEmpty(bodyId)) return;
+        petAttrBonuses ??= new List<PetAttrBonusEntry>();
+        var e = GetPetAttrBonus(bodyId);
+        if (e == null)
+        {
+            e = new PetAttrBonusEntry { id = bodyId };
+            petAttrBonuses.Add(e);
+        }
+        e.hp += hp;
+        e.atk += atk;
+        e.def += def;
+    }
+
+    // === 动态难度状态（2026-11-22 新增；真源与唯一计算出口 = AdaptiveDifficulty）===
+    /// <summary>按关卡 key 的连续失败次数（key 形如 Normal_0_1_2 / rift_35）。成功后清零。</summary>
+    public List<StringIntEntry> adaptiveFailStreak = new List<StringIntEntry>();
+    /// <summary>
+    /// 橡皮筋阶段，<b>按玩法 mode 各存一份</b>（2026-11-22 主人拍板隔离）：
+    /// 活动副本/裂隙通关只推进自己那份，不会污染主线后续难度。
+    /// </summary>
+    public List<AdaptiveRubberEntry> adaptiveRubber = new List<AdaptiveRubberEntry>();
+    /// <summary>强武器送暖剩余局数（进本消耗 1）。</summary>
+    public int adaptiveWeaponEaseRuns = 0;
 }
 
 [Serializable]

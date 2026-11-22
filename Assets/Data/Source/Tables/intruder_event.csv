@@ -1,7 +1,15 @@
 # 乱入事件配置：eventId 事件ID；type 类型(Intruder敌对乱入/Rescue友军救场/Entry入场救援)；storyNode 剧情挂点(preBattle:章/postBoss:章/island:岛id)；chapter 游戏章；islandId 支线岛id；triggerNode 触发节点(hp40/onEnter/waveN)；unitCount 参战人数(恒3)；replaceCount 敌对乱入替换怪数(其余0)；storyKey 剧情key(非台词)；rewardId 奖励ID；onceScope 一次性范围(stage/island)；squadId 固定救场小队(SQ_MAIN)；startHpRatio 入场救援起步血量(0.4)
+# 【2026-11-22 拍板】强盗贯穿8章、按章递进组合：replaceCount=该章出场的强盗人数（1小弟/1大哥/2人/女法/远近/坦法/三人组/三人组），组合真源在 IntruderPicker.BanditIdsForChapter，本列人数必须与之一致。
 eventId,type,storyNode,chapter,islandId,triggerNode,unitCount,replaceCount,storyKey,rewardId,onceScope,squadId,startHpRatio
 EV01,Rescue,preBattle:1,1,,hp40,3,0,rescue_ch1,badge_low,stage,SQ_MAIN,
 EV02,Entry,preBattle:5,5,,onEnter,3,0,entry_ch5,badge_mid,stage,SQ_MAIN,0.4
-EV03,Intruder,preBattle:3,3,,wave1,3,3,intruder_ch3,badge_low,stage,,
 EV04,Rescue,island:2,,2,hp40,3,0,rescue_island2,badge_mid,island,SQ_MAIN,
 EV05,Entry,preBattle:7,7,,onEnter,3,0,entry_ch7,badge_high,stage,SQ_MAIN,0.4
+EV03,Intruder,preBattle:1,1,,wave1,3,1,intruder_ch1,badge_low,stage,,
+EV06,Intruder,preBattle:2,2,,wave1,3,1,intruder_ch2,badge_low,stage,,
+EV07,Intruder,preBattle:3,3,,wave1,3,2,intruder_ch3,badge_low,stage,,
+EV08,Intruder,preBattle:4,4,,wave1,3,1,intruder_ch4,badge_low,stage,,
+EV09,Intruder,preBattle:5,5,,wave1,3,2,intruder_ch5,badge_mid,stage,,
+EV10,Intruder,preBattle:6,6,,wave1,3,2,intruder_ch6,badge_mid,stage,,
+EV11,Intruder,preBattle:7,7,,wave1,3,3,intruder_ch7,badge_high,stage,,
+EV12,Intruder,preBattle:8,8,,wave1,3,3,intruder_ch8,badge_high,stage,,

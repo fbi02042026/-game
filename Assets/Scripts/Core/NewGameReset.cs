@@ -36,6 +36,10 @@ public static class NewGameReset
         BattleRally.Reset();
         // 【2026-11-09】羁绊副本回城重开旗子（进程级静态），清档必须一起复位
         MercFavorUI.PendingOpenAfterBattleHireId = null;
+        // 竞技场回城重开旗子：与上面同款（回城 ConsumePendingOpen 才消费），清档后不能让新档误弹竞技场
+        ArenaPopupUI.PendingOpenAfterBattle = false;
+        // 裂隙「新纪录」角标：回冒险页刷新才消费，清档后不能让新档误显上一档纪录
+        EndlessRiftRules.NewRecordPendingShow = false;
         // 2026-11-12 升级弹窗队列是进程级 static，清档必须清
         LevelUpPopup.ResetForNewGame();
         // 2026-11-22 城镇入口大地图是 DDOL 静态 Canvas，清档必须一起销毁重建
@@ -45,6 +49,6 @@ public static class NewGameReset
         // 不清的话新档在本次登录内不再亮红点（定义 TalentSystem.cs:126，置位 TalentUI.cs:287）。
         TalentSystem.TalentDotSeenThisSession = false;
 
-        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列/天赋红点）");
+        UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列/天赋红点/竞技场回城旗/裂隙新纪录旗）");
     }
 }

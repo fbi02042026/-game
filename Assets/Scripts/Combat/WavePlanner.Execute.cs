@@ -593,6 +593,28 @@ public partial class WavePlanner
         merc.Face(-1);                // 面向玩家半场（左），照 ArenaEnemySpawner L258
         merc.SetPartyIndex(slot);     // 车道偏移按队内序错开（同 L257）
 
+        // 【2026-11-22 主人拍板】强盗强度按 boss 档，不打死倍率：玩家装备继承会随关卡成长，
+        // 固定「血3攻2」到后期会被反超。改吃 boss 同款章内成长曲线（GetStatScale 唯一出口）
+        // + BOSS_TTK_HP_MUL 血档，随章节/大关/小关自动爬坡。
+        // ⚠ 不直接照搬 boss 绝对值：boss 攻击另吃 ChapterAtkMul(0.35~0.75)×BOSS_ATTACK_MUL(0.6)
+        // 两道削减，佣兵体系不吃；照搬会变成「数值像 boss、打人比小弟还轻」。
+        // 故只借 boss 的成长曲线与血档倍率，基数仍用佣兵自身（GetAttr 当前值），
+        // SetBaseAndCurrent 一起写回，RecalcAllAttr 不回退；夜薇法攻同步放大。只作用于本函数生成的强盗。
+        var bMgr = BattleManager.Instance;
+        int banditChapter = bMgr != null ? bMgr.CurrentChapter : 1;
+        int banditStage = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : 0;
+        int banditGrand = bMgr != null && bMgr.IsFormalMainRun && ChapterManager.Instance != null
+            ? ChapterManager.Instance.currentGrand : 1;   // 与 Monster.Init.GrandIndexForStatScale 同款
+        float banditScale = GameConfig.GetStatScale(banditChapter, banditGrand, banditStage);
+        float banditHpMul = 3f * banditScale * GameConfig.BOSS_TTK_HP_MUL;   // 血：boss TTK 血档，随章爬坡
+        float banditAtkMul = 2f * banditScale;                               // 攻：只吃章内曲线，不吃 boss 攻击削减
+        var a = merc.attr;
+        a.SetBaseAndCurrent(AttrType.MaxHp, a.GetAttr(AttrType.MaxHp) * banditHpMul);
+        a.SetBaseAndCurrent(AttrType.Attack, a.GetAttr(AttrType.Attack) * banditAtkMul);
+        float magicAtk = a.GetAttr(AttrType.MagicAttack);
+        if (magicAtk > 0f) a.SetBaseAndCurrent(AttrType.MagicAttack, magicAtk * banditAtkMul);
+        merc.currentHp = a.GetAttr(AttrType.MaxHp);   // 当前血量同步到放大后的上限，否则开局残血
+
         // 🔴 记账四件套（缺一会导致怪清不完 / 不掉金币 / 不算击杀任务）
         merc.OnDead += OnMonsterDead;      // 普通怪 Execute L516
         bm.monsters.Add(merc);             // 普通怪 Execute L517 / 竞技场 L276
