@@ -326,7 +326,8 @@ public partial class WavePlanner
             {
                 string intruderNode = "preBattle:" + CurrentChapter;
                 if (IntruderEventDirector.TryGetIntruderForNode(intruderNode, out var intruderEv)
-                    && intruderEv.chapter == CurrentChapter)
+                    && intruderEv.chapter == CurrentChapter
+                    && stageIdx == IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter))
                 {
                     // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 整块跳过：
                     // 不打标 → Execute 不替换怪，剧情钩子查不到事件自然不播。Plan 为运行期（战斗开始时经

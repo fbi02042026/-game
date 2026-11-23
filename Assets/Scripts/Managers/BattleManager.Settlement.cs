@@ -3055,6 +3055,15 @@ public partial class BattleManager
     /// </summary>
     bool HasChapterNextStageForSettlement()
     {
+        // 2026-11-23 主人拍板「打完章内第三关强制回城、不要下一关钮」：章内第 3 小关
+        // （stageIndex==2，0 基）通关后不给下一关按钮，只留「确定」=回城。判据用 currentStage.stageIndex
+        // （LoadStage 时赋值、通关过程不再变），不能用已被 OnStageComplete 推进的 currentStageIndex。
+        // 仅正式主线普通难度生效（与宠物营救/引导同口径），困难/噩梦及各副本不受影响。
+        if (Mode.Id == BattleModeId.Normal && IsFormalMainRun
+            && NormalOnlyContentAllowed(BattleDifficulty)
+            && currentStage != null && currentStage.stageIndex == 2)
+            return false;
+
         var data = SaveSystem.Instance?.Data;
         bool chapterDone = data != null
             && (BattleDifficulty > 0

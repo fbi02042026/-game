@@ -30,6 +30,10 @@ public static class QuestRewardClaim
         for (int i = 0; i < all.Length; i++)
         {
             var def = all[i];
+            // 【2026-11-23】C1_Q0 是「首次引导·点日志领奖」的专属任务：它的 done 由 guideStep>=LogReward
+            // 派生（MainQuestSystem.ProgressOf），预热/续跑时 IsDone 恒真，迁移会把奖励提前标成已领，
+            // 导致引导走到日志页时领奖按钮不出现、引导秒结束。此任务排除出迁移，由引导让玩家亲手领。
+            if (def.id == "C1_Q0") continue;
             if (MainQuestSystem.IsDone(def))
                 data.claimedMainQuestIds.Add(def.id);
         }

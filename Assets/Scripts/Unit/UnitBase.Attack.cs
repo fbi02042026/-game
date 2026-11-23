@@ -317,6 +317,11 @@ public partial class UnitBase
                 faction, firePos, hitPos, facingDir, hitTf, kit, null, scaleMul, speedMul,
                 () =>
                 {
+                    // 【2026-11-23 修·胜利后双弹窗】战斗已收局（胜利结算/死亡复活窗/死亡收尾均置 isInBattle=false）
+                    // 时在飞弹道到点不再结算伤害：胜利弹窗弹出后敌方余弹仍会飞完命中，不挡就会把玩家打死
+                    // 再弹一次失败，出现「胜利+失败」双弹窗。战斗中不受影响（中途抽奖只冻 UnitsCanAct、
+                    // 不动 isInBattle，弹道照常结算，行为零变化）。
+                    if (BattleManager.Instance != null && !BattleManager.Instance.isInBattle) return;
                     if (pendingTarget == null || pendingTarget.isDead) return;
                     if (checkMiss)
                     {

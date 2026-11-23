@@ -423,6 +423,8 @@ public class TownHubController : MonoBehaviour
         {
             TutorialDirector.Instance?.NotifyTownTab(tab);
             _character?.ShowPage();
+            // 2026-11-23 酒馆气泡模式：玩家自己点进角色页时通知宠物引导推进（不再由引导自动切页）
+            PetFeatureGuide.NotifyCharacterPageOpened();
             GameBgm.Play(GameBgm.Track.Town);
         }
         else if (tab == MainNavTab.Log)

@@ -38,6 +38,12 @@ public partial class BattleManager
 
     public void OnHeroDead()
     {
+        // 【2026-11-23 修·胜利后双弹窗】战斗已收局（胜利结算链 isInBattle=false）不再触发失败收尾：
+        // 兜住收局瞬间穿透的伤害（余弹/延迟技能等任意路径），防止胜利结算弹出后玩家再被判定死亡、
+        // 又弹一次失败，叠成「胜利+失败」双弹窗。复活链 DoReviveHero 会恢复 isInBattle=true，
+        // 复活后再次阵亡不受影响；复活窗期间玩家已 isDead，不会二次进入本函数。
+        if (!isInBattle) return;
+
         // 【2026-10-24 主人拍板】正式关阵亡先弹「失败 + 复活/返回」选择界面：冻场待抉择，
         // 点【复活】按当日档位（广告/50钻/100钻）原地半血复活继续打，点【返回】才走原收尾（遗产结算）。
         // 【2026-11-02 主人纠正「死亡只能返回」】裂隙**不再**走这道门（EndlessBattleMode.OffersRevive = false）：
@@ -534,7 +540,7 @@ public partial class BattleManager
         }
         if (currentStage != null)
             RunStats.StageTitle = ChapterManager.Instance != null
-                ? ChapterManager.Instance.GetCurrentStageDisplayName()
+                ? $"第{Mathf.Max(1, ChapterManager.Instance.currentStageIndex + 1)}关"
                 : GameConfig.GetChapterMapName(RunStats.Chapter);
         else
             RunStats.StageTitle = GameConfig.GetChapterMapName(RunStats.Chapter);

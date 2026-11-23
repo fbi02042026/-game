@@ -39,7 +39,7 @@ public static class IntruderPicker
             case 3: return new[] { BanditBlade, BanditBoss };             // 小弟+大哥
             case 4: return new[] { BanditWitch };                         // 女法初遇
             case 5: return new[] { BanditWitch, BanditBlade };            // 远近搭配
-            case 6: return new[] { BanditBoss, BanditWitch };             // 坦法搭配
+            case 6: return new[] { BanditBoss, BanditWitch };             // 重武+法搭配
             case 7: return new[] { BanditBoss, BanditWitch, BanditBlade }; // 三人组
             case 8: return new[] { BanditBoss, BanditWitch, BanditBlade }; // 三人组终章
             default:
@@ -80,14 +80,14 @@ public static class IntruderPicker
             if (!string.IsNullOrEmpty(def.MercAssetId)) excluded.Add(def.MercAssetId);
         }
         // ===== 修点③（2026-11-20 二次拍板⑦）：排除救场小队三名 =====
-        // 口径：救场小队（加百列 H023 / 艾拉 H015 / 塞拉 H012）绝不以敌对乱入身份出现——
+        // 口径：救场小队（加百列 H023 / 艾拉 H015 / 莉娜 H017，2026-11-23 治疗位由塞拉 H012 换牧师莉娜）绝不以敌对乱入身份出现——
         // 同一张脸既当救场队友又当拦路敌人，"同一支队伍暗中保护玩家"的剧情就穿帮。
         // 取数走 MercRosterDefs.TryGetByHireId 的 AssetId（T1 口径），不散写字符串；
         // 艾拉 gongshou101 虽已被上面三职业 101 脸覆盖，仍按拍板三名全列（幂等，防未来 101 口径改动）。
         // 静态推演：花名册去重 20 个 AssetId − 三职业101 − dunbing203 − naima102 = 15 ≥ PickCount*2，抽 3 无压力。
         TryExcludeSquadAssetId(excluded, "H023");   // 加百列 dunbing203
         TryExcludeSquadAssetId(excluded, "H015");   // 艾拉 gongshou101
-        TryExcludeSquadAssetId(excluded, "H012");   // 塞拉 naima102
+        TryExcludeSquadAssetId(excluded, "H017");   // 莉娜 naima102（与塞拉同战斗模板，排除的 AssetId 不变）
         return excluded;
     }
 

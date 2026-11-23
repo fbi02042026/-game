@@ -43,7 +43,7 @@ public static class IslandStoryBeats
             Narration = "湾里横七竖八搁着十几条船，桅杆全朝着同一个方向倒。",
             Note      = "「桅杆倒向哪，怪就在哪。这句值五十金，先赊着。——独眼」",
             YouLine   = "你这条消息是从遇难者嘴里问出来的吧。",
-            AfterLine = "船是空的，货还在。这一趟，公会的账本上不会有一分钱。",
+            AfterLine = "船是空的，货还在。这些货，公会的账本上一分钱都记不上。",
         },
         new IslandText
         {
@@ -59,7 +59,7 @@ public static class IslandStoryBeats
             Narration = "草原上的草伏得整整齐齐，像被谁一寸寸压平的。",
             Note      = "「草伏的方向就是安全路线。倒着走。——独眼（这条免费，因为我也不知道为什么）」",
             YouLine   = "免费的消息最贵，上次免费那条差点把我留在岛上。",
-            AfterLine = "风又吹起来了。它等这个等的，恐怕比我等转正还久。",
+            AfterLine = "风又吹起来了。它等这一天，恐怕比我等转正还久。",
         },
         new IslandText
         {

@@ -178,16 +178,15 @@ public class BuffInfoTipUI : MonoBehaviour
         if (_rootRt == null || _panelRt == null || anchor == null) return;
         Canvas.ForceUpdateCanvases();   // 首帧 rect 还没算好，先刷一次再量
 
-        var canvas = GetComponentInParent<Canvas>();
-        Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
-
+        // 2026-11-23：浮框与 anchor 同处战斗 Canvas 的世界空间，直接反向变换到 _rootRt 本地坐标。
+        // 旧写法走 WorldToScreenPoint/ScreenPointToLocalPoint 往返；浮框自身挂了 Overlay Canvas，
+        // GetComponentInParent<Canvas>() 取到它自己 → cam 判成 null → 把 ScreenSpaceCamera 下的
+        // 世界坐标当成屏幕像素，浮框整体偏移，跑到佣兵头像上。改为同空间直接反变换，不出屏。
         var corners = new Vector3[4];
         anchor.GetWorldCorners(corners);
         Vector3 topCenter = (corners[1] + corners[2]) * 0.5f;
-        Vector2 sp = RectTransformUtility.WorldToScreenPoint(cam, topCenter);
-        Vector2 lp;
-        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_rootRt, sp, cam, out lp))
-            lp = Vector2.zero;
+        Vector3 localTop = _rootRt.InverseTransformPoint(topCenter);
+        Vector2 lp = new Vector2(localTop.x, localTop.y);
 
         Rect r = _rootRt.rect;
         float halfW = r.width * 0.5f;

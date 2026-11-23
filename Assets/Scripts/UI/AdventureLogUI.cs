@@ -136,6 +136,16 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         SelectTab(LogTab.MainStory, force: true);
     }
 
+    /// <summary>【2026-11-23】首次引导领奖步专用：只重建主线页行表。
+    /// 不跑 ShowPage 那一整套（存档对齐/成就结算/抬层级/刷红点），避免引导遮罩期间的无谓副作用。
+    /// 已停主线页 → 直接 RefreshBody；停在别的页 → 走 SelectTab 让页签高亮同步。
+    /// </summary>
+    public void RefreshMainForGuide()
+    {
+        if (_tab == LogTab.MainStory) RefreshBody();
+        else SelectTab(LogTab.MainStory, force: true);
+    }
+
     /// <summary>碎片/商店操作后刷新列表（不关弹层）。</summary>
     public void RefreshAfterPhase3()
     {

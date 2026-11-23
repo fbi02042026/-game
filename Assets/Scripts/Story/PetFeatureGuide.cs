@@ -3,7 +3,9 @@ using UnityEngine;
 
 /// <summary>
 /// 宠物功能新手引导（2026-11-22）：1-3 正式主线首通 → 回城 → 告知开启宠物功能 →
-/// 角色页软提示指宠物入口 → 上阵 → 喂养（随机属性 +X + 亲密度）→ 宠物用战斗对话框叫两声。
+/// 底栏气泡指角色页 → 玩家自己进角色页后气泡指宠物入口 → 上阵 → 喂养（随机属性 +X + 亲密度）→ 宠物用战斗对话框叫两声。
+/// 【2026-11-23 主人拍板】不替玩家自动切页（旧版 OpenCharacter 的「下滑转场」观感差），一律酒馆气泡模式：
+/// 贴目标 + 尖角 + 无手指滑动 + 点击即收，见 ShowBubble()。
 ///
 /// 真源与边界：
 ///  · 宠物功能「已解锁」真源 = SaveData.HasIntruderStorySeen(PetRescueStoryBeats.SeenKey)，
@@ -76,6 +78,8 @@ public static class PetFeatureGuide
     }
 
     // —— 玩家操作通知（各 UI 动作点调用；只在引导进行中有效）——
+    /// <summary>玩家自己点进角色页时由 TownHubController.SwitchTabNow 调（酒馆气泡模式：不自动切页）。</summary>
+    public static void NotifyCharacterPageOpened() => _driver?.OnCharacterPageOpened();
     public static void NotifyPetUIOpened() => _driver?.OnPetUIOpened();
     public static void NotifyDeployed(string petId) => _driver?.OnDeployed(petId);
     public static void NotifyFed(string petId) => _driver?.OnFed(petId);
@@ -85,7 +89,7 @@ public static class PetFeatureGuide
 public class PetFeatureGuideDriver : MonoBehaviour
 {
     Coroutine _co;
-    int _stage;   // 0 idle / 1 待开宠物界面 / 2 待上阵 / 3 待喂养 / 4 收尾中
+    int _stage;   // 0 idle / 1 待进角色页 / 2 待开宠物界面 / 3 待上阵 / 4 待喂养 / 5 收尾中
     string _petId;
 
     public void Begin()
@@ -109,31 +113,34 @@ public class PetFeatureGuideDriver : MonoBehaviour
         GlobalToastUI.ShowPersona("第三关打完了，宠物功能给你开啦～去角色页找那个新图标，我可不等你哦～");
         yield return new WaitForSecondsRealtime(2.2f);
 
-        // 第二拍：切角色页 + 软提示指宠物入口
-        var hub = TownHubController.Instance;
-        if (hub != null) hub.OpenCharacter();
-        float switchWait = 0f;
-        while (switchWait < 0.6f)
-        {
-            switchWait += Time.unscaledDeltaTime;
-            yield return null;
-        }
+        // 第二拍【2026-11-23 酒馆气泡模式】：不自动切页，底栏「角色」按钮贴气泡指路，等玩家自己点进去。
+        var nav = MainBottomNav.Instance;
+        var navRect = nav != null && nav.characterButton != null
+            ? nav.characterButton.transform as RectTransform : null;
+        if (navRect != null)
+            ShowBubble("先去底栏「角色」页，宠物功能藏在那儿～", navRect, false);
+        else
+            Debug.LogError("[PetFeatureGuide] 底栏角色按钮取不到，角色页指路气泡跳过（不静默兜底）");
+        yield return WaitStage(2);   // 等玩家自己点进角色页（TownHubController 通知）
+
+        // 第三拍：指宠物入口（玩家已在角色页，用普通气泡层即可）
         var charUi = CharacterUI.Instance;
         var entryRect = charUi != null ? CharacterUI.PetEntryRect : null;
-        TutorialHintUI.Ensure().Show("点这个「宠物」图标进去看看嘛～", entryRect, PetFeatureGuide.HintSeconds);
-        yield return WaitStage(2);   // 等玩家点开宠物界面
+        if (entryRect != null)
+            ShowBubble("点这个「宠物」图标进去看看嘛～", entryRect, false);
+        else
+            Debug.LogError("[PetFeatureGuide] 角色页宠物入口取不到，指路气泡跳过");
+        yield return WaitStage(3);   // 等玩家点开宠物界面
 
-        // 第三拍：指上阵按钮
-        TutorialHintUI.Ensure().Show("先点「上阵」把它带上，我不会亏待你的宠物哦～",
-            PetUI.DeployBtnRect, PetFeatureGuide.HintSeconds);
-        yield return WaitStage(3);   // 等玩家上阵
+        // 第四拍：指上阵按钮（宠物弹窗在 TownPopup 900 层，气泡要抬层盖过去）
+        ShowBubble("先点「上阵」把它带上，我不会亏待你的宠物哦～", PetUI.DeployBtnRect, true);
+        yield return WaitStage(4);   // 等玩家上阵
 
-        // 第四拍：指喂养按钮（同一个按钮，上阵后文案变「喂养」）
-        TutorialHintUI.Ensure().Show("再点「喂养」一次，它会长属性、跟你更亲哦～",
-            PetUI.DeployBtnRect, PetFeatureGuide.HintSeconds);
-        yield return WaitStage(4);   // 等玩家喂养
+        // 第五拍：指喂养按钮（同一个按钮，上阵后文案变「喂养」）
+        ShowBubble("再点「喂养」一次，它会长属性、跟你更亲哦～", PetUI.DeployBtnRect, true);
+        yield return WaitStage(5);   // 等玩家喂养
 
-        // 第五拍：宠物用战斗对话框叫两声（固定锚点浮在宠物模型上方）
+        // 第六拍：宠物用战斗对话框叫两声（固定锚点浮在宠物模型上方）
         TutorialHintUI.Ensure().Hide();
         yield return PlayTwoCries();
 
@@ -155,6 +162,29 @@ public class PetFeatureGuideDriver : MonoBehaviour
             Debug.LogWarning("[PetFeatureGuide] 第 " + target + " 步等待超时，跳过（不卡死引导）");
     }
 
+    /// <summary>酒馆气泡模式统一出口：贴目标底框 + 尖角 + 点击即收 + 无手指滑动（不去下滑）；
+    /// overPopup=气泡要盖到 TownPopup(900) 弹窗里控件时抬层（照 MercSwapHint.TryShow 口径）。</summary>
+    static void ShowBubble(string text, RectTransform target, bool overPopup)
+    {
+        var bubble = BattleManager.DraftHintBubble;
+        if (bubble == null)
+        {
+            Debug.LogError("[PetFeatureGuide] 气泡底框取不到（像素风空白对话框指针），提示跳过（不兜底静默）");
+            return;
+        }
+        var hint = TutorialHintUI.Ensure();
+        hint.SetBannerSpriteOnce(bubble);
+        if (overPopup) hint.SetSortOrderOnce(GameConfig.UiSort.TownPopup + 40);
+        hint.SetTapToHideOnce(true);   // 点一下即收，不留屏
+        hint.Show(text, target, PetFeatureGuide.HintSeconds, false);
+        if (!hint.IsVisible || hint.CurrentHint != text)
+        {
+            // Show 被战斗头顶台词占用没真弹出：退掉一次性设置，防污染下一条
+            hint.SetBannerSpriteOnce(null);
+            hint.SetSortOrderOnce(0);
+        }
+    }
+
     IEnumerator PlayTwoCries()
     {
         var bubble = BattleHeadTalkUI.Ensure();
@@ -167,24 +197,30 @@ public class PetFeatureGuideDriver : MonoBehaviour
         }
     }
 
-    public void OnPetUIOpened()
+    /// <summary>玩家自己进角色页：stage 1→2，收掉指路气泡，下一步指宠物入口。</summary>
+    public void OnCharacterPageOpened()
     {
         if (_stage == 1) { _stage = 2; TutorialHintUI.Instance?.Hide(); }
     }
 
+    public void OnPetUIOpened()
+    {
+        if (_stage == 2) { _stage = 3; TutorialHintUI.Instance?.Hide(); }
+    }
+
     public void OnDeployed(string petId)
     {
-        if (_stage != 2) return;
+        if (_stage != 3) return;
         _petId = petId;
-        _stage = 3;
+        _stage = 4;
         TutorialHintUI.Instance?.Hide();
     }
 
     public void OnFed(string petId)
     {
-        if (_stage != 3) return;
+        if (_stage != 4) return;
         _petId = petId;
-        _stage = 4;
+        _stage = 5;
     }
 
     void OnDestroy()

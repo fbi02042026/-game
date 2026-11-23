@@ -12,6 +12,7 @@ public enum WeatherType { Clear, Rain, Snow }
 public class BattleAtmosphere : MonoBehaviour
 {
     static BattleAtmosphere _instance;
+    static bool _nightToastDone;
 
     /// <summary>战斗期按需查找/装配；非 DDOL，随 Battle 场景销毁。</summary>
     public static BattleAtmosphere Instance
@@ -44,6 +45,23 @@ public class BattleAtmosphere : MonoBehaviour
         if (OnChanged != null) OnChanged(Phase, Weather);
         // T4 视野控制器随进关装配并绑定（懒加载，非 DDOL，随 Battle 场景销毁）。
         NightVisionController.Instance.Bind(this);
+    }
+
+    /// <summary>
+    /// 波清推进昼夜：仅黄昏起始关、清完第 1 波且还有后续波次时，从 Dusk 渐变到 Night（一次）。
+    /// 其余相位（Day/Night）与天气一律不动；已是 Night 时不再触发，天然幂等。
+    /// </summary>
+    public void OnWaveCleared(int clearedWaves, int totalWaves)
+    {
+        if (Phase != DayPhase.Dusk) return;
+        if (clearedWaves < 1 || clearedWaves >= totalWaves) return;
+        Phase = DayPhase.Night;
+        if (!_nightToastDone)
+        {
+            _nightToastDone = true;
+            UIManager.Instance?.ShowToast("黑夜降临，小心暗处的敌人。", false);
+        }
+        if (OnChanged != null) OnChanged(Phase, Weather);
     }
 
     void OnDestroy()

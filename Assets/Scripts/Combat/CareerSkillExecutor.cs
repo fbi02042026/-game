@@ -630,29 +630,66 @@ public static class CareerSkillExecutor
         // 【2026-11-14 主人「要往前飞一段距离后爆炸」】落点不再锁在最近目标身上（贴身目标会让法球几乎原地炸），
         // 改为沿朝向固定前飞 CAREER_ORB_FLIGHT_DIST 后自爆；lockedEnd 即爆点＝范围伤害中心。
         // 【2026-11-15】固定 8f 大于竖屏全宽（orthoSize×aspect×2≈6.08）会飞出屏外，且旧版
-        // 「到怪群就炸」的落点上限在 11-14 被一并丢掉。现取 min(常量, 屏内剩余, 朝向最远可见怪)
-        // 作前飞距离：仍往前飞、落在怪群里、绝不出屏。视口公式与 GameConfig.IsInCombatViewport 同源。
+        // 「到怪群就炸」的落点上限在 11-14 被一并丢掉；11-15 又用「最远可见怪」封顶，
+        // 11-23 起改为怪群重心＋前行提前量（见下）。屏内剩余仍由 edgeLimit 封顶，绝不出屏。
         float orbDist = GameConfig.CAREER_ORB_FLIGHT_DIST;
         var cam = Camera.main;
-        if (cam != null && cam.orthographic)
+        bool hasEdge = cam != null && cam.orthographic;
+        float edgeLimit = 0f;   // 沿朝向还剩多少屏内空间（防飞出屏）
+        if (hasEdge)
         {
             float halfW = cam.orthographicSize * cam.aspect;
             float edgeX = cam.transform.position.x + facing * (halfW - 0.3f);
-            orbDist = Mathf.Min(orbDist, Mathf.Max(0f, (edgeX - fire.x) * facing));
+            edgeLimit = Mathf.Max(0f, (edgeX - fire.x) * facing);
+            orbDist = Mathf.Min(orbDist, edgeLimit);
         }
+        // 【2026-11-23 主人「法师发射大火球的时候发射到敌人后面，而敌人都在往前走导致打中的敌人少了」】
+        // 旧版把前飞距离压到「朝向最远那只可见怪的当前位置」（farthest）＝爆点钉在怪群最靠外的一端，
+        // 而怪群整体朝英雄走、法球又慢（0.55×0.4 ≈ 5.3 单位/秒），落地时怪已移开半个身位，
+        // 爆点始终留在怪群身后；DealArea 再按「离爆点最近」取前 N 个，命中名单就永远是靠外那几只。
+        // 现改为：① 落点取屏内怪群 x 的中位数（重心），且剔除刚刷在屏外 margin 0.35 的怪，
+        // 避免新刷怪把落点拽到屏幕边缘；② 按飞行时间 t = 距离 / 实际弹速补偿怪群平均横向速度，
+        // 落点加 vx*t 提前量，让爆炸盖在「法球到达那一刻」的怪群中心；
+        // ③ 提前量不越过最靠英雄的那只怪（否则炸到已经走过去的空位），也不越过最外那只，
+        // 并仍受屏内边缘 / CAREER_ORB_FLIGHT_DIST 约束，绝不出屏。
         var bm = BattleManager.Instance;
         if (bm != null && bm.monsters != null)
         {
-            float farthest = 0f;
+            var xs = new List<float>(8);
+            float vxSum = 0f;
             for (int i = 0; i < bm.monsters.Count; i++)
             {
                 var m = bm.monsters[i];
-                if (m == null || m.isDead || !GameConfig.IsInCombatViewport(m)) continue;
-                float ahead = (m.transform.position.x - fire.x) * facing;
-                if (ahead > farthest) farthest = ahead;
+                if (m == null || m.isDead) continue;
+                // margin 传 0：只用真正在屏内的怪；屏外刚刷出来的怪不参与落点
+                if (!GameConfig.IsInCombatViewport(m, 0f)) continue;
+                var mp = m.transform.position;
+                xs.Add(mp.x);
+                vxSum += m.rb != null ? m.rb.velocity.x : -facing * m.attr.GetAttr(AttrType.MoveSpeed);
             }
-            if (farthest > 0f) orbDist = Mathf.Min(orbDist, farthest);
+            if (xs.Count > 0)
+            {
+                xs.Sort();
+                float medianX = xs[xs.Count / 2];
+                float aheadMedian = (medianX - fire.x) * facing;
+                // 怪群整体在英雄背后（已贴身越过）时不用重心，沿用固定前飞，避免原地炸
+                if (aheadMedian > 0.05f)
+                {
+                    float vfxSpeed = BattleVFXSystem.Instance != null
+                        ? BattleVFXSystem.Instance.projectileSpeed : 24f;
+                    float speed = Mathf.Max(0.1f, vfxSpeed * Mathf.Max(0.05f, GameConfig.CAREER_ORB_SPEED_MUL)
+                                                         * GameConfig.PROJECTILE_SPEED_GLOBAL_MUL);
+                    float travelT = aheadMedian / speed;
+                    float predX = medianX + (vxSum / xs.Count) * travelT;
+                    float closestX = facing >= 0 ? xs[0] : xs[xs.Count - 1];
+                    float farthestX = facing >= 0 ? xs[xs.Count - 1] : xs[0];
+                    if ((predX - closestX) * facing < 0f) predX = closestX + facing * 0.1f;
+                    if ((predX - farthestX) * facing > 0f) predX = farthestX;
+                    orbDist = Mathf.Max(0f, (predX - fire.x) * facing);
+                }
+            }
         }
+        if (hasEdge) orbDist = Mathf.Min(orbDist, edgeLimit);
         Vector3 end = fire + Vector3.right * facing * orbDist;
         Vector3 lockedEnd = end;
         // 【2026-11-14 主人「法师的大法球技能发射点再往前点」】只给本发大法球的起点沿朝向额外前移，

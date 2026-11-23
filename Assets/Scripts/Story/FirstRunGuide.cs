@@ -508,26 +508,13 @@ public class FirstRunGuide : MonoBehaviour
         if (TalentUI.LeftUnlockedCount() > before)
         {
             Advance(GuideStep.Talent, null);
-            // 【2026-11-06 主人拍板】点亮提示要说清涨的属性，别只称赞（数值走 TalentDefs 真源）。
-            var newTalentNode = TalentDefs.GetLeft(before + 1);
-            string talentGainText = newTalentNode != null && newTalentNode.effect != null
-                && !string.IsNullOrEmpty(newTalentNode.effect.display)
-                ? newTalentNode.effect.display : "属性";
-            UIManager.Instance?.ShowToastPersona("天赋点亮了，" + talentGainText + "，练练手吧。");
+            // 【2026-11-23 主人反馈】天赋点亮后直接进「点冒险日志领奖」引导：
+            // 旧版这里还逼玩家点「公会」回主界面，把日志引导顶到回主界面之后（多余的闸门）。
+            UIManager.Instance?.ShowToastPersona("不错嘛，一点就通——看来本小姐没看错人。");
 
-            // 【2026-10-16 主人拍板】引导到天赋就到头了：先收掉还开着的天赋面板（让玩家看着主界面）。
-            // 点完 CoTalent 返回，Drive 下一轮走到 Tavern 槽位 → 按当日拍板直接跳过 → Done 收引导。
-            // 之后 TownFlow 才弹登录、关登录才提示新邮件，三件事严格串行不交叉。
+            // 收掉还开着的天赋面板露出底栏，好让玩家点「日志」（收尾链也依赖面板已关）。
             var talentUi = TalentUI.Instance;
             if (talentUi != null && talentUi.IsOpen) talentUi.Hide();
-            // 【2026-10-18 主人拍板】收尾先指引玩家点左下角「公会」回主界面。
-            // 【2026-10-20 主人拍板】回主界面后不再弹「教完了」收尾气泡——引导直接收场（Done），
-            // TownFlow 立刻弹每日登录，别让那句话挡在登录前面。
-            yield return CoPoint("最后点左下角的「公会」，回主界面——别走丢。",
-                () => NavRect(MainNavTab.Guild),
-                () => MainBottomNav.Instance != null
-                    && MainBottomNav.Instance.Current == MainNavTab.Guild,
-                false, 0f);   // 【2026-11-04】不自动走
         }
         else
         {
@@ -583,11 +570,18 @@ public class FirstRunGuide : MonoBehaviour
 
     IEnumerator CoLogReward()
     {
-        yield return CoPoint("先点底栏「日志」——本小姐在那儿留了份委托，别让人家说第二遍！",
+        // 【2026-11-23 主人反馈】天赋后直接指底栏「日志」；预热可能已建过日志页，
+        // 仍让玩家亲手点一次底栏，_holeTriggered 只作本次步骤的点击信号。
+        yield return CoPoint("点底栏「日志」——本小姐在那儿留了份委托，去把它领了！",
             () => NavRect(MainNavTab.Log),
             () => _holeTriggered || LogPageOpen(),
             false, 0f);
-        MainQuestSystem.RefreshGuideTask();   // 日志页已到：让 C1_Q0 立即达成，可领取按钮出现
+
+        // 任务达成后必须重建日志页行表：AdventureLogUI 不订阅 OnChanged，
+        // 不刷新的话 _rowData 里 C1_Q0 还是未达成 → ClaimButtonRect 拿不到目标 → 引导秒结束。
+        MainQuestSystem.RefreshGuideTask();
+        AdventureLogUI.Instance?.RefreshMainForGuide();   // 轻量：只重建主线行表，不跑 ShowPage 整套
+        yield return null;                      // 等一帧：行重建 + 领奖按钮激活
 
         yield return CoPoint("看见主线页顶上那份「第一份委托」没？右边「可领取」的按钮，点它把奖励拿了——哼，才不是特意给你留的呢！",
             ClaimButtonRect,

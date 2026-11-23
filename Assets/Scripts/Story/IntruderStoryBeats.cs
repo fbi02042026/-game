@@ -6,7 +6,10 @@ using UnityEngine;
 /// 乱入·救场剧情（2026-11-20 批次2 T3 + 批次4 T5/T6）：台词真源只此一处 C# 常量，不进 csv / prefab；
 /// 只挂波次节点 / 受伤节点，不主动弹。
 /// 批次2 提供 TryPlayIntruder（敌对乱入）；批次4 追加 TryPlayRescue（友军救场，三段）/
-/// TryPlayEntry（入场救援·被围攻）/ TryPlayRescueOutcome（入场救援谢幕·救援成功口径）。
+/// TryPlayRescueOutcome（入场救援谢幕·救援成功口径）。
+/// 【2026-11-23 主人拍板「战斗中的尽量不要弹立绘剧情弹窗」】战斗中触发的那两段改<b>战场内演出</b>：
+/// 救场（玩家濒死友军入场）走 RescueBattleLines；入场救援（被围攻）走 EntryBattleLines ——
+/// 都只留台词数据，由 BattleManager 在场上用战斗小人 + 头顶气泡播。谢幕仍在打完播，保持全屏立绘。
 /// 立绘：救场小队直接用花名册 HireId 取佣兵立绘；批次6 起敌对反派三人组用主人供图立绘
 ///（StoryPortraits.BanditBoss/Witch/Blade）；命名 ≤7 汉字。
 /// 结构统一：Narration 起手（只首句 .Bg()）→ Solo 对白 → 救场用 BlackLine 收最后一句
@@ -121,14 +124,14 @@ public static class IntruderStoryBeats
 
     // ============================================================
     // 批次4（2026-11-20 T5/T6）：友军救场 + 入场救援
-    // 固定小队 SQ_MAIN：加百列 H023（剑盾）/ 艾拉 H015（游侠）/ 塞拉 H012（水系法）。
+    // 固定小队 SQ_MAIN：加百列 H023（剑盾）/ 艾拉 H015（游侠）/ 莉娜 H017（牧师，2026-11-23 主人拍板由塞拉 H012 水系法换入）。
     // 立绘直接用花名册 HireId（MercPortraitSprites 通道），不新造资源。
     // ============================================================
 
     /// <summary>救场小队立绘 id（花名册 HireId，剧情窗与战斗单位同一套真源）。</summary>
     const string SquadGabriel = "H023";   // 加百列 · 剑盾
     const string SquadElla = "H015";      // 艾拉 · 游侠
-    const string SquadSera = "H012";      // 塞拉 · 水系法
+    const string SquadLina = "H017";      // 莉娜 · 牧师（naima102 战斗模板与塞拉同款，零 prefab 改动）
 
     // ============================================================
     // 批次6（2026-11-20）：敌对乱入固定反派三人组（主人供立绘三张并授权改名）。
@@ -142,46 +145,6 @@ public static class IntruderStoryBeats
     const string BanditWitch = "bandit_witch";
     /// <summary>阿刃 · 狂战小弟（立绘 bandit_blade / 战斗 kuangzhan201）。</summary>
     const string BanditBlade = "bandit_blade";
-
-    /// <summary>
-    /// T5 友军救场剧情入口。按 chapter / islandId 取口吻：
-    /// islandId 非空 → 支线岛版；chapter ≥ 7 → 揭底版；其余（含第 1 章首遇）→ 首遇版。
-    /// 返回 true = 已交给 StoryDirector 播放；播放失败已回调 onDone（调用方照常放行友军入场）。
-    /// </summary>
-    public static bool TryPlayRescue(int chapter, string islandId, Action onDone)
-    {
-        List<StoryBeat> beats;
-        if (!string.IsNullOrEmpty(islandId))
-        {
-            int.TryParse(islandId, out int island);
-            beats = BuildRescueIslandBeats(island);
-        }
-        else if (chapter >= 7)
-            beats = BuildRescueRevealBeats(chapter);
-        else
-            beats = BuildRescueFirstMeetBeats(chapter);
-
-        Debug.Log($"[IntruderStory] 友军救场剧情 chapter={chapter} island={islandId ?? "-"} beats={beats.Count}");
-        return PlayRescueBeats(beats, onDone);
-    }
-
-    /// <summary>
-    /// T6 入场救援剧情入口：进 Boss 关撞见小队被围攻、剩一口血。播完由调用方生成低血友军。
-    /// storyKey 仅作日志（台词按 chapter 分派：ch5 沉船湾版 / ch7 版 / 其它章通用版）。
-    /// </summary>
-    public static bool TryPlayEntry(int chapter, string storyKey, Action onDone)
-    {
-        List<StoryBeat> beats;
-        if (chapter == 7)
-            beats = BuildEntryCh7Beats();
-        else if (chapter == 5)
-            beats = BuildEntryCh5Beats();
-        else
-            beats = BuildEntryGenericBeats(chapter);
-
-        Debug.Log($"[IntruderStory] 入场救援剧情 chapter={chapter} storyKey={storyKey} beats={beats.Count}");
-        return PlayRescueBeats(beats, onDone);
-    }
 
     /// <summary>
     /// T6 谢幕段（2026-11-20 三次拍板）：只要我方赢（波末通关检测点必然已赢）就是救援成功——
@@ -198,7 +161,7 @@ public static class IntruderStoryBeats
     /// <summary>救场类剧情公共播放口：预热小队立绘 → StoryDirector 播放；取不到导演时 LogError 后放行。</summary>
     static bool PlayRescueBeats(List<StoryBeat> beats, Action onDone)
     {
-        StoryPortraits.Warmup(StoryPortraits.Player, SquadGabriel, SquadElla, SquadSera);
+        StoryPortraits.Warmup(StoryPortraits.Player, SquadGabriel, SquadElla, SquadLina);
         var dir = StoryDirector.Ensure();
         if (dir == null)
         {
@@ -210,98 +173,130 @@ public static class IntruderStoryBeats
         return true;
     }
 
-    // ---------- 救场三段 ----------
+    // ---------- 救场（玩家濒死·友军杀出）· 战场内演出 ----------
+    // 【2026-11-23 主人拍板「战斗中的尽量不要弹立绘剧情弹窗」】这一段本来就发生在战斗中
+    //（玩家/友军血量掉到 40%、Boss 波进行中）：不再开全屏立绘窗，也不再把时间定格。
+    // 三人满血入场后立刻开打，台词走战斗头顶气泡——先落人再演，救场也当场生效
+    //（莉娜的治疗、加百列的盾比「演完才落地」更救命）。
+    // 原旁白/黑幕两句（「怪堆侧翼杀出三个人影」「三个人影站进你身侧」等）由画面承载：三人就在场上。
+    // ------------------------------------------------------------
+
+    /// <summary>
+    /// 救场战场演出台词：islandId 非空 → 支线岛版；chapter ≥ 7 → 揭底版；其余（含第 1 章首遇）→ 首遇版。
+    /// 说话人槽位与入场救援同一套（0/1/2 = 加百列/艾拉/莉娜，3 = 玩家）。
+    /// </summary>
+    public static List<EntryBattleLine> RescueBattleLines(int chapter, string islandId)
+    {
+        if (!string.IsNullOrEmpty(islandId)) return BuildRescueIslandLines();
+        if (chapter >= 7) return BuildRescueRevealLines();
+        return BuildRescueFirstMeetLines();
+    }
 
     /// <summary>救场·首遇版（第 1 章拍板口径；2~6 章若未来配表也走本段，措辞不绑第 1 章专属名词）。</summary>
-    static List<StoryBeat> BuildRescueFirstMeetBeats(int chapter)
+    static List<EntryBattleLine> BuildRescueFirstMeetLines()
     {
-        var beats = new List<StoryBeat>
+        return new List<EntryBattleLine>
         {
-            StoryDirector.Narration("怪堆侧翼杀出三个人影——盾、弓、法杖，配合得像排练过一百遍。"),
+            L(EntrySpeaker.Gabriel, "让让！盾在这儿立住了，一只都别想越线！", 2.0f),
+            L(EntrySpeaker.Ella, "我勒个豆，全队打成这样？胆子肥嘟嘟的啊你们。", 2.2f),
+            L(EntrySpeaker.Lina, "先回血，别的回头说。", 1.6f),
+            L(EntrySpeaker.Player, "你们是哪位？我没点外援啊，还是那种不讲价的。", 2.2f),
+            L(EntrySpeaker.Gabriel, "有人托了我们，让我们盯着你点。细节打完再聊——先活着。", 2.4f),
         };
-        if (chapter == 1)
-            beats[0] = beats[0].Bg(StoryBackgrounds.Chapter1Stele);
-        beats.Add(StoryDirector.Solo("加百列", "让让！盾在这儿立住了，一只都别想越线！", SquadGabriel));
-        beats.Add(StoryDirector.Solo("艾拉", "我勒个豆，全队打成这样？胆子肥嘟嘟的啊你们。", SquadElla));
-        beats.Add(StoryDirector.Solo("塞拉", "先回血，别的回头说。", SquadSera));
-        beats.Add(StoryDirector.Solo("你", "你们是哪位？我没点外援啊，还是那种不讲价的。", StoryPortraits.Player));
-        beats.Add(StoryDirector.Solo("加百列", "有人托了我们，让我们盯着你点。细节打完再聊——先活着。", SquadGabriel));
-        beats.Add(StoryDirector.BlackLine("三个人影站进你身侧，像早就该在那儿。"));
-        return beats;
     }
 
     /// <summary>救场·支线岛版：接 IslandStoryBeats 的「独眼字条 / 岛况」口吻，不绑主线进度。</summary>
-    static List<StoryBeat> BuildRescueIslandBeats(int islandId)
+    static List<EntryBattleLine> BuildRescueIslandLines()
     {
-        var beats = new List<StoryBeat>
+        return new List<EntryBattleLine>
         {
-            StoryDirector.Narration("岛的怪围上来之前，三个人先一步替你们顶住了潮头。").Bg(IslandBg(islandId)),
-            StoryDirector.Solo("加百列", "这岛的怪比字条上写的多三倍——独眼又开始瞒报了。", SquadGabriel),
-            StoryDirector.Solo("艾拉", "队形没散，侧面归我们。你们打你们的，闪身步我们兜着。", SquadElla),
-            StoryDirector.Solo("塞拉", "血别硬撑，喝口水再上。", SquadSera),
-            StoryDirector.Solo("你", "你们怎么跟到岛上来的？这船票挺贵吧。", StoryPortraits.Player),
-            StoryDirector.Solo("加百列", "有人托了我们。托我们的人说，你在哪，我们就在哪。", SquadGabriel),
-            StoryDirector.BlackLine("潮声里，三个人默默往你身前又挪了半步。"),
+            L(EntrySpeaker.Gabriel, "这岛的怪比字条上写的多三倍——独眼又开始瞒报了。", 2.2f),
+            L(EntrySpeaker.Ella, "队形没散，侧面归我们。你们打你们的，闪身步我们兜着。", 2.2f),
+            L(EntrySpeaker.Lina, "血别硬撑，圣光罩着你。", 1.6f),
+            L(EntrySpeaker.Player, "你们怎么跟到岛上来的？这船票挺贵吧。", 2.0f),
+            L(EntrySpeaker.Gabriel, "有人托了我们。托我们的人说，你在哪，我们就在哪。", 2.4f),
         };
-        return beats;
     }
 
     /// <summary>救场·揭底版（第 7 章后）：把委托链说透——赛琳受托，托她的那位一直没说破的名字此刻落地。</summary>
-    static List<StoryBeat> BuildRescueRevealBeats(int chapter)
+    static List<EntryBattleLine> BuildRescueRevealLines()
     {
-        var beats = new List<StoryBeat>
+        return new List<EntryBattleLine>
         {
-            StoryDirector.Narration("熟悉的三个身影又切了进来。这一次，他们不再遮掩来意。"),
-        };
-        if (chapter == 7)
-            beats[0] = beats[0].Bg(StoryBackgrounds.AbyssChoice);
-        beats.Add(StoryDirector.Solo("加百列", "别问怎么又是我们。委托人你其实天天见——公会前台，赛琳。", SquadGabriel));
-        beats.Add(StoryDirector.Solo("艾拉", "前台背后还有一位。那位姑娘带队走之前就料到凶多吉少，才提前把话托给赛琳。", SquadElla));
-        beats.Add(StoryDirector.Solo("塞拉", "她的原话是：看着他，别让他进裂隙。拉不住，就护着他别走太深。", SquadSera));
-        beats.Add(StoryDirector.Solo("你", "……艾丽娅。你们一路跟着我，就为了这句嘱咐？", StoryPortraits.Player));
-        beats.Add(StoryDirector.Solo("加百列", "对。所以别让那句嘱咐白托付——活着，一起回去。", SquadGabriel));
-        beats.Add(StoryDirector.BlackLine("话说透了，盾墙反而立得更稳了。"));
-        return beats;
-    }
-
-    // ---------- 入场救援（被围攻） ----------
-
-    /// <summary>入场救援·第 5 章（沉船湾意象，配 EV02 preBattle:5）。</summary>
-    static List<StoryBeat> BuildEntryCh5Beats()
-    {
-        return new List<StoryBeat>
-        {
-            StoryDirector.Narration("Boss 关的门还没关严，你就看见三个人被围在残骸中间——血条见底，盾上全是豁口。").Bg(StoryBackgrounds.WreckShip),
-            StoryDirector.Solo("加百列", "来的正好！我们被咬住了——搭把手！", SquadGabriel),
-            StoryDirector.Solo("艾拉", "半管血，剩三支箭，闪身步还能再秀三回合，别嫌弃！", SquadElla),
-            StoryDirector.Solo("你", "我勒个豆，这不是上次救我的那队吗？撑住，我来了！", StoryPortraits.Player),
-            StoryDirector.BlackLine("你冲进围圈，战局从这一刻改写。"),
+            L(EntrySpeaker.Gabriel, "别问怎么又是我们。委托人你其实天天见——公会前台，赛琳。", 2.4f),
+            L(EntrySpeaker.Ella, "前台背后还有一位。那位姑娘带队走之前就料到凶多吉少，才提前把话托给赛琳。", 2.6f),
+            L(EntrySpeaker.Lina, "她的原话是：看着他，别让他进裂隙。拉不住，就护着他别走太深。", 2.6f),
+            L(EntrySpeaker.Player, "……艾丽娅。你们一路跟着我，就为了这句嘱咐？", 2.2f),
+            L(EntrySpeaker.Gabriel, "对。所以别让那句嘱咐白托付——活着，一起回去。", 2.4f),
         };
     }
 
-    /// <summary>入场救援·第 7 章（配 EV05 preBattle:7，口吻贴宿敌线）。</summary>
-    static List<StoryBeat> BuildEntryCh7Beats()
+    // ---------- 入场救援（被围攻）· 战场内演出 ----------
+    // 【2026-11-23 主人拍板】这段不再开全屏剧情窗（立绘与战斗像素小人割裂太严重），
+    // 改由 BattleManager.CoEntryRescueBattleScene 在场上让三名佣兵用战斗小人 + 头顶气泡说话：
+    // 先落人（低血友军直接站在队伍前方）再演，台词贴着真人说。
+    // 原旁白两句（「血条见底、盾上全是豁口」「你冲进围圈」）改由画面承载——三人低血站成一排、
+    // 收尾三处刀光，不再单独出字。
+    // ------------------------------------------------------------
+
+    /// <summary>战场演出说话人槽位：0/1/2 = 救场小队出场顺序（加百列/艾拉/莉娜），3 = 玩家。</summary>
+    public enum EntrySpeaker { Gabriel = 0, Ella = 1, Lina = 2, Player = 3 }
+
+    /// <summary>战场演出一条：谁说、说什么、气泡停多久（秒，unscaled）。</summary>
+    public struct EntryBattleLine
     {
-        return new List<StoryBeat>
+        public EntrySpeaker Speaker;
+        public string Text;
+        public float Hold;
+    }
+
+    /// <summary>
+    /// 入场救援战场演出台词（按章分派：ch5 沉船湾版 / ch7 宿敌线版 / 其它章通用版）。
+    /// 列表顺序即演出顺序；调用方按 Speaker 槽位取场上单位，取不到就跳过该句（不兜底换人）。
+    /// </summary>
+    public static List<EntryBattleLine> EntryBattleLines(int chapter)
+    {
+        if (chapter == 7) return BuildEntryCh7Lines();
+        if (chapter == 5) return BuildEntryCh5Lines();
+        return BuildEntryGenericLines();
+    }
+
+    /// <summary>战场演出一条的简写构造（hold 默认 2.2s：打字机 18 字/秒，长句也够读完）。</summary>
+    static EntryBattleLine L(EntrySpeaker who, string text, float hold = 2.2f)
+    {
+        return new EntryBattleLine { Speaker = who, Text = text, Hold = hold };
+    }
+
+    /// <summary>第 5 章（配 EV02 preBattle:5，沉船湾意象）。</summary>
+    static List<EntryBattleLine> BuildEntryCh5Lines()
+    {
+        return new List<EntryBattleLine>
         {
-            StoryDirector.Narration("Boss 关开场，那支熟悉的队伍正被围在深处——这一次，轮到你了。").Bg(StoryBackgrounds.AbyssChoice),
-            StoryDirector.Solo("加百列", "别愣着！我们扛得住，但没多少余量了！", SquadGabriel),
-            StoryDirector.Solo("艾拉", "说好的守护者当到头了——该你护我们一回！", SquadElla),
-            StoryDirector.Solo("你", "行，这份人情我记下了。都别死！", StoryPortraits.Player),
-            StoryDirector.BlackLine("三个人退到你身侧，血都只剩最后一口。"),
+            L(EntrySpeaker.Gabriel, "来的正好！我们被咬住了——搭把手！"),
+            L(EntrySpeaker.Ella, "半管血，剩三支箭，闪身步还能再秀三回合，别嫌弃！", 2.4f),
+            L(EntrySpeaker.Player, "我勒个豆，这不是上次救我的那队吗？撑住，我来了！", 2.4f),
         };
     }
 
-    /// <summary>入场救援·通用版（表配到其它章时兜底，不绑章节专属意象）。</summary>
-    static List<StoryBeat> BuildEntryGenericBeats(int chapter)
+    /// <summary>第 7 章（配 EV05 preBattle:7，口吻贴宿敌线）。</summary>
+    static List<EntryBattleLine> BuildEntryCh7Lines()
     {
-        return new List<StoryBeat>
+        return new List<EntryBattleLine>
         {
-            StoryDirector.Narration($"第 {chapter} 章的 Boss 关里，三个人被围在怪群中央，血都只剩一口。"),
-            StoryDirector.Solo("加百列", "来的正好！我们顶不住了——搭把手！", SquadGabriel),
-            StoryDirector.Solo("艾拉", "快！这圈越缩越小了！", SquadElla),
-            StoryDirector.Solo("你", "撑住，我来了！", StoryPortraits.Player),
-            StoryDirector.BlackLine("你冲进围圈，战局从这一刻改写。"),
+            L(EntrySpeaker.Gabriel, "别愣着！我们扛得住，但没多少余量了！"),
+            L(EntrySpeaker.Ella, "说好的守护者当到头了——该你护我们一回！", 2.4f),
+            L(EntrySpeaker.Player, "行，这份人情我记下了。都别死！", 2.2f),
+        };
+    }
+
+    /// <summary>通用版（表配到其它章时兜底，不绑章节专属意象）。</summary>
+    static List<EntryBattleLine> BuildEntryGenericLines()
+    {
+        return new List<EntryBattleLine>
+        {
+            L(EntrySpeaker.Gabriel, "来的正好！我们顶不住了——搭把手！"),
+            L(EntrySpeaker.Ella, "快！这圈越缩越小了！", 1.8f),
+            L(EntrySpeaker.Player, "撑住，我来了！", 1.8f),
         };
     }
 
@@ -316,25 +311,8 @@ public static class IntruderStoryBeats
             StoryDirector.Narration("最后一只怪倒下。挂了彩的、差点躺下的，都被你从围圈里捞了回来——三个人，一个不少。"),
             StoryDirector.Solo("加百列", "呼——都活着。谢了，是她让我们看着你的。", SquadGabriel),
             StoryDirector.Solo("艾拉", "就是惨了点，箭袋比脸都干净，闪身步都跑出火星子了。你走的每一步，我们都替她看着。", SquadElla),
-            StoryDirector.Solo("塞拉", "伤都归我管，回镇上喝两天热汤就好。别把挂彩当勋章。", SquadSera),
+            StoryDirector.Solo("莉娜", "伤都归我管，回镇上喝两天热汤就好。别把挂彩当勋章。", SquadLina),
             StoryDirector.BlackLine("三人互相搀着退进通道深处。受伤，但没人掉队。"),
         };
-    }
-
-    /// <summary>岛 id → 岛背景（真源 StoryBackgrounds.Island01..08，越界返回 null 不铺图）。</summary>
-    static string IslandBg(int islandId)
-    {
-        switch (islandId)
-        {
-            case 1: return StoryBackgrounds.Island01;
-            case 2: return StoryBackgrounds.Island02;
-            case 3: return StoryBackgrounds.Island03;
-            case 4: return StoryBackgrounds.Island04;
-            case 5: return StoryBackgrounds.Island05;
-            case 6: return StoryBackgrounds.Island06;
-            case 7: return StoryBackgrounds.Island07;
-            case 8: return StoryBackgrounds.Island08;
-            default: return null;
-        }
     }
 }

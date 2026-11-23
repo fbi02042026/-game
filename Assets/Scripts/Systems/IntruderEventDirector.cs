@@ -57,6 +57,19 @@ public static class IntruderEventDirector
     }
 
     /// <summary>
+    /// 【强盗投放关位唯一真源（2026-11-23 主人拍板每章第6关）】
+    /// 8 章递进组合不变，只把触发关位收敛到 stageIdx0=5（第6关，0-based），
+    /// 避开章节剧情关（第1关）、Boss 救援关（第5/10关）、精英关（第3/8关）。
+    /// 所有“只在该关触发”的门禁统一读这里；返回 5 不随 chapter 变化。
+    /// </summary>
+    public static int IntruderStageIndexForChapter(int chapter)
+    {
+        if (ActProgressionDefs.TypeOfStage(5) != StageType.Normal)
+            UnityEngine.Debug.LogError("[IntruderEventDirector] 第6关不再是普通关，强盗投放会撞 Boss/精英剧情，请重选关位并同步 IntruderStageIndexForChapter");
+        return 5;
+    }
+
+    /// <summary>
     /// 查询出口（T4 友军救场·主线）：按章号取第一条 type=="Rescue" 的事件（Row.chapter 匹配）。
     /// 无匹配返回 false 属正常（该章没配救场），不报 Error。
     /// </summary>

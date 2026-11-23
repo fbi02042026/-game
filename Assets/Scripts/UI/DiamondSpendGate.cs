@@ -40,7 +40,8 @@ public static class DiamondSpendGate
         if (have < cost)
         {
             // 【2026-10-24 主人拍板】不足时直接告知缺口，不弹确认框
-            GlobalToastUI.Show($"钻石不足（持有 {have} / 需要 {cost}）");
+            // 【2026-11-23 主人报「手机端点皮肤够不够都不弹」】force：看板娘对话/气泡占屏时也要弹出余额缺口（非 force 会被 AnyBubbleShowing 吞掉）
+            GlobalToastUI.Show($"钻石不足（持有 {have} / 需要 {cost}）", true);
             return;
         }
 

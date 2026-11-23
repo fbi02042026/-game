@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -8,8 +9,11 @@ using UnityEngine;
 /// 判定限定「正式主线 + 当前 sub0==2 + 未播过」，其它玩法（裂隙/竞技场/活动本/羁绊/支线岛）一律不触发，
 /// 不改波数/怪数/怪物结构（铁律 40/41），只在两波之间插一段剧情。
 ///
-/// 流式抢跑防护：插叙期间置 _preBattleStoryPlaying=true，TickWaveStreamSpawn:1401 见到就停，
+/// 流式抢跑防护：插叙期间置 _preBattleStoryPlaying=true，TickWaveStreamSpawn 见到就停，
 /// 不会在剧情没播完时把下一波刷出来；播完回调里解锁狗 + 存档 + 放行（下一波由流式/波清点自然推进）。
+/// 【2026-11-23 主人拍板】插叙从全屏对白改为<b>战场内演出</b>（见 CoPetRescueBattleScene）：
+/// 场上生成一只挨打的狗 + 头顶气泡 + 全场刀光 + 狗逃走，保持战斗视角；全程不生成真战斗单位、
+/// 不进 monsters/allyUnits、不计 KillCount/掉落，纯视觉、零统计污染。
 /// </summary>
 public partial class BattleManager
 {
@@ -53,14 +57,14 @@ public partial class BattleManager
 
         bool done = false;
         float watchdog = 0f;
-        PetRescueStoryBeats.TryPlay(() => done = true);
+        StartCoroutine(CoPetRescueBattleScene(() => done = true));
         while (!done && watchdog < 300f)
         {
             watchdog += Time.unscaledDeltaTime;
             yield return null;
         }
         if (watchdog >= 300f)
-            Debug.LogError("[PetRescue] 营救插叙看门狗超时 300s，强制放行（StoryDirector 可能未回调）");
+            Debug.LogError("[PetRescue] 营救战场演出看门狗超时 300s，强制放行（演出协程可能未回调）");
 
         // 营救成功即预解锁狗（哪怕本关失败也不回收，规格第一节：不锁在 1-3 难度墙后）
         var data = SaveSystem.Instance?.Data;
@@ -77,6 +81,10 @@ public partial class BattleManager
             DeployRescuedPet();
         }
 
+        // 【2026-11-23 主人「下一波和剧情不要同时出现」】演出收窗后留一拍停顿，
+        // 让气泡/狗逃走的画面收干净再放行，不与下一波刷怪撞在同一帧。
+        yield return new WaitForSecondsRealtime(0.6f);
+
         _preBattleStoryPlaying = prevGate;
 
         // 放行：重新排 1 秒后的流式出兵（插叙期间 TickWaveStreamSpawn 被闸门挡掉并把 _waveStreamCo 清了）。
@@ -84,5 +92,117 @@ public partial class BattleManager
         if (isInBattle && !_stageCleared && !_portalActive && !_allWavesSpawned
             && FindNextUnspawnedWaveIndex() >= 0)
             ScheduleWaveStreamNext();
+    }
+
+    // ============================================================
+    // 【2026-11-23 主人拍板】宠物挨打剧情：战场内演出（不是全屏几句话带过）
+    // ============================================================
+    // 纯视觉、零统计污染：生成一只挨打的狗 prefab（不挂 Pet 组件、不进 allyUnits/monsters），
+    // 用头顶气泡走对白、Animator 播 Hit 表现挨打、全场刀光表现玩家上前营救，最后狗逃走并销毁。
+    // 不动波数/怪数/怪物结构（铁律 40/41）：这些临时物体不参与任何战斗结算。
+    // 全程用 unscaled 时间，跟 StoryDirector 一样不依赖 timeScale。
+
+    IEnumerator CoPetRescueBattleScene(Action onDone)
+    {
+        var talk = BattleHeadTalkUI.Ensure();
+        var vfx = BattleVFXSystem.Instance;
+        float heroX = hero != null ? UnitBase.GetCombatX(hero) : 0f;
+        float z = unitRoot != null ? unitRoot.position.z : 0f;
+
+        // 狗落在玩家前方偏右（玩家朝右打，狗被围在前方看得见）；不推英雄坐标（2026-09-18 铁律）
+        float dogX = heroX + 2.4f;
+        Vector3 dogPos = new Vector3(dogX, UnitBase.GROUND_Y, z);
+        var dog = SpawnRescueDogVisual(dogPos);
+        if (dog == null)
+        {
+            // 取不到狗 prefab：不静默兜底，报错后仍回调放行（避免卡死流程）
+            Debug.LogError("[PetRescue] 挨打狗 prefab 取不到，战场演出跳过对白（流程照常放行）");
+            onDone?.Invoke();
+            yield break;
+        }
+        var dogAnim = dog.GetComponent<Animator>();
+        var dogTf = dog.transform;
+
+        // —— 第一拍：狗被围，呜咽 + 挨打动作（头顶气泡贴狗，不弹全屏窗）——
+        if (talk != null)
+        {
+            talk.PlayLineAt(dogTf, PetRescueStoryBeats.DogWhimper, PetRescueStoryBeats.WhimperHold);
+            // 播 Hit 帧表现「正在挨打」（prefab 自带 Animal_Hit 状态，.controller 无参数按状态名直切）
+            if (dogAnim != null && dogAnim.HasState(0, Animator.StringToHash("Animal_Hit")))
+                dogAnim.Play("Animal_Hit", 0, 0f);
+        }
+        yield return new WaitForSecondsRealtime(PetRescueStoryBeats.WhimperHold);
+
+        // —— 第二拍：玩家喊话上前（头顶气泡贴玩家本体）——
+        if (talk != null && hero != null)
+            talk.PlayLine(hero, PetRescueStoryBeats.PlayerShout, PetRescueStoryBeats.ShoutHold);
+        yield return new WaitForSecondsRealtime(0.5f);
+
+        // —— 全场刀光齐出：玩家「上前营救、一击清场」的视觉（不推英雄、不改战斗）——
+        // 刀光落点 = 狗周围三处（左/上/右），营造「围攻的怪被同时劈开」；纯特效，不结算伤害。
+        if (vfx != null)
+        {
+            vfx.PlaySlash(dogPos + new Vector3(-0.5f, 0.35f, 0f), 1, VfxFaction.Ally);
+            vfx.PlaySlash(dogPos + new Vector3(0.5f, 0.35f, 0f), -1, VfxFaction.Ally);
+            vfx.PlaySlash(dogPos + new Vector3(0f, 0.55f, 0f), 1, VfxFaction.Ally);
+        }
+        yield return new WaitForSecondsRealtime(PetRescueStoryBeats.SlashHold);
+
+        // —— 第三拍：狗脱困，回应一声 ——
+        if (talk != null)
+            talk.PlayLineAt(dogTf, PetRescueStoryBeats.DogThanks, PetRescueStoryBeats.ThanksHold);
+        if (dogAnim != null && dogAnim.HasState(0, Animator.StringToHash("Animal_Idle")))
+            dogAnim.Play("Animal_Idle", 0, 0f);
+        yield return new WaitForSecondsRealtime(PetRescueStoryBeats.ThanksHold);
+
+        // —— 狗逃走：掉头跑出屏幕（只挪狗自己的坐标，不碰英雄/其它单位）——
+        if (talk != null)
+            talk.PlayLineAt(dogTf, PetRescueStoryBeats.DogFlee, PetRescueStoryBeats.ThanksHold);
+        if (dogAnim != null && dogAnim.HasState(0, Animator.StringToHash("Animal_Walk")))
+            dogAnim.Play("Animal_Walk", 0, 0f);
+        float fleeT = 0f;
+        const float fleeDur = 0.9f;
+        float fromX = dogTf.position.x;
+        float toX = fromX - 9f;
+        while (fleeT < fleeDur && dog != null)
+        {
+            fleeT += Time.unscaledDeltaTime;
+            float k = Mathf.Clamp01(fleeT / fleeDur);
+            GameConfig.SetWorldPosition(dog, new Vector3(Mathf.Lerp(fromX, toX, k), UnitBase.GROUND_Y, z));
+            yield return null;
+        }
+
+        if (dog != null) Destroy(dog);
+        onDone?.Invoke();
+    }
+
+    /// <summary>生成「挨打狗」纯视觉实例：只加载 prefab + 挂到 unitRoot + 半高缩放，不挂 Pet/不进战斗列表。</summary>
+    GameObject SpawnRescueDogVisual(Vector3 pos)
+    {
+        var def = PetDefs.Get(PetRescueStoryBeats.DogId);
+        if (def == null)
+        {
+            Debug.LogError("[PetRescue] 狗 id 不在 PetDefs 真源：" + PetRescueStoryBeats.DogId);
+            return null;
+        }
+        GameObject prefab = Resources.Load<GameObject>("UI/Pets/" + def.prefabPath);
+        if (prefab == null)
+        {
+            Debug.LogError("[PetRescue] 狗 prefab 加载失败：UI/Pets/" + def.prefabPath);
+            return null;
+        }
+        GameObject go = Instantiate(prefab);
+        go.SetActive(true);
+        GameConfig.AttachToUnitRoot(go.transform);
+        GameConfig.SetWorldPosition(go, pos);
+        go.transform.rotation = Quaternion.identity;
+        // 半高：与战斗宠物同口径（玩家 localScale=1 → 狗 0.5），纯视觉不创建血条/技能
+        float hs = hero != null ? Mathf.Abs(hero.transform.localScale.x) : 1f;
+        if (hs < 0.0001f) hs = 1f;
+        // 11-23 与战斗宠物共用体型真源：宠物形象翻倍后剧情狗同步，避免演出与实际战斗大小不一致。
+        float s = hs * Pet.PET_HEIGHT_RATIO;
+        go.transform.localScale = new Vector3(s, s, s);
+        Debug.Log("[PetRescue] 战场演出：挨打狗出场 pos=" + pos + " scale=" + s.ToString("F2"));
+        return go;
     }
 }

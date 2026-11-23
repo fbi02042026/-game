@@ -192,7 +192,7 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("赤焰炼狱：通往最深处前的最后一层。这里的热不是火——是裂缝本身在烧。"),
             StoryDirector.Solo("你", "三个月前，她走进这层就再没出来。炼狱烧不穿她留下的脚印。", StoryPortraits.Player),
-            StoryDirector.Solo("你", "第八支小队走到这儿的，只剩我一个。答案和债，今天一起结。", StoryPortraits.Player),
+            StoryDirector.Solo("你", "第八支小队走到这儿的，只剩我一个。那句话的答案要找出来，三枚铜板的账要结清。", StoryPortraits.Player),
         };
         StoryDirector.Ensure().Play(beats, onDone);
     }
@@ -203,8 +203,8 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("永霜雪境：裂隙最深处，雪一直下。这一趟的终点就在前面。"),
             // 【2026-11-01 主人拍板「不要回顾剧情这个模式，改成关卡里的」】c8_ice 两句并入战前
-            StoryDirector.Narration("雪落到剑刃上就化了，像它认得这把剑。"),
-            StoryDirector.Narration("裂隙在前面收成一条白线。你想起老板娘那句没说完的话，忽然明白她为什么没往下说。"),
+            StoryDirector.Narration("雪落到剑刃上也不化，就堆在缺口旁边，像它认得这把剑。"),
+            StoryDirector.Narration("裂隙在前面收成一条白线。你想起老板娘那本抄满名字的册子，忽然明白她为什么只抄不说。"),
         };
         // 【2026-10-29 叙事体检】第 7 章选 A（先带她回去）后艾丽娅已送回城，不再对她说话；
         // B（一起砸了）/ C（让她坐上去）她仍同行，原台词保留。战前剧情每周目每章只播一次（看过即不重播）。
@@ -647,8 +647,8 @@ public static class ChapterStoryBeats
         {
             StoryDirector.Narration("装备科的库房比想象里深。最里面的柜子上了三把锁，锁上贴着同一张封条：内部流转，勿问。"),
             StoryDirector.Narration("柜子里没有钱，也没有装备——只有一摞码得整整齐齐的空纸箱。每个箱面写着一支队伍的编号。"),
-            StoryDirector.Solo("你", "第九支……领用单上写的就是他们。进裂隙前一天，箱子被人单独领走了。", StoryPortraits.Player),
-            StoryDirector.Narration("箱底压着一张字条，墨迹很新：「想知道答案，就去它们回来的地方。」"),
+            StoryDirector.Solo("你", "第九支……领用单最后一行的编号，就是这些箱子。进裂隙前一天，这批箱子被人单独领走了。", StoryPortraits.Player),
+            StoryDirector.Narration("箱底压着一张字条，墨迹很新：「想知道答案，就去它们最后停下的地方。」"),
         };
         // 【2026-10-24 主人拍板「黑幕可以加地点或需要玩家知道的字幕」】本段没有背景图，黑幕字幕直接点名地点
         StoryDirector.Ensure().Play(beats, onDone, null, false, "装备科·库房");
@@ -672,7 +672,7 @@ public static class ChapterStoryBeats
             StoryDirector.Solo("梅莉莎", "手别伸过来。箱子很沉，你抱不动。", StoryPortraits.Melissa),
             // 【2026-10-31 修】原「两百多支队伍」与碑上七支、每三年一次的量级差两个数量级，改成不报数
             StoryDirector.Solo("你", "M。装备科记录员。十一年，每一支进裂隙的队伍的箱子，全是你装的。", StoryPortraits.Player),
-            StoryDirector.Solo("梅莉莎", "装了十一年，就赌一件事——总有一支队伍，能把我预感的那些事，一件不差全应验。", StoryPortraits.Melissa),
+            StoryDirector.Solo("梅莉莎", "装了十一年，就赌一件事——总有一支队伍，会把我预感的那些事，一件不差全碰上。", StoryPortraits.Melissa),
             StoryDirector.Solo("梅莉莎", "今天，应验了。", StoryPortraits.Melissa),
             StoryDirector.Narration("她把最后一个箱子推到你面前。箱面写着：给追到这儿的人。"),
             StoryDirector.Solo("梅莉莎", "回去吧。以后进裂隙的箱子，换你来装。", StoryPortraits.Melissa),
@@ -693,7 +693,7 @@ public static class ChapterStoryBeats
 
     static void BuildHappy(List<StoryBeat> b)
     {
-        b.Add(StoryDirector.Narration("沉座在你面前碎成八瓣。第八块空碑上的名字，终于没人刻得上去了。").Bg(StoryBackgrounds.EndHappy).Shake());
+        b.Add(StoryDirector.Narration("沉座在你面前碎成八瓣。第八块空碑，终于不用刻名字了。").Bg(StoryBackgrounds.EndHappy).Shake());
         b.Add(StoryDirector.Solo("艾丽娅", "结束了。对我们来说，结束了。", StoryPortraits.Xiaomei));
         b.Add(StoryDirector.Narration("你们拼命往回跑。跑出口的时候天亮得刺眼。"));
         b.Add(StoryDirector.Solo("艾丽娅", "……三枚铜板。我还没还。", StoryPortraits.Xiaomei));

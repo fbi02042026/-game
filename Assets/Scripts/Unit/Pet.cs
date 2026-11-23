@@ -17,8 +17,8 @@ using UnityEngine;
 /// </summary>
 public partial class Pet : Mercenary
 {
-    /// <summary>宠物高度 = 玩家高度的这个比例（用户 11-21「战斗中宠物大概是玩家一半的高度」）。</summary>
-    const float PET_HEIGHT_RATIO = 0.5f;
+    /// <summary>宠物高度 = 玩家高度的这个比例（11-21「玩家一半高」→ 11-23 主人「战斗中形象也小，再放大一倍」=1.0 与玩家等高）。internal 供战场演出狗复用同一真源。</summary>
+    internal const float PET_HEIGHT_RATIO = 1.0f;
     /// <summary>头顶血条离模型顶部的间隙 = 宠物自身世界高度 × 此比例（11-22 按体型调节，不写死世界单位）。</summary>
     const float HP_BAR_HEAD_GAP_RATIO = 0.12f;
     /// <summary>移动动画倍率上下限（11-22：步频跟位移，别再出现「动画慢移动快」滑步）。</summary>
@@ -155,8 +155,12 @@ public partial class Pet : Mercenary
         attr.SetBaseAndCurrent(AttrType.MagicAttack, magic ? Mathf.Max(1f, def.atk) : 0f);
         attr.SetBaseAndCurrent(AttrType.AttackSpeed, GameConfig.BASE_ATTACK_SPEED);
         attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED * PET_MOVE_BASE_RATIO * GetMoveRateBySpecies(def));
-        attr.SetBaseAndCurrent(AttrType.AttackRange,
-            IsRangedPet(def) ? GameConfig.RangeBow * 0.75f : GameConfig.RangeSword);
+        // 2026-11-23 主人「宠物攻击距离还是远，要和近战一样」：射程全统一近战剑距(0.96)，远程宠不再放风筝。
+        // 11-23 二次修：远程/法术宠走 Orb 弹丸(UsesMeleeBasicAttack=false)，吃不到 GetEffectiveAttackRange 里我方近战的
+        // ×0.9 贴身系数，实际 0.96+0.12 Slack 比真近战远一截。这里给远程/法术宠配置射程预乘 0.9，
+        // 使全部宠物有效射程统一到 0.864(=0.96×0.9)，与玩家/近战佣兵一致，弹丸外观(子弹样)保留不变。
+        float petRange = GameConfig.RangeSword * (IsMagicPet(def) || IsRangedPet(def) ? 0.9f : 1f);
+        attr.SetBaseAndCurrent(AttrType.AttackRange, petRange);
         attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
         currentHp = attr.GetAttr(AttrType.MaxHp);
     }
@@ -165,7 +169,7 @@ public partial class Pet : Mercenary
     static bool IsMagicPet(PetDefs.Def def)
         => def != null && def.id.StartsWith("lizard");
 
-    /// <summary>巨嘴鸟/鹦鹉、恶魔狼（换皮后远程）走弓；其余近战。</summary>
+    /// <summary>巨嘴鸟/鹦鹉、恶魔狼（换皮后远程）——射程已统一近战，此处仅标识弹丸外观；其余近战刀光。</summary>
     static bool IsRangedPet(PetDefs.Def def)
         => def != null && (def.id.StartsWith("toucan") || def.id == "wolf_demon");
 
@@ -198,12 +202,13 @@ public partial class Pet : Mercenary
         return MOVE_RATE_DEFAULT;
     }
 
-    /// <summary>技能套：法术宠→法球，远程宠→弓，其余→近战刀光（与 IsMagicPet/IsRangedPet 同源）。</summary>
+    /// <summary>攻击套：法术宠→法球，远程宠→法球弹丸(子弹样)，其余→近战刀光（2026-11-23 远程弓箭换弹丸）。</summary>
     protected override AttackVfxKit GetAttackVfxKit()
     {
         if (_def == null) return AttackVfxKit.MeleeSlash;
         if (IsMagicPet(_def)) return AttackVfxKit.Orb;
-        if (IsRangedPet(_def)) return AttackVfxKit.Bow;
+        // 2026-11-23 主人「远程找个子弹样子的」：Orb=圆球弹丸(VFX/Shared/Ally/Orb)，Bow=宽扁箭矢。
+        if (IsRangedPet(_def)) return AttackVfxKit.Orb;
         return AttackVfxKit.MeleeSlash;
     }
 
@@ -246,6 +251,11 @@ public partial class Pet : Mercenary
         {
             var r = srs[i];
             if (r == null || r.sprite == null || !r.enabled) continue;
+            // 2026-11-23 主人「战斗宠物别缩太小、还是玩家一半大」：prefab 的 Attack/Hit/Hit_2/Dead
+            // 动画帧节点 m_IsActive=0 但 SpriteRenderer.enabled=1 且尺寸远大于躯干(Hit 高 2.01>
+            // Body 1.27)，旧版把它们算进 bounds → myH 虚高 → 反推 s 偏小。只给宠物排除 inactive 帧；
+            // 玩家(Hero)量法一字不改，targetH 口径不变。
+            if (unit is Pet && !r.gameObject.activeInHierarchy) continue;
             if (r.name == "Shadow" || r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
             if (!has) { b = r.bounds; has = true; }
             else b.Encapsulate(r.bounds);
@@ -285,7 +295,7 @@ public partial class Pet : Mercenary
     /// 缺 Shadow 节点只告警不新建（项目红线：不静默造资源）。
     /// </summary>
     /// <summary>阴影可见尺寸放大倍数（11-22 主人「宠物阴影太小」→「放大一倍」→「再放大一倍」）：实心圆软边让可见核心比标称小。</summary>
-    const float BATTLE_SHADOW_SIZE_SCALE = 6f;
+    const float BATTLE_SHADOW_SIZE_SCALE = 12f;  // 11-23 主人「脚下阴影还是小」：6→12 翻倍
     /// <summary>阴影纵向压扁系数（11-22 主人「压扁一些」）：横向放大同时收高度，更像贴地椭圆。</summary>
     const float BATTLE_SHADOW_FLATTEN = 0.6f;
 
@@ -353,6 +363,8 @@ public partial class Pet : Mercenary
         {
             var r = srs[i];
             if (r == null || r.sprite == null || !r.enabled) continue;
+            // 2026-11-23：与 MeasureBodyHeight 同口径，宠物排除 inactive 动画帧，血条贴可见躯干顶部
+            if (!r.gameObject.activeInHierarchy) continue;
             if (r.name == "Shadow" || r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) >= 0) continue;
             if (!has) { b = r.bounds; has = true; }
             else b.Encapsulate(r.bounds);

@@ -262,7 +262,10 @@ public partial class Monster
             && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun
             && ActProgressionDefs.BossKindOfStage(stageIdx0) == 2;   // 路线B：关10(stageIdx0=9)大Boss档
         float bossStatMul = finalBossStage ? GameConfig.BOSS_FINAL_STAT_MUL : 1f;
-        baseHp *= bossStatMul;
+        // 【2026-11-23 主人拍板】章末大 Boss 只加血、不动攻：新增独立乘区，避免复用 bossStatMul 把攻击一起抬。
+        // 判定与 bossStatMul 同源（finalBossStage 已含 IsFormalMainRun + BossKindOfStage==2），副本/裂隙/小 Boss 恒 1。
+        float bossFinalHpMul = finalBossStage ? GameConfig.BOSS_FINAL_HP_MUL : 1f;
+        baseHp *= bossStatMul * bossFinalHpMul;
         baseAtk *= bossStatMul;
 
         float waveMul = 1f + waveNum * 0.05f;
@@ -349,7 +352,7 @@ public partial class Monster
                 float roleMul = bossUnit
                     ? (isMagicType ? BossMagicHpMul : BossPhysicalHpMul)
                     : (isMagicType ? EliteMagicHpMul : ElitePhysicalHpMul);
-                baseHp = firstMob.baseHp * roleMul * bossStatMul;
+                baseHp = firstMob.baseHp * roleMul * bossStatMul * bossFinalHpMul;
             }
         }
         // 【2026-11-14 主人拍板「属性分维度爬坡 + 数个小高潮，不要一马平川」】正式主线关逐关属性轮动

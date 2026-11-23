@@ -106,7 +106,7 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     bool _bubblePointUpOnce;
     /// <summary>
-    /// 【2026-11-16 主人需求】一次性「点击任意处立即收掉」：只给收尾那条对话小提示用。
+    /// 【2026-11-16 主人需求】一次性「点击任意处立即收掉」：收尾对话小提示 / 技能排序软引导用。
     /// Hide 时清空，其余引导零影响；短时武装门限防弹窗关闭那一下的残余点击误关。
     /// </summary>
     bool _tapToHideOnce;
@@ -741,7 +741,7 @@ public class TutorialHintUI : MonoBehaviour
             Hide();
             return;
         }
-        // 【2026-11-16】一次性点击收掉：只给收尾对话提示用；武装门限内不响应，防残余误触
+        // 【2026-11-16】一次性点击收掉：收尾对话提示 / 技能排序软引导；武装门限内不响应，防残余误触
         if (_tapToHideOnce && Time.unscaledTime >= _tapHideArmAt && ScreenTapped())
         {
             Hide();

@@ -300,6 +300,16 @@ public partial class MercDrawPoolUI : MonoBehaviour
         {
             Debug.LogError("[MercDrawPoolUI] 列表卡缺「升阶」节点（主人预制体 Slot 内应有三钮）");
         }
+
+        // 【2026-11-23 主人要求】替换点选态：下方列表卡变暗且不可点，只留上方队列格可点换下。
+        // CanvasGroup 一处办到三件事：alpha 变暗 / interactable=false 禁用卡及卡内升阶钮的点击 /
+        // blocksRaycasts 保持 true 吃掉射线，不穿透到暗区误关窗。列表卡走复用池、Fill 每轮全量重填，
+        // 进出点选态都经 Refresh→FillTemplateCard，这里每次显式写值，不残留。
+        var listCg = card.GetComponent<CanvasGroup>();
+        if (listCg == null) listCg = card.AddComponent<CanvasGroup>();
+        listCg.alpha = _swapSelecting ? 0.45f : 1f;
+        listCg.interactable = !_swapSelecting;
+        listCg.blocksRaycasts = true;
     }
 
     /// <summary>卡内「升阶」钮材料不够时的压灰色（只调色不动图，同 inQueue 灰显口径）。</summary>

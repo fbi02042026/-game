@@ -446,6 +446,9 @@ public partial class BattleManager
             return false;
         }
         if (!hasEvent) return false;
+        // 【2026-11-23 主人拍板】每章只在第6关触发：非投放关放行首波、不播剧情
+        int curStageIdx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
+        if (curStageIdx != IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter)) return false;
         // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 不播（放行首波），
         // 与 Plan 不打标口径一致；首波链独立查表、不走 wave 打标，必须在此自查存档。data 为空视为未看。
         var intruderData = SaveSystem.Instance?.Data;
@@ -508,9 +511,9 @@ public partial class BattleManager
     // 批次4（2026-11-20 T4/T5/T6/T9）：友军救场 + 入场救援
     // ============================================================
     // T4 触发链：UnitBase.Damage.cs 实际扣血后 → TryTriggerRescueOnWounded（门禁+Boss波+阈值+一次旗）
-    //   → CoRescueArrival（剧情三件套）→ SpawnRescueSquad(满血 1f)。
-    // T6 入场救援：BattleStartSequenceCoroutine 提前槽（战前剧情同槽）→ CoEntryRescueBeforeFirstWave
-    //   → 剧情 → SpawnRescueSquad(0.4 低血起步) → 首波照常刷。
+    //   → CoRescueArrival：先 SpawnRescueSquad(满血 1f) 落人，再 CoRescueBattleScene 头顶气泡演（2026-11-23 起不再走全屏立绘）。
+    // T6 入场救援：BattleStartSequenceCoroutine 的 FinishBattleIntro 之后 → CoEntryRescueBeforeFirstWave
+    //   → 先 SpawnRescueSquad(0.4 低血起步) 落人 → CoEntryRescueBattleScene 气泡 + 刀光 → 首波照常刷。
     // 波末：Update 通关检测点 TickRescueSquadWaveEnd —— T5 直接撤场；T6 先谢幕剧情再撤场（不拦结算）。
     // 撤场兜底：StopBattleSpawnCoroutines（换关/撤离/收尾）→ DespawnRescueSquad，不带到结算/下一关。
     // 🔴 不调 UnlockMerc（临时入队不算已拥有，照 RunDraftDirector.cs:583 引导分支口径）。
@@ -518,9 +521,14 @@ public partial class BattleManager
 
     /// <summary>T4 濒死阈值（主人 2026-11-18 拍板 40%；实测过频再单独拍板调，不私自改）。</summary>
     internal const float RescueHpRatio = 0.4f;
-    /// <summary>固定救场小队（2026-11-20 拍板①）：加百列 H023 剑盾 / 艾拉 H015 游侠 / 塞拉 H012 水系法，squadId="SQ_MAIN"。</summary>
-    static readonly string[] RescueSquadHireIds = { "H023", "H015", "H012" };
-    const float RescueSpawnAheadBase = 2.2f;   // 救场小队生成点：玩家前方基线
+    /// <summary>固定救场小队（2026-11-20 拍板①；2026-11-23 主人拍板治疗位换牧师）：加百列 H023 剑盾 / 艾拉 H015 游侠 / 莉娜 H017 牧师，squadId="SQ_MAIN"。</summary>
+    static readonly string[] RescueSquadHireIds = { "H023", "H015", "H017" };
+    /// <summary>
+    /// 救场小队生成点的玩家前方基线（2026-11-23 由 2.2 收窄到 1.0）：救场/入场救援都改战场演出，
+    /// 三个说话人必须同框。窄屏（720×1280）画面右边界 ≈ 开战位 +3.89，旧基线 2.2 + 1.1×2
+    /// 会把第三人推到屏外（气泡被钳在屏幕边缘、脱离本人）→ 现为 1.0 / 2.1 / 3.2。
+    /// </summary>
+    const float RescueSpawnAheadBase = 1.0f;
     const float RescueSpawnAheadStep = 1.1f;   // 队内成员错位间距
 
     /// <summary>T4 本关已触发旗：命中即置 true 不再查；换关在 ResetWaveProgress 清（T8 关卡级口径）。</summary>
@@ -572,41 +580,48 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// T5 救场剧情 → onDone 才生成友军（剧情期间战斗已被 StoryDirector 暂停正好当演出）。
-    /// 三件套照 CoAnnounceThenSpawnNextWave 的 T3 分支：try/catch + StopPlaying + 300s 看门狗；异常也放行（友军照常入场）。
+    /// T5 救场（2026-11-23 改战场内演出）：三名满血友军直接入场开打，台词走战斗头顶气泡。
+    /// 不再开全屏立绘窗、不再靠 StoryDirector 的 timeScale=0 定格 —— 这段发生在玩家 40% 血、
+    /// Boss 波进行中，弹立绘等于「战斗中弹剧情 + 回来又变像素小人」（主人 11-23 拍板）。
+    /// 先落人再演也让救场当场生效：莉娜的治疗与加百列的盾立刻接上，比「演完才落地」更救命。
     /// </summary>
     IEnumerator CoRescueArrival()
     {
-        bool done = false;
-        BattleEntryDraftPanel.Hide();   // T9：防抽奖按钮盖住对话窗（Settlement.cs:387 同款）
-        bool playing = false;
-        try
-        {
-            playing = IntruderStoryBeats.TryPlayRescue(
-                IsSideIsland ? 0 : CurrentChapter,
-                IsSideIsland ? SideIslandId.ToString() : null,
-                () => done = true);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[BattleManager] 友军救场剧情播放异常，友军照常入场: " + e.Message);
-            StoryDirector.Ensure().StopPlaying();
-            var dlg = DialogueUI.Instance;
-            if (dlg != null) dlg.Hide();
-            playing = false;
-        }
-        if (playing)
-        {
-            float watchdog = 0f;
-            while (!done && watchdog < 300f)
-            {
-                watchdog += Time.unscaledDeltaTime;
-                yield return null;
-            }
-            if (!done) Debug.LogWarning("[BattleManager] 友军救场剧情 5 分钟未完成，强制放行友军入场");
-        }
         SpawnRescueSquad(1f, entryMode: false);   // 救场友军满血入场
+        if (_rescueSquad.Count == 0)
+        {
+            // 一个都没生成：不静默兜底造人，报错后照常打（流程不能卡）
+            Debug.LogError("[BattleManager] 救场小队一个都没生成，救场演出跳过（战斗照常）");
+            _rescueStoryCo = null;
+            yield break;
+        }
+        yield return CoRescueBattleScene();
         _rescueStoryCo = null;
+    }
+
+    /// <summary>
+    /// 救场·战场演出（2026-11-23）：三人轮流喊话 + 玩家回一句，气泡贴本人头上（跟着单位走）。
+    /// 不暂停战斗、不置 _preBattleStoryPlaying（本波怪已在场，没有待刷波次要拦）；
+    /// 台词取 IntruderStoryBeats.RescueBattleLines（支线岛版/揭底版/首遇版），取不到人跳过该句。
+    /// </summary>
+    IEnumerator CoRescueBattleScene()
+    {
+        var talk = BattleHeadTalkUI.Ensure();
+        if (talk == null)
+        {
+            Debug.LogError("[BattleManager] BattleHeadTalkUI 取不到，救场演出跳过（友军已入场，战斗照常）");
+            yield break;
+        }
+        var lines = IntruderStoryBeats.RescueBattleLines(
+            IsSideIsland ? 0 : CurrentChapter,
+            IsSideIsland ? SideIslandId.ToString() : null);
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (_runClosed || _stageCleared) break;   // 玩家死了/已通关：立刻收掉气泡，别压在结算上
+            var unit = ResolveSquadSpeaker(lines[i].Speaker);
+            if (unit == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
+            yield return talk.CoPlayLine(unit, lines[i].Text, lines[i].Hold);
+        }
     }
 
     /// <summary>生成救场小队（T5 满血 1f / T6 低血 startHpRatio=0.4）。固定三人同一支队伍，不随机。</summary>
@@ -736,9 +751,10 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// T6 入场救援：进 Boss 关先播「撞见小队被围攻」剧情 → onDone 生成 3 名低血友军（startHpRatio=0.4）→ 首波照常刷。
-    /// 挂点 = BattleStartSequenceCoroutine 提前槽（CoPreBattleStoryThenFirstWave 之后同槽，不另开新时机）。
-    /// 一次性：存档级 intruderStorySeenKeys（key=eventId），多周目不重播同一段（已看则整段不触发）。
+    /// T6 入场救援（2026-11-23 改战场内演出）：进 Boss 关先把 3 名低血友军（startHpRatio=0.4，表值优先）
+    /// 落在队伍前方 → 在场上用战斗小人 + 头顶气泡演「被咬住、搭把手」 → 首波照常刷。
+    /// 挂点 = BattleStartSequenceCoroutine 的 FinishBattleIntro 之后（队伍与镜头都已就位）。
+    /// 一次性：存档级 intruderStorySeenKeys（key=eventId），多周目不重播（已看则整段不触发，友军也不生成）。
     /// </summary>
     IEnumerator CoEntryRescueBeforeFirstWave()
     {
@@ -762,35 +778,82 @@ public partial class BattleManager
         var data = SaveSystem.Instance?.Data;
         if (data != null && data.HasIntruderStorySeen(row.eventId)) yield break;   // 多周目不重播
 
-        bool done = false;
-        BattleEntryDraftPanel.Hide();   // T9 同款
-        bool playing = false;
-        try
-        {
-            playing = IntruderStoryBeats.TryPlayEntry(CurrentChapter, row.storyKey, () => done = true);
-        }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[BattleManager] 入场救援剧情播放异常，友军照常入场: " + e.Message);
-            StoryDirector.Ensure().StopPlaying();
-            var dlg = DialogueUI.Instance;
-            if (dlg != null) dlg.Hide();
-            playing = false;
-        }
-        if (playing)
-        {
-            // 开播即记存档（MarkPreStorySeen 同口径：跳过也算看过，防同段重播）
-            data?.MarkIntruderStorySeen(row.eventId);
-            float watchdog = 0f;
-            while (!done && watchdog < 300f)
-            {
-                watchdog += Time.unscaledDeltaTime;
-                yield return null;
-            }
-            if (!done) Debug.LogWarning("[BattleManager] 入场救援剧情 5 分钟未完成，强制放行友军入场");
-        }
+        // 开演即记存档（跳过也算看过，防同段重播；与 MarkPreStorySeen 同口径）
+        data?.MarkIntruderStorySeen(row.eventId);
+
+        // 先落人再演：旧流程是「全屏窗演完才生成友军」，画面里没有人、回来才是像素小人（割裂根因）。
+        // 现在三人直接站在队伍前方（低血起步），气泡就贴在本人头上。
         float hp = row.startHpRatio > 0f ? row.startHpRatio : RescueHpRatio;   // 表值优先，缺省 0.4（拍板③）
         SpawnRescueSquad(hp, entryMode: true);
+        if (_rescueSquad.Count == 0)
+        {
+            // 一个都没生成：不静默兜底造人，报错后照常放行首波（流程不能卡）
+            Debug.LogError("[BattleManager] 入场救援三名友军一个都没生成，战场演出跳过（首波照常）");
+            yield break;
+        }
+
+        // 演出期间压住硬刷兜底（照 PetRescue 同款）；玩家若已点「开始战斗」则演出内部提前收场
+        bool prevGate = _preBattleStoryPlaying;
+        _preBattleStoryPlaying = true;
+        yield return CoEntryRescueBattleScene();
+        _preBattleStoryPlaying = prevGate;
+    }
+
+    /// <summary>
+    /// 入场救援·战场演出（2026-11-23）：三名低血友军在队伍前方被咬住 → 头顶气泡轮流喊话 → 玩家回一句
+    /// → 收尾三处刀光表示冲进围圈。纯视觉/零统计污染：不生成假怪、不结算伤害、不计数、
+    /// 不动波数怪数（铁律 40/41）——台上这三人本来就是这一关要参战的真实友军。
+    /// 全程 unscaled 时间，与 PetRescue / StoryDirector 同口径。
+    /// </summary>
+    IEnumerator CoEntryRescueBattleScene()
+    {
+        var talk = BattleHeadTalkUI.Ensure();
+        if (talk == null)
+        {
+            Debug.LogError("[BattleManager] BattleHeadTalkUI 取不到，入场救援战场演出跳过（友军已入场，首波照常）");
+            yield break;
+        }
+        var lines = IntruderStoryBeats.EntryBattleLines(CurrentChapter);
+        for (int i = 0; i < lines.Count; i++)
+        {
+            // 玩家已点「开始战斗」：立刻收掉演出让路（剧情只是插播，不挡开打）
+            if (_liveStartRequested) break;
+            var unit = ResolveSquadSpeaker(lines[i].Speaker);
+            if (unit == null) continue;   // 该位没生成/已阵亡：跳过这句，不兜底换人
+            yield return talk.CoPlayLine(unit, lines[i].Text, lines[i].Hold);
+        }
+
+        // 收尾刀光：玩家冲进围圈解围（纯特效，不结算伤害）
+        var vfx = BattleVFXSystem.Instance;
+        if (vfx != null)
+        {
+            float z = unitRoot != null ? unitRoot.position.z : 0f;
+            var first = _rescueSquad[0];
+            float cx = first != null ? UnitBase.GetCombatX(first)
+                : (hero != null ? UnitBase.GetCombatX(hero) + 2f : 0f);
+            vfx.PlaySlash(new Vector3(cx - 0.5f, UnitBase.GROUND_Y + 0.4f, z), 1, VfxFaction.Ally);
+            vfx.PlaySlash(new Vector3(cx + 0.5f, UnitBase.GROUND_Y + 0.4f, z), -1, VfxFaction.Ally);
+            yield return new WaitForSecondsRealtime(0.35f);
+        }
+    }
+
+    /// <summary>
+    /// 说话人槽位 → 场上单位（0/1/2 = 救场小队，3 = 玩家）；救场与入场救援两段演出共用。取不到返回 null。
+    /// 认人用花名册 hireId（不认 _rescueSquad 下标）：三人里万一某个生成失败，下标会整体前移，
+    /// 按顺序取会把加百列的台词安到艾拉头上。
+    /// </summary>
+    UnitBase ResolveSquadSpeaker(IntruderStoryBeats.EntrySpeaker who)
+    {
+        if (who == IntruderStoryBeats.EntrySpeaker.Player) return hero;
+        int idx = (int)who;
+        if (_rescueSquad == null || idx < 0 || idx >= RescueSquadHireIds.Length) return null;
+        string hire = RescueSquadHireIds[idx];
+        for (int i = 0; i < _rescueSquad.Count; i++)
+        {
+            var m = _rescueSquad[i];
+            if (m != null && m.hireId == hire) return m;
+        }
+        return null;   // 该位没生成/已阵亡：调用方跳过这句，不兜底换人
     }
 
     /// <summary>首波刷怪（含兜底）；成功才标记 _firstWaveSpawned</summary>
@@ -958,10 +1021,6 @@ public partial class BattleManager
         if (entryStoryEarly)
         {
             yield return CoPreBattleStoryThenFirstWave();
-            // 批次4 T6 入场救援（同槽处理，不另开新时机）：Boss 关先播「撞见小队被围攻」剧情
-            // → onDone 生成 3 名低血友军（0.4）→ 之后的抽奖分流 / 首波时序一字不动。
-            // Boss 关必中 entryStoryEarly（ShouldOfferBossBlessing 对 Boss 关恒 true），提前槽即唯一入口。
-            yield return CoEntryRescueBeforeFirstWave();
             yield return CoBossStageBlessingChoice();
             BattleEntryDraftPanel.Instance?.SetDrawLocked(false);   // 剧情播完才恢复可抽
         }
@@ -975,6 +1034,12 @@ public partial class BattleManager
         yield return CoPartyWalkInFromLeft(startX, z);
 
         FinishBattleIntro(follow);
+
+        // 【2026-11-23 主人拍板】入场救援（T6）改「战场内演出」，挂点从提前槽挪到这里：
+        // 旧槽位（章节卡淡出那一帧）队伍还在屏外，像素小人说话玩家根本看不见；
+        // 现在队伍已在开战位站定、UnitsCanAct=false，三个说话人不会跑，镜头也已就位。
+        // 门禁/存档一次性/生成低血友军仍在 CoEntryRescueBeforeFirstWave 内部，这里只管时序。
+        yield return CoEntryRescueBeforeFirstWave();
 
         if (Rules.DirectorOwnsWaves)
         {
@@ -1360,6 +1425,8 @@ public partial class BattleManager
         // 【2026-10-21 主人拍板】顶部进度条改按当前关波次推进：已清波数 = 下一个未刷波索引
         //（FindNextUnspawnedWaveIndex 返回第一个未刷波的下标 = 已刷完的波数，见 WavePlanner.Advance.cs:216）
         BattleUI.Instance?.UpdateWaveProgress(Mathf.Max(0, nextIdx), _waves != null ? _waves.Count : 0);
+        // 【2026-11-23 主人拍板】黄昏关（以 Phase==Dusk 判定）清完第 1 波后渐变到夜晚；末波/白天关/夜关/引导局由方法内部判定自然不推进。
+        BattleAtmosphere.Instance?.OnWaveCleared(Mathf.Max(0, nextIdx), _waves != null ? _waves.Count : 0);
 
         // 【2026-11-01 主人拍板】抽奖只在每层开始（CoStageEntryDraft），波清一律不弹抽奖窗：
         // 无限裂隙与正式关/金币本同款 —— 旧口径：5 秒倒计时（不冻结）→「下一波来袭」预告出兵（2026-11-12 起停用）。
@@ -1420,6 +1487,14 @@ public partial class BattleManager
     {
         if (!isInBattle || _stageCleared || _runClosed || BattleLootMode.Active) return;
         if (_preBattleStoryPlaying) return;
+        // 2026-11-23 主人「下一波和剧情不要同时出现」：任何剧情正在播（timeScale=0 的全屏对白，
+        // 或战场内不冻结时间的插叙演出）都顺延流式刷怪，绝不放弃——剧情收窗后下一拍自然补上。
+        // 旧版只看 _preBattleStoryPlaying，覆盖不到羁绊本 Boss 前剧情/敌对乱入等未置该位的剧情。
+        if (StoryDirector.Instance != null && StoryDirector.Instance.IsPlaying)
+        {
+            ScheduleWaveStreamNext();
+            return;
+        }
         int nextIdx = FindNextUnspawnedWaveIndex();
         if (nextIdx < 0) return;
         var next = _waves != null && nextIdx < _waves.Count ? _waves[nextIdx] : null;
@@ -1591,7 +1666,9 @@ public partial class BattleManager
             bool intruderGate = IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
                                 && !IsArena && !IsActivityDungeon && !IsEndlessRift
                                 && NormalOnlyContentAllowed(BattleDifficulty);   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
-            if (intruderWave && intruderGate)
+            // 【2026-11-23 主人拍板】每章只在第6关触发：非投放关不播（Plan 打标已加同款门禁，此处双保险）
+            int curIntruderStageIdx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
+            if (intruderWave && intruderGate && curIntruderStageIdx == IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter))
             {
                 bool done = false;
                 BattleEntryDraftPanel.Hide();   // 幂等：防抽奖按钮盖住对话窗（Settlement.cs:387 同款）

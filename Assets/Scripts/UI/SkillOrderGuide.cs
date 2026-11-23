@@ -30,7 +30,7 @@ public static class SkillOrderGuide
     /// </summary>
     public const string Text = "技能冷却好会自动放，不用手点。拖动可以改顺序，① 最先放——记不住就多看两眼。";
 
-    const float ShowSeconds = 5f;
+    const float ShowSeconds = 3f;
 
     /// <summary>
     /// 【2026-11-11 主人拍板】本条引导的专属排版：两行紧凑、框更矮（约 120px）。
@@ -119,6 +119,11 @@ public static class SkillOrderGuide
             target = bui.skillSlotRoot as RectTransform;
 
         hint.Show(Text, target, ShowSeconds, false, Layout);
+        // 【2026-11-23 主人拍板】点一下就收掉，别让这条引导在战斗里占屏；不点则 3 秒自动收。
+        // 走 TutorialHintUI 既有的「一次性点击收掉」出口（Hide 自动失效，其余引导零影响）。
+        // Show 可能被战斗台词占屏挡掉：确认真的弹出来了才武装，免得污染下一条引导。
+        if (hint.IsVisible && hint.CurrentHint == Text)
+            hint.SetTapToHideOnce(true);
 
         PlayerPrefs.SetInt(PrefsKey, 1);
         PlayerPrefs.Save();

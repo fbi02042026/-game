@@ -167,7 +167,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 点选态标记：队列已上阵格子盖黄「换下」（raycast 不拦点击，点格即换）；
+    /// 点选态标记：队列已上阵格子盖黄底提示（raycast 不拦点击，点格即换）；不写「换下」文字（2026-11-23 主人要求）；
     /// 选择期间收掉红「−」，防误触出队触发自动补位打乱替换。
     /// </summary>
     void ApplySwapSelectMarks()
@@ -185,7 +185,6 @@ public partial class MercDrawPoolUI : MonoBehaviour
             var mark = NewImage(tr, "SwapSel", new Color(1f, 0.80f, 0.25f, 0.45f));
             Stretch(mark.rectTransform);
             mark.transform.SetAsLastSibling();   // 压在立绘最上层
-            MakeText(mark.transform, "Label", "换下", 22);
         }
     }
 

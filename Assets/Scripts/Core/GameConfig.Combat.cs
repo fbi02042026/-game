@@ -188,12 +188,18 @@ public static partial class GameConfig
     /// </summary>
     public const float BOSS_FINAL_STAT_MUL = 1.0f;
     /// <summary>
-    /// 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2。
+    /// 【2026-11-05 主人拍板 / 2026-11-23 攻改 0.8】1-5 及其后所有 Boss：攻击 -20%（0.8）、血量 x2。
     /// 真源只此一处，消费点唯一 = Monster.Init 最终写 attr 处（物理 / 魔法两条攻击线都吃）；
     /// 普通怪 / 精英不受影响，副本 / 裂隙里的 Boss 同样生效。
     /// </summary>
-    public const float BOSS_ATTACK_MUL = 0.6f;
+    public const float BOSS_ATTACK_MUL = 0.8f;
     public const float BOSS_HP_MUL = 2.0f;
+    /// <summary>
+    /// 【2026-11-23 主人拍板】章末大 Boss（stageIdx0=9）专属血量倍率，只乘血、不动攻。
+    /// 消费点唯一 = Monster.Init 的 chapterFirstHpRule 与 bossStatMul 两处 baseHp 写入。
+    /// 1.3 = 章末大 Boss 再厚三成，配合 BOSS_ATTACK_MUL 0.8 让收尾扛得住四人齐射。
+    /// </summary>
+    public const float BOSS_FINAL_HP_MUL = 1.3f;
     /// <summary>
     /// 【2026-11-15 19:2x 主人拍板「只有每章第一关是前两个小怪，后面的关卡都要有词条怪做穿插，
     /// 搭配和数量由少变多」】正式主线关每关词条怪配额档（章内关序 0 基）：
@@ -877,7 +883,7 @@ public static partial class GameConfig
     /// <summary>
     /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
     /// 第一章关 10 大 Boss（forest_110 石灵）<b>专属攻击系数</b>，只乘攻击、不乘血量。
-    /// 为什么单独开一条：全局 <see cref="BOSS_ATTACK_MUL"/> = 0.6 是 11-05「Boss 攻击 -40%」的拍板，
+    /// 为什么单独开一条：全局 <see cref="BOSS_ATTACK_MUL"/> 现为 0.8（11-23 由 0.6 上调），
     ///   直接改它会连累 8 章所有 Boss；这里只补第一章关 10 这一个点。
     /// 现状换算（guildScale/diffScale=1、waveMul=1；近远真源 = monster_attack_style 风格表：
     ///   石灵 1-10 = <b>Melee 近战 ⇒ 物理型</b>，血量档走 BossPhysicalHpMul=18，不是法系的 12）：

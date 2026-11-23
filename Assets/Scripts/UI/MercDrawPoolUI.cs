@@ -35,6 +35,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     string _replacingInId;
     /// <summary>【2026-10-17 二次拍板】替换点选态：true = 等玩家点上方队列格子换下谁（不弹任何窗体）。</summary>
     bool _swapSelecting;
+    /// <summary>【2026-11-23】点选态下方中间的「取消替换」按钮（运行时建树，Refresh 控显隐）。</summary>
+    GameObject _cancelSwapBtn;
 
     // 点选态动态效果：队列已上阵格子绕中心左右旋转（2026-10-18 主人拍板：不再左右位移），退出点选态必须还原角度
     Coroutine _swapSwayCo;
@@ -257,6 +259,16 @@ public partial class MercDrawPoolUI : MonoBehaviour
         _restructurePanel = panel;
 
         WireClicks();
+
+        // 【2026-11-23 主人要求】点选态下方中间的「取消替换」按钮：运行时建树（不动预制体），
+        // 复用 Art.cs 的 MakeBtn 统一外观；显隐由 Refresh 一处按 _swapSelecting 控制，点它走 ExitSwapSelecting。
+        if (panel != null)
+        {
+            var cancelSwapBtn = MakeBtn(panel.transform, "BtnCancelSwap", "取消替换", new Vector2(0.5f, 0.06f), ExitSwapSelecting);
+            _cancelSwapBtn = cancelSwapBtn != null ? cancelSwapBtn.gameObject : null;
+        }
+        if (_cancelSwapBtn != null) _cancelSwapBtn.SetActive(false);
+
         if (_root != null) _root.SetActive(false);
     }
 
@@ -370,8 +382,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
             RefreshPoolSlot(_poolSlots[i], i, open, hireId);
         }
 
-        // 替换点选态：队列已上阵格子盖「换下」高亮，点谁换谁（2026-10-17 二次拍板：不弹替换面板）
+        // 替换点选态：队列已上阵格子盖黄底高亮，点谁换谁（2026-10-17 二次拍板：不弹替换面板）
         if (_swapSelecting) ApplySwapSelectMarks();
+        // 【2026-11-23】「取消替换」按钮显隐只认点选态，一处控制不遗漏（进/出/关窗重开都经 Refresh）
+        if (_cancelSwapBtn != null) _cancelSwapBtn.SetActive(_swapSelecting);
 
         RefreshOwned();
         RefreshLocked();

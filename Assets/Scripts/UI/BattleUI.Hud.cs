@@ -78,8 +78,8 @@ public partial class BattleUI : MonoBehaviour
         if (stageLabel != null)
         {
             ShowLabelWithFrame(stageLabel);
-            // 【2026-11-01 主人拍板】左上角章节名改显关卡编号「大关-小关」（如 3-2，大关跨篇连续编号 1-1…10-5 → 11-1…）。
-            // 副本/竞技场/裂隙/支线岛/终章等非主线模式没有大关概念，仍显章节地名（口径①仅主线让位）。
+            // 【2026-11-23 主人拍板】左上角主线关号改显「第X关」（X=章内第几关 = stageIndex+1，如 1-3 → 第3关）。
+            // 副本/竞技场/裂隙/支线岛/终章等非主线模式没有章内关号概念，仍显章节地名（口径①仅主线让位）。
             var cm = ChapterManager.Instance;
             var bmHud = BattleManager.Instance;
             bool mainRun = bmHud == null || bmHud.IsFormalMainRun;
@@ -88,7 +88,7 @@ public partial class BattleUI : MonoBehaviour
             stageLabel.text = bmHud != null && bmHud.IsEndlessRift
                 ? $"第{Mathf.Max(1, bmHud.EndlessRiftStage)}层"
                 : (mainRun && cm != null
-                    ? cm.GetCurrentStageDisplayName()
+                    ? $"第{Mathf.Max(1, cm.currentStageIndex + 1)}关"
                     : GameConfig.GetChapterMapName(chapter));
             // 【2026-10-18 主人反馈】左上角地区名/难度字偏大，运行时收一档（不动预制体）
             stageLabel.fontSize = 19;
