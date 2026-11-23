@@ -456,8 +456,9 @@ public static class MailSystem
     }
 
     /// <summary>
-    /// 首登欢迎邮件（给玩家的正式/测试信）：含 200 金币 + 5 天赋石 + 致谢与加群邀请。
-    /// 【2026-11-05 主人拍板】原附件佣兵「莉娜(H017)」删掉，换 5 天赋石；id 升版 v3 重发（老玩家也会收到新版一封）。
+    /// 首登欢迎邮件（给玩家的正式信）：含 800 金币 + 100 钻石 + 致谢与加群邀请。
+    /// 【2026-11-23 主人拍板「只留欢迎信 给800金币 100钻石」】原 200 金币+5 天赋石改 800 金币+100 钻石，
+    /// id 升版 v4 重发（老玩家也会收到新版一封；旧版 v3 与停发的补偿礼包由 DevGiftMail 清理）。
     /// 配图走表情包「高兴」（2026-10-16 主人原话：「表情用表情包里的图片 用高兴的那个」——不用佣兵头像顶表情位）。
     /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励/换配图）只需把 id 升版（如 welcome_2026_v3）。
     /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone，notifyToast=false：提示延后到关登录时）；
@@ -466,7 +467,7 @@ public static class MailSystem
     public static void EnsureWelcomeMail(bool notifyToast = true)
     {
         Ensure();
-        const string WelcomeId = "welcome_2026_v3";
+        const string WelcomeId = "welcome_2026_v4";
         var list = SaveSystem.Instance.Data.mailInbox;
         for (int i = 0; i < list.Count; i++)
             if (list[i] != null && list[i].id == WelcomeId) return;   // 已发过，不重复
@@ -477,7 +478,7 @@ public static class MailSystem
             title = "欢迎来到《像素冒险：裂隙之刃》！",
             sender = "制作组",
             body = "感谢您下载并试玩《像素冒险：裂隙之刃》！\n\n" +
-                   "这是制作组的一点小心意——200 金币与 5 枚天赋石请收下，祝您冒险顺利。\n\n" +
+                   "这是制作组的一点小心意——800 金币与 100 钻石请收下，祝您冒险顺利。\n\n" +
                    "我们是个小团队，正努力把游戏做得更好玩。如果您在游戏里有任何想法、吐槽或建议，" +
                    "非常欢迎加入玩家交流群（QQ 群号 1126152907），和我们一起聊游戏制作。\n\n" +
                    "我们一定会认真听取大家合理的建议，让游戏变得更有趣。再次感谢您的支持！\n\n" +
@@ -485,240 +486,9 @@ public static class MailSystem
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
             detailImagePath = "UI/Art/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）
-            gold = 200,
-            talentPoints = 5,   // 【2026-11-05 主人拍板】佣兵莉娜删掉，换 5 天赋石（flat 字段，详情页/领取弹窗均有现成展示）
+            gold = 800,
+            diamond = 100,   // 【2026-11-23 主人拍板】奖励改 800 金币 + 100 钻石（flat 字段，详情页/领取弹窗均有现成展示）
         }, notifyToast);
-    }
-
-    /// <summary>
-    /// 全服补偿邮件（2026-10-17）：500 金币 + 普通招募卷轴×2。
-    /// 固定 id 去重，整份存档只发一次；要调整奖励/文案只改 id 升版（如 compensation_2026_10_v2）。
-    /// 触发点：TownSceneBootstrap 回主界面补发（幂等，与欢迎信同链路）。
-    /// </summary>
-    public static void EnsureCompensationMail(bool notifyToast = true)
-    {
-        Ensure();
-        const string CompId = "compensation_2026_10_v1";
-        var list = SaveSystem.Instance.Data.mailInbox;
-        for (int i = 0; i < list.Count; i++)
-            if (list[i] != null && list[i].id == CompId) return;   // 已发过，不重复
-
-        Enqueue(new MailEntry
-        {
-            id = CompId,
-            title = "致玩家的补偿礼包",
-            sender = "制作组",
-            body = "亲爱的冒险者：\n\n" +
-                   "近期我们修复了游戏中的若干问题，感谢大家在试玩过程中的耐心与反馈。\n\n" +
-                   "为表歉意，特送上补偿礼包：500 金币、普通招募卷轴×2，请收下。\n\n" +
-                   "普通招募卷轴可在酒馆招募稀有佣兵。\n" +
-                   "如有任何建议，欢迎加入玩家交流群（QQ 群号 1126152907）告诉我们。\n\n" +
-                   "—— 像素冒险制作组",
-            createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            type = MailType.Reward,
-            detailImagePath = "UI/Art/Icons/表情包/爱心",   // 详情页表情：表情包「爱心」（2026-10-17 主人拍板，图在 Icons/表情包/ 目录）
-            gold = 500,
-            attachments = new List<MailAttachment>
-            {
-                new MailAttachment
-                {
-                    type = "scrollCommon",
-                    amount = 2,
-                    iconOverride = "UI/Art/Icons/Common/icon_hire_scroll",
-                },
-            },
-        }, notifyToast);
-    }
-
-    /// <summary>
-    /// 里程奖励·猎手长弓补偿邮件（2026-11-02 主人拍板「已经购买但没有装备上的 做下补偿…直接发个邮件给个弓得了」）：
-    /// 领过里程弓（logMileageGrantedKeys 含 special:rare_bow；该奖励条目已从 WeaponMilestones 下架）但因
-    /// 「开局不重发」bug 实际没享受到的玩家 → 补一封带 equip_bow_1（稀有档）附件的邮件，领取进随身仓库
-    /// （equip 附件口径同 ArenaRules 冠军武器邮件）。
-    /// 防重 = SaveData.mileageBowMailSent（已发过 → return；没领过弓 → return 且不写档）。
-    /// 触发点：TownSceneBootstrap.TryDailyLoginOnce（回主界面补发，与欢迎信/补偿信同链路）。
-    /// 🔴 测试版临时，正式上线删除：调用行 + 本方法 + SaveData.mileageBowMailSent 一并删。
-    /// </summary>
-    public static void EnsureMileageBowCompensationMail(bool notifyToast = true)
-    {
-        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
-        if (data == null) return;
-        if (data.mileageBowMailSent) return;                                    // 已发过
-        var keys = data.logMileageGrantedKeys;
-        if (keys == null || !keys.Contains("special:rare_bow")) return;         // 没领过里程弓：不补（不写档）
-
-        Enqueue(new MailEntry
-        {
-            title = "猎手长弓补偿",
-            body = "亲爱的冒险者：\n\n" +
-                   "「猎手长弓」已从里程奖励中下架。\n" +
-                   "感谢你的支持，随信附上一把猎手长弓，请收下。\n\n" +
-                   "—— 像素冒险制作组",
-            sender = "制作组",
-            createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-            type = MailType.Reward,
-            attachments = new List<MailAttachment>
-            {
-                new MailAttachment
-                {
-                    type = "equip",
-                    amount = 1,
-                    defId = "equip_bow_1",
-                    rarity = 2,   // 邮件装备附件口径 0~4：2 = 稀有（与里程领取时 forcedRarity=Rare 同档）
-                    iconOverride = EquipIcons.ResourcesPath + "Bow_1",   // equip_bow_1.iconFileName（照 ArenaSeasonWeapons.MailIconPath 先例）
-                },
-            },
-        }, notifyToast);
-        data.mileageBowMailSent = true;
-        SaveSystem.Instance?.Save();
-        Debug.Log("[Mail] 里程·猎手长弓补偿邮件已发（测试版临时，正式上线删除）");
-    }
-
-    /// <summary>
-    /// 【2026-11-08 主人拍板·v2 拆分版】升星流程测试补给：拆成 6 封，每封最多 3 个附件格。
-    /// 起因：v1 一封塞 14 格，MailDetailUI.RebuildRewardCells 是单排横排（96px×13≈1248 > 逻辑宽 720），
-    /// 图标会横向溢出详情页。拆开后单封最多 3 格（192px），详情页/领取弹窗都不再溢出。
-    /// 口径（主人原话「每次一个佣兵和碎片还有徽记」）：每封对应一个佣兵，含该佣兵的满星徽记 +
-    /// 满星本命碎片；本次新发的 H013 莫娜 / H017 莉娜另加佣兵本体（已拥有的 3 白不重复发本体）。
-    /// 另 1 封单独放资金：1000 钻 + 5000 金（2026-11-08 主人「金币改成5000吧」），不塞进佣兵封，
-    /// 保持「一封一个佣兵」的口径。
-    /// 徽记 id / 档位 / 数量 / 碎片数全部走真源（MercGrowSprites.JobKey + MercStarDefs.BadgeTierOf +
-    /// MercGrowInventory.BadgeId + MercStarDefs.BadgeCost / FullStarFragTotal），不写死任何 id 与数量；
-    /// 花名册或职业认不出 → LogError 并跳过该封（fail closed，不发不吞）。
-    /// 附件口径沿用既有 TryClaim 分支：merc→解锁佣兵、badge→MercGrowInventory.Add、mercfrag→GrantFragments。
-    /// 触发点：TownSceneBootstrap.TryDailyLoginOnce（与欢迎信/补偿信同链路，要求引导已完成）。
-    /// 逐封固定 id 幂等（v2 前缀）；v1 那封旧大杂烩若还在测试档里先清掉，避免两版叠加把奖励发两遍。
-    /// 🔴 测试版临时，正式上线删除：调用行 + 本方法。改奖励需升版 id 前缀（如 v3）才会重发。
-    /// </summary>
-    public static void EnsureStarUpTestMail(bool notifyToast = true)
-    {
-        Ensure();
-        const string IdPrefix = "starup_test_mail_v2_";
-        const string LegacyId = "starup_test_mail_v1";
-        const int TestDiamond = 1000;
-        const int TestGold = 5000;
-        var inbox = SaveSystem.Instance.Data.mailInbox;
-
-        // 旧版 v1（一封 14 格）已在部分测试档入箱：清掉，避免与 v2 叠加重复发奖励。
-        int removed = 0;
-        for (int i = inbox.Count - 1; i >= 0; i--)
-        {
-            var m = inbox[i];
-            if (m != null && m.id == LegacyId) { inbox.RemoveAt(i); removed++; }
-        }
-        if (removed > 0)
-        {
-            SaveSystem.Instance.Save();
-            RedDot.RefreshCommon();
-            MailListUI.NotifyInboxChanged();
-        }
-
-        // 本版每封独立幂等：一次收集现有 id（Enqueue 会往同一个 list 追加，本集合只用于查重）
-        var existingIds = new HashSet<string>();
-        for (int i = 0; i < inbox.Count; i++)
-            if (inbox[i] != null && !string.IsNullOrEmpty(inbox[i].id)) existingIds.Add(inbox[i].id);
-
-        const string LegendaryMage = "H013";   // 莫娜·雷系法师（传奇）
-        const string RarePriest = "H017";      // 莉娜·牧师（稀有）
-        var newMercs = new HashSet<string> { LegendaryMage, RarePriest };
-
-        // 一封一个佣兵：默认已拥有 3 白 + 本次新发 2 人
-        var badgeMercs = new List<string>(SaveData.DefaultUnlockedMercIds) { LegendaryMage, RarePriest };
-
-        int sent = 0;
-        for (int i = 0; i < badgeMercs.Count; i++)
-        {
-            string hireId = badgeMercs[i];
-            string mailId = IdPrefix + hireId;
-            if (existingIds.Contains(mailId)) continue;   // 该佣兵那封已发过
-
-            if (!MercRosterDefs.TryGetByHireId(hireId, out var def))
-            {
-                Debug.LogError($"[Mail] 升星测试邮件：花名册查不到 {hireId}，该封未发放");
-                continue;
-            }
-            string job = MercGrowSprites.JobKey(def.JobName);
-            if (string.IsNullOrEmpty(job))
-            {
-                Debug.LogError($"[Mail] 升星测试邮件：{def.Name} 职业名「{def.JobName}」识别不出徽记大类，该封未发放");
-                continue;
-            }
-            string tier = MercStarDefs.BadgeTierOf(def.Rarity);
-            int badgeCount = 0;
-            for (int s = 1; s <= MercStarDefs.MaxOutStar; s++)
-                badgeCount += MercStarDefs.BadgeCost(def.Rarity, s);
-            int fragCount = MercStarDefs.FullStarFragTotal(def.Rarity);
-            bool isNew = newMercs.Contains(hireId);
-
-            var attachments = new List<MailAttachment>();
-            if (isNew)   // 默认 3 白已拥有，不重复发本体
-            {
-                attachments.Add(new MailAttachment
-                {
-                    type = "merc",
-                    amount = 1,
-                    hireId = hireId,
-                    iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,
-                });
-            }
-            attachments.Add(new MailAttachment
-            {
-                type = "badge",
-                amount = badgeCount,
-                defId = MercGrowInventory.BadgeId(job, tier),
-                iconOverride = ContentPaths.Icons.JobBadge + "/" + job + tier,
-            });
-            attachments.Add(new MailAttachment
-            {
-                type = "mercfrag",
-                amount = fragCount,
-                hireId = hireId,
-                iconOverride = ContentPaths.Icons.MercHead + "/" + hireId,
-            });
-
-            string body = $"{def.Name}（{def.JobName}）的升星补给：\n" +
-                          $"· {job}徽记·{tier} ×{badgeCount}\n" +
-                          $"· {FragmentDisplayName(hireId)} ×{fragCount}\n" +
-                          (isNew ? "· 附赠该佣兵本体\n" : "") +
-                          "徽记与碎片够升满 3 星；升星仍需另扣金币/钻石。\n" +
-                          "—— 像素冒险制作组";
-
-            Enqueue(new MailEntry
-            {
-                id = mailId,
-                title = "升星补给·" + def.Name,
-                sender = "制作组",   // 不用「开发组」：DevGiftMail 清理判据就是它，会被当场删掉
-                body = body,
-                createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                type = MailType.Reward,
-                attachments = attachments,
-            }, notifyToast);
-            existingIds.Add(mailId);
-            sent++;
-        }
-
-        // 资金单独一封（2 个 flat 货币格），不塞进佣兵封
-        string fundId = IdPrefix + "fund";
-        if (!existingIds.Contains(fundId))
-        {
-            Enqueue(new MailEntry
-            {
-                id = fundId,
-                title = "升星补给·资金",
-                sender = "制作组",
-                body = "升星要花不少钱，先给你备上：\n" +
-                       $"· 钻石 ×{TestDiamond}\n· 金币 ×{TestGold}\n\n" +
-                       "升星仍会按稀有度另扣金币/钻石。\n\n—— 像素冒险制作组",
-                createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                type = MailType.Reward,
-                diamond = TestDiamond,
-                gold = TestGold,
-            }, notifyToast);
-            sent++;
-        }
-
-        if (sent > 0 || removed > 0)
-            Debug.Log($"[Mail] 升星补给 v2：本次发 {sent} 封（{badgeMercs.Count} 封佣兵材料 + 1 封资金 {TestDiamond}钻/{TestGold}金），清理旧 v1 {removed} 封（测试版临时）");
     }
 
     /// <summary>打开详情即记已读（只标记，不动领取状态）。</summary>

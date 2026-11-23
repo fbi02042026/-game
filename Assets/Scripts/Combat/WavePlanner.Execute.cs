@@ -107,6 +107,8 @@ public partial class WavePlanner
         // 【2026-10-20 主人拍板】读入本波随机编成（全近战/混合/全远程），供 PickWaveSpriteIndex 分流；
         // 引导波 compositionStyle 恒 0，走 tutorial_battle 表编成不受影响。
         _activeWaveComposition = wave != null ? wave.compositionStyle : 0;
+        // 【2026-11-23 统一编排器】旧「怪围着狗」落位特判已删：狗改走真参战上场，
+        // 怪走通用屏外入场、自然走入交战点，不再有狗位真源/落位钳制（消除抢时序根源）。
         float waveSpacing = GetMonsterWaveSpacing();
         // 【2026-10-20 主人拍板】本波的出生点候选池（车道×深度档，已洗牌），逐只随机取用；
         // 随机只落在车道与深度上，进场侧恒为右侧。
@@ -283,6 +285,7 @@ public partial class WavePlanner
             float enterDepth = (wave.aroundAnchor || wave.bilateralEnter)
                 ? 0f
                 : pooledDepth;
+            // 【2026-11-23 统一编排器】所有波统一走通用屏外入场（不再有狗剧情落位特判）。
             Monster m = SpawnMonsterOffscreenEnter(
                 engagePos, lane, monsterScale, template, stageIdx, spriteIndexOverride,
                 wave.forcedTarget, fromLeft, enterDepth);

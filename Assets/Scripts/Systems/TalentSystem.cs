@@ -25,6 +25,14 @@ public static class TalentSystem
     public const string ItemForgetPotion = "item_forget_potion";
 
     /// <summary>
+    /// 【2026-11-23】背包扩容节点 id（与 TalentDefs.CountBagRowUnlocks 读的 "R_BAG" 同源）。
+    /// 换职业**保留**该节点、不清不退：清它会连带把背包可用行从 6 掉回 3，
+    /// 放在下部行的道具被网格过滤掉（不丢档，但玩家会当成装备没了）。
+    /// 洗点仍照旧清掉（见 TryRespecRight 注释：洗点 = 重置右列）。
+    /// </summary>
+    const string BagNodeId = "R_BAG";
+
+    /// <summary>
     /// 【2026-11-20 主人拍板】钻石换职业的花费（账号级）。UI 确认文案与扣费都读这一处，禁止另写数字。
     /// 换职业 = 扣钻石 + 清右列退 80% 天赋石（左列金币天赋不动）+ 切职业真源。
     /// </summary>
@@ -440,21 +448,45 @@ public static class TalentSystem
     /// <summary>
     /// 【洗点 / 换职业共用】清右列节点并按 80% 算出应退天赋石（向下取整）——退费计算的唯一出口，禁止第二份 0.8。
     /// 只清右列（左列金币天赋不动）；含 JobChoice 的 _job 后缀键。调用方负责 Add 退款与 Save/刷新。
+    /// keepBagRows=true 时**跳过背包扩容节点**（换职业用：保留扩容、其石头也不退）；洗点仍传 false 全清。
     /// ⚠ 换职业务必在 SetSelected **之前**调用：RightNodes 按当前职业取视图，切了职业就读不到旧职业节点。
     /// </summary>
-    static int ClearRightAndRefundCore(SaveData data)
+    static int ClearRightAndRefundCore(SaveData data, bool keepBagRows = false)
     {
+        int refund = CalcRightRefundCore(data, keepBagRows);   // 先算（要用清除前的等级）
+        for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
+        {
+            var node = TalentDefs.RightNodes[i];
+            if (keepBagRows && node.id == BagNodeId) continue;   // 背包扩容保留（见 BagNodeId 注释）
+            data.talents.Remove(node.id);
+            data.talents.Remove(node.id + "_job");
+        }
+        return refund;
+    }
+
+    /// <summary>
+    /// 【2026-11-23】80% 退款的**纯计算**出口（只读，不改存档）：已投总额 × 0.8 向下取整。
+    /// 洗点 / 换职业都从 ClearRightAndRefundCore 走它，换职业确认窗的「返还 N」预览也用它 ——
+    /// 全项目仍然只有这一处 0.8，UI 不许再算第二份。
+    /// </summary>
+    public static int CalcRightRefundCore(SaveData data, bool keepBagRows = false)
+    {
+        if (data == null || data.talents == null) return 0;
         int totalSpent = 0;
         for (int i = 0; i < TalentDefs.RightNodes.Length; i++)
         {
             var node = TalentDefs.RightNodes[i];
+            if (keepBagRows && node.id == BagNodeId) continue;
             int lv = TalentDefs.GetRightNodeLevel(data.talents, node.id);
             if (lv > 0) totalSpent += TalentDefs.RightNodeTotalSpent(node, lv);
-            data.talents.Remove(node.id);
-            data.talents.Remove(node.id + "_job");
         }
         return (int)(totalSpent * 0.8f); // 向下取整
     }
+
+    /// <summary>【2026-11-23】换职业确认窗用：预计返还天赋石（只读，不改任何状态）。
+    /// 口径与 TryChangeJob 完全一致（含「背包扩容保留、不退」）。</summary>
+    public static int PreviewChangeJobRefund()
+        => CalcRightRefundCore(SaveSystem.Instance?.Data, keepBagRows: true);
 
     /// <summary>
     /// 洗右列：清除所有右列节点的等级（含 JobChoice 的已选职业），退还已投入天赋石的 80%（向下取整）。
@@ -497,12 +529,13 @@ public static class TalentSystem
     /// 收口在这里做，UI 只需先走 DiamondSpendGate.Request 二次确认、确认回调里调本方法。
     ///
     /// <para>顺序不可换：</para>
-    /// <para>① 先按**旧职业视图**清右列 + 算退 80% 天赋石（ClearRightAndRefundCore 必须在 SetSelected 之前，
-    /// RightNodes 读的是当前职业视图，切了就读不到旧节点）；② TrySpendDiamond 扣费（唯一扣费出口）；</para>
-    /// <para>③ 退款 + 背包行回落（save:false，先攒齐内存改动）；④ SetSelected 切职业真源
-    /// （内部 Save 一次，此时状态已完整，避免半截盘；换表由 RightNodes 按新职业过滤自动生效）；</para>
-    /// <para>⑤ RecalcAttr 重算 + 落盘兜底 + HUD/天赋页刷新。</para>
-    /// <para>左列金币天赋全程不动。失败在任何一步之前 return，不产生半截状态。</para>
+    /// <para>① TrySpendDiamond **先**扣费（唯一扣费出口）—— 失败直接 return，内存一个字节没动
+    ///（2026-11-23 修：原来先清右列再扣费，扣费失败会留下「天赋已清、未退款、未落盘」的半截内存）；</para>
+    /// <para>② 再按**旧职业视图**清右列 + 算退 80% 天赋石（ClearRightAndRefundCore 必须在 SetSelected 之前，
+    /// RightNodes 读的是当前职业视图，切了就读不到旧节点）；③ 退款（save:false）；</para>
+    /// <para>④ SetSelected 切职业真源（内部 Save 一次，此时状态已完整，避免半截盘；换表由 RightNodes 按新职业过滤自动生效）；</para>
+    /// <para>⑤ RecalcAttr 重算 + 落盘兜底 + HUD/红点/天赋页刷新。</para>
+    /// <para>左列金币天赋、以及背包扩容节点（R_BAG）全程不动。失败在任何一步之前 return，不产生半截状态。</para>
     /// </summary>
     public static bool TryChangeJob(PlayerJobId target, out string reason)
     {
@@ -532,20 +565,21 @@ public static class TalentSystem
             return false;
         }
 
-        // ① 旧职业视图下清右列 + 算退款（此时还没切职业，RightNodes = 旧职业表）
-        int refund = ClearRightAndRefundCore(data);
-
-        // ② 扣钻石（Diamond 唯一扣费出口，fail closed）
+        // ① 先扣钻石（Diamond 唯一扣费出口，fail closed）—— 失败时内存零改动，不留半截状态
         if (!ResourceWallet.TrySpendDiamond(CHANGE_JOB_DIAMOND_COST, "更换职业", save: false, notify: false))
         {
             reason = "钻石扣除失败";
             return false;
         }
 
-        // ③ 退款 + 背包行回落（都 save:false，先攒齐所有内存改动）
+        // ② 旧职业视图下清右列 + 算退款（此时还没切职业，RightNodes = 旧职业表）。
+        // keepBagRows：背包扩容节点保留不清（清它会让背包可用行掉回 3、下部道具看不见），其石头也不退。
+        int refund = ClearRightAndRefundCore(data, keepBagRows: true);
+
+        // ③ 退款（save:false，先攒齐所有内存改动）
         if (refund > 0)
             ResourceWallet.Add(ResourceWallet.ResourceType.TalentPoint, refund, save: false, notify: false);
-        SyncBackpackRows(data);   // 清掉 R_BAG → 背包行回落 3
+        SyncBackpackRows(data);   // R_BAG 保留 → 背包行数不变（幂等写回当前值）
 
         // ④ 切职业真源（单一出口）。SetSelected 内部会 Save 一次 ——
         // 此时钻石/天赋/退款/背包已全部改完，这次落盘就是完整状态，不留半截盘。
@@ -555,8 +589,13 @@ public static class TalentSystem
         Hero.Instance?.RecalcAttr();
         SaveSystem.Instance.Save();
         GuildHallUI.RefreshAllHudStatic();
-        if (TalentUI.Instance != null) TalentUI.Instance.RefreshAll();
-        UIManager.Instance?.ShowToast($"已转为{PlayerJobDefs.Get(target).DisplayName}，返还天赋石 {refund}");
+        RefreshTalentEntryRedDot(data);   // 【2026-11-23】清右列后天赋入口红点按新状态重算（原来没人刷）
+        // 【2026-11-23】RefreshForJobChange：职业变了先重建天赋页左右列再刷新，
+        // 否则右列还是旧职业那套节点（点击按 id 落到新职业节点，名实错配）。
+        if (TalentUI.Instance != null) TalentUI.Instance.RefreshForJobChange();
+        UIManager.Instance?.ShowToast(refund > 0
+            ? $"已转为{PlayerJobDefs.Get(target).DisplayName}，返还天赋石 {refund}"
+            : $"已转为{PlayerJobDefs.Get(target).DisplayName}");
         Debug.Log($"[TalentSystem] 换职业 {old} → {target}，花钻石 {CHANGE_JOB_DIAMOND_COST}，返还天赋石 {refund}");
         return true;
     }

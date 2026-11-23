@@ -17,19 +17,22 @@ public class LoginNoticePopupUI : MonoBehaviour
     /// 已读记录在 PlayerPrefs：老玩家点「清除数据」走 SaveSystem.DeleteLocalSaveAndReset（不碰 PlayerPrefs），
     /// 所以清完档不会再弹；SaveSystem 版本自动清档的 DeleteAll 会把它一起清掉（= 新版正好重弹一次，与清档同节奏）。
     /// </summary>
-    public const string CurrentNoticeId = "2026-11-01";
+    public const string CurrentNoticeId = "2026-11-23";
 
     const string SeenPrefKey = "login_notice_seen_id";
 
     const string NoticeBody =
         "好久不见，久等啦！\n" +
         "\n" +
-        "这段日子反复打磨了好几轮，\n" +
-        "新玩法也一个接一个加进来。\n" +
+        "新版加了全新关卡剧情\n" +
+        "和宠物玩法，等你来玩！\n" +
+        "关卡掉的装备也能带走！\n" +
         "\n" +
-        "注意：老存档已经清空，\n" +
-        "要和大家从新档再出发。\n" +
+        "老存档已经清空，\n" +
+        "大家从新档再出发。\n" +
         "\n" +
+        "天赋也改版了！关卡还在调优，\n" +
+        "后面还会调整，请多包涵~\n" +
         "新朋友不用理会，直接开玩！";
 
     static LoginNoticePopupUI _instance;
@@ -122,13 +125,18 @@ public class LoginNoticePopupUI : MonoBehaviour
         boardRt.anchorMin = boardRt.anchorMax = new Vector2(0.5f, 0.5f);
         boardRt.pivot = new Vector2(0.5f, 0.5f);
         boardRt.anchoredPosition = Vector2.zero;
+        // 【2026-11-23 主人拍板「公告窗体整个放大」】整板等比 1.2 倍（500×604 → 渲染 600×725），
+        // 只用 localScale 等比缩放禁拉伸（先例 BattleSettlementUI.FitPanelUniformScale）；
+        // 正文框/关闭热区都在板坐标系内跟着放大，无需重算。720 宽屏下两侧各余 ≈60px。
+        boardRt.localScale = Vector3.one * 1.2f;
 
         // 正文：按原图纸面安全区换算后两边再各缩进 15px（2026-10-20 主人拍板「框体两边往里缩，
         // 不要跟图片一样宽」），纸面 x∈[55,448] 宽 393 → 正文框 360 居中，两侧留白 ≈20px。
-        // 字号 24 降 22：最长行 16 个全角字 = 352px，22 号在 360 宽内放得下不折行
-        //（24 号需 384px，缩窄后会把「点右侧「设置」，选「清除数据」，」折得很难看）。
+        // 字号 24：2026-11-23 主人要求「公告再大一些」（原 22，当年降 22 是旧文案最长 16 全角 24 号放不下；
+        // 现文案最长 14 全角 = 336px，24 号在 360 宽内放得下不折行；12 行总高 ≈293px，
+        // UpperCenter 从框顶排，底部离书本装饰（y<-153）余 ≈19px）。
         var body = NewText("Body", board.transform, NoticeBody);
-        body.fontSize = 22;
+        body.fontSize = 24;
         body.lineSpacing = 1.4f;
         body.alignment = TextAnchor.UpperCenter;
         body.color = new Color(0.29f, 0.22f, 0.16f, 1f);   // 深棕，配米色纸面，别用白色

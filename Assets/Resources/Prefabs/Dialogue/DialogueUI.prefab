@@ -159,7 +159,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   portraitArtFacesRight: 1
-  typeCharsPerSecond: 12
+  typeCharsPerSecond: 24
 --- !u!1 &4007
 GameObject:
   m_ObjectHideFlags: 0

@@ -290,11 +290,12 @@ public static class SlotMachineDefs
     public const int CATEGORY_WEIGHT_MERC = 20;
 
     /// <summary>
-    /// 【2026-10-24 主人拍板】不保底传奇、保底稀有：每 5 次装备方向抽奖保底 1 次稀有+
-    /// （连续第 5 张白卡强制 RARE）。触发判定唯一出口 = <see cref="SlotMachineSystem.EquipRareGuaranteeActive"/>。
+    /// 【2026-10-24 主人拍板】不保底传奇、保底稀有：每 N 次装备方向抽奖保底 1 次稀有+
+    /// （连续第 N 张白卡强制 RARE）。触发判定唯一出口 = <see cref="SlotMachineSystem.EquipRareGuaranteeActive"/>。
+    /// 【2026-11-23 主人拍板】N 由 5 提到 10；保底出的稀有按该档最低属性生成（见 RiftEquipGenerator.GenerateOne）。
     /// 想调松紧只改这一个数。
     /// </summary>
-    public const int EQUIP_RARE_GUARANTEE_EVERY = 5;
+    public const int EQUIP_RARE_GUARANTEE_EVERY = 10;
 
     // 【2026-10-31 主人报「技能和佣兵是不是几率太低了」】竞技场单独一档：
     // 一场只有 5 次额度，55/20/20 的正式关权重意味着约 1/4 的场次一个技能都抽不到 —— 确实太低。

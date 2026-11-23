@@ -12,6 +12,9 @@ public partial class TalentUI
 
     void EnsureLists()
     {
+        // 【2026-11-23】职业变了（钻石换职业）→ 右列视图已换成另一套表，整列必须重建。
+        if (_listsBuilt && _listsBuiltJobId != (int)PlayerJobDefs.GetSelected())
+            RebuildListsForJobChange();
         if (_listsBuilt) return;
         if (leftContent == null || rightContent == null)
             AutoBindFromHierarchy();
@@ -147,7 +150,46 @@ public partial class TalentUI
         WireScrollSync();
 
         _listsBuilt = true;
+        _listsBuiltJobId = (int)PlayerJobDefs.GetSelected();
         WireClicks();
+    }
+
+    /// <summary>
+    /// 【2026-11-23】换职业后重建左右两列（右列随职业换表；左列与职业无关，但同一套构建流程一起重建最省事）。
+    /// 先清视图引用再清节点；子节点**先 SetActive(false) 再 Destroy** —— Destroy 帧末才生效，
+    /// 只 Destroy 不隐藏会让同帧的 LayoutGroup 把旧行算进布局，新列表就排歪了。
+    /// </summary>
+    void RebuildListsForJobChange()
+    {
+        _leftViews.Clear();
+        _rightViews.Clear();
+        _fxBatch.Clear();
+        _pendingRowIndex = -1;
+        _pendingNode = null;
+        ClearListChildren(leftContent, leftNodeTemplate);
+        ClearListChildren(rightContent, rightRowTemplate, rightExtraRowTemplate);
+        _listsBuilt = false;
+        Debug.Log($"[TalentUI] 职业已变更为 {PlayerJobDefs.GetSelected()}，重建左右列（右列按新职业取表）");
+    }
+
+    /// <summary>清空列表容器里的运行时行，跳过模板节点本身（模板可能是容器的子节点，删了后面就建不出来）。</summary>
+    static void ClearListChildren(RectTransform content, params GameObject[] keep)
+    {
+        if (content == null) return;
+        for (int i = content.childCount - 1; i >= 0; i--)
+        {
+            var child = content.GetChild(i);
+            if (child == null) continue;
+            bool keepIt = false;
+            for (int k = 0; k < keep.Length; k++)
+            {
+                if (keep[k] == null) continue;
+                if (child.gameObject == keep[k] || child.IsChildOf(keep[k].transform)) { keepIt = true; break; }
+            }
+            if (keepIt) continue;
+            child.gameObject.SetActive(false);
+            Destroy(child.gameObject);
+        }
     }
 
     /// <summary>

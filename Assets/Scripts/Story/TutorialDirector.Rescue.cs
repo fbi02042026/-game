@@ -157,7 +157,7 @@ public partial class TutorialDirector
         // 措辞按主人原话的意图优化：短、有对比、不解释，留给玩家自己品。
         if (talk != null)
             yield return TalkBlock(bm, talk, restoreAct: false,
-                new TalkLine(merc, "一个都别想跑。", 1.5f));
+                new TalkLine(merc, "一个都别想跑。", 2.4f)); // 2026-11-23 统一：1.5→2.4 防没看清
 
         var vfx = BattleVFXSystem.Instance;
         var victims = new List<UnitBase>();

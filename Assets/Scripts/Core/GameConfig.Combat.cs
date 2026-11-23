@@ -201,29 +201,31 @@ public static partial class GameConfig
     /// </summary>
     public const float BOSS_FINAL_HP_MUL = 1.3f;
     /// <summary>
-    /// 【2026-11-15 19:2x 主人拍板「只有每章第一关是前两个小怪，后面的关卡都要有词条怪做穿插，
-    /// 搭配和数量由少变多」】正式主线关每关词条怪配额档（章内关序 0 基）：
+    /// 【2026-11-23 主人拍板「每关稳定出、由少到多」】正式主线关每关词条怪配额档（章内关序 0 基）：
     ///   第 1 关 = 0（只有 1/2 号普通小怪，1 近 1 远）；
-    ///   第 2 关起 1~2 / 1~2 / 2~3 … 第 9~10 关 5~6，逐关递增。
-    /// 真源只此一处；消费点唯一 = WavePlanner.InitAffixQuota。旧「x-1/x-2=0、x-3 才登场」由本次覆盖。
+    ///   第 2 关起逐关递增 1~2 / 2~3 / 3~4 … 第 7 关起封顶 6~7（11-15「每两关+1」会让第2、3关同档，由本次覆盖）。
+    /// 真源只此一处；消费点唯一 = WavePlanner.InitAffixQuota。
     /// </summary>
     public static void AffixQuotaRange(int stageIdx, out int min, out int max)
     {
         if (stageIdx <= 0) { min = 0; max = 0; }
         else
         {
-            min = Mathf.Min(5, 1 + (stageIdx - 1) / 2);   // 1,1,2,2,3,3,4,4,5
-            max = Mathf.Min(6, min + 1);                    // 2,2,3,3,4,4,5,5,6
+            min = Mathf.Clamp(stageIdx, 1, 6);              // 1,2,3,4,5,6,6,6,6（逐关+1，封顶6）
+            max = Mathf.Min(7, min + 1);                    // 2,3,4,5,6,7,7,7,7
         }
     }
-    /// <summary>主线每关词条怪编号池上限：第 2 关 3 号，之后每两关 +1，封顶 6（3~6 为词条段）。
-    /// 搭配由少变多：3 → 3/5 → 3/5/6 → 末关 3/4/5/6（4 号 minWave=9 只在末节入池）。</summary>
+    /// <summary>主线每关词条怪编号池上限：第 2 关起逐关 +1，封顶 6（3~6 为词条段）。
+    /// 【2026-11-23 改】旧「每两关+1」让第2/3关都只有编号3一种词条；现在第2关编号3、
+    /// 第3关编号3/5（两种）、第4关起编号3/5/6（三种），让玩家由少到多认全词条。
+    /// 4 号 minWave=9 只在末节入池，故前期实际是 3/5/6 三条。</summary>
     public static int AffixSpriteMaxForStage(int stageIdx)
-        => Mathf.Min(6, 3 + Mathf.Max(0, stageIdx - 1) / 2);
-    /// <summary>主线每波词条怪上限：第 2~4 关 1 只 / 第 5~7 关 2 只 / 第 8~10 关 3 只。
-    /// 波数固定 2~3，靠它让「数量由少变多」兑现；11-14「每波恒 1」由本次口径覆盖。裂隙不吃这里。</summary>
+        => Mathf.Min(6, 3 + Mathf.Max(0, stageIdx));
+    /// <summary>主线每波词条怪上限：第 2 关 1 只 / 第 3 关 2 只 / 第 4 关起 3 只。
+    /// 【2026-11-23 改】旧「每3关+1」让第2~4关都只 1 只（第3关因开场波排除只剩末波1只，玩家看不到），
+    /// 现在逐关 +1 封顶 3，配合配额曲线兑现「由少到多」。裂隙不吃这里。</summary>
     public static int AffixWaveCapForStage(int stageIdx, int waveMonsterCount)
-        => Mathf.Min(waveMonsterCount, Mathf.Clamp(1 + Mathf.Max(0, stageIdx - 1) / 3, 1, 3));
+        => Mathf.Min(waveMonsterCount, Mathf.Clamp(stageIdx, 1, 3));
     /// <summary>2026-11-12 主人拍板：每关词条怪上限 = 本关正常波总怪数 × 比例。
     /// 【2026-11-15 改】5% → 25%：5% 会把 AffixQuotaRange 的递增曲线压成恒 1 只（本关总怪数 28~100，
     /// 5% 只有 1~5 只），「数量由少变多」兑现不了；25% 下封顶 ≥ qMax(6)，配额完全由曲线决定，
@@ -967,13 +969,15 @@ public static partial class GameConfig
     // ===== 【2026-11-13 主人拍板「按章节的平均值加系数、必须比初始武器好」】装备攻击三档区间 =====
     /// <summary>档位系数下限（×本章普通怪平均 baseAttack）。真源 combat_tuning 表 EQUIP_ATK_TIER_*，缺表回退此处默认。</summary>
     public static float EquipAtkTierLo(string rarityId) =>
-        rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_LO", 2.6f)
+        rarityId == "UNCOMMON" ? CombatTuningTable.Get("EQUIP_ATK_TIER_UNCOMMON_LO", 2.05f)
+        : rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_LO", 2.6f)
         : rarityId == "LEGEND" ? CombatTuningTable.Get("EQUIP_ATK_TIER_LEGEND_LO", 4.8f)
         : CombatTuningTable.Get("EQUIP_ATK_TIER_NORMAL_LO", 1.2f);
 
     /// <summary>档位系数上限（×本章普通怪平均 baseAttack）。</summary>
     public static float EquipAtkTierHi(string rarityId) =>
-        rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_HI", 3.6f)
+        rarityId == "UNCOMMON" ? CombatTuningTable.Get("EQUIP_ATK_TIER_UNCOMMON_HI", 2.5f)
+        : rarityId == "RARE" ? CombatTuningTable.Get("EQUIP_ATK_TIER_RARE_HI", 3.6f)
         : rarityId == "LEGEND" ? CombatTuningTable.Get("EQUIP_ATK_TIER_LEGEND_HI", 6.8f)
         : CombatTuningTable.Get("EQUIP_ATK_TIER_NORMAL_HI", 2.0f);
 

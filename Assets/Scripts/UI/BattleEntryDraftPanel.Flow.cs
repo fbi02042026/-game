@@ -550,7 +550,7 @@ public partial class BattleEntryDraftPanel
     float MapScaleAt(float mul) => CaptureMapBaseScale() * mul;
 
     /// <summary>
-    /// map 的两态：<b>中心 Y = 220 → 320</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
+    /// map 的两态：<b>中心 Y = 220 → 315</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
     /// （原 2026-10-27 拍板恒 1.4；2026-11-11 改为基准派生，见 <c>MapScaleMulCollapsed</c>）。
     ///
     /// <para>读位置恒用 <c>anchoredPosition.y</c> —— 点锚点与拉伸锚点下它都是「中心相对父级中心的偏移」，
@@ -600,7 +600,7 @@ public partial class BattleEntryDraftPanel
         // 【2026-11-11 主人拍板「进场场景在抽奖时又变动位置」】恒终态下每帧写回必须幂等：
         // 位置上面已有差值闸门，scale 原来却无条件写。面板常驻后 LateUpdate 每帧
         // ApplyMapState(1f) 会把 map 一直标脏 → 每帧触发 Canvas 重建，揭幕后头一帧
-        // 就是主人看到的「背景卡一下」。只在真值变化时落笔：320/1.4 终态、
+        // 就是主人看到的「背景卡一下」。只在真值变化时落笔：315/1.4 终态、
         // WriteMapTransform 单一出口、11-09「map 恒终态」口径一个字不动。
         var want = Vector3.one * scale;
         if ((_mapRt.localScale - want).sqrMagnitude > 1e-8f)

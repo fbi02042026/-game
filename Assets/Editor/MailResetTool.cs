@@ -13,14 +13,7 @@ public static class MailResetTool
     // 与 MailSystem 里固定 id 幂等邮件一一对应；随机 id 的溢出邮件一律不动。
     static readonly HashSet<string> FixedIds = new HashSet<string>
     {
-        "welcome_2026_v3",
-        "compensation_2026_10_v1",
-        "starup_test_mail_v2_H011",
-        "starup_test_mail_v2_H001",
-        "starup_test_mail_v2_H005",
-        "starup_test_mail_v2_H013",
-        "starup_test_mail_v2_H017",
-        "starup_test_mail_v2_fund",
+        "welcome_2026_v4",
     };
 
     [MenuItem("Tools/邮件/重置为可领取（测试档）", false, 300)]
@@ -40,8 +33,6 @@ public static class MailResetTool
 
         // 按固定 id 幂等重发：奖励走真源重算，内部已落盘 + 刷红点 + 通知列表
         MailSystem.EnsureWelcomeMail(notifyToast: false);
-        MailSystem.EnsureCompensationMail(notifyToast: false);
-        MailSystem.EnsureStarUpTestMail(notifyToast: false);
         RedDot.RefreshCommon();
         MailListUI.NotifyInboxChanged();
 

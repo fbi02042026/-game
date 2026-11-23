@@ -263,7 +263,7 @@ public partial class TutorialDirector
         //   怪也能正常进场（不再干等 10s 超时）；本对话播的时候 TalkBlock 自行短暂冻结、播完即恢复。
         // 【2026-10-07 主人反馈「佣兵说的话太快了，没看到」】停留 0.75 → 1.9。
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "跟紧我，别走散。", 1.9f));
+            new TalkLine(merc, "跟紧我，别走散。", 2.4f)); // 2026-11-23 统一：1.9→2.4 防没看清
 
         // 不冻结战斗：玩家可随时上前清怪。
         // 2026-09-18：这里原本会直接改写 Hero 坐标把玩家往前推（最高 18/秒），
@@ -316,10 +316,9 @@ public partial class TutorialDirector
         var stepElite = TutorialBattleTable.GetStepOrDefault(4);
         if (stepElite.eliteCount > 0)
         {
-            // 【2026-10-07 主人反馈「玩家说的 boss 那句话也没看到」】先让玩家自己喊一句，
-            // 再砸「精英来袭」预告 —— 两句之间要能看清字，停留一律 ≥1.9s。
-            yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "好家伙，来了个更大的？！", 1.9f)); // 【2026-10-16 主人拍板】换流行语气（「我勒个豆」已给惊呆句，这里避开不撞）
+            // 【2026-11-23 主人拍板】玩家这句挪到精英进场后、与精英/塔克对白同一次 TalkBlock 串行播：
+            // 原先排在 Boss 大图之前，大图砸下来时气泡已被 TalkBlock 收掉，玩家「还没看清就没了」。
+            // 这里只留 Boss 大图；台词见下方 CoFindWaveElite 之后的 TalkBlock。
             // 2026-10-09 主人拍板：Boss 大图 wave_boss_incoming 本来就写着「首领来袭」，
             // 这里再传副标题 = 上面图片 + 下面文字两个提示（主人口中的"上下 2 个首领来袭"）。
             // 去掉文字，只留大图；Boss 波一律不叠副标题（与 BattleManager 2026-10-07 口径一致）。
@@ -357,10 +356,14 @@ public partial class TutorialDirector
 
         if (rival != null && !rival.isDead)
         {
-            // 【2026-10-07 主人反馈「说的话太快了，没看到」】气泡停留一律往 2 秒以上给。
+            // 【2026-10-07 / 2026-11-23】气泡停留一律往 2 秒以上给；玩家话从 Boss 大图前挪到这里，
+            // 和精英/塔克对白同一次 TalkBlock 串行播（大图砸完、精英进场站定才说，一句一句看清）。
+            // 【2026-11-23 主人拍板】「小心使盾的」= 说塔克；精英说完塔克接一句，精英再说下一句；语气调生动。
             yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(rival, "老大交代过：小心那个扛盾的。说的就是你吧？", 2.4f),
-                new TalkLine(rival, "我看也没什么了不起——让我试试你的实力。", 2.4f));
+                new TalkLine(Hero.Instance, "好家伙，来了个更大的？！", 2.4f),
+                new TalkLine(rival, "老大特意交代过：当心那个使盾的——说的就是你，别装了！", 2.6f),
+                new TalkLine(merc, "哼，盯上本小姐？那你可真是挑错人了。", 2.4f),
+                new TalkLine(rival, "嘴倒是挺硬。那就手底下见真章——上都上！", 2.6f));
             // 【2026-10-28 主人拍板】对白说完才放开：关掉进场暂停窗，怪从屏幕边缘推进到交战位开打；
             // 技能 Energy 由下一步 CoWatchPlayerSkill 充满 →「先说话，再开始准备放技能」。
             if (bm != null)
@@ -403,8 +406,8 @@ public partial class TutorialDirector
         yield return WaitFieldClear(strict: true);
 
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "……", 1.8f),
-            new TalkLine(merc, "走吧。", 2.0f));
+            new TalkLine(merc, "……", 2.4f), // 2026-11-23 统一：1.8→2.4 防没看清
+            new TalkLine(merc, "走吧。", 2.4f)); // 2026-11-23 统一：2.0→2.4 防没看清
         headTalk?.HideNow();
         hint.Hide();
 

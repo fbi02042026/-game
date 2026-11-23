@@ -216,7 +216,8 @@ public static class DraftPool
 
     // 品质段的固定行序：好东西排前面，玩家一眼看到「传说有多稀有」（2026-10-05 主人要的极简口径）
     // 【2026-10-18 叫法口径】末档是「抽奖币」（安慰奖进局内抽奖币池），不写「金币」。
-    static readonly string[] QualityOrder = { "传说", "稀有", "普通", "抽奖币" };
+    // 2026-11-23：加「优秀」（绿）一档，位置在稀有与普通之间（概率公示必须与实际一致）
+    static readonly string[] QualityOrder = { "传说", "稀有", "优秀", "普通", "抽奖币" };
 
     /// <summary>
     /// 概率公示弹窗的表：按**当前真实卡池现算**，不是写死的文案。
@@ -340,6 +341,10 @@ public static class DraftPool
     static string QualityBucket(DraftCard card)
     {
         if (card.Kind == DraftCardKind.Gold) return "抽奖币";
+        // 【2026-11-23】绿档单列一行：SkillRarity 只有三档，绿已被并进 Common，
+        // 公示要精确就得回读装备实例自己的 Rarity（唯一真源 = EquipInstance.rarity）。
+        if (card.Kind == DraftCardKind.Equip && card.Equip != null && card.Equip.rarity == Rarity.Uncommon)
+            return "优秀";
         return RarityBucket(card.Rarity);
     }
 
@@ -361,6 +366,9 @@ public static class DraftPool
         // 2026-10-13 #4：金币色转发 RarityPalette.Gold（与开奖卡金币分支同源，别再抄一份）
         // 2026-11-03 主人拍板全项目统一：品质色同样转发 RarityPalette，色值唯一来源，不在本文件抄第二份
         if (card.Kind == DraftCardKind.Gold) return RarityPalette.Gold;
+        // 【2026-11-23】绿卡取绿，别跟着 SkillRarity.Common 一起显示成灰白
+        if (card.Kind == DraftCardKind.Equip && card.Equip != null && card.Equip.rarity == Rarity.Uncommon)
+            return RarityPalette.Uncommon;
         switch (card.Rarity)
         {
             case SkillRarity.Legendary: return RarityPalette.Legendary;   // 橙金 #FFB833
@@ -1037,8 +1045,10 @@ public static class DraftPool
         {
             case Rarity.Legendary:
             case Rarity.Epic: return SkillRarity.Legendary;
-            case Rarity.Rare:
-            case Rarity.Uncommon: return SkillRarity.Rare;
+            case Rarity.Rare: return SkillRarity.Rare;
+            // 【2026-11-23 主人拍板】绿档是低档，必须并进「普通」——旧写法和 Rare 一起归稀有，
+            // 会让 3 成产出的绿装在三选一里显示成蓝卡，直接砸掉「蓝极少」的口径。
+            case Rarity.Uncommon: return SkillRarity.Common;
             default: return SkillRarity.Common;
         }
     }

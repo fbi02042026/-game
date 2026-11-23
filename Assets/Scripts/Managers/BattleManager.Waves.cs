@@ -388,6 +388,9 @@ public partial class BattleManager
         _intruderStoryShownThisStage = false;   // 修点①（T8 关卡级口径）：换关允许下一关的首波乱入剧情再播
         _rescueShownThisStage = false;          // 批次4 T8（关卡级）：换关允许下一关再触发友军救场
         _rescueWaveEndHandled = false;          // 批次4 T8（关卡级）：波末成败/撤场闸随换关复位
+        _petRescueStageActive = false;          // 【2026-11-23】换关允许 1-3 未通关时再演狗剧情
+        _petRescuePendingDeploy = false;        // 换关清掉待归队，不带到下一关
+        ResetBattleCutscene();                  // 【2026-11-23 统一编排器】停演出协程 + 清占用标志，防串台
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
         _reviveUsedThisStage = false;   // 【2026-10-24】复活每关一次，关卡开始重置
@@ -1397,6 +1400,16 @@ public partial class BattleManager
     void BeginNextWaveCountdown()
     {
         if (Rules.SkipWaveAnnounce) return;
+        Debug.Log("[CutsceneDiag] BeginNextWave occupied=" + CutsceneOccupyingBattlefield + " next=" + FindNextUnspawnedWaveIndex() + " alive=" + CountAliveMonsters() + " waveCo=" + (_waveAnnounceCo != null));
+        // 【2026-11-23 主人「狗剧情在前一波播完、处理完再出首领来袭」】剧情播放期间不推进下一波。
+        // 旧版这里没闸：Update 的 Emergency 每帧调本方法，狗插叙把 _preBattleStoryPlaying 置 true
+        // 后，下一帧 hook 已 fired 返回 false → 直接排 CoAnnounceThenSpawnNextWave（首领来袭+刷 Boss），
+        // 与狗剧情并行。剧情收窗后标志还原，下一帧从这里自然推进，狗已 DeployRescuedPet 归队助战。
+        if (_preBattleStoryPlaying) return;
+        // 【2026-11-23 统一编排器】演出占用战场期间一律不推进波次（唯一真源 = IsOccupyingBattlefield）。
+        // 旧版散落的 phase=1/3 判断已随 4 个并发协程一起删除；演出结束由 finally 释放标志，
+        // 下一帧 Update Emergency 自然补上首领来袭，无自锁、无抢跑。
+        if (CutsceneOccupyingBattlefield) return;
         if (_allWavesSpawned || _portalActive || _stageCleared) return;
         int nextIdx = FindNextUnspawnedWaveIndex();
         if (nextIdx < 0)
@@ -1408,9 +1421,9 @@ public partial class BattleManager
         if (CountAliveMonsters() > 0) return;
         if (_waveAnnounceCo != null) return;
 
-        // 【2026-11-21 宠物剧情】1-3 第一波清完插叙（内部限定正式主线 + sub0==2 + 未播过）。
-        // 返回 true = 已启动插叙、本次出兵取消；播完回调会重进本方法走正常出兵（钩子已触发不再重播）。
-        if (TryPetRescueInterlude()) return;
+        // 【2026-11-23 统一编排器】第一波清完只"激活"判定（不插叙、照常刷第二波）；
+        // 第二波刷出时由 Update → TryPlayDogRescueCutscene 启动单协程演出，占用标志自动拦本方法。
+        TryPetRescueActivate();
 
         // 【2026-10-21 主人拍板】恢复关下线后血线口子消失 → 普通战斗波清完时全队回血（WaveClearHealRatio）。
         // 本方法是权威波清点：MonsterDeath.CoCheckWaveClearNextFrame 与 Update 清波检测两路都汇聚到这里，
@@ -1487,6 +1500,8 @@ public partial class BattleManager
     {
         if (!isInBattle || _stageCleared || _runClosed || BattleLootMode.Active) return;
         if (_preBattleStoryPlaying) return;
+        // 【2026-11-23 统一编排器】演出占用战场期间不流式刷怪，避免 WaitWaveCleared 永远清不完。
+        if (CutsceneOccupyingBattlefield) return;
         // 2026-11-23 主人「下一波和剧情不要同时出现」：任何剧情正在播（timeScale=0 的全屏对白，
         // 或战场内不冻结时间的插叙演出）都顺延流式刷怪，绝不放弃——剧情收窗后下一拍自然补上。
         // 旧版只看 _preBattleStoryPlaying，覆盖不到羁绊本 Boss 前剧情/敌对乱入等未置该位的剧情。
@@ -1625,6 +1640,7 @@ public partial class BattleManager
     {
         if (_waveAnnounceRunning || _stageCleared || _portalActive) yield break;
         if (FindNextUnspawnedWaveIndex() < 0) yield break;
+        Debug.Log("[CutsceneDiag] CoAnnounce START next=" + FindNextUnspawnedWaveIndex() + " occupied=" + CutsceneOccupyingBattlefield);
 
         // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】_waveAnnounceRunning / _waveAnnounceCo
         // 是「有借有还」闸门：预告协程若在播放中被中断（协程被停 / 播放链抛异常 / 切后台恢复首帧异常），
@@ -1710,7 +1726,10 @@ public partial class BattleManager
             StopWaveCountdown();
         }
 
-        if (!_stageCleared && !_portalActive && CountAliveMonsters() <= 0)
+        Debug.Log("[CutsceneDiag] CoAnnounce END next=" + FindNextUnspawnedWaveIndex() + " occupied=" + CutsceneOccupyingBattlefield + " alive=" + CountAliveMonsters());
+        // 【2026-11-23 统一编排器】演出占用战场期间不补刷下一波（本条出口是唯一没走
+        // BeginNextWaveCountdown 闸的路径）：直接跳过，下一帧 Update Emergency 在演出释放后自然补上。
+        if (!_stageCleared && !_portalActive && CountAliveMonsters() <= 0 && !CutsceneOccupyingBattlefield)
             SpawnNextPendingWave();
     }
 
@@ -1897,6 +1916,10 @@ public partial class BattleManager
         RunDraftDirector.Instance?.Tick();
 
         // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
+
+        // 【2026-11-23 统一编排器】第二波刷出时启动狗营救单协程演出 + Boss 半血归队检测
+        TryPlayDogRescueCutscene();
+        TickPetRescueRejoin();
 
         // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
         for (int i = monsters.Count - 1; i >= 0; i--)

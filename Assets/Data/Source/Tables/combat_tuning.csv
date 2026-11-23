@@ -15,6 +15,8 @@ GUILD_SCALE_PER,0.02,公会等级系数（0.02×公会等级）
 # ---- 装备攻击三档区间（RiftEquipGenerator；锚点=本章普通怪平均 baseAttack。2026-11-13 主人拍板「按章节平均值加系数、必须比初始武器好、别写死」） ----
 EQUIP_ATK_TIER_NORMAL_LO,1.2,普通档攻击下限系数（×本章敌人平均攻击）
 EQUIP_ATK_TIER_NORMAL_HI,2.0,普通档攻击上限系数
+EQUIP_ATK_TIER_UNCOMMON_LO,2.05,优秀档攻击下限系数（×本章敌人平均攻击）
+EQUIP_ATK_TIER_UNCOMMON_HI,2.5,优秀档攻击上限系数
 EQUIP_ATK_TIER_RARE_LO,2.6,稀有档攻击下限系数
 EQUIP_ATK_TIER_RARE_HI,3.6,稀有档攻击上限系数
 EQUIP_ATK_TIER_LEGEND_LO,4.8,传奇档攻击下限系数

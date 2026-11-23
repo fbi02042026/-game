@@ -364,7 +364,9 @@ public static class ArenaShopGoods
         if (good.kind == GoodKind.Bow)
         {
             // 弓进随身仓库（legacyEquipPool，冠军武器邮件附件领取同口径）；rarity 0~4 档：2=稀有
-            granted = ItemGrantSystem.GrantEquip(BowId, 2);
+            // 【2026-11-23 统一】模板 baseRarity = Rare，传值必须同档：
+                // 旧写 2 是 Uncommon（绿），买到手是「优秀」绿弓，与商店里显示的蓝弓对不上。
+                granted = ItemGrantSystem.GrantEquip(BowId, (int)Rarity.Rare);
             if (granted) data.arenaShopBowId = BowId;
             msg = "「逐风长弓」到手！游侠出战自动换装";
         }

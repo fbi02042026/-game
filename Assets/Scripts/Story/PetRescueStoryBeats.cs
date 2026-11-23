@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 宠物营救剧情（2026-11-21 定稿，2026-11-23 改战场演出）：第 1 章第 1 座大关第 3 小关（1-3），
-/// 「第一波清完→进下一波前」插叙。分镜：狗被围攻 → 玩家上前 → 狗跑掉；末波精英战狗回归助战另在战斗侧挂。
-///
-/// 【2026-11-23 主人拍板】这段不再走全屏对白窗（「不是剧情几句话带过的」），改为<b>战场内演出</b>：
-/// 场上生成一只挨打的狗 + 头顶气泡对白 + 刀光齐出 + 狗逃走，全程保持战斗视角。
+/// 宠物营救剧情（2026-11-21 定稿，2026-11-23 分镜重构）：第 1 章第 1 座大关第 3 小关（1-3）。
+/// 【2026-11-23 主人拍板·完整分镜】不走全屏对白窗，全程战场内演出、保持战斗视角：
+///   第一波照常打 → 第二波刷出时怪围着狗，狗"汪汪"+玩家喊话（冻场自动播）→ 解冻打第二波（狗常驻）
+///   → 第二波清完 → 狗叫两声往后跑走 + 玩家"真是一只有趣的小狗"点评（冻场）→ 首领来袭 → Boss 半血狗归队帮忙。
 /// 真源只此一处 C# 常量，不进 csv/prefab；台词口吻照项目现成调侃风（「我勒个豆」）。
-/// 演出协程在 BattleManager.PetRescue.cs 的 CoPetRescueBattleScene（要访问 unitRoot/hero 等战斗私有域）。
+/// 演出协程在 BattleManager.PetRescue.cs（CoPetRescuePreBattle / CoPetRescuePostBattle，要访问 unitRoot/hero 等战斗私有域）。
 /// </summary>
 public static class PetRescueStoryBeats
 {
@@ -20,8 +19,12 @@ public static class PetRescueStoryBeats
     public const string DogId = "dog";
 
     // —— 战场演出台词（头顶气泡，真源只此一处）——
-    /// <summary>第一拍：狗被围时呜咽。</summary>
+    /// <summary>第一拍：狗被围时呜咽（旧分镜保留，现用 DogBark）。</summary>
     public const string DogWhimper = "呜……汪汪！";
+    /// <summary>【2026-11-23 分镜】狗被围着叫 / 战后叫两声（同一声汪汪，气泡贴狗）。</summary>
+    public const string DogBark = "汪汪！汪汪！";
+    /// <summary>【2026-11-23 分镜】战后玩家点评。</summary>
+    public const string PlayerRemark = "真是一只有趣的小狗。";
     /// <summary>第二拍：玩家喊话上前。</summary>
     public const string PlayerShout = "我勒个豆，几个打一个还要不要脸？松手，冲我来！";
     /// <summary>第三拍：狗脱困后回应。</summary>
@@ -34,4 +37,5 @@ public static class PetRescueStoryBeats
     public const float ShoutHold = 2.6f;
     public const float ThanksHold = 1.6f;
     public const float SlashHold = 0.35f;
+    public const float RemarkHold = 2.2f;   // 战后玩家点评停留（2026-11-23 分镜）
 }

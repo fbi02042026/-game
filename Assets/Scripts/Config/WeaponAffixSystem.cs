@@ -39,15 +39,19 @@ public static class WeaponAffixSystem
         return list;
     }
 
-    /// <summary>稀有度 → 随机词条数（对齐设计：普通0 / 稀有1 / 史诗1 / 传奇2）。</summary>
+    /// <summary>稀有度 → 随机词条数（对齐 equip_rarity_rules：普通0 / 优秀1 / 稀有1 / 史诗1 / 传奇2）。</summary>
     public static int AffixCountForRarity(Rarity rarity)
     {
         switch (rarity)
         {
             case Rarity.Legendary: return 2;
+            // 【2026-11-23 统一】绿档原来落 default = 0 条，与表里 UNCOMMON「随机属性条数=1」冲突：
+            // 模板路径（equip_sword_2 / equip_new_weapon_02 等 16 件 baseRarity=Uncommon 的模板）
+            // 生成的绿装一件词条都没有，而掉落路径生成的绿装带 1 条 —— 同样叫「优秀」，属性条数不一样。
+            case Rarity.Uncommon:
             case Rarity.Epic:
             case Rarity.Rare: return 1;
-            default: return 0; // Common / Uncommon
+            default: return 0; // Common
         }
     }
 

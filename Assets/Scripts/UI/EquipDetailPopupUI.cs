@@ -138,10 +138,10 @@ public class EquipDetailPopupUI : MonoBehaviour
         _name.text = EquipUiText.EquipTitle(eq);
         EquipUiText.ApplyRarityColor(_name, eq.rarity);
 
-        // 稀有度 / 星级（强化 >0 才显示 +N，主人口径）
+        // 稀有度（2026-11-23 主人拍板「武器装备不要出现星级」：删 ★N，只留稀有度；强化 >0 才显示 +N）
         _info.text = eq.enhanceLevel > 0
-            ? $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}　+{eq.enhanceLevel}"
-            : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}";
+            ? $"{EquipUiText.RarityName(eq.rarity)}　+{eq.enhanceLevel}"
+            : EquipUiText.RarityName(eq.rarity);
         EquipUiText.ApplyRarityColor(_info, eq.rarity);
 
         // 属性一条一行（与替换弹窗同源）

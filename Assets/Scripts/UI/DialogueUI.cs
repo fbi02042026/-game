@@ -65,7 +65,7 @@ public partial class DialogueUI : MonoBehaviour
     public bool portraitArtFacesRight = true;
 
     [Header("打字机")]
-    public float typeCharsPerSecond = 12f;
+    public float typeCharsPerSecond = 24f;
 
     Action _onAdvance;
     Action _onSkip;

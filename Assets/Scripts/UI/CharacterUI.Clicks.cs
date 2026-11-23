@@ -134,7 +134,13 @@ public partial class CharacterUI
             UIManager.Instance?.ShowToast(reason);
             return;
         }
-        PlayerJobSelectUI.ShowChangeJob(_ => RefreshAll());
+        // 【2026-11-23】换完职业除了属性/立绘，角色页 6 槽装备栏也要切到新职业那套：
+        // EnsureEquipBar 只在 ShowPage 跑过一次，不在这里补，装备栏会一直显示旧职业的武器套。
+        PlayerJobSelectUI.ShowChangeJob(_ =>
+        {
+            RefreshAll();
+            EnsureEquipBar();
+        });
     }
 
     /// <summary>

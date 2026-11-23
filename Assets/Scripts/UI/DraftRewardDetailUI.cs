@@ -269,7 +269,10 @@ public class DraftRewardDetailUI : MonoBehaviour
 
     void Fill(DraftCard card)
     {
-        Color tint = RarityPalette.Get(card.Rarity);
+        // 【2026-11-23 统一】装备品质真源是 Equip.rarity —— card.Rarity 是 SkillRarity，
+        // 绿档已被并进 Common，直接用会把「优秀」显示成普通灰白。其它卡种仍走 card.Rarity。
+        bool equipCard = card.Kind == DraftCardKind.Equip && card.Equip != null;
+        Color tint = equipCard ? RarityPalette.Get(card.Equip.rarity) : RarityPalette.Get(card.Rarity);
         _frame.color = tint;
         _kindText.color = Color.Lerp(tint, Color.white, 0.45f);
         _titleText.color = Color.white;
@@ -328,7 +331,8 @@ public class DraftRewardDetailUI : MonoBehaviour
 
             case DraftCardKind.Equip:
                 _kindText.text = "获得装备";
-                _metaText.text = RarityLabel(card.Rarity) + " · ★" + Mathf.Max(1, card.Star);
+                // 【2026-11-23 主人拍板「武器装备不要出现星级」】装备卡不再拼 ★N，只留品质名
+                _metaText.text = EquipUiText.RarityName(card.Equip != null ? card.Equip.rarity : Rarity.Common);
                 body = string.IsNullOrEmpty(card.Desc) ? "本局装备，撤离不带出。" : card.Desc;
                 icon = card.Equip != null ? EquipIcons.Resolve(card.Equip) : null;
                 paramsText = EquipParamLines(card);

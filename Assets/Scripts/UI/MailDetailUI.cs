@@ -717,8 +717,14 @@ public class MailDetailUI : MonoBehaviour
                 if (eqTpl != null)
                 {
                     attName = eqTpl.equipName;
-                    nameColor = RarityPalette.Get(eqTpl.baseRarity);   // 名字仍按稀有度（金字+黑描边）
-                    frameSprite = EquipRarityFrame.SpriteOf(eqTpl.baseRarity);   // 框走装备框三档图
+                    // 【2026-11-23 统一】显示的品质必须 = 领取后背包里的那一件：
+                    // 发放真源是 att.rarity（GrantEquip 直接写进 EquipmentData.rarity），
+                    // 旧写法读模板 baseRarity —— 模板白、附件按稀有发，邮件里白框、背包里蓝/绿，两头不一样。
+                    Rarity showRarity = att.rarity >= (int)Rarity.Common && att.rarity <= (int)Rarity.Legendary
+                        ? (Rarity)att.rarity
+                        : eqTpl.baseRarity;   // 附件没写 rarity（旧存档/其它邮件）才回退模板
+                    nameColor = RarityPalette.Get(showRarity);   // 名字仍按稀有度（金字+黑描边）
+                    frameSprite = EquipRarityFrame.SpriteOf(showRarity);   // 框走装备框三档图
                     tintFrame = false;   // 框图自带色，不再染 RarityPalette 色防脏
                 }
                 else

@@ -120,6 +120,13 @@ public partial class TalentUI : MonoBehaviour
     TalentDefs.TalentRightNode _pendingNode;
     bool _wired;
     bool _listsBuilt;
+    /// <summary>
+    /// 【2026-11-23】上一次建列表时的职业。右列行是按职业取视图（TalentDefs.RightNodes）一次性建好缓存的，
+    /// 职业一变（钻石换职业）必须整列重建 —— 否则界面写着旧职业的节点名，点击却按共享 id
+    ///（R_C1 / R_C2 / R_DUAL 三职业共用）落到新职业的节点上，效果与显示对不上。
+    /// -1 = 还没建过。
+    /// </summary>
+    int _listsBuiltJobId = -1;
 
     // 右列「开通演出」（2026-10-13 主人拍板；【2026-11-05】触发源改人物升级：右列门槛改挂人物等级、
     // 门槛为 1~13 逐级）——人物等级跨过门槛时对应那批右列节点「暗→亮 + 放大缩小」提示玩家。
@@ -239,6 +246,19 @@ public partial class TalentUI : MonoBehaviour
         Instance.RefreshAll();
         Instance.ApplyFit(); // 2026-10-24 主人拍板：预热时也套瘦屏适配（见 TalentUI.Fit.cs）
         go.SetActive(false);
+    }
+
+    /// <summary>
+    /// 【2026-11-23】换职业后调用：职业变了就先重建列表再刷新。
+    /// ⚠ 页面没开（预热后一直 SetActive(false)）时**绝不在这里重建** —— 布局/尺寸在 inactive 画布上算歪，
+    /// 与 Prewarm 的「先 active 跑重活再隐藏」同理。此时啥也不做，留给下次 Show()：
+    /// Show 里先 SetActive(true) 再 EnsureLists()，那时按 _listsBuiltJobId 比对职业一次性重建。
+    /// </summary>
+    public void RefreshForJobChange()
+    {
+        if (!gameObject.activeInHierarchy) return;
+        EnsureLists();   // 内部比对 _listsBuiltJobId，职业变了会整体重建
+        RefreshAll();
     }
 
     public void Show()

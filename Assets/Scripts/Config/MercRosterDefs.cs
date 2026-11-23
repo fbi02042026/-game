@@ -76,7 +76,7 @@ public static class MercRosterDefs
         // 【教训】给角色定性别 / 改名之前必须先看立绘，不许凭名字凭空猜。
         // 他是完成新手引导后可在酒馆招募的牧师，名字要好记、好认；头像框 / 对白 / 日志现在都显示同一个名字。
         // 【2026-10-08 补记】引导局的那位佣兵已换成 H003 塔克，H011 不再自动入队，只走酒馆招募。
-        D("H011", "路加", "路加", "naima101", "牧师", MercRarity.Common, 1.00f, 302.5f,34.4f,25.7f, 1.20f, 3.5f, "SK004", "SK011", 500, true, true),
+        D("H011", "路加", "路加", "naima101", "牧师", MercRarity.Common, 1.00f, 302.5f,34.4f,25.7f, 0.84f, 3.5f, "SK004", "SK011", 500, true, true),
         D("H012", "塞拉", "蓝之泪", "naima102", "水系法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.00f, 3.5f, "SK004", null, 1700, false),
         // 【2026-11-02 主人拍板】H013 升传奇：数值=传说公式（基准 206.0/36.7/24.1 ×1.70/×2.00/×1.85），
         //   补被动 SK017 魔力涌动，价格 2000→8000 对齐伊芙。模型 2026-11-03 主人拍板换 fashi202（naima201 战士相不符已归还模型库）。
@@ -88,7 +88,7 @@ public static class MercRosterDefs
         // 获得口 = 看广告活动专属（MercSkillMapping.TavernExcludedHireIds 已摘池，见 2026-10-31 拍板）。
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Rare, 1.15f, 244.8f,58.2f,34.6f, 1.60f, 4.2f, null, "SK002", 500, false, true),
         D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
-        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 382.6f,49.8f,37.3f, 1.20f, 3.5f, "SK004", null, 1700, false),
+        D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 382.6f,49.8f,37.3f, 0.84f, 3.5f, "SK004", null, 1700, false),
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, false, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 211.8f,36.7f,22.5f, 1.35f, 3.5f, null, "SK017", 600, true, true),
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.30f, 3.5f, "SK018", null, 1800, false),

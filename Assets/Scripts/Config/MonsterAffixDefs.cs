@@ -74,13 +74,12 @@ public static class MonsterAffixDefs
     // 精英/Boss 掷骰词缀不吃 —— 它们已按 RollAttrScale 向 1 收敛且自身够厚）。
     // 【2026-11-15 口径】基准 = Monster.Init 按「当前章/座/节 + 当前波」算完的
     // attr（GetStatScale 当关倍率 × 表值），跟着当前关的小怪一起爬坡；不取第一章表值、不写死常量。
-    // 【2026-11-22 血 3f → 5f】反馈「词条怪 1-2 下就死、有点脆」。
-    // 归因：词条怪表 baseHp 基数只有 18~43，×3 后低血档仍只 60 上下；法师武器攻击全场最高 +
-    // 物理型怪 MagicDefense 写死 0 + 类型克制 ×1.1，三重叠加把低血词条怪放大成 1-2 下秒。
-    // 只加血、攻击 ×2 不动（未反馈攻击问题）；仅表定词条怪（VisualTinted）吃这层，精英/Boss 掷骰词缀不受影响。
+    // 【2026-11-23 血 5f → 6f、攻 2f → 2.5f】反馈「词条怪数值可以再提高」。
+    // 11-22 血 3→5 解决「1-2 下就死」；这次血攻一起抬，让穿插的词条怪更有存在感。
+    // 仅表定词条怪（VisualTinted）吃这层，精英/Boss 掷骰词缀不受影响。
     // 消费点唯一 = MonsterAffix.Apply；想调手感只改这两个常量。
-    public const float FixedAffixHpMul = 5f;
-    public const float FixedAffixAtkMul = 2f;
+    public const float FixedAffixHpMul = 6f;
+    public const float FixedAffixAtkMul = 2.5f;
     public static readonly Def[] All =
     {
         // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：

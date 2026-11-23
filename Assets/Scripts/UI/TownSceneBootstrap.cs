@@ -143,8 +143,9 @@ public class TownSceneBootstrap : MonoBehaviour
         // 【2026-10-20 补偿】「Lv2 已领但没拿到暮火之杖」的存量玩家进镇自动补发
         //（幂等：GrantKey 已写就跳过；失败不写标记，下次进镇重试）。
         SpecialWeapons.RepairMissingLv2Staff();
-        // 【2026-11-03 主人拍板「把测试用的那封邮件删掉」】测试邮件已停发，这里只做收尾清理：
-        // 把存量测试档里的历史测试邮件（发件人「开发组」）清掉，玩家进主界面自动消失。
+        // 【2026-11-03「把测试用的那封邮件删掉」/ 2026-11-23「把奖励邮件那几封测试的邮件去掉」】
+        // 测试邮件已停发，这里只做收尾清理：清掉存量档里的历史测试邮件
+        // （开发组福利 / 升星补给 / 猎手长弓补偿），玩家进主界面自动消失。
         // 唯一调用点，判据与清理逻辑都在 DevGiftMail 内；存量档清完后可连同本行一起删。
         DevGiftMail.RunOncePerLaunch();
         if (!settled)
@@ -190,9 +191,6 @@ public class TownSceneBootstrap : MonoBehaviour
         _loginCheckedThisTownVisit = true;
 
         MailSystem.EnsureWelcomeMail();   // 🆕 已通关老玩家回主界面补发欢迎信（幂等：已发过不再入邮、不再弹提示）
-        MailSystem.EnsureCompensationMail();   // 🆕 全服补偿邮件（2026-10-17：500金币+卷轴，幂等同欢迎信链路）
-        MailSystem.EnsureMileageBowCompensationMail();   // 🔴 测试版临时：里程·猎手长弓下架补偿邮件（2026-11-02，幂等同上链路），正式上线删除本行
-        MailSystem.EnsureStarUpTestMail();   // 🔴 测试版临时：升星流程测试补给（2026-11-08，幂等同上链路），正式上线删除本行
         DailyLoginSystem.OnEnterGame();
         // 【2026-10-20 修】OnEnterGame 跨天累加 LoginDays 后必须立刻同步红点：
         // GuildHallUI.Awake 的 RefreshCommon 跑在本协程之前，按的是昨天的天数；

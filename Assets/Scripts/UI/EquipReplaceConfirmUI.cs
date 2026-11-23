@@ -323,10 +323,11 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         // 旧写法走 SkillRarityUtil(DraftPool.MapRarity) 会把「史诗(紫)」说成「传说」——
         // 名字按稀有度上色后就会变成「紫色的传说」，自相矛盾。
         // 2026-10-11 主人拍板：强化等级为 0 时**不显示「+0」**（主人原话「如果没有加就不要显示+0」）
+        // 2026-11-23 主人拍板「武器装备不要出现星级」：删 ★N，只留稀有度（强化 >0 仍显示 +N）。
         SetText(col, "Info", eq == null ? ""
             : eq.enhanceLevel > 0
-                ? $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}　+{eq.enhanceLevel}"
-                : $"{EquipUiText.RarityName(eq.rarity)}　★{Mathf.Max(1, eq.star)}");
+                ? $"{EquipUiText.RarityName(eq.rarity)}　+{eq.enhanceLevel}"
+                : EquipUiText.RarityName(eq.rarity));
         // 2026-10-12 主人拍板：属性「一条一行、竖着往下排」，不再挤成一长串靠自动折行。
         // 条目内容与抽卡卡面同一处真源（DraftPool.FormatEquipDescLines），这里只换分隔符。
         // 【2026-10-13 改版】ColumnNew 传 compareTo=旧装备 → 同属性自动加 ▲/▼ 对比箭头。

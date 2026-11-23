@@ -43,7 +43,7 @@ public static class RarityPalette
     public static readonly Color Epic = new Color(0.72f, 0.42f, 0.95f, 1f);
     /// <summary>稀有 / 蓝。</summary>
     public static readonly Color Rare = new Color(0.35f, 0.68f, 0.98f, 1f);
-    /// <summary>精良 / 绿（仅装备使用）。</summary>
+    /// <summary>优秀 / 绿（仅装备使用；2026-11-23 叫法统一为「优秀」，原写「精良」）。</summary>
     public static readonly Color Uncommon = new Color(0.35f, 0.78f, 0.40f, 1f);
     /// <summary>普通 / 灰白（不再用纯白，纯白在浅底卡片上会糊成一片）。</summary>
     public static readonly Color Common = new Color(0.80f, 0.82f, 0.86f, 1f);

@@ -396,6 +396,20 @@ public partial class WavePlanner
             if (assigned < quota && perWaveQuota[wi] < cap) { perWaveQuota[wi]++; assigned++; }
             else if (assigned > quota && perWaveQuota[wi] > 0) { perWaveQuota[wi]--; assigned--; }
         }
+        // 【2026-11-23 主人拍板「每关稳定出，后面的波次都要出现」】配额够分时给每个可投放波保底 1 只：
+        // 大数随机法可能把某波摊成 0（玩家整波看不到词条怪）。从最多的波借 1 只补空波，总数 assigned 不变；
+        // 主线开场波 i=0 已被 spawnable 排除，裂隙曲线不动（endlessQuotaMode 跳过）。
+        if (!endlessQuotaMode && assigned >= spawnable.Count)
+        {
+            foreach (int wi in spawnable)
+            {
+                if (perWaveQuota[wi] > 0) continue;
+                int donor = -1, best = 1;
+                foreach (int d in spawnable)
+                    if (perWaveQuota[d] > best) { best = perWaveQuota[d]; donor = d; }
+                if (donor >= 0) { perWaveQuota[donor]--; perWaveQuota[wi] = 1; }
+            }
+        }
         foreach (var kv in perWaveQuota)
             if (kv.Value > 0) _waves[kv.Key].affixQuotaInWave = kv.Value;
         GamePerf.Log($"[WavePlanner] 词条怪配额 {(endlessQuotaMode ? "裂隙第" + bm.EndlessRiftStage + "层 比例" + ratio : "ch" + CurrentChapter + " 第" + (stageIdx + 1) + "关")} quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");

@@ -16,6 +16,11 @@ public partial class BattleManager
     /// <summary>宠物跟随玩家的横向偏移（身侧偏后）。生成与队伍进场摆位共用同一真源。</summary>
     const float PET_FOLLOW_OFFSET = 0.8f;
 
+    /// <summary>营救登场落点（2026-11-23 主人「狗要已经在和怪战斗，不是从玩家左面进来」）：
+    /// 落在玩家前方 → 至少比玩家靠前这么远，绝不站到玩家身后；场上没怪时用默认前冲距离。</summary>
+    const float PET_RESCUE_AHEAD_MIN = 0.9f;
+    const float PET_RESCUE_AHEAD_DEFAULT = 2.2f;
+
     /// <summary>取场上当前上阵宠物（宠物不在 MercenaryManager 列表里，单独从 allyUnits 找）。</summary>
     Pet GetDeployedPet()
     {
@@ -43,11 +48,41 @@ public partial class BattleManager
     void DeployRescuedPet()
     {
         if (!IsFormalMainRun || IsTutorialRun) return;
-        SpawnBattlePet(PetRescueStoryBeats.DogId, "营救回归");
+        SpawnBattlePet(PetRescueStoryBeats.DogId, "营救回归", ResolveRescueDogSpawnX());
     }
 
-    /// <summary>生成宠物战斗单位到玩家身侧；开战上阵与营救中途归队共用此唯一出口。</summary>
-    void SpawnBattlePet(string id, string reason)
+    /// <summary>
+    /// 营救狗的横向落点（2026-11-23 主人拍板）：落在<b>玩家前方</b>的活怪群里，
+    /// 玩家打完一波往前走时看到的是「狗已经在跟怪打」，而不是狗从玩家左后方进场。
+    /// 取活怪平均 X（怪还在屏外走进来时收到画面右缘内），下限 = 玩家前方 PET_RESCUE_AHEAD_MIN，
+    /// 上限 = 画面右缘内 1.2；极窄屏 lo>hi 时直接贴上限，绝不把狗甩到屏外（前 9 轮的坑）。
+    /// </summary>
+    float ResolveRescueDogSpawnX()
+    {
+        GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
+        float heroX = hero != null ? hero.transform.position.x
+                    : (spawnPoint != null ? spawnPoint.position.x : 0f);
+
+        float sum = 0f;
+        int n = 0;
+        for (int i = 0; i < monsters.Count; i++)
+        {
+            var m = monsters[i];
+            if (m == null || m.isDead) continue;
+            sum += m.transform.position.x;
+            n++;
+        }
+        float x = n > 0 ? sum / n : heroX + PET_RESCUE_AHEAD_DEFAULT;
+
+        float lo = Mathf.Max(visMin + 0.6f, heroX + PET_RESCUE_AHEAD_MIN);
+        float hi = visMax - 1.2f;
+        if (lo > hi) return hi;
+        return Mathf.Clamp(x, lo, hi);
+    }
+
+    /// <summary>生成宠物战斗单位到玩家身侧；开战上阵与营救中途归队共用此唯一出口。
+    /// spawnX 有值 = 用指定横向落点（营救登场落在玩家前方怪群里），不传 = 站玩家身侧偏后。</summary>
+    void SpawnBattlePet(string id, string reason, float? spawnX = null)
     {
         var save = SaveSystem.Instance?.Data;
         if (save == null) return;
@@ -81,7 +116,9 @@ public partial class BattleManager
                     : (spawnPoint != null ? spawnPoint.position : Vector3.zero);
         pos.y = UnitBase.GROUND_Y;
         if (unitRoot != null) pos.z = unitRoot.position.z;
-        pos.x -= PET_FOLLOW_OFFSET;   // 宠物站在玩家身侧偏后，不挡主角
+        // 【2026-11-23 主人「狗要已经在和怪战斗，不是从玩家左面进来」】营救传 spawnX → 前方怪群；
+        // 开战上阵不传 → 仍站玩家身侧偏后，不挡主角。
+        pos.x = spawnX.HasValue ? spawnX.Value : pos.x - PET_FOLLOW_OFFSET;
 
         GameObject go = Instantiate(prefab);
         go.SetActive(true);

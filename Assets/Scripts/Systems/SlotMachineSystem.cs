@@ -490,7 +490,8 @@ public static class SlotMachineSystem
     /// <summary>
     /// 【2026-10-24 主人拍板】保底稀有的**触发条件**（唯一出口，同 <see cref="MercGuaranteeActive"/> 模式）：
     /// 非引导局、且本局装备方向已连续（EQUIP_RARE_GUARANTEE_EVERY - 1）张白卡 ——
-    /// 即「连续第 5 张白卡」这一抽强制稀有及以上。引导局恒白不保底（10-12 拍板「每次引导战力一样」）。
+    /// 即「连续第 N 张白卡」这一抽强制稀有及以上（2026-11-23 起 N=10，真源在 SlotMachineDefs）。
+    /// 引导局恒白不保底（10-12 拍板「每次引导战力一样」）。
     /// 唯一调用点 = DraftPool.PickOne（付费直抽出口）。
     /// </summary>
     public static bool EquipRareGuaranteeActive() =>
@@ -502,6 +503,8 @@ public static class SlotMachineSystem
     /// <summary>
     /// 【2026-10-24 主人拍板】记一次装备抽奖结果（生效出口，唯一调用点 = BattleManager 扣钱后）。
     /// 判定口径：装备卡且品质非普通（SkillRarity.Common）→ 清零（出稀有+ 了）；
+    /// 【2026-11-23】绿档在 DraftPool.MapRarity 已并进 Common，所以「白 + 绿」一起计入连续低档，
+    /// 连续第 10 抽保底仍升到稀有 —— 不用另加计数分支。
     /// 否则 +1 —— 非装备卡（池空回落 PowerUp 等）= 这次装备抽奖没出稀有 = +1。
     /// </summary>
     public static void NoteEquipDrawResult(DraftCard card)

@@ -17,8 +17,8 @@ using UnityEngine;
 /// </summary>
 public partial class Pet : Mercenary
 {
-    /// <summary>宠物高度 = 玩家高度的这个比例（11-21「玩家一半高」→ 11-23 主人「战斗中形象也小，再放大一倍」=1.0 与玩家等高）。internal 供战场演出狗复用同一真源。</summary>
-    internal const float PET_HEIGHT_RATIO = 1.0f;
+    /// <summary>宠物高度 = 玩家高度的这个比例（11-23 主人「差不多玩家一半大左右，最大不超过玩家」→ 0.45；演进：1.0 → 0.5 → 0.3 → 0.36 → 0.45）。所有宠物（狗/狼/羊/鸟/蜥蜴及皮肤）共用同一真源，internal 供战场演出狗复用。</summary>
+    internal const float PET_HEIGHT_RATIO = 0.45f;
     /// <summary>头顶血条离模型顶部的间隙 = 宠物自身世界高度 × 此比例（11-22 按体型调节，不写死世界单位）。</summary>
     const float HP_BAR_HEAD_GAP_RATIO = 0.12f;
     /// <summary>移动动画倍率上下限（11-22：步频跟位移，别再出现「动画慢移动快」滑步）。</summary>
@@ -218,7 +218,7 @@ public partial class Pet : Mercenary
         float targetH = 0f;
         var hero = Hero.Instance;
         if (hero != null && MeasureBodyHeight(hero, out float heroH) && heroH > 0.01f)
-            targetH = heroH * PET_HEIGHT_RATIO;
+            targetH = heroH * Mathf.Min(PET_HEIGHT_RATIO, 1f);   // 上限=玩家身高（11-23 主人：最大不要超过玩家）
 
         if (TryGetBodyHeight(out float myH) && myH > 0.01f && targetH > 0.01f)
         {
@@ -230,7 +230,7 @@ public partial class Pet : Mercenary
             // 取不到 bounds（prefab 刚实例化一帧内 SpriteRenderer 未就绪）：退回玩家 scale 的一半
             float hs = hero != null ? Mathf.Abs(hero.transform.localScale.x) : 1f;
             if (hs < 0.0001f) hs = 1f;
-            float s = hs * PET_HEIGHT_RATIO;
+            float s = hs * Mathf.Min(PET_HEIGHT_RATIO, 1f);   // 同上限：不超玩家
             transform.localScale = new Vector3(s, s, s);
             Debug.LogWarning("[Pet] bounds 取不到，半高退回 scale=" + s.ToString("F2"));
         }
@@ -294,8 +294,8 @@ public partial class Pet : Mercenary
     /// 按原影子世界尺寸还原椭圆，再染黑 0.35；不动 prefab / meta / 节点层级 / 排序。
     /// 缺 Shadow 节点只告警不新建（项目红线：不静默造资源）。
     /// </summary>
-    /// <summary>阴影可见尺寸放大倍数（11-22 主人「宠物阴影太小」→「放大一倍」→「再放大一倍」）：实心圆软边让可见核心比标称小。</summary>
-    const float BATTLE_SHADOW_SIZE_SCALE = 12f;  // 11-23 主人「脚下阴影还是小」：6→12 翻倍
+    /// <summary>阴影可见尺寸放大倍数（随 PET_HEIGHT_RATIO 同比：6→3.6→4.32→5.4，11-23 主人「宠物放大到玩家一半」阴影同比）：实心圆软边让可见核心比标称小。</summary>
+    const float BATTLE_SHADOW_SIZE_SCALE = 5.4f;  // 11-23 主人「宠物放大到玩家一半，阴影同比」：4.32→5.4
     /// <summary>阴影纵向压扁系数（11-22 主人「压扁一些」）：横向放大同时收高度，更像贴地椭圆。</summary>
     const float BATTLE_SHADOW_FLATTEN = 0.6f;
 

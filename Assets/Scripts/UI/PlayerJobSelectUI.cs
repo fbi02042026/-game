@@ -243,8 +243,10 @@ public class PlayerJobSelectUI : MonoBehaviour
                 _hint.text = HintText;
             _hint.fontSize = HintFontSize;
         }
-        if (!_fromPrefab && _title != null)
-            _title.text = "选择职业";
+        // 【2026-11-23】标题跟着模式走：换职业模式写「切换职业」。
+        //（原来只有白模路径才改标题，预制体里烤死的「选择职业」在换职业模式下一直没改。）
+        if (_title != null)
+            _title.text = _opts.Mode == PickMode.ChangeJob ? "切换职业" : "选择职业";
 
         if (_root != null)
         {
@@ -681,6 +683,13 @@ public class PlayerJobSelectUI : MonoBehaviour
     {
         if (index < 0 || index >= _offer.Count) return;
         var job = _offer[index];
+        // 【2026-11-23】换职业模式点当前职业：卡片已压暗并挂「当前」角标，这里直接挡掉不选中
+        //（原来要一路点到「确认转职」才 toast 拒绝，白点两次）。
+        if (_opts.Mode == PickMode.ChangeJob && job == PlayerJobDefs.GetSelected())
+        {
+            UIManager.Instance?.ShowToast("这已经是当前职业");
+            return;
+        }
         if (_opts.RequireSwordShield && job != PlayerJobId.SwordShield)
         {
             UIManager.Instance?.ShowToast("请先选择剑盾卫士");
@@ -748,10 +757,13 @@ public class PlayerJobSelectUI : MonoBehaviour
                 // 无 Resources 图时保留 prefab 已拖 Sprite，不刷色块
             }
             bool sel = hasSel && _selected.Value == _offer[i];
-            ApplyCardSelectVisual(c, sel, hasSel);
+            // 【2026-11-23】换职业模式：当前职业那张卡不是候选（选它没意义），单独压暗 + 挂「当前」角标。
+            bool isCurrent = _opts.Mode == PickMode.ChangeJob && _offer[i] == PlayerJobDefs.GetSelected();
+            ApplyCardSelectVisual(c, sel, hasSel, isCurrent);
         }
         UpdateLastPickBadges();
         UpdateSuggestBadges();
+        UpdateCurrentJobBadges();
     }
 
     /// <summary>
@@ -760,7 +772,11 @@ public class PlayerJobSelectUI : MonoBehaviour
     /// </summary>
     void UpdateLastPickBadges()
     {
-        bool showBadge = !_opts.TutorialForceSwordFirst && _lastPick.HasValue;
+        // 【2026-11-23】换职业模式不显示「上次选择」：那张卡语义是「当前职业」，
+        // 走 CurrentJobBadge（同一位置），两个角标一起开会叠印。
+        bool showBadge = !_opts.TutorialForceSwordFirst
+                         && _opts.Mode != PickMode.ChangeJob
+                         && _lastPick.HasValue;
         for (int i = 0; i < _cards.Count; i++)
         {
             if (i >= _offer.Count) continue;
@@ -840,6 +856,47 @@ public class PlayerJobSelectUI : MonoBehaviour
         return go.transform;
     }
 
+    /// <summary>
+    /// 【2026-11-23】换职业模式的「当前」角标：标出玩家此刻的职业（那张卡不可选、已压暗）。
+    /// 与「上次选择 / 建议」同位置、三种角标互斥出现；运行时建，不碰预制体。
+    /// </summary>
+    void UpdateCurrentJobBadges()
+    {
+        bool show = _opts.Mode == PickMode.ChangeJob;
+        for (int i = 0; i < _cards.Count; i++)
+        {
+            if (i >= _offer.Count) continue;
+            var cardTf = _cards[i].Button != null ? _cards[i].Button.transform : null;
+            if (cardTf == null) continue;
+            bool want = show && _offer[i] == PlayerJobDefs.GetSelected();
+            var badge = FindDeep(cardTf, "CurrentJobBadge");
+            if (badge == null && want)
+                badge = CreateCurrentBadge(cardTf);
+            if (badge != null)
+                badge.gameObject.SetActive(want);
+        }
+    }
+
+    /// <summary>建一颗右上角「当前」小角标：深底 + 浅蓝字，锚死卡片右上角（与「建议」角标同尺寸）。</summary>
+    static Transform CreateCurrentBadge(Transform card)
+    {
+        var go = new GameObject("CurrentJobBadge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(card, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(1f, 1f);
+        rt.anchoredPosition = new Vector2(-2f, -2f);
+        rt.sizeDelta = new Vector2(64f, 34f);
+        var img = go.GetComponent<Image>();
+        img.color = new Color(0.08f, 0.07f, 0.1f, 0.78f);
+        img.raycastTarget = false;
+
+        var t = CreateText(go.transform, "Label", "当前", 20, TextAnchor.MiddleCenter);
+        Stretch(t.rectTransform);
+        t.color = new Color(0.75f, 0.92f, 1f, 1f);
+        return go.transform;
+    }
+
     static void EnsureCardSelectFx(ref CardBind bind, Transform cardTf)
     {
         if (cardTf == null) return;
@@ -857,15 +914,18 @@ public class PlayerJobSelectUI : MonoBehaviour
         bind.SelectOutline.enabled = false;
     }
 
-    static void ApplyCardSelectVisual(CardBind c, bool selected, bool anySelected)
+    static void ApplyCardSelectVisual(CardBind c, bool selected, bool anySelected, bool isCurrentJob = false)
     {
         if (c.DimGroup != null)
         {
-            c.DimGroup.alpha = anySelected && !selected ? 0.4f : 1f;
+            // 【2026-11-23】当前职业卡（换职业模式）恒暗，且不参与放大/缩小 —— 它不在本次候选里
+            c.DimGroup.alpha = isCurrentJob ? 0.45f : (anySelected && !selected ? 0.4f : 1f);
             // 默认三卡 0.98；有选中时：选中 1.02，另外两张 0.95（均以预制体卡片原缩放为基准）
             var bs = (c.BaseScale.x <= 0.0001f || c.BaseScale.y <= 0.0001f || c.BaseScale.z <= 0.0001f)
                 ? Vector3.one : c.BaseScale;
-            if (!anySelected)
+            if (isCurrentJob)
+                c.DimGroup.transform.localScale = bs;
+            else if (!anySelected)
                 c.DimGroup.transform.localScale = bs * 0.98f;
             else
                 c.DimGroup.transform.localScale = selected
@@ -973,9 +1033,15 @@ public class PlayerJobSelectUI : MonoBehaviour
             }
             string fromName = PlayerJobDefs.Get(current).DisplayName;
             string toName = PlayerJobDefs.Get(target).DisplayName;
+            // 【2026-11-23】把「到底退多少」算出来写进确认文案 —— 走 TalentSystem 的只读预览出口，
+            // UI 这边不另算一份 0.8（口径含「背包扩容保留、不退」）。
+            int refundPreview = TalentSystem.PreviewChangeJobRefund();
+            string refundLine = refundPreview > 0
+                ? $"右列天赋将清空，返还天赋石 {refundPreview}（已投的 80%，向下取整）。"
+                : "右列暂无可返还的天赋石（还没往右列投过）。";
             DiamondSpendGate.Request(
                 "更换职业",
-                $"确定从「{fromName}」转为「{toName}」？\n右列天赋将清空并按 80% 返还天赋石，左列金币天赋保留。",
+                $"确定从「{fromName}」转为「{toName}」？\n{refundLine}\n左列金币天赋与背包扩容保留。",
                 TalentSystem.CHANGE_JOB_DIAMOND_COST,
                 () =>
                 {
@@ -991,7 +1057,10 @@ public class PlayerJobSelectUI : MonoBehaviour
                         UIManager.Instance?.ShowToast(reason);
                     }
                 },
-                okLabel: "确认转职");
+                okLabel: "确认转职",
+                // 【2026-11-23】确认窗必须严格压在职业弹窗(910)之上：同层 910 排序不定，
+                // 确认窗的全屏 Dim 会把职业弹窗的点击射线吃掉（项目里记过同款坑）。
+                sortingOrder: GameConfig.UiSort.BattlePopup);
             return;
         }
 

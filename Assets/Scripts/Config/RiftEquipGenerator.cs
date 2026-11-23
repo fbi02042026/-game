@@ -19,6 +19,7 @@ public static class RiftEquipGenerator
     /// <param name="forceAtLeastRare">
     /// 【2026-10-24 主人拍板】保底稀有：true 时 roll 出「普通（白）」升档为「稀有（RARE）」，
     /// 引导局（fixedForTutorial）不生效。签名末尾默认参数，既有调用点零改动。
+    /// 【2026-11-23 主人拍板】升档后属性取「稀有档最低值」（非随机区间），避免保底件意外超模。
     /// </param>
     public static List<EquipInstance> Generate(int count, StageType stageType, int blacksmithLevel = 1, float attrBonus = 0f, bool forceWeapon = false, int chapter = 1, bool fixedForTutorial = false, bool forceAtLeastRare = false, int difficulty = 0, bool capToMilestone = false)
     {
@@ -46,18 +47,25 @@ public static class RiftEquipGenerator
         // 【2026-11-13 主人拍板】初级装备下限：采集一次本局开局发的初始武器 / 盾，
         // 生成主属性与词条时逐条钳制（详见下方 StarterFloor 注释）。
         var starter = CaptureStarterBaseline(job, fixedForTutorial);
-        // 引导确定性化：稀有度恒 NORMAL（Ch1 20% 稀有曲线只影响正式关/非引导抽卡）。
+        // 引导确定性化：稀有度恒 NORMAL（Ch1 10% 稀有曲线只影响正式关/非引导抽卡）。
         var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter);
+        // 【2026-11-23 主人拍板】只有真的从白升到稀有才取该档最低属性；表缺行 LogError 时不置位。
+        bool pityUpgraded = false;
         // 【2026-10-24 主人拍板】保底稀有：保底抽出的装备不许再是普通（白）。
         // FindRarityRule 失败时返回 FallbackRarity()（Id=NORMAL）而非 null，必须用 Id 判失败 —— fail closed：LogError + 保持原品质，不静默升档。
         // !fixedForTutorial 双保险：引导局恒普通（10-12 拍板「每次引导战力一样」），绝不被保底污染。
-        if (forceAtLeastRare && !fixedForTutorial && rarity != null && rarity.Id == "NORMAL")
+        // 【2026-11-23】绿档也是低档：白 / 绿都触发保底升稀有，否则绿占 3 成会把保底稀释掉。
+        if (forceAtLeastRare && !fixedForTutorial && rarity != null
+            && (rarity.Id == "NORMAL" || rarity.Id == "UNCOMMON"))
         {
             var rareRule = FindRarityRule("RARE");
             if (rareRule == null || rareRule.Id != "RARE")
                 Debug.LogError("[RiftEquipGenerator] 保底稀有取不到 RARE 品质规则（rarity 表缺行？），本次保持 roll 出的品质，不静默升档");
             else
+            {
                 rarity = rareRule;
+                pityUpgraded = true;
+            }
         }
         // forceWeapon 由引导宝箱传入：宝箱只掉武器，避免误给防具；否则保留默认 45% 武器概率。
         // 引导确定性化：必为主手武器（引导第一拍定稿就是「一抽(武器)」）。
@@ -128,12 +136,13 @@ public static class RiftEquipGenerator
             Debug.LogError($"[RiftEquipGenerator] combat_tuning 档位系数区间反了：{rarity.Id} LO={tierLo:F2} > HI={tierHi:F2}");
             tierHi = tierLo;
         }
+        // 2026-11-23：保底升档件取档位下限 tierLo（区间随机留给自然掉落的稀有）。
         float anchorRoll = fixedForTutorial ? 1.0f : Random.Range(1.0f, 1.1f);
         float mainVal = enemyAnchored
-            ? enemyAvg * Random.Range(tierLo, tierHi) * chapterGrowth
+            ? enemyAvg * (pityUpgraded ? tierLo : Random.Range(tierLo, tierHi)) * chapterGrowth
             : anchorToTemplate
                 ? tplAtk * anchorRoll * chapterGrowth
-                : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial) * chapterGrowth;
+                : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial, pityUpgraded) * chapterGrowth;
         // 【2026-11-13】主属性下限：整条随机分布平移到「不低于初级装备」，不做硬钳。
         // 硬钳会让 Ch1 普通装低半段全部落在同一个数（卡面 RoundToInt 后一模一样，
         // 2026-10-20 主人报过「两次抽出同一个武器 数值都一样」），平移保住随机区间宽度。
@@ -147,7 +156,8 @@ public static class RiftEquipGenerator
         mainVal *= difficultyMul;   // 【2026-11-19 R2】难度系数乘在保底平移之后（先 floor 再乘）
         if (enemyAnchored)
             Debug.Log($"[EQUIP-FLOOR] ch={chapter} 敌人均值={enemyAvg:F2} 档={rarity.Id} " +
-                      $"区间=[{tierLo:F2},{tierHi:F2}]×A 最终={mainVal:F2} 初始基准={starter.Attack:F2}");
+                      $"区间=[{tierLo:F2},{tierHi:F2}]×A 最终={mainVal:F2} 初始基准={starter.Attack:F2}" +
+                      (pityUpgraded ? " 保底最低档" : ""));
         var attrs = new List<AttrBonusData>();
         if (TryMapAttr(main, mainVal, job, out var mainBonus))
             attrs.Add(mainBonus);
@@ -157,13 +167,15 @@ public static class RiftEquipGenerator
             : Random.Range(rarity.AffixMin, rarity.AffixMax + 1);
         // 引导确定性化：NORMAL 本就 0 词条；即便将来配表改了词条数，也按确定性走，不引入随机。
         if (fixedForTutorial) affixCount = Mathf.Max(0, rarity.AffixMin);
+        // 2026-11-23：保底升档件取该档最少词条（与「最低属性」同口径）。
+        if (pityUpgraded) affixCount = Mathf.Max(0, rarity.AffixMin);
         var used = new HashSet<string> { main };
         for (int a = 0; a < affixCount; a++)
         {
             string id = PickWeightedLanded(slot.RandPool, job, used, fixedForTutorial);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
-            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial) * chapterGrowth, attrBonus);
+            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial, pityUpgraded) * chapterGrowth, attrBonus);
             // 【2026-11-13】随机词条同口径平移保底（稀有 / 传奇区间本就远高于下限，实际不会触发）
             float affixFloor = StarterFloor(id, starter);
             float affixMin = RolledMin(id, rarity.Id, rarity.AffixMul, chapterGrowth);
@@ -296,19 +308,26 @@ public static class RiftEquipGenerator
     ///   独立掷品质的装备，开界面见传奇概率 = 1-(1-p)³，比单件率高近 3 倍。主人选方案A：
     ///   传奇列在当日上调基础上**砍半**（1.5/2.5/3.5/3.75/5.25/6.25/7.25），
     ///   NORMAL / RARE 两列零变动。单开界面见传奇概率：Ch2 ≈4.4% / Ch4 ≈10.2% / Ch8 ≈20%。
+    /// 【2026-11-23 主人拍板】第 1 章白多蓝少：稀有 20% → 10%（普通 80% → 90%），传奇仍恒 0；Ch2-8 零变动。
+    /// 同日另定：保底稀有升档时取「高一档里最低属性」（见 GenerateOne 的 pityUpgraded 分支）。
     /// </summary>
-    static void ChapterRarityWeights(int chapter, out float wNormal, out float wRare, out float wLegend)
+    static void ChapterRarityWeights(int chapter, out float wNormal, out float wUncommon,
+                                     out float wRare, out float wLegend)
     {
+        // 【2026-11-23 主人拍板】加「绿色/优秀」档，走「白多 → 绿多 → 蓝多」的过渡：
+        //   Ch1 白 62 / 绿 31 / 蓝 7（蓝极少、且与白绿拉开一档）；Ch2-3 绿爬到峰值 33~33.5（绿多期）；
+        //   Ch4 起白让位给蓝，Ch5 蓝过半（蓝多期），Ch8 蓝 80.75 / 金 7.25（金列一格未动）。
+        //   原则：只拆原白列，蓝/金绝对值的节奏保持（Ch1 蓝依旧个位数，金仍按 10-24 砍半口径）。
         switch (Mathf.Clamp(chapter, 1, 8))
         {
-            case 2: wNormal = 73.5f; wRare = 25f;   wLegend = 1.5f;  break;
-            case 3: wNormal = 67.5f; wRare = 30f;   wLegend = 2.5f;  break;
-            case 4: wNormal = 61.5f; wRare = 35f;   wLegend = 3.5f;  break;
-            case 5: wNormal = 55.75f; wRare = 40.5f; wLegend = 3.75f; break;
-            case 6: wNormal = 49.25f; wRare = 45.5f; wLegend = 5.25f; break;
-            case 7: wNormal = 43.25f; wRare = 50.5f; wLegend = 6.25f; break;
-            case 8: wNormal = 37.25f; wRare = 55.5f; wLegend = 7.25f; break;
-            default: wNormal = 80f; wRare = 20f; wLegend = 0f; break; // 第 1 章：稀有 20%，无传奇（Ch1 恒 0 不动，2026-10-24 主人拍板）
+            case 2: wNormal = 42f;   wUncommon = 33f;   wRare = 23.5f;  wLegend = 1.5f;  break;
+            case 3: wNormal = 31f;   wUncommon = 33.5f; wRare = 33f;    wLegend = 2.5f;  break;
+            case 4: wNormal = 22f;   wUncommon = 30f;   wRare = 44.5f;  wLegend = 3.5f;  break;
+            case 5: wNormal = 15f;   wUncommon = 25f;   wRare = 56.25f; wLegend = 3.75f; break;
+            case 6: wNormal = 10f;   wUncommon = 19f;   wRare = 65.75f; wLegend = 5.25f; break;
+            case 7: wNormal = 6f;    wUncommon = 14f;   wRare = 73.75f; wLegend = 6.25f; break;
+            case 8: wNormal = 3f;    wUncommon = 9f;    wRare = 80.75f; wLegend = 7.25f; break;
+            default: wNormal = 62f;  wUncommon = 31f;   wRare = 7f;     wLegend = 0f;   break; // 第 1 章：白绿为主，蓝 7%，无传奇
         }
     }
 
@@ -319,12 +338,12 @@ public static class RiftEquipGenerator
             return FallbackRarity();
 
         // 稀有度唯一真源：章节曲线（ChapterRarityWeights）。勿改回隐藏等级或关卡段权重。
-        ChapterRarityWeights(chapter, out float wN, out float wR, out float wL);
+        ChapterRarityWeights(chapter, out float wN, out float wU, out float wR, out float wL);
         float total = 0f;
         var weights = new float[rules.Count];
         for (int i = 0; i < rules.Count; i++)
         {
-            float w = WeightForRarity(rules[i].Id, wN, wR, wL);
+            float w = WeightForRarity(rules[i].Id, wN, wU, wR, wL);
             // 第 1 章绝不掉传奇（双保险：Ch1 曲线权重本就为 0，防将来调曲线误给）。
             if (rules[i].Id == "LEGEND" && Mathf.Max(1, chapter) <= 1)
                 w = 0f;
@@ -344,10 +363,11 @@ public static class RiftEquipGenerator
     }
 
     /// <summary>品质ID → 章节权重映射（2026-10-12 前叫 WeightForHidden，彼时真源是隐藏等级）。</summary>
-    static float WeightForRarity(string rarityId, float wNormal, float wRare, float wLegend)
+    static float WeightForRarity(string rarityId, float wNormal, float wUncommon, float wRare, float wLegend)
     {
         switch (rarityId)
         {
+            case "UNCOMMON": return wUncommon;   // 2026-11-23 绿档，缺这行会并进白
             case "RARE": return wRare;
             case "LEGEND": return wLegend;
             default: return wNormal;
@@ -512,15 +532,21 @@ public static class RiftEquipGenerator
         return null;
     }
 
-    static float RollAttrValue(string attrId, string rarityId, float mul, bool isAffix, bool fixedForTutorial = false)
+    /// <param name="lowestOfTier">2026-11-23 保底稀有用：取该品质区间下限，不掷随机。</param>
+    static float RollAttrValue(string attrId, string rarityId, float mul, bool isAffix, bool fixedForTutorial = false, bool lowestOfTier = false)
     {
         if (!RiftEquipTables.TryGetRange(attrId, out var range))
-            // 无表兜底区间同样确定性化：中值 20（原 10~30 随机）
-            return (fixedForTutorial ? 20f : 10f + Random.Range(0f, 20f)) * mul;
+            // 无表兜底区间同样确定性化：中值 20（原 10~30 随机）；保底取下限 10。
+            return (fixedForTutorial ? 20f : lowestOfTier ? 10f : 10f + Random.Range(0f, 20f)) * mul;
 
         float min, max;
         switch (rarityId)
         {
+            // 【2026-11-23】绿档独立区间（表第 13/14 列），与白/蓝严格不重叠
+            case "UNCOMMON":
+                min = range.UncommonMin;
+                max = range.UncommonMax;
+                break;
             case "RARE":
                 min = range.RareMin;
                 max = range.RareMax;
@@ -535,8 +561,8 @@ public static class RiftEquipGenerator
                 break;
         }
         if (max < min) max = min;
-        // 引导确定性化：区间中值（跨次运行一致）
-        float v = fixedForTutorial ? (min + max) * 0.5f : min + (max - min) * Random.value;
+        // 引导确定性化：区间中值（跨次运行一致）；2026-11-23 保底升档：区间下限。
+        float v = fixedForTutorial ? (min + max) * 0.5f : lowestOfTier ? min : min + (max - min) * Random.value;
         v *= mul;
         // 百分比表内已是百分点数字（如 5 = 5%），运行时 CritRate 用 0~1
         if (IsRateAttr(attrId))
@@ -674,7 +700,8 @@ public static class RiftEquipGenerator
     static float RolledMin(string attrId, string rarityId, float mul, float growth)
     {
         if (!RiftEquipTables.TryGetRange(attrId, out var r)) return 0f;
-        float lo = rarityId == "RARE" ? r.RareMin
+        float lo = rarityId == "UNCOMMON" ? r.UncommonMin
+                 : rarityId == "RARE" ? r.RareMin
                  : rarityId == "LEGEND" ? r.LegendMin
                  : r.CommonMin;
         return lo * mul * growth * (IsRateAttr(attrId) ? 0.01f : 1f);
@@ -751,6 +778,7 @@ public static class RiftEquipGenerator
     {
         switch (id)
         {
+            case "UNCOMMON": return Rarity.Uncommon;   // 2026-11-23：缺这行绿会显示成白
             case "RARE": return Rarity.Rare;
             case "LEGEND": return Rarity.Legendary;
             default: return Rarity.Common;
@@ -860,8 +888,9 @@ public static class RiftEquipGenerator
                 if (!fixedForTutorial && !string.IsNullOrEmpty(rarityId)
                     && TryGetTemplateAttack(t, PlayerJobBaseStats.IsMagicJob(job), out float tAtk))
                 {
+                    // 【2026-11-23】绿档与普通同档（低攻外观），只有稀有起才要求 15~25 档。
                     bool tierMismatchByAtk =
-                        (rarityId == "NORMAL" && tAtk > TemplateTierNormalMax)
+                        ((rarityId == "NORMAL" || rarityId == "UNCOMMON") && tAtk > TemplateTierNormalMax)
                         || (rarityId == "RARE" && (tAtk > TemplateTierRareMax || tAtk <= TemplateTierNormalMax));
                     if (tierMismatchByAtk)
                     {
@@ -897,7 +926,7 @@ public static class RiftEquipGenerator
                 {
                     int tplRar = (int)t.baseRarity;
                     bool tierMismatchByRarity =
-                        rarityId == "NORMAL" ? (tplRar != (int)Rarity.Common)
+                        (rarityId == "NORMAL" || rarityId == "UNCOMMON") ? (tplRar != (int)Rarity.Common)
                         : rarityId == "RARE" ? (tplRar < (int)Rarity.Uncommon || tplRar > (int)Rarity.Epic)
                         : false;
                     if (tierMismatchByRarity)

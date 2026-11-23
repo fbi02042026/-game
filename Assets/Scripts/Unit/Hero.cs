@@ -633,10 +633,39 @@ public class Hero : UnitBase
         {
             if (alliesEngaged)
             {
-                facingDir = 1;
-                ApplyFacing(facingDir);
-                if (rb != null) rb.velocity = Vector2.zero;
-                isMoving = false;
+                // 【2026-11-23 主人「玩家出屏要能回来找怪继续打、不能怪在屏外看不到」】
+                // 旧实现场上有怪却锁不到目标（怪被甩到 >1 屏宽外，被 FindNearestEnemyOnField
+                // 的距离闸过滤）时写死朝右站桩 → 相机跟着静止的玩家，怪永远留在屏外。改为朝
+                // 全场最近活怪回头走；进到一屏宽内后由正常索敌接管继续打。无怪分支一字不动。
+                UnitBase back = null;
+                float bestD = float.MaxValue;
+                var bmBack = BattleManager.Instance;
+                if (bmBack != null && bmBack.monsters != null)
+                {
+                    for (int i = 0; i < bmBack.monsters.Count; i++)
+                    {
+                        var m = bmBack.monsters[i];
+                        if (m == null || m.isDead || !m.gameObject.activeInHierarchy) continue;
+                        float d = Mathf.Abs(GetCombatX(this) - GetCombatX(m));
+                        if (d < bestD) { bestD = d; back = m; }
+                    }
+                }
+                if (back != null)
+                {
+                    target = back; // 让 ClampToScreen 走「离目标一屏宽」分支，允许出屏追回
+                    facingDir = GetCombatX(back) >= GetCombatX(this) ? 1 : -1;
+                    ApplyFacing(facingDir);
+                    if (rb != null)
+                        rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
+                    isMoving = true;
+                }
+                else
+                {
+                    facingDir = 1;
+                    ApplyFacing(facingDir);
+                    if (rb != null) rb.velocity = Vector2.zero;
+                    isMoving = false;
+                }
             }
             else
             {

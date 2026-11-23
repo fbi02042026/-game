@@ -273,7 +273,9 @@ public static class ArenaRules
                         type = "equip",
                         amount = 1,
                         defId = weaponId,
-                        rarity = 4,   // 邮件装备附件口径 0~4：4 = 最高档（传奇）
+                        // 【2026-11-23 统一】附件 rarity 存的就是 Rarity 枚举值（1白/2绿/3蓝/4紫/5金），
+                        // 不是 0~4 索引。旧值 4 = Epic（紫），领到背包是紫装，而邮件详情按模板显示金框 —— 两头不一样。
+                        rarity = (int)Rarity.Legendary,
                         iconOverride = ArenaSeasonWeapons.MailIconPath(weaponId),
                     },
                 };
@@ -692,7 +694,7 @@ public static class ArenaRules
     /// 模板从 <see cref="BotTeamTemplates"/> 按 seed 掷一个；人数档随战力（&lt;3000=2（含原 &lt;800 档，2026-10-31
     /// 主人报「敌方怎么就一个人」抬到 2 人）/ 其余=3，封顶镜像玩家队形）。
     /// 权重口径对齐 PowerCalc（佣兵 lv×70+★×110、技能 rar×90+★×140），纯展示不求总和精确等于战力。
-    /// 品质概率随战力上移：垫底机器人多普通/精良，前排满屏传说（「战力换算成佣兵技能和装备」）。
+    /// 品质概率随战力上移：垫底机器人多普通/优秀，前排满屏传说（「战力换算成佣兵技能和装备」）。
     /// ⚠ 与 <see cref="BuildBotBattleSquad"/> 逐行同源（同 seed、模板掷点各消耗一次 rng.Next，其余掷点顺序一致），
     /// 改动必须两边同步，否则详情与实战阵容分叉。
     /// </summary>
@@ -777,9 +779,10 @@ public static class ArenaRules
     static string RarityName(SkillRarity r)
         => r == SkillRarity.Legendary ? "传说" : r == SkillRarity.Rare ? "稀有" : "普通";
 
+    // 【2026-11-23 统一】绿档叫法跟 EquipUiText.RarityName / 概率公示一致，一律「优秀」（原「精良」）
     static string RarityName(Rarity r)
         => r == Rarity.Legendary ? "传说" : r == Rarity.Epic ? "史诗" : r == Rarity.Rare ? "稀有"
-         : r == Rarity.Uncommon ? "精良" : "普通";
+         : r == Rarity.Uncommon ? "优秀" : "普通";
 
     // ───────────────────────── 战力倒推 · 可生成实体版（2026-10-30「竞技场真战斗」） ─────────────────────────
 

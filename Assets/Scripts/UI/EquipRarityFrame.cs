@@ -4,7 +4,8 @@ using UnityEngine;
 /// 【2026-11-11 主人拍板「以后装备必走稀有度框体 统一下」】装备稀有度框体图的全局唯一出口。
 ///
 /// 三档装备框美术（Assets/Resources/UI/Battle/zhaungbeitihuan/，主人 2026-10-14 拍板引入）：
-///   传奇 → zhaungbeijin（橙金）；史诗/稀有/精良（紫/蓝/绿）→ zhuangbeilan（蓝）；普通 → zhuangbeibai（白）。
+///   传奇 → zhaungbeijin（橙金）；史诗/稀有（紫/蓝）→ zhuangbeilan（蓝）；优秀/普通（绿/白）→ zhuangbeibai（白）。
+///   【2026-11-23 主人拍板】绿色档用白框（不新造绿框美术），与普通同框、靠字色与属性区分。
 /// 150×150 方图、meta 无九宫格 spriteBorder → 使用方一律 Simple + preserveAspect（禁 Sliced 拉伸变形）；
 /// 框中心是实心深底 → 必须<b>垫在装备图标之下</b>用（照替换弹窗 Iconbg 用法，压图标之上会盖图）。
 ///
@@ -30,8 +31,10 @@ public static class EquipRarityFrame
                 break;
             case Rarity.Epic:
             case Rarity.Rare:
+                name = "zhuangbeilan";   // 紫 / 蓝 → 蓝
+                break;
             case Rarity.Uncommon:
-                name = "zhuangbeilan";   // 紫 / 蓝 / 绿 → 蓝
+                name = "zhuangbeibai";   // 【2026-11-23】绿 → 白框（主人口径：不新增绿框美术）
                 break;
             default:
                 name = "zhuangbeibai";   // 普通 → 白

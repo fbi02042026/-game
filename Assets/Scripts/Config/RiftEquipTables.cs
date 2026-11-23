@@ -45,6 +45,9 @@ public static class RiftEquipTables
         public float CommonMin, CommonMax;
         public float RareMin, RareMax;
         public float LegendMin, LegendMax;
+        // 【2026-11-23 主人拍板】绿色/优秀档区间。普通 < 优秀 < 稀有 三段严格不重叠，
+        // 真源 equip_attr_ranges.csv 第 13/14 列（行尾两列，代码按 c[12]/c[13] 读）。
+        public float UncommonMin, UncommonMax;
         public bool IsPercent;
         // 2026-09-26 主人拍板：毒伤只给游侠，职业白名单走表（equip_attr_ranges.适用职业），不写死
         public string AllowedJobs;
@@ -163,6 +166,20 @@ public static class RiftEquipTables
             r.RareMax = ParseNum(c[6]);
             r.LegendMin = ParseNum(c[7]);
             r.LegendMax = ParseNum(c[8]);
+            // 【2026-11-23】绿档区间：缺列 = 表没同步，报出来并回退普通区间（否则绿装数值恒 0）。
+            if (c.Length > 13)
+            {
+                r.UncommonMin = ParseNum(c[12]);
+                r.UncommonMax = ParseNum(c[13]);
+            }
+            else
+            {
+                UnityEngine.Debug.LogError(
+                    "[RiftEquipTables] equip_attr_ranges 缺「优秀品质最小值/最大值」两列（" + r.AttrId +
+                    "），绿档回退普通区间 —— 请跑 Tools/sync_table_bytes.py equip_attr_ranges");
+                r.UncommonMin = r.CommonMin;
+                r.UncommonMax = r.CommonMax;
+            }
             _ranges[r.AttrId] = r;
         }
     }
@@ -270,9 +287,14 @@ public static class RiftEquipTables
             case Rarity.Legendary:
             case Rarity.Epic:
                 lo = range.LegendMin; hi = range.LegendMax; break;
+            // 【2026-11-23 统一】绿档必须走自己的区间（表第 13/14 列），
+            // 原来和 Rare 合并 → 模板生成的绿装主属性直接取蓝档区间，与蓝装几乎同强，
+            // 玩家在装备栏看到的「优秀」比「普通」高出一整档，与掉落路径（RiftEquipGenerator
+            // 的 RollAttrValue 用 UncommonMin/Max）自相矛盾。两处口径必须一致。
             case Rarity.Rare:
-            case Rarity.Uncommon:
                 lo = range.RareMin; hi = range.RareMax; break;
+            case Rarity.Uncommon:
+                lo = range.UncommonMin; hi = range.UncommonMax; break;
             default:
                 lo = range.CommonMin; hi = range.CommonMax; break;
         }

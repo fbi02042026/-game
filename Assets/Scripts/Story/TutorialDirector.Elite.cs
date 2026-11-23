@@ -127,7 +127,9 @@ public partial class TutorialDirector
             if (settleT >= 5f && elite.IsSkillPerforming)
                 Debug.LogWarning("[Tutorial] 等精英聚力跳落地超时，遗言照常播出");
 
+            // 【2026-11-23 主人拍板】遗言加一句「可恶……」——被打到血条见底的不甘，语气更活。
             yield return TalkBlock(bm, headTalk,
+                new TalkLine(elite, "可恶……我居然会输。", 2.2f),
                 new TalkLine(elite, "我不过是个小杂鱼……", 2.2f),
                 new TalkLine(elite, "可你前面的路，将会是一片黑暗。", 2.6f));
         }

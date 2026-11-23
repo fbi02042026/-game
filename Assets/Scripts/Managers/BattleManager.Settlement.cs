@@ -1761,8 +1761,10 @@ public partial class BattleManager
             tier = EquipRarityTier(card.Equip.rarity);
             icon = card.Equip.icon ?? card.Equip.template?.icon;
             kind = "获得装备";
-            // 品质词：装备先过 DraftPool.MapRarity（唯一映射，不写第二份），词色跟卡框同色
-            rarityLabel = SkillRarityUtil.DisplayName(DraftPool.MapRarity(card.Equip.rarity));
+            // 品质词：直接读实例 Rarity（唯一出口 EquipUiText.RarityName）。
+            // 【2026-11-23 统一】原来先过 DraftPool.MapRarity —— 绿档会被压成 SkillRarity.Common，
+            // 卡面就成了「绿框 + 绿光 + 品质词写普通」，与三选一/详情弹窗的「优秀」对不上。
+            rarityLabel = EquipUiText.RarityName(card.Equip.rarity);
             // 【2026-10-13 #2·裁定1】实际增量为 0 = 玩家留着旧的、新件已折成分解材料 → 不显示「战力 +0」
             if (powerDelta <= 0) note = "已折成分解材料";
         }
@@ -1808,7 +1810,9 @@ public partial class BattleManager
             case Rarity.Legendary: return DraftPrizePopupUI.TierLegend;
             case Rarity.Epic: return DraftPrizePopupUI.TierEpic;
             case Rarity.Rare: return DraftPrizePopupUI.TierRare;
-            case Rarity.Uncommon: return DraftPrizePopupUI.TierRare;   // 绿档与蓝档同档演出
+            // 【2026-11-23 统一】绿档按低档演出（与白框口径一致），不再借蓝档；
+            // 否则 3 成产出的绿装开奖时放蓝光，玩家会以为出了蓝。
+            case Rarity.Uncommon: return DraftPrizePopupUI.TierCommon;
             default: return DraftPrizePopupUI.TierCommon;
         }
     }

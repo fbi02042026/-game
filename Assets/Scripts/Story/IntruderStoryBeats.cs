@@ -197,9 +197,9 @@ public static class IntruderStoryBeats
     {
         return new List<EntryBattleLine>
         {
-            L(EntrySpeaker.Gabriel, "让让！盾在这儿立住了，一只都别想越线！", 2.0f),
+            L(EntrySpeaker.Gabriel, "让让！盾在这儿立住了，一只都别想越线！", 2.4f), // 2026-11-23 统一 防没看清
             L(EntrySpeaker.Ella, "我勒个豆，全队打成这样？胆子肥嘟嘟的啊你们。", 2.2f),
-            L(EntrySpeaker.Lina, "先回血，别的回头说。", 1.6f),
+            L(EntrySpeaker.Lina, "先回血，别的回头说。", 2.4f), // 2026-11-23 统一 防没看清
             L(EntrySpeaker.Player, "你们是哪位？我没点外援啊，还是那种不讲价的。", 2.2f),
             L(EntrySpeaker.Gabriel, "有人托了我们，让我们盯着你点。细节打完再聊——先活着。", 2.4f),
         };
@@ -212,8 +212,8 @@ public static class IntruderStoryBeats
         {
             L(EntrySpeaker.Gabriel, "这岛的怪比字条上写的多三倍——独眼又开始瞒报了。", 2.2f),
             L(EntrySpeaker.Ella, "队形没散，侧面归我们。你们打你们的，闪身步我们兜着。", 2.2f),
-            L(EntrySpeaker.Lina, "血别硬撑，圣光罩着你。", 1.6f),
-            L(EntrySpeaker.Player, "你们怎么跟到岛上来的？这船票挺贵吧。", 2.0f),
+            L(EntrySpeaker.Lina, "血别硬撑，圣光罩着你。", 2.4f), // 2026-11-23 统一 防没看清
+            L(EntrySpeaker.Player, "你们怎么跟到岛上来的？这船票挺贵吧。", 2.4f), // 2026-11-23 统一 防没看清
             L(EntrySpeaker.Gabriel, "有人托了我们。托我们的人说，你在哪，我们就在哪。", 2.4f),
         };
     }
@@ -295,8 +295,8 @@ public static class IntruderStoryBeats
         return new List<EntryBattleLine>
         {
             L(EntrySpeaker.Gabriel, "来的正好！我们顶不住了——搭把手！"),
-            L(EntrySpeaker.Ella, "快！这圈越缩越小了！", 1.8f),
-            L(EntrySpeaker.Player, "撑住，我来了！", 1.8f),
+            L(EntrySpeaker.Ella, "快！这圈越缩越小了！", 2.4f), // 2026-11-23 统一 防没看清
+            L(EntrySpeaker.Player, "撑住，我来了！", 2.4f), // 2026-11-23 统一 防没看清
         };
     }
 

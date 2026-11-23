@@ -42,7 +42,10 @@ public static class ItemGrantSystem
 
     /// <summary>
     /// 给玩家发装备（入仓库 legacyEquipPool）。返回是否成功。
-    /// equipId 必须能在 EquipTemplate 表里查到；rarity 0~4，star 默认 0。
+    /// equipId 必须能在 EquipTemplate 表里查到；rarity 用 <see cref="Rarity"/> 枚举值 1~5
+    /// （【2026-11-23 修正】旧注释写 0~4，实际一路直接落进 EquipmentData.rarity，
+    ///   读取侧 <see cref="PersistentEquipConverter.FromPersistent"/> 是 (Rarity)d.rarity，
+    ///   按 0~4 传会整体错一档：2 变绿装、4 变紫装、5 被旧 clamp 截成紫），star 默认 0。
     /// </summary>
     public static bool GrantEquip(string equipId, int rarity, int star = 0)
     {
@@ -65,7 +68,7 @@ public static class ItemGrantSystem
             data.legacyEquipPool.Add(new EquipmentData
             {
                 equipId = equipId,
-                rarity = Mathf.Clamp(rarity, 0, 4),
+                rarity = Mathf.Clamp(rarity, (int)Rarity.Common, (int)Rarity.Legendary),
                 star = star,
                 isLegacy = true,
             });
