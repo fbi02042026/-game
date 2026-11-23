@@ -146,9 +146,9 @@ public class LoginNoticePopupUI : MonoBehaviour
         bodyRt.pivot = new Vector2(0.5f, 0.5f);
         bodyRt.sizeDelta = new Vector2(360f, 355f);
         // 14:59 主人看真机截图拍板「字往下点，太往上了」：27 → -18（下移 45px）。
-        // 文字块高 ≈246px，下移后底部离纸面书本装饰（y<-153）还有约 66px，不会压书；
-        // 中心偏移 |-18| < 64，仍命中居中元素保护，不会被上下重锚定搬走。
-        bodyRt.anchoredPosition = new Vector2(0f, -18f);
+        // 2026-11-23 16:xx 主人看整体截图又要求「字整体往上一点」：-18 → -4（上移 14px，渲染后 ≈17px）。
+        // 中心偏移 |-4| < 64，仍命中居中元素保护，不会被上下重锚定搬走。
+        bodyRt.anchoredPosition = new Vector2(0f, -4f);
         ui._body = body;
 
         // 右上角关闭热区：X 美术中心≈(475,52)，相对图心(250,302) → (222,248)。
