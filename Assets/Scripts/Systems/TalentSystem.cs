@@ -316,10 +316,10 @@ public static class TalentSystem
         if (TalentDefs.IsRightNodeMutexLocked(node, talents)) { reason = "互斥：已选其它流派"; return false; }
 
         // 【2026-11-19 主人拍板】R_DUAL 原「主流派满5级」前置已改挂等级门槛
-        //（自身 unlockLeftIndex=9（2026-11-19 起），见下方等级判断）；流派节点已界面隐藏，不再依赖 R_F1/R_F2。
+        //（自身 unlockLeftIndex=45（2026-11-23 起），见下方等级判断）；流派节点已界面隐藏，不再依赖 R_F1/R_F2。
 
         // 【2026-11-05 主人拍板「右侧天赋改人物等级开启，跟左列取消挂钩」】门槛 = 人物等级
-        //（配表 unlockLeftIndex：2026-11-19 起 1~13 逐级，语义由「左列已点数」改为「人物等级」）。
+        //（配表 unlockLeftIndex：2026-11-23 起可见 10 格按 5~50 级每 5 级开一格，语义由「左列已点数」改为「人物等级」）。
         if (LevelSystem.CurrentLevel < node.unlockLeftIndex)
         { reason = $"等级达到{node.unlockLeftIndex}级后解锁"; return false; }
 

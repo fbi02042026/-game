@@ -213,7 +213,7 @@ public partial class DailyLoginUI
         {
             // 【2026-10-16 主人拍板】回主界面的判定加严：天赋页关了 **且** 首次引导收完了才弹，
             // 防止引导遮罩/收尾气泡还挂着时登录弹进来交叉。
-            if (!TalentPageOpen() && !GuideStillBusy())
+            if (!TalentPageOpen() && !GuideStillBusy() && !OtherPopupBusy())
             {
                 _pendingShow = false;
                 Open();
@@ -237,6 +237,14 @@ public partial class DailyLoginUI
         var g = FirstRunGuide.Instance;
         return g != null && !g.IsFinished;
     }
+
+    /// <summary>
+    /// 【2026-11-23】其它模态弹窗（恭喜升级 / 获得奖励）是否在屏：在屏就不算回到主界面。
+    /// 修「领取任务奖励 + 升级弹窗关掉后又弹每日登录，几个界面叠在一起」——
+    /// 登录窗层级 900 低于奖励窗 905 / 升级窗 996，硬弹只会垫在它们下面一起显示。
+    /// 只判模态弹窗，**不判**冒险日志这类常开页面（判了玩家在页内就永远等不到登录弹窗）。
+    /// </summary>
+    static bool OtherPopupBusy() => LevelUpPopup.IsShowing || RewardPopupUI.IsShowing;
 
     // ============================================================
     // 弹窗内新手指路（2026-10-20 主人拍板）：

@@ -83,7 +83,9 @@ public static class SpeechBubbleFit
         // 主人要求「根据字的多少实时调整对话框大小」：短句收小、长句放大。
         // 收小判据 —— 把整句按「不换行」量一次天然宽度，只要单行就塞得进基准框，
         // 就按内容等比缩小气泡（**字号不变**，只缩框，短句不再挂着一个大气泡）。
-        if (minScale < 0.999f)
+        // 【2026-11-23】含显式换行（多行）时不收小：下一段量的是「整句单行塞不塞得进基准框」，
+        // 多行文本会被误判成短句 → 框缩到 minScale、可用行宽更窄，折行反而更凶。
+        if (minScale < 0.999f && fitted.IndexOf('\n') < 0)
         {
             float oneLineW = MeasureUnwrapped(text, fitted, preferWidth: true);
             if (oneLineW > 0f)
@@ -271,10 +273,20 @@ public static class SpeechBubbleFit
     {
         if (string.IsNullOrEmpty(content)) return "";
         string raw = content.Replace("\r\n", "\n").Replace("\r", "\n").Trim();
-        // 去掉人为硬换行，交给 Wrap；保留用户有意的短暂停顿意义不大，统一走自动折行
-        raw = raw.Replace("\n", "");
-        while (raw.Contains("  ")) raw = raw.Replace("  ", " ");
-        return raw;
+        // 【2026-11-23 主人拍板】保留文案里的显式换行 \n：气泡宽度锁死在基准值（growHeightOnly），
+        // 只靠自动折行会把尾字断成「了。」这种孤字行，需要作者手动控断句。
+        // 连续空行压成一个换行，行首行尾空白去掉；不含 \n 的旧文案走完这一圈结果与改动前完全一致。
+        string[] lines = raw.Split('\n');
+        var sb = new System.Text.StringBuilder(raw.Length);
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i].Trim();
+            if (line.Length == 0) continue;
+            while (line.Contains("  ")) line = line.Replace("  ", " ");
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(line);
+        }
+        return sb.ToString();
     }
 
     static void ResolvePads(RectTransform bubble, RectTransform textRt,

@@ -356,14 +356,14 @@ public partial class TutorialDirector
 
         if (rival != null && !rival.isDead)
         {
-            // 【2026-10-07 / 2026-11-23】气泡停留一律往 2 秒以上给；玩家话从 Boss 大图前挪到这里，
-            // 和精英/塔克对白同一次 TalkBlock 串行播（大图砸完、精英进场站定才说，一句一句看清）。
-            // 【2026-11-23 主人拍板】「小心使盾的」= 说塔克；精英说完塔克接一句，精英再说下一句；语气调生动。
+            // 【2026-10-07 / 2026-11-23】气泡停留一律往 2 秒以上给。
+            // 【2026-11-23 主人拍板·最终版】战斗中不要啰嗦、一个气泡一句 —— 这段只留精英单行一句：点名「使盾的」= 塔克。
+            // 玩家吐槽 / 塔克接话 / 精英下令三句全删，说完直接开打（「老大」伏笔此处不再交代，留给后续剧情）。
+            // 长句用 \n 手动断句（SpeechBubbleFit.Sanitize 现保留硬换行，气泡一行 8 字）。
+            // 🔴 塔克台词红线：不得出现「本小姐」等女性自称（赛琳的口头禅，TutorialDirector.Town.cs:607），
+            // 见他其余台词「跟紧我，别走散」「躲在我后面」。
             yield return TalkBlock(bm, headTalk, restoreAct: false,
-                new TalkLine(Hero.Instance, "好家伙，来了个更大的？！", 2.4f),
-                new TalkLine(rival, "老大特意交代过：当心那个使盾的——说的就是你，别装了！", 2.6f),
-                new TalkLine(merc, "哼，盯上本小姐？那你可真是挑错人了。", 2.4f),
-                new TalkLine(rival, "嘴倒是挺硬。那就手底下见真章——上都上！", 2.6f));
+                new TalkLine(rival, "当心那个使盾的！", 2.6f));
             // 【2026-10-28 主人拍板】对白说完才放开：关掉进场暂停窗，怪从屏幕边缘推进到交战位开打；
             // 技能 Energy 由下一步 CoWatchPlayerSkill 充满 →「先说话，再开始准备放技能」。
             if (bm != null)
@@ -405,8 +405,8 @@ public partial class TutorialDirector
 
         yield return WaitFieldClear(strict: true);
 
+        // 【2026-11-23 主人拍板·一个气泡一句】原「……」+「走吧。」两个气泡合并成一句，塔克不说话直接走。
         yield return TalkBlock(bm, headTalk,
-            new TalkLine(merc, "……", 2.4f), // 2026-11-23 统一：1.8→2.4 防没看清
             new TalkLine(merc, "走吧。", 2.4f)); // 2026-11-23 统一：2.0→2.4 防没看清
         headTalk?.HideNow();
         hint.Hide();

@@ -193,6 +193,13 @@ public static class ResourceStrip
             _host.talentText = FindDeep(_talent, "天赋石Text")?.GetComponent<Text>();
             if (_host.talentText == null)
                 Debug.LogError("[ResourceStrip] 天赋石Panel 里没有 天赋石Text —— 天赋石数字将不显示（不兜底）");
+
+            // 【2026-11-23 主人拍板「天赋石图标改成路径加载吧 改成一致」】预制体里 天赋石Icon 直连的 sprite guid
+            // （8e4a0258f90a40f5b3c3cb3bb8cc54df）全工程无拥有者——团结 56 字符 guid 拖不进预制体、保存后 m_Sprite 不落盘，
+            // 运行时只能是白块；重拖会再一次掉盘。这里改走与背包 / 结算 / 邮件 / 商店同一个出口，全界面同一张图。
+            var tIcon = FindDeep(_talent, "天赋石Icon")?.GetComponent<Image>();
+            if (tIcon != null) tIcon.sprite = CommonIconSprites.Load("icon_talent_stone");
+            else Debug.LogError("[ResourceStrip] 天赋石Panel 里没有 天赋石Icon —— 天赋石图标不显示（不兜底）");
             // 【2026-10-25 主人拍板】天赋石加号 = 直接打开冒险日志里的历程（里程）商店；
             // 图标/显隐仍以预制体原样为准，这里只接点击
             var tbtn = FindDeep(_talent, "PlusButton")?.GetComponent<Button>();

@@ -90,6 +90,7 @@ public partial class TalentUI
     {
         BindCurrencyTexts();
         WireGoldPlusIfNeeded();
+        ApplyTalentStoneIcons();   // 【2026-11-23】资源行/表头天赋石图标改路径加载（预制体 guid 悬空）
     }
 
     /// <summary>
@@ -191,6 +192,31 @@ public partial class TalentUI
             if (nested != null) return nested;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 【2026-11-23 主人拍板「天赋石图标改成路径加载吧 改成一致」】
+    /// 天赋页两处天赋石图标（资源行 CoinIcon / 右列表头 icon）在预制体里直连的 sprite guid
+    /// （8e4a0258f90a40f5b3c3cb3bb8cc54df）全工程无拥有者——团结 56 字符 guid 拖不进预制体、保存后 m_Sprite 不落盘，
+    /// 重拖只会再掉一次盘。这里与背包 / 结算 / 邮件 / 商店走同一出口 icon_talent_stone，保证所有界面是同一张图。
+    /// 节点名在 prefab 里是 \u5929\u8D4B\u77F3Panel / \u5929\u8D4B\u77F3Icon（天赋石），已按码点核对。
+    /// </summary>
+    void ApplyTalentStoneIcons()
+    {
+        var sp = CommonIconSprites.Load("icon_talent_stone");
+        ApplyTalentStoneIcon("Panel/ResourceRow/天赋石Panel/CoinIcon", sp);
+        ApplyTalentStoneIcon("Panel/Columns/RightColumn/Header/icon", sp);
+    }
+
+    void ApplyTalentStoneIcon(string path, Sprite sp)
+    {
+        var img = transform.Find(path)?.GetComponent<Image>();
+        if (img == null)
+        {
+            Debug.LogError("[TalentUI] 缺少天赋石图标节点：" + path + "（不兜底）");
+            return;
+        }
+        if (sp != null) img.sprite = sp;
     }
 
     static Image FindDeepImage(Transform root, string name)

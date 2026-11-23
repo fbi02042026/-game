@@ -27,6 +27,13 @@ public class RewardPopupUI : MonoBehaviour
 {
     public static RewardPopupUI Instance { get; private set; }
 
+    /// <summary>
+    /// 【2026-11-23】画面此刻是否在屏上。其它弹窗（恭喜升级 LevelUpPopup / 每日登录 DailyLoginUI）
+    /// 据此让位，避免几层模态弹窗同时叠在屏幕上。Instance 是常驻 DDOL 单例，
+    /// 未打开时 gameObject 是关的（BuildFromPrefab / BuildFallback 末尾 SetActive(false)）。
+    /// </summary>
+    public static bool IsShowing => Instance != null && Instance.gameObject.activeSelf;
+
     const string PrefabPath = "Prefabs/UI/RewardPopup";
 
     /// <summary>一条奖励 = 图标 + 文案（文案自带数量，如「钻石 ×100」）。</summary>
@@ -241,7 +248,7 @@ public class RewardPopupUI : MonoBehaviour
     /// 不再各自 Toast。图标沿用邮件领取 / 每日登录同款 Common 图标（缺图由 CommonIconSprites 报错）。
     /// extras 放称号、装备名这类没有资源图标的奖励，每条一格；清单为空时不弹窗。
     /// </summary>
-    public static void ShowClaimRewards(long gold, long mats, long talent, long diamond, string[] extras = null)
+    public static void ShowClaimRewards(long gold, long mats, long talent, long diamond, string[] extras = null, System.Action onClosed = null)
     {
         var items = new List<Entry>();
         if (gold > 0) items.Add(new Entry(CommonIconSprites.Load("icon_gold"), "金币 ×" + gold));
@@ -253,7 +260,7 @@ public class RewardPopupUI : MonoBehaviour
             for (int i = 0; i < extras.Length; i++)
                 if (!string.IsNullOrEmpty(extras[i])) items.Add(new Entry(null, extras[i]));
         }
-        Show(items);
+        Show(items, onClosed);
     }
 
     /// <summary>装备类领奖条目：名字上稀有度色 + 框体走 EquipRarityFrame 唯一出口（2026-11-11 主人拍板）。</summary>

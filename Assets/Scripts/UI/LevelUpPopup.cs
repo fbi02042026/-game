@@ -103,6 +103,9 @@ public static class LevelUpPopup
     public static void FlushPending()
     {
         if (_host != null) return;   // 已有窗在显示：等玩家点黑幕，由 OnDimClicked 续弹，绝不覆盖
+        // 【2026-11-23】获得奖励窗在屏时让位：不清队列、只不弹，由它的关窗回调再拉一次
+        // （QuestRewardClaim.ClaimMain 传 LevelUpPopup.FlushPending）。防升级窗 996 压到奖励窗 905 上。
+        if (RewardPopupUI.IsShowing) return;
         if (_pending.Count == 0) return;
         var e = _pending.Dequeue();
         Show(e.Key, e.Value);

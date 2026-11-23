@@ -168,9 +168,16 @@ public partial class TalentUI
         // Line (1) 是主人在预制体里手工复制出来的节点；显隐规则见 RefreshOneRightNode。
         v.lineUp = go.transform.Find("Line")?.GetComponent<Image>();
         v.lineDown = go.transform.Find("Line (1)")?.GetComponent<Image>();
-        // 【2026-11-19 主人拍板】右列天赋再小 30%：主卡 Opt_0 运行时缩到 0.7（预制体不动）。
+        // 【2026-11-19 主人拍板】主卡 Opt_0 运行时缩放（倍数见 RightIconScale，预制体不动）。
         // 缩放放在连线对齐之前——EnsureRightLinkAxis 读 Opt_0 的 localScale 算中轴，自动跟随新尺寸。
         // 互斥合并行（两张卡并排）另有语义，不缩、不在此处理。
+        // 【2026-11-23 主人拍板】右列图标框统一紫色六边形（天赋_0002_图层-2）：预制体里 Opt_* 本体与
+        // 「选中」高亮框的 sprite 引用指向已删除的 图层 21.png（运行时为 null＝白框），这里按路径补。
+        for (int o = 0; o < 3; o++)
+        {
+            var optT = go.transform.Find("Opt_" + o);
+            if (optT != null) ApplyHexFrame(optT, true);
+        }
         if (node.type != TalentDefs.RightNodeType.Mutex)
         {
             var mainOpt = go.transform.Find("Opt_0") as RectTransform;
@@ -220,6 +227,32 @@ public partial class TalentUI
             if (ob != null) ob.enabled = false;
         }
         return v;
+    }
+
+    /// <summary>
+    /// 【2026-11-23 主人拍板】图标框补图：预制体里 Opt_* 本体与「选中」高亮框（节点名 U+9009 U+4E2D）
+    /// 的 sprite 引用指向已删除的 图层 21.png，运行时解析为 null（白框）。
+    /// <para>forceSelf=true 时本节点无条件换成紫六边形（右列图标框是本需求主线）；
+    /// 「选中」子节点只补 null，已有贴图（Icon / bg / 连线）一律不动。</para>
+    /// <para>贴图取不到直接 LogError，不兜底。</para>
+    /// </summary>
+    void ApplyHexFrame(Transform node, bool forceSelf)
+    {
+        if (node == null) return;
+        if (sprRightHex == null)
+        {
+            Debug.LogError("[TalentUI] 六边形框贴图缺失（sprRightHex = UI/Talent/天赋_0002_图层-2）");
+            return;
+        }
+        var own = node.GetComponent<Image>();
+        if (own != null && (forceSelf || own.sprite == null)) ApplySprite(own, sprRightHex, true);
+        for (int i = 0; i < node.childCount; i++)
+        {
+            var child = node.GetChild(i);
+            if (child.name != "选中") continue;
+            var img = child.GetComponent<Image>();
+            if (img != null && img.sprite == null) ApplySprite(img, sprRightHex, true);
+        }
     }
 
     /// <summary>

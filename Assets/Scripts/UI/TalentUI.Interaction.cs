@@ -105,9 +105,11 @@ public partial class TalentUI
 
         for (int i = 0; i < 3; i++)
         {
-            if (choiceButtons[i] != null) continue;
             var t = transform.Find($"ChoicePopup/Choice_{i}");
             if (t == null) continue;
+            // 【2026-11-23 主人拍板】选项卡底图与右列是同一张断链图，补紫六边形（只补 null，不动 Icon/bg）
+            ApplyHexFrame(t, false);
+            if (choiceButtons[i] != null) continue;
             choiceButtons[i] = t.GetComponent<Button>();
             if (choiceLabels[i] == null)
                 choiceLabels[i] = choiceButtons[i]?.GetComponentInChildren<Text>(true);
