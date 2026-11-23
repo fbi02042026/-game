@@ -40,6 +40,9 @@ public class BattleBossHpBar : MonoBehaviour
     const float BOSS_DEATH_ZERO_HOLD = 0.8f;
     bool _killCamHidden;
     bool _wantVisible;
+    // 【2026-11-23 主人拍板 A】狗营救演出期间屏幕血条不弹（只压显示、不丢目标），演出结束自动补显。
+    // 唯一写入点 = BattleManager.CutsceneDirector 的演出启动 / 复位 / finally 三处。
+    static bool _cutsceneSuppressed;
     Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
     Transform _progressBar;
     Transform _questMap;       // 【2026-10-16 改】= QuestPanel（左上任务面板）；旧引用 "map" 是场景底图根节点，绝不能藏
@@ -85,6 +88,19 @@ public class BattleBossHpBar : MonoBehaviour
         if (_inst == null) return;
         _inst._killCamHidden = hidden;
         _inst.ApplyVisibility();
+    }
+
+    /// <summary>
+    /// 演出期压制（2026-11-23 主人拍板 A）：狗营救演出期间精英/Boss 屏幕血条一律不弹，
+    /// 只压显示、目标照常绑定；演完 suppressed=false 时走 Refresh 唯一出口重新挑目标并补显。
+    /// </summary>
+    public static void SetCutsceneSuppressed(bool suppressed)
+    {
+        if (_cutsceneSuppressed == suppressed) return;
+        _cutsceneSuppressed = suppressed;
+        if (_inst == null) return;          // 还没建实例：静态标志已记下，下次建实例后按它生效
+        if (suppressed) _inst.ApplyVisibility();
+        else _inst.Refresh();
     }
 
     /// <summary>
@@ -244,7 +260,7 @@ public class BattleBossHpBar : MonoBehaviour
         // 血条此刻是藏的、又不是击杀镜头在藏 → 重挑目标并重放可见性。
         // 覆盖「漏刷新 / 被别处 SetActive(false) / 绑定晚了」等一切静默失败，绝不无声赖着。
         // 击杀镜头藏血条期间（_killCamHidden）不抢，命中了再自然解藏。
-        if (_root != null && !_root.gameObject.activeSelf && !_killCamHidden)
+        if (_root != null && !_root.gameObject.activeSelf && !_killCamHidden && !_cutsceneSuppressed)
             Refresh();
 
         // 【2026-10-18 主人拍板】死亡归零展示期：血条已归零，倒数结束再收起。
@@ -565,7 +581,7 @@ public class BattleBossHpBar : MonoBehaviour
     void ApplyVisibility()
     {
         if (_root == null) return;
-        bool showBoss = _wantVisible && !_killCamHidden;
+        bool showBoss = _wantVisible && !_killCamHidden && !_cutsceneSuppressed;
         if (_root.gameObject.activeSelf != showBoss)
             _root.gameObject.SetActive(showBoss);
 

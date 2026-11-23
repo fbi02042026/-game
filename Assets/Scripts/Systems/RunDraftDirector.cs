@@ -441,9 +441,13 @@ public class RunDraftDirector : MonoBehaviour
         // 有旧件才弹确认（old != eq 防同实例重入的语义保留）。
         if (old != null && old != eq)
         {
-            bool chose = false;
-            yield return EquipReplaceConfirmUI.CoShow(eq, old, r => chose = r);
-            replace = chose;
+            // 【2026-11-23 主人报「点下一关的时候能带到下一关替换上装备」】三态收场：
+            // Discarded = 局已收尾（换关/回城/死亡/撤离），本次抽奖整笔作废 ——
+            // 不落装备、不折币、不回调 done（调用方已按 _runClosed 静默退场）。
+            var outcome = EquipReplaceConfirmUI.Outcome.KeepOld;
+            yield return EquipReplaceConfirmUI.CoShow(eq, old, r => outcome = r);
+            if (outcome == EquipReplaceConfirmUI.Outcome.Discarded) yield break;
+            replace = outcome == EquipReplaceConfirmUI.Outcome.Replace;
         }
 
         if (replace)

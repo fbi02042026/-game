@@ -113,7 +113,7 @@ public class CharacterSlotUI
     /// <summary>
     /// 更新槽位显示
     /// </summary>
-    public void UpdateSlot(string name, int level, float currentHp, float maxHp, bool showLevel = true)
+    public void UpdateSlot(string name, int level, float currentHp, float maxHp, bool showLevel = false)
     {
         if (root == null) return;
         root.SetActive(true);
@@ -791,7 +791,7 @@ public class CharacterSlotUI
 
     /// <summary>
     /// 等级文字（Lv.N）。放在卡片左上角（y≈34），避开中间的脸。
-    /// 玩家槽走 UpdateSlot(showLevel:false)，只有佣兵槽会显示。
+    /// 2026-11-23 主人拍板：战斗头像一律不显示等级 → UpdateSlot 默认 showLevel:false，玩家/佣兵槽都不显示。
     /// </summary>
     void EnsureLevelLabel()
     {

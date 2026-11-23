@@ -1018,6 +1018,9 @@ public class PlayerJobSelectUI : MonoBehaviour
             PlayerJobDefs.SetSelected(picked);
             var cb = _onPicked;
             _onPicked = null;
+            // 【2026-11-23 主人报「这个框还延迟到了下个界面」】职业介绍框是 5 秒自动收的软引导，
+            // 点「确定职业」马上就离开本界面，不停留 → 在这里立刻收掉，别把框带到下一个界面。
+            TutorialHintUI.Instance?.Hide();
             Hide();
             cb?.Invoke(picked);
             return;

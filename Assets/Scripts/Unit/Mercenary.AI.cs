@@ -10,13 +10,24 @@ public partial class Mercenary : UnitBase
     /// <summary>【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
     /// 我方佣兵交战前压停步线：距目标 ≤ 有效射程 × 此比例才站桩（0.55 ≈ 走进射程一半）。
     /// 只影响「已进攻击射程后是否继续往前走」，不改射程、攻击 CD、伤害与索敌。
-    /// 【2026-11-22】改 protected virtual：佣兵默认仍 0.55（行为零变化），宠物 override 成进射程即站桩。</summary>
-    protected virtual float EngageDistRatio => 0.55f;
+    /// 【2026-11-22】改 protected virtual：佣兵默认仍 0.55（行为零变化），宠物 override 成进射程即站桩。
+    /// 【2026-11-23 主人拍板「牧师攻击距离太近」】牧师佣兵不参与前压：进射程（1.0 × 射程）即站桩 ——
+    /// 否则射程调到 2.30 也会被 0.55 拉到 1.27 贴脸站。判据走花名册职业名，其它职业仍 0.55。</summary>
+    protected virtual float EngageDistRatio
+    {
+        get
+        {
+            if (MercRosterDefs.IsPriestJob(hireId, mercId)) return 1f;
+            return 0.55f;
+        }
+    }
 
     // —— 屏外走入（2026-10-31 主人拍板「竞技场敌人从屏幕外走进来，不能突然出现」）——
     // 仅敌方佣兵（isAlly=false，竞技场机器人小队）使用；己方抽卡入场走 SpawnRunMerc 的拴绳回队，不经过这里。
     bool _mapEnterActive;
     float _mapEnterTargetX;
+    /// <summary>是否仍在屏外走入段（供演出侧等"走到位再开口"，读的就是 _mapEnterActive 单一真源）。</summary>
+    public bool IsMapEntering => _mapEnterActive;
     // 【2026-10-31 晚】开打前抽到己方佣兵：AI 闸（UnitsCanAct=false）不解冻，走入段会被定在屏外
     // （这正是早上「抽到佣兵没有立即上阵」的根因，当时误改成编队位瞬现）。
     // 抽卡入场这条线改传 walkWhileFrozen=true，让佣兵在冻场期间也由代码驱动走回编队位。

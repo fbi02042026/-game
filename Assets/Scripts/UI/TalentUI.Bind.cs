@@ -187,7 +187,13 @@ public partial class TalentUI
         // Mutex 合并行两张卡并排、轨道另有语义，跳过不动。
         if (node.type != TalentDefs.RightNodeType.Mutex) EnsureRightLinkAxis(go, v);
         EnsureRightLock(v);
-        if (v.titleText != null) v.titleText.text = node.name;
+        // 【2026-11-23 主人拍板】右侧不要天赋名字：整行只留图标+连线，TitleText 节点隐藏（保留不删）。
+        // 旧实现图标上移而 TitleText 留在行根 →「字和图标分家」；隐藏后不再有这个名字文字。
+        if (v.titleText != null)
+        {
+            v.titleText.text = node.name;
+            v.titleText.gameObject.SetActive(false);
+        }
         if (v.costText != null) v.costText.text = "";
 
         // 整行点击：解锁 / 升级 / JobChoice 弹 6选1。右列每行一个节点，无分行选项按钮。
@@ -220,6 +226,16 @@ public partial class TalentUI
                 {
                     var sp = TalentIcons.GetTalent(singleOpt.name);
                     if (sp != null) ApplySprite(icon, sp, true);
+                    // 【2026-11-23 主人拍板】图标与紫色六边形框同心：框是 Opt_0 本体（preserveAspect 居中），
+                    // 图标按自身锚点与父框高度现读回中；只改纵向 y，x / sizeDelta / 贴图 / prefab 一概不动。
+                    var iconRt = icon.rectTransform;
+                    var parentRt = iconRt.parent as RectTransform;
+                    if (parentRt != null)
+                    {
+                        float parentH = parentRt.rect.height > 1f ? parentRt.rect.height : parentRt.sizeDelta.y;
+                        float anchorY = (iconRt.anchorMin.y + iconRt.anchorMax.y) * 0.5f;
+                        iconRt.anchoredPosition = new Vector2(iconRt.anchoredPosition.x, (0.5f - anchorY) * parentH);
+                    }
                 }
             }
             // 整行点击即可，禁用子选项独立响应（避免点中选项区不触发整行）

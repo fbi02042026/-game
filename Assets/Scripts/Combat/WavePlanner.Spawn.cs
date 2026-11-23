@@ -135,29 +135,20 @@ public partial class WavePlanner
     }
 
     // ---- extracted from BattleManager L876-L910 ----
+    /// <summary>
+    /// 引导局血量收口。【2026-11-23 主人拍板「引导和正式关卡数值一致」】起，
+    /// <b>普通小怪不再读表档</b>：血量走 Monster.Init 的正式关乘区（引导不吃全局砍半 ⇒ 天然 = 正式关 ×2），
+    /// 与正式关同一套公式、同一套章节/关卡曲线。表档 eliteHpMin/Max 只留给<b>精英槽位</b>，
+    /// 保住第 4/6 拍「压轴打不完 → 撤离」的血量演出（10-16 那批拍板值）。
+    /// </summary>
     void ApplyTutorialMonsterTuning(Monster monster)
     {
         if (!Rules.ApplyTableMonsterHp || !_tutorialHpFromTable || monster == null || monster.attr == null)
             return;
+        if (!monster.IsEliteWave) return;
 
-        float min;
-        float max;
-        if (monster.IsEliteWave)
-        {
-            min = _tutorialEliteHpMin;
-            max = _tutorialEliteHpMax;
-        }
-        else if (monster.IsRangedStyle && (_tutorialRangedHpMin > 0f || _tutorialRangedHpMax > 0f))
-        {
-            // 远程怪单独降血：与近战同血会让「远程更脆」的手感不成立（近战 3~4 刀 / 远程 2~3 刀）。
-            min = _tutorialRangedHpMin;
-            max = _tutorialRangedHpMax;
-        }
-        else
-        {
-            min = _tutorialHpMin;
-            max = _tutorialHpMax;
-        }
+        float min = _tutorialEliteHpMin;
+        float max = _tutorialEliteHpMax;
         if (min <= 0f && max <= 0f) return;
         if (max <= 0f) max = min;
         if (min <= 0f) min = max;
@@ -172,15 +163,15 @@ public partial class WavePlanner
         else
             rolled = Random.Range(min, max);
 
-        float hp = rolled * GameConfig.MONSTER_HP_GLOBAL_MUL;
+        // 表档即最终满血（不再乘 MONSTER_HP_GLOBAL_MUL，见 tutorial_battle.csv 表头）。
+        float hp = rolled;
         monster.attr.SetAttr(AttrType.MaxHp, hp);
         monster.currentHp = hp;
-        // [BALANCE-TEMP] 教学关血量覆盖后的真实满血（一眼看出是不是被压到个位数）
+        // [BALANCE-TEMP] 教学关精英血量覆盖后的真实满血
         string cfgId = monster.config != null ? monster.config.id : "-";
         float cfgBaseHp = monster.config != null ? monster.config.baseHp : -1f;
         Debug.Log($"[BALANCE] mon={monster.name} cfg={cfgId} cfgBaseHp={cfgBaseHp} " +
-                  $"elite={monster.IsEliteWave} rolled={rolled} MUL={GameConfig.MONSTER_HP_GLOBAL_MUL} " +
-                  $"finalMaxHp={hp:F1}");
+                  $"elite={monster.IsEliteWave} rolled={rolled} finalMaxHp={hp:F1}");
     }
 
     // ============================================================

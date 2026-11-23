@@ -2,8 +2,9 @@ using System.Collections;
 using UnityEngine;
 
 /// <summary>
-/// 宠物功能新手引导（2026-11-22）：1-3 正式主线首通 → 回城 → 告知开启宠物功能 →
-/// 底栏气泡指角色页 → 玩家自己进角色页后气泡指宠物入口 → 上阵 → 喂养（随机属性 +X + 亲密度）→ 宠物用战斗对话框叫两声。
+/// 宠物功能新手引导（2026-11-22；2026-11-23 主人拍板「胜利界面先报喜、回城只指路」）：
+/// 1-3 正式主线首通 → 胜利结果界面奖励展示完弹「宠物功能已开启」toast（ShowUnlockToastOnVictory）→
+/// 回城 → 底栏气泡指角色页 → 玩家自己进角色页后气泡指宠物入口 → 上阵 → 喂养（随机属性 +X + 亲密度）→ 宠物用战斗对话框叫两声。
 /// 【2026-11-23 主人拍板】不替玩家自动切页（旧版 OpenCharacter 的「下滑转场」观感差），一律酒馆气泡模式：
 /// 贴目标 + 尖角 + 无手指滑动 + 点击即收，见 ShowBubble()。
 ///
@@ -21,6 +22,16 @@ public static class PetFeatureGuide
     const string DoneKey = "petFeatureGuide_1_3";
     internal const float StepTimeoutSeconds = 120f;   // 单步等待玩家操作的看门狗（秒），超时放行不卡死
     internal const float HintSeconds = 9f;            // 软提示自动消失时长
+    /// <summary>本引导四条气泡统一缩到 250×120（文案已精简到两行内）：
+    /// 400 宽气泡的「不出屏」夹取上限只有 ±152，而入口在最左（约 −280）、部署钮在弹窗右侧（约 +180）
+    /// → 尖角两头都被夹偏。250 宽夹取上限 ±227，两端都能落回目标内。
+    /// 只作用于本类四条 ShowBubble；全局 400×192 口径、其余引导、字号色值一律不动。
+    /// internal：使用点在另一个类 PetFeatureGuideDriver.ShowBubble（同文件同程序集）。</summary>
+    internal static readonly TutorialHintUI.HintLayout GuideBubbleLayout = new TutorialHintUI.HintLayout
+    {
+        BubbleWidth = 250f,
+        BubbleHeight = 120f,
+    };
 
     static bool _pending;                    // 跨场景 pending：1-3 通关置位，回城消费
     static PetFeatureGuideDriver _driver;
@@ -34,9 +45,24 @@ public static class PetFeatureGuide
         Debug.Log("[PetFeatureGuide] 1-3 首通，pending 宠物功能引导");
     }
 
+    /// <summary>
+    /// 胜利结果界面「奖励展示完」时调（2026-11-23 主人拍板「胜利界面加上功能开启的 toast」）：
+    /// 只弹一条前台小姐告知宠物功能已开启，不清 pending —— 回城引导（TryConsumeOnTown）照旧。
+    /// </summary>
+    public static void ShowUnlockToastOnVictory()
+    {
+        if (!_pending || IsDone) return;
+        GlobalToastUI.ShowPersona("宠物功能开啦～回城找我，我可不等你哦～");
+    }
+
     /// <summary>回城时调（TownHubController.Start）。启动全局唯一驱动器，条件不满足时它自己安静。</summary>
     public static void TryConsumeOnTown()
     {
+        // 【2026-11-23 主人「打完中断再进也没有引导宠物上阵流程了」】_pending 是内存静态字段，
+        // 1-3 通关置位后只要退出进程（含退出 Play）就丢，再回城永远不引导。
+        // 缺失时从存档补回一次，判据与 MarkClearedStage13 的调用前提完全一致。
+        if (_driver != null) return;            // 本会话已启动过（含引导进行中）：不重开、不打断玩家当前进度
+        if (!_pending) _pending = ShouldGuideFromSave();
         if (!_pending) return;
         _pending = false;
         var data = SaveSystem.Instance?.Data;
@@ -45,6 +71,19 @@ public static class PetFeatureGuide
         if (!data.HasIntruderStorySeen(PetRescueStoryBeats.SeenKey)) return;
 
         Ensure().Begin();
+    }
+
+    /// <summary>
+    /// 存档推导「1-3 首通该引导、但还没引导完」——中断后重进补 pending 的唯一判据：
+    /// 宠物功能已解锁（营救剧情看过）+ 完成标记未写 + 1-3 已通关（与 Settlement 调 MarkClearedStage13 的前提一致）。
+    /// </summary>
+    static bool ShouldGuideFromSave()
+    {
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        if (data.HasIntruderStorySeen(DoneKey)) return false;
+        if (!data.HasIntruderStorySeen(PetRescueStoryBeats.SeenKey)) return false;
+        return data.HasStageCleared(1, 2);
     }
 
     static PetFeatureGuideDriver Ensure()
@@ -109,8 +148,8 @@ public class PetFeatureGuideDriver : MonoBehaviour
             yield return null;
         }
 
-        // 第一拍：告知开启宠物功能（前台小姐傲娇口吻，自带口吻字）
-        GlobalToastUI.ShowPersona("第三关打完了，宠物功能给你开啦～去角色页找那个新图标，我可不等你哦～");
+        // 第一拍：回城指路（功能开启的 toast 已在胜利界面说过了，这里不再重复报喜）
+        GlobalToastUI.ShowPersona("宠物在角色页等你，快去看看嘛～");
         yield return new WaitForSecondsRealtime(2.2f);
 
         // 第二拍【2026-11-23 酒馆气泡模式】：不自动切页，底栏「角色」按钮贴气泡指路，等玩家自己点进去。
@@ -118,7 +157,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var navRect = nav != null && nav.characterButton != null
             ? nav.characterButton.transform as RectTransform : null;
         if (navRect != null)
-            ShowBubble("先去底栏「角色」页，宠物功能藏在那儿～", navRect, false);
+            ShowBubble("点底栏「角色」页找我～", navRect, false, PetFeatureGuide.GuideBubbleLayout);
         else
             Debug.LogError("[PetFeatureGuide] 底栏角色按钮取不到，角色页指路气泡跳过（不静默兜底）");
         yield return WaitStage(2);   // 等玩家自己点进角色页（TownHubController 通知）
@@ -127,17 +166,17 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var charUi = CharacterUI.Instance;
         var entryRect = charUi != null ? CharacterUI.PetEntryRect : null;
         if (entryRect != null)
-            ShowBubble("点这个「宠物」图标进去看看嘛～", entryRect, false);
+            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.GuideBubbleLayout);
         else
             Debug.LogError("[PetFeatureGuide] 角色页宠物入口取不到，指路气泡跳过");
         yield return WaitStage(3);   // 等玩家点开宠物界面
 
         // 第四拍：指上阵按钮（宠物弹窗在 TownPopup 900 层，气泡要抬层盖过去）
-        ShowBubble("先点「上阵」把它带上，我不会亏待你的宠物哦～", PetUI.DeployBtnRect, true);
+        ShowBubble("点「上阵」带上它～", PetUI.DeployBtnRect, true, PetFeatureGuide.GuideBubbleLayout);
         yield return WaitStage(4);   // 等玩家上阵
 
         // 第五拍：指喂养按钮（同一个按钮，上阵后文案变「喂养」）
-        ShowBubble("再点「喂养」一次，它会长属性、跟你更亲哦～", PetUI.DeployBtnRect, true);
+        ShowBubble("再点「喂养」涨属性～", PetUI.DeployBtnRect, true, PetFeatureGuide.GuideBubbleLayout);
         yield return WaitStage(5);   // 等玩家喂养
 
         // 第六拍：宠物用战斗对话框叫两声（固定锚点浮在宠物模型上方）
@@ -164,7 +203,8 @@ public class PetFeatureGuideDriver : MonoBehaviour
 
     /// <summary>酒馆气泡模式统一出口：贴目标底框 + 尖角 + 点击即收 + 无手指滑动（不去下滑）；
     /// overPopup=气泡要盖到 TownPopup(900) 弹窗里控件时抬层（照 MercSwapHint.TryShow 口径）。</summary>
-    static void ShowBubble(string text, RectTransform target, bool overPopup)
+    static void ShowBubble(string text, RectTransform target, bool overPopup,
+        TutorialHintUI.HintLayout? layout = null)
     {
         var bubble = BattleManager.DraftHintBubble;
         if (bubble == null)
@@ -176,7 +216,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         hint.SetBannerSpriteOnce(bubble);
         if (overPopup) hint.SetSortOrderOnce(GameConfig.UiSort.TownPopup + 40);
         hint.SetTapToHideOnce(true);   // 点一下即收，不留屏
-        hint.Show(text, target, PetFeatureGuide.HintSeconds, false);
+        hint.Show(text, target, PetFeatureGuide.HintSeconds, false, layout);
         if (!hint.IsVisible || hint.CurrentHint != text)
         {
             // Show 被战斗头顶台词占用没真弹出：退掉一次性设置，防污染下一条
@@ -189,6 +229,12 @@ public class PetFeatureGuideDriver : MonoBehaviour
     {
         var bubble = BattleHeadTalkUI.Ensure();
         var anchor = PetUI.PetArtAnchor;
+        if (anchor == null)
+        {
+            // 缺真值直接报错跳过，不静默沿用上一场战斗的旧位置（气泡停在左下角就是这个原因）
+            Debug.LogError("[PetFeatureGuide] 宠物展示节点取不到，叫声气泡跳过（不兜底）");
+            yield break;
+        }
         var cries = PetBattleBanter.GetTwoCries(_petId);
         for (int i = 0; i < cries.Length; i++)
         {

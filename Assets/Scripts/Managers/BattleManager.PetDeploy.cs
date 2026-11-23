@@ -45,10 +45,21 @@ public partial class BattleManager
     /// 只认正式主线非引导，场上已有同 id 宠物则幂等早退（不叠加第二只）。
     /// 不写 petDeployedId：上阵真源仍归玩家手动选择，引导流程不被跳过。
     /// </summary>
-    void DeployRescuedPet()
+    /// <summary>spawnX 有值用指定落点（归队从左侧进场）；不传=狗登场落前方怪群（旧行为不变）。</summary>
+    void DeployRescuedPet(float? spawnX = null)
     {
         if (!IsFormalMainRun || IsTutorialRun) return;
-        SpawnBattlePet(PetRescueStoryBeats.DogId, "营救回归", ResolveRescueDogSpawnX());
+        SpawnBattlePet(PetRescueStoryBeats.DogId, "营救回归", spawnX ?? ResolveRescueDogSpawnX());
+    }
+
+    /// <summary>狗从左侧进场的生成点（2026-11-23 主人「狗没有从左边跑进来，还是突然出现的」）：
+    /// 落在画面左缘【外】——生成那一刻玩家看不到 pop 出现，随后由演出协程 CoRunDogIntoScene
+    /// 跑到目标点，观感是"从屏幕左侧跑进来"。第一次登场与精英战归队共用此起点。</summary>
+    const float DOG_RUN_IN_SPAWN_MARGIN = 0.9f;
+    float ResolveRescueDogLeftSpawnX()
+    {
+        GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
+        return visMin - DOG_RUN_IN_SPAWN_MARGIN;
     }
 
     /// <summary>

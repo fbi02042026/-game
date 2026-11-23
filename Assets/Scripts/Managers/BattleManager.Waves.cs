@@ -389,7 +389,6 @@ public partial class BattleManager
         _rescueShownThisStage = false;          // 批次4 T8（关卡级）：换关允许下一关再触发友军救场
         _rescueWaveEndHandled = false;          // 批次4 T8（关卡级）：波末成败/撤场闸随换关复位
         _petRescueStageActive = false;          // 【2026-11-23】换关允许 1-3 未通关时再演狗剧情
-        _petRescuePendingDeploy = false;        // 换关清掉待归队，不带到下一关
         ResetBattleCutscene();                  // 【2026-11-23 统一编排器】停演出协程 + 清占用标志，防串台
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
@@ -534,6 +533,13 @@ public partial class BattleManager
     const float RescueSpawnAheadBase = 1.0f;
     const float RescueSpawnAheadStep = 1.1f;   // 队内成员错位间距
 
+    /// <summary>
+    /// 救场小队屏外生成点（2026-11-23 主人「佣兵那些剧情是不是也有这些问题」）：
+    /// 画面左缘再往外这么多 —— 生成那一刻玩家看不到 pop 出现，随后由 <see cref="Mercenary.BeginMapEnter"/>
+    /// 走到编队位，观感是「援军从左侧走进来」。与狗剧情 <c>DOG_RUN_IN_SPAWN_MARGIN</c> 同口径。
+    /// </summary>
+    const float RescueWalkInMargin = 0.9f;
+
     /// <summary>T4 本关已触发旗：命中即置 true 不再查；换关在 ResetWaveProgress 清（T8 关卡级口径）。</summary>
     bool _rescueShownThisStage;
     /// <summary>当前在场的是不是 T6 入场救援（true=波末判成败后撤场；false=T5 救场，波末直接撤场）。</summary>
@@ -544,6 +550,8 @@ public partial class BattleManager
     readonly List<Mercenary> _rescueSquad = new List<Mercenary>();
     /// <summary>救场/谢幕剧情协程句柄；换关/撤离随 StopBattleSpawnCoroutines 停。</summary>
     Coroutine _rescueStoryCo;
+    /// <summary>T5 救场对话是否正冻着场（只解自己冻的场，防误解冻死亡/结算的冻场）。</summary>
+    bool _rescueFrozeUnits;
 
     /// <summary>Boss 波进行中（读现有 WaveData.isBossWave 标记，不新造判据）。</summary>
     bool IsBossWaveActive => _activeWaveIndex >= 0 && _waves != null && _activeWaveIndex < _waves.Count
@@ -604,7 +612,8 @@ public partial class BattleManager
 
     /// <summary>
     /// 救场·战场演出（2026-11-23）：三人轮流喊话 + 玩家回一句，气泡贴本人头上（跟着单位走）。
-    /// 不暂停战斗、不置 _preBattleStoryPlaying（本波怪已在场，没有待刷波次要拦）；
+    /// 【2026-11-23 主人「冻场」】对话期间冻住全场（UnitsCanAct=false），与引导 TalkBlock / 狗营救对话同源；
+    /// 三人先不冻场地走到编队位（冻着会僵在屏外），全员到位后才冻场开口，说完 finally 解冻继续打。
     /// 台词取 IntruderStoryBeats.RescueBattleLines（支线岛版/揭底版/首遇版），取不到人跳过该句。
     /// </summary>
     IEnumerator CoRescueBattleScene()
@@ -618,12 +627,33 @@ public partial class BattleManager
         var lines = IntruderStoryBeats.RescueBattleLines(
             IsSideIsland ? 0 : CurrentChapter,
             IsSideIsland ? SideIslandId.ToString() : null);
+
+        // 走入期不冻场：冻着走不动会僵在屏外（T5 此刻 UnitsCanAct 为 true，走入照常）
         for (int i = 0; i < lines.Count; i++)
         {
-            if (_runClosed || _stageCleared) break;   // 玩家死了/已通关：立刻收掉气泡，别压在结算上
-            var unit = ResolveSquadSpeaker(lines[i].Speaker);
-            if (unit == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
-            yield return talk.CoPlayLine(unit, lines[i].Text, lines[i].Hold);
+            if (_runClosed || _stageCleared) yield break;
+            var walker = ResolveSquadSpeaker(lines[i].Speaker);
+            if (walker == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
+            yield return CoWaitRescueSpeakerInPlace(walker);   // 走到位再开口，气泡不落在屏外
+        }
+
+        // 全员到位后整段冻场播台词：进来前谁能动才由谁冻，finally 只解自己冻的那次
+        try
+        {
+            if (UnitsCanAct) { UnitsCanAct = false; _rescueFrozeUnits = true; }
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (_runClosed || _stageCleared) break;   // 玩家死了/已通关：立刻收掉气泡，别压在结算上
+                var unit = ResolveSquadSpeaker(lines[i].Speaker);
+                if (unit == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
+                yield return talk.CoPlayLine(unit, lines[i].Text, lines[i].Hold);
+            }
+        }
+        finally
+        {
+            // 死亡冻场/结算已接管时不动 UnitsCanAct，只解自己冻的那次
+            if (_rescueFrozeUnits && !_runClosed && !_stageCleared) UnitsCanAct = true;
+            _rescueFrozeUnits = false;
         }
     }
 
@@ -636,15 +666,32 @@ public partial class BattleManager
         _rescueEntryMode = entryMode;
         float heroX = UnitBase.GetCombatX(hero);
         float z = unitRoot != null ? unitRoot.position.z : hero.transform.position.z;
+        // 【2026-11-23 主人「佣兵那些剧情是不是也有这些问题」】旧写法把三人直接 Instantiate 在队伍前方
+        //（heroX+1.0/2.1/3.2）—— 冻场中凭空出现、连走路都没有，和狗剧情「突然出现」是同一个病根。
+        // 改走现存唯一屏外走入机制（Mercenary.BeginMapEnter，与抽卡入场同款）：
+        // 屏外左缘生成 → 走到编队位 → 到点自动交还普通 AI。朝向由 StepMapEnter 每帧按位移方向翻，不会倒着跑。
+        GetBattleVisibleX(out float visMin, out float visMax, 0.35f);
+        float enterX0 = visMin - RescueWalkInMargin;
         int spawned = 0;
         for (int i = 0; i < RescueSquadHireIds.Length; i++)
         {
+            float targetX = heroX + RescueSpawnAheadBase + i * RescueSpawnAheadStep;
+            // 起点与终点同间距错开 → 三人保持队形一起走进来，不会叠在同一处出生
+            float enterX = enterX0 - i * RescueSpawnAheadStep;
             var merc = SpawnRescueSquadMember(mm, RescueSquadHireIds[i],
-                new Vector3(heroX + RescueSpawnAheadBase + i * RescueSpawnAheadStep, UnitBase.GROUND_Y, z),
+                new Vector3(enterX, UnitBase.GROUND_Y, z), targetX,
                 hpRatio);
-            if (merc != null) { _rescueSquad.Add(merc); spawned++; }
+            if (merc != null)
+            {
+                // T6 入场救援挂在 FinishBattleIntro 之后（战前 UnitsCanAct=false），不传 walkWhileFrozen
+                // 就会被冻在屏外看不见 —— 这正是「突然出现/看不到人」的成因；
+                // T5 走入期不冻场（三人走到位后才冻场念台词），同一口径照走。
+                merc.BeginMapEnter(targetX, 1, walkWhileFrozen: true);
+                _rescueSquad.Add(merc);
+                spawned++;
+            }
         }
-        Debug.Log($"[BattleManager] 救场小队入场 hpRatio={hpRatio:0.##} entryMode={entryMode} spawned={spawned}/3");
+        Debug.Log($"[BattleManager] 救场小队屏外入场 hpRatio={hpRatio:0.##} entryMode={entryMode} spawned={spawned}/3 enterX={enterX0:0.##}");
     }
 
     /// <summary>
@@ -652,7 +699,7 @@ public partial class BattleManager
     /// SpawnMercenary(AssetId) → 挂技能/真名/真 hireId → 进 allyUnits → 挂死亡 → 计贡献 → 按比例起步血量。
     /// 🔴 不调 UnlockMerc —— 临时入队不算已拥有（RunDraftDirector.cs:583 引导分支同口径）。
     /// </summary>
-    Mercenary SpawnRescueSquadMember(MercenaryManager mm, string hireId, Vector3 pos, float hpRatio)
+    Mercenary SpawnRescueSquadMember(MercenaryManager mm, string hireId, Vector3 pos, float cameraExtendX, float hpRatio)
     {
         if (!MercRosterDefs.TryGetByHireId(hireId, out var def) || string.IsNullOrEmpty(def.AssetId))
         {
@@ -675,13 +722,16 @@ public partial class BattleManager
         RunStats.EnsureAlly(GetAllyMvpKey(merc), GetAllyMvpDisplayName(merc));
         float maxHp = merc.attr != null ? merc.attr.GetAttr(AttrType.MaxHp) : 100f;
         merc.currentHp = Mathf.Max(1f, maxHp * Mathf.Clamp01(hpRatio));
-        ExtendCameraMaxX(pos.x + 6f);
+        // 注意 pos 现在是屏外走入起点，镜头扩展必须按【编队落点】算（cameraExtendX），
+        // 按起点算会把 maxX 顶错位置（旧实现按 pos.x+6f，pos 原来就是落点，同口径）。
+        ExtendCameraMaxX(cameraExtendX + 6f);
         return merc;
     }
 
     /// <summary>
-    /// 波末收口（T5 撤场 / T6 成败判定 + 撤场）。唯一调用点：Update 的通关检测块（所有波刷完 + 场上无活怪），
-    /// 即 Boss 波结束、StartStageClearRewardSequence 之前 —— 谢幕剧情播在撤场前，结算不被拦截。
+    /// 波末收口（T5 战后台词 + 撤场 / T6 成败判定 + 撤场）。唯一调用点：Update 的通关检测块
+    /// （所有波刷完 + 场上无活怪），即 Boss 波结束、StartStageClearRewardSequence 之前 ——
+    /// 后续剧情播在撤场前，结算不被拦截。
     /// </summary>
     void TickRescueSquadWaveEnd()
     {
@@ -689,10 +739,49 @@ public partial class BattleManager
         _rescueWaveEndHandled = true;
         if (!_rescueEntryMode)
         {
-            DespawnRescueSquad();   // T5：本波结束直接撤场，无谢幕剧情
+            _rescueStoryCo = StartCoroutine(CoRescueAfterBattleThenDespawn());   // T5：战后补几句再撤场
             return;
         }
         _rescueStoryCo = StartCoroutine(CoRescueOutcomeThenDespawn());   // T6：先成败剧情再撤场
+    }
+
+    /// <summary>
+    /// T5 战后台词（2026-11-23 主人「其他的战斗完再继续说几句就行」）：战中只播 2 句最短救场说明，
+    /// 「谁托的/为什么来」挪到这里——波末我方已赢、播在撤场前，与 T6 谢幕同一条 PlayRescueBeats 出口。
+    /// </summary>
+    IEnumerator CoRescueAfterBattleThenDespawn()
+    {
+        Debug.Log("[BattleManager] 救场波末：我方已赢 → 播救场战后台词");
+        bool done = false;
+        BattleEntryDraftPanel.Hide();   // 与 T6 同款：先收掉结算抽奖面板，别压住剧情
+        bool playing = false;
+        try
+        {
+            playing = IntruderStoryBeats.TryPlayRescueAfterBattle(
+                IsSideIsland ? 0 : CurrentChapter,
+                IsSideIsland ? SideIslandId.ToString() : null,
+                () => done = true);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[BattleManager] 救场战后台词播放异常，直接撤场放行结算: " + e.Message);
+            StoryDirector.Ensure().StopPlaying();
+            var dlg = DialogueUI.Instance;
+            if (dlg != null) dlg.Hide();
+            playing = false;
+        }
+        if (playing)
+        {
+            float watchdog = 0f;
+            while (!done && watchdog < 300f)
+            {
+                watchdog += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            if (!done) Debug.LogWarning("[BattleManager] 救场战后台词 5 分钟未完成，强制撤场放行结算");
+        }
+        DespawnRescueSquad();
+        _rescueStoryCo = null;
     }
 
     /// <summary>T6 谢幕（2026-11-20 三次拍板）：播点在 Update 通关检测点（必然我方已赢）→ 统一「救援成功·受伤版」剧情（小队受伤没死，无死亡暗示）→ 撤场。不拦结算。</summary>
@@ -739,6 +828,12 @@ public partial class BattleManager
         {
             StopCoroutine(_rescueStoryCo);
             _rescueStoryCo = null;
+        }
+        // StopCoroutine 不触发协程 finally：若正冻在 T5 对话中撤场，这里补解冻（只解自己冻的场）
+        if (_rescueFrozeUnits)
+        {
+            if (!_runClosed && !_stageCleared) UnitsCanAct = true;
+            _rescueFrozeUnits = false;
         }
         if (_rescueSquad.Count == 0) return;
         var mm = MercenaryManager.Instance;
@@ -823,6 +918,7 @@ public partial class BattleManager
             if (_liveStartRequested) break;
             var unit = ResolveSquadSpeaker(lines[i].Speaker);
             if (unit == null) continue;   // 该位没生成/已阵亡：跳过这句，不兜底换人
+            yield return CoWaitRescueSpeakerInPlace(unit, abortOnLiveStart: true);   // 走到位再开口，气泡不落在屏外
             yield return talk.CoPlayLine(unit, lines[i].Text, lines[i].Hold);
         }
 
@@ -857,6 +953,26 @@ public partial class BattleManager
             if (m != null && m.hireId == hire) return m;
         }
         return null;   // 该位没生成/已阵亡：调用方跳过这句，不兜底换人
+    }
+
+    /// <summary>
+    /// 等说话人从屏外走到编队位再开口（2026-11-23）：走入途中头顶气泡的锚点还在屏幕外，
+    /// 会被钳在画面边缘、脱离本人 —— 与狗剧情「气泡看不到」是同一个病根（锚点跑到屏外）。
+    /// 5 秒看门狗：窄屏里队尾第三人从屏外走到编队位约 2.5~3 秒，留足余量；
+    /// 真走不进来也照常说，绝不把演出卡死。非佣兵 / 已到位直接放行。
+    /// abortOnLiveStart=true（T6 入场救援）：玩家一点「开始战斗」就不再等，立刻收掉演出让路。
+    /// </summary>
+    IEnumerator CoWaitRescueSpeakerInPlace(UnitBase unit, bool abortOnLiveStart = false)
+    {
+        var merc = unit as Mercenary;
+        if (merc == null) yield break;
+        float t = 0f;
+        while (t < 5f && merc != null && merc.IsMapEntering && !_runClosed && !_stageCleared)
+        {
+            if (abortOnLiveStart && _liveStartRequested) yield break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
     }
 
     /// <summary>首波刷怪（含兜底）；成功才标记 _firstWaveSpawned</summary>
@@ -1396,6 +1512,20 @@ public partial class BattleManager
     void SpawnNextPendingWave() => Planner.SpawnNextPendingWave();
 
 
+    /// <summary>
+    /// 【2026-11-23 主人拍板·狗营救分镜】1-3 剧情关的精英末波要不要当「首领来袭」播：
+    /// 狗被打跑后先弹首领大图、再出精英。只认剧情已激活（_petRescueStageActive）的那一关的末波，
+    /// 其它精英关 / 其它波恒 false，别处不用另写判定。
+    /// </summary>
+    internal bool IsPetRescueEliteWaveAnnounce(int waveIdx)
+    {
+        if (!_petRescueStageActive) return false;
+        if (_waves == null || waveIdx < 0 || waveIdx >= _waves.Count) return false;
+        if (waveIdx != _waves.Count - 1) return false;      // 只末波（精英关末波 = 精英波）
+        var w = _waves[waveIdx];
+        return w != null && !w.isBossWave;
+    }
+
     /// <summary>清完当前波后出下一波：第 1 波清场播全关唯一一次「下一波来袭」Gate，其余普通波清完直接出兵，Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」再出兵（2026-11-13 v5 口径）</summary>
     void BeginNextWaveCountdown()
     {
@@ -1450,6 +1580,12 @@ public partial class BattleManager
         // 旧 5 秒倒计时 + 下一波来袭预告整段停用，函数保留不删（下线≠删除）；
         // Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」，羁绊本 Boss 前剧情保留。
         bool boss = _waves != null && nextIdx < _waves.Count && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
+        // 【2026-11-23 主人拍板·狗营救分镜】1-3 精英末波也走「首领来袭」大图：狗被打跑后先弹大图再出精英。
+        if (!boss && IsPetRescueEliteWaveAnnounce(nextIdx))
+        {
+            _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+            return;
+        }
         // 【2026-11-14 主人拍板·覆盖 2026-11-13 v5「全关唯一一次 Gate」】
         // 「下一波来袭」只在**跨大波**那一拍播：下一个待刷波是另一个回合（大波）的首波时才播，
         // 同一大波里的小波之间一律直刷（配合 WAVE_STREAM_GAP_SEC=1 秒流式压上）——
@@ -1653,10 +1789,12 @@ public partial class BattleManager
             int nextIdx = FindNextUnspawnedWaveIndex();
             bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                         && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-            var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
+            // 【2026-11-23 主人拍板·狗营救分镜】1-3 精英末波按 Boss 播报（「首领来袭」大图 + 不叠下面那行字）
+            bool bossLook = boss || IsPetRescueEliteWaveAnnounce(nextIdx);
+            var kind = bossLook ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
             // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
             // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
-            string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
+            string announce = (bossLook || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
 
             // 【T10】羁绊副本 Boss 前剧情：Boss 波刷出前播，播完再走「首领来袭」大图 + 刷怪。
             // 本协程期间 _waveAnnounceRunning=true，SpawnNextPendingWave 不会被提前触发（沿用既有闸门）。
@@ -1742,10 +1880,10 @@ public partial class BattleManager
         int nextIdx = FindNextUnspawnedWaveIndex();
         bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                     && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-        var kind = boss ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
+        var kind = (boss || IsPetRescueEliteWaveAnnounce(nextIdx)) ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
         // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
         // 【2026-10-07 主人拍板】Boss 波已经有「首领来袭」大图，下面不再叠一行字。
-        string announce = (boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
+        string announce = (kind == BattleWaveAnnounceUI.Kind.Boss || Planner == null) ? "" : Planner.WaveAnnounceText(nextIdx);
         yield return BattleWaveAnnounceUI.CoPlay(kind, announce);
         _waveAnnounceRunning = false;
     }
@@ -1917,9 +2055,8 @@ public partial class BattleManager
 
         // 首波刷怪：主路径 ScheduleFirstWaveSpawn；兜底仅 CoFirstWaveHardFallback（勿在 Update 叠刷）
 
-        // 【2026-11-23 统一编排器】第二波刷出时启动狗营救单协程演出 + Boss 半血归队检测
+        // 【2026-11-23 统一编排器】第二波刷出时启动狗营救单协程演出（狗归队改由演出步骤驱动）
         TryPlayDogRescueCutscene();
-        TickPetRescueRejoin();
 
         // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
         for (int i = monsters.Count - 1; i >= 0; i--)

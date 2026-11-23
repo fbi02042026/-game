@@ -17,8 +17,8 @@ using UnityEngine;
 /// </summary>
 public partial class Pet : Mercenary
 {
-    /// <summary>宠物高度 = 玩家高度的这个比例（11-23 主人「差不多玩家一半大左右，最大不超过玩家」→ 0.45；演进：1.0 → 0.5 → 0.3 → 0.36 → 0.45）。所有宠物（狗/狼/羊/鸟/蜥蜴及皮肤）共用同一真源，internal 供战场演出狗复用。</summary>
-    internal const float PET_HEIGHT_RATIO = 0.45f;
+    /// <summary>宠物高度 = 玩家高度的这个比例（11-23 主人「差不多玩家一半大左右，最大不超过玩家」→ 0.45；演进：1.0 → 0.5 → 0.3 → 0.36 → 0.45 → 0.54 → 0.486 → 0.5103）。所有宠物（狗/狼/羊/鸟/蜥蜴及皮肤）共用同一真源，internal 供战场演出狗复用。11-23 22:39「放大20%」：0.45×1.2=0.54；11-23 22:4x「狗小10%」：0.54×0.9=0.486；11-23 23:1x「放大5%」：0.486×1.05=0.5103。</summary>
+    internal const float PET_HEIGHT_RATIO = 0.5103f;
     /// <summary>头顶血条离模型顶部的间隙 = 宠物自身世界高度 × 此比例（11-22 按体型调节，不写死世界单位）。</summary>
     const float HP_BAR_HEAD_GAP_RATIO = 0.12f;
     /// <summary>移动动画倍率上下限（11-22：步频跟位移，别再出现「动画慢移动快」滑步）。</summary>
@@ -45,6 +45,35 @@ public partial class Pet : Mercenary
     public string petDefId;          // PetDefs.Def.id（dog / toucan / goat / lizard / wolf + 皮肤 id）
     PetDefs.Def _def;
     bool _fled;                      // 本局已跑掉（防重复触发逃跑）
+    bool _cutsceneControlled;        // 演出接管位移（跑入镜头）：继承 AI 早退，速度由演出协程独占
+
+    /// <summary>
+    /// 演出接管位移（2026-11-23 主人「狗没有从左边跑进来，还是突然出现的」）：
+    /// 生成在画面左缘外 → 演出协程逐帧写水平速度跑进怪群，期间继承 AI 早退（否则 AI 按目标
+    /// 改朝向/改速度，跑入会变成原地抽搐）；到位后 SetCutsceneControlled(false) 交还 AI 正常参战。
+    /// 跑动期 Moving 动画仍由 CoPetMoveAnimSpeed 按 rb.velocity 自动切 Walk，不另设动画出口。
+    /// </summary>
+    public void SetCutsceneControlled(bool on)
+    {
+        _cutsceneControlled = on;
+        if (rb != null) rb.velocity = Vector2.zero;
+    }
+
+    /// <summary>演出跑入期间写水平速度（交还 AI 前唯一速度出口）。</summary>
+    public void SetCutsceneVelocityX(float vx)
+    {
+        if (rb != null) rb.velocity = new Vector2(vx, rb.velocity.y);
+    }
+
+    /// <summary>本局是否已血空跑掉（演出等「狗被打跑」的只读出口，2026-11-23 狗营救分镜）。</summary>
+    public bool IsFled => _fled;
+
+    /// <summary>剧情驱动：立刻走「血空退场」同一出口（血空自然触发之外的唯一补口，共用 CoFleeAway）。</summary>
+    public void FleeNow()
+    {
+        if (_fled || isDead) return;
+        Die();
+    }
     MonsterHealthBar _hpBar;
     // 移动动画状态：null=待重切（攻击/受击打断后），true=Walk，false=Idle。
     bool? _petWalkState;
@@ -395,6 +424,19 @@ public partial class Pet : Mercenary
     }
 
     /// <summary>
+    /// 【2026-11-23 主人「狗脸冲右往左跑出去」】逃跑期间停掉继承来的佣兵 AI：
+    /// 宠物血空只置 _fled（非 isDead），基类 Update 的 isDead 闸不生效，Mercenary.AIUpdate 每帧
+    /// 按目标把脸转回右、把速度交还 AI → 与 CoFleeAway 的「朝左+左速度」打架，看起来是倒着跑。
+    /// 这里 fled 后直接早退，让逃跑朝向/位移只由 CoFleeAway 独占；正常战斗仍走 base。
+    /// 【2026-11-23 演出跑入】同理：_cutsceneControlled 期间也早退，位移/朝向由演出协程独占。
+    /// </summary>
+    protected override void AIUpdate()
+    {
+        if (_fled || _cutsceneControlled) return;
+        base.AIUpdate();
+    }
+
+    /// <summary>
     /// 血空不走死亡：掉头跑出屏幕 → 销毁。不播死亡动画、不触发 OnDead（不结算、不给奖励）。
     /// </summary>
     protected override void Die(bool isCritKill = false)
@@ -420,11 +462,17 @@ public partial class Pet : Mercenary
 
         float speed = GameConfig.BASE_MOVE_SPEED * 2.2f;
         float elapsed = 0f;
-        while (elapsed < 1.6f)
+        // 【2026-11-23 主人「狗往左跑到一半就消失，没有跑出屏」】原来固定跑 1.6s 就 Destroy：
+        // 狗是在怪群中间（画面中部）血空的，1.6s 只够跑几单位，停在屏幕内就没了，看着像半路蒸发。
+        // 改成按画面左缘【外】判定——真跑出屏幕才退场；移速不变，6s 上限只兜「相机跟着走永远跑不出去」。
+        while (elapsed < 6f)
         {
             if (rb != null)
                 rb.velocity = new Vector2(-speed, rb.velocity.y);
             elapsed += Time.deltaTime;
+            BattleManager.GetBattleVisibleX(out float visMin, out _);
+            // GetBattleVisibleX 的 minX 已含 0.7 pad → 再减 1.5 才是「整只狗都出了视口左缘」。
+            if (transform.position.x <= visMin - 1.5f) break;
             yield return null;
         }
         Debug.Log("[Pet] " + petDefId + " 血空跑出屏幕，退场（不死不结算）");

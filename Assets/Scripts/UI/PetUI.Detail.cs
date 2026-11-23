@@ -44,9 +44,27 @@ public partial class PetUI
         int hpBonus = bonus != null ? bonus.hp : 0;
         int atkBonus = bonus != null ? bonus.atk : 0;
         int defBonus = bonus != null ? bonus.def : 0;
-        if (_hpText != null) SetText(_hpText, (def.hp + hpBonus).ToString());
-        if (_atkText != null) SetText(_atkText, (def.atk + atkBonus).ToString());
-        if (_defText != null) SetText(_defText, (def.def + defBonus).ToString());
+        string hpText = (def.hp + hpBonus).ToString();
+        string atkText = (def.atk + atkBonus).ToString();
+        string defText = (def.def + defBonus).ToString();
+        // 【2026-11-23 主人「每次喂养在属性右面 +X，玩家才知道涨了多少」】
+        // 只贴本次喂养那一项、只贴一次（TryFeed → RefreshAll 紧接调用），其余刷新一律干净总数。
+        if (!string.IsNullOrEmpty(_feedGainBodyId))
+        {
+            if (_feedGainBodyId == attrBodyId)
+            {
+                string gain = " +" + _feedGainAmount;
+                if (_feedGainAttr == "血量") hpText += gain;
+                else if (_feedGainAttr == "攻击") atkText += gain;
+                else if (_feedGainAttr == "防御") defText += gain;
+            }
+            _feedGainBodyId = null;
+            _feedGainAttr = null;
+            _feedGainAmount = 0;
+        }
+        if (_hpText != null) SetText(_hpText, hpText);
+        if (_atkText != null) SetText(_atkText, atkText);
+        if (_defText != null) SetText(_defText, defText);
         if (_powerText != null) SetText(_powerText, "战力 " + def.power);
 
         // 品质星级 1~4：Star0..3，前 qualityStar 颗点亮（只换图/色，不动位置）

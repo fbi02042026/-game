@@ -545,7 +545,40 @@ public static class MercRosterDefs
         moveSpeed = d.MoveSpeed > 0.1f
             ? GameConfig.BASE_MOVE_SPEED * (d.MoveSpeed / designMoveRef)
             : GameConfig.BASE_MOVE_SPEED;
-        atkRange = ResolveRange(d.AssetId);
+        atkRange = ResolveRange(d);
+    }
+
+    /// <summary>
+    /// 牧师佣兵射程的兜底像素值（表缺行时用），与 monster_ranged 同一算式，不写死数字。
+    /// </summary>
+    const float MercPriestRangePxFallback = GameConfig.RANGE_PX_BOW * GameConfig.MONSTER_RANGED_RANGE_MUL;
+
+    /// <summary>
+    /// 【2026-11-23 主人拍板「牧师攻击距离太近」】牧师职业名单独一档射程（表 merc_priest），
+    /// 不再跟法师共用 weapon_staff 156。判据是花名册行的职业名 —— 共用 asset 的佣兵必须各判各的
+    /// （naima102：塞拉「水系法师」/ 莉娜「牧师」），所以本重载吃整个 Def，不接受裸 assetId。
+    /// 职业名认不出 / 非牧师 → 走原 ResolveRange(assetId) 的形态映射，其它职业一字不变。
+    /// </summary>
+    public static float ResolveRange(Def d)
+    {
+        if (!string.IsNullOrEmpty(d.JobName) && d.JobName.Contains("牧师"))
+            return AttackRangeTable.GetWorld("merc_priest", MercPriestRangePxFallback);
+        return ResolveRange(d.AssetId);
+    }
+
+    /// <summary>
+    /// 是否牧师（判据 = 花名册职业名含「牧师」；先按 hireId 行，再按 asset 首行）。
+    /// 【2026-11-23】给佣兵交战停步线用：牧师是后排奶，不该跟着近战一起前压。
+    /// 查不到职业名一律按「不是牧师」处理（行为退回原有前压，不静默改变其它职业）。
+    /// </summary>
+    public static bool IsPriestJob(string hireId, string assetId)
+    {
+        string job = null;
+        if (!string.IsNullOrEmpty(hireId) && TryGetByHireId(hireId, out var byHire))
+            job = byHire.JobName;
+        if (string.IsNullOrEmpty(job) && !string.IsNullOrEmpty(assetId))
+            job = GetJobName(assetId);
+        return !string.IsNullOrEmpty(job) && job.Contains("牧师");
     }
 
     public static float ResolveRange(string assetId)

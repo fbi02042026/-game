@@ -478,12 +478,23 @@ public static partial class GameConfig
     public const float PLAYER_ATTACK_SPEED_MUL = 0.8f;
 
     /// <summary>
-    /// 佣兵（Mercenary）攻击速度倍率，0.7 = 出手间隔变慢 30%。
+    /// 佣兵（Mercenary）攻击速度倍率，0.29 = 累计出手间隔变慢 71%。
     /// 【2026-11-05 主人拍板「佣兵攻速比玩家快太多」】只给佣兵降，怪物节奏不变
     /// （在 UnitBase.GetAttackCooldown 的 is Mercenary 分支里乘，与玩家 0.8 同口径）。
+    /// 【2026-11-23 主人「再减，感觉佣兵比玩家攻速还快」】0.7×0.7=0.49。
+    /// 【2026-11-23 主人「我和佣兵都是游侠，我比佣兵慢」→ 拍板方案A压倍率】0.49→0.29：
+    ///   玩家游侠稳定态 ≈0.466 次/秒（表间隔1.24→0.806×弓0.85×玩家0.8×游侠0.85）；
+    ///   游侠佣兵基础 1.40~1.60 直接是频率，取最高艾拉1.60 → 1.60×0.29=0.464 < 0.466，同游侠玩家略快。
+    ///   宠物走 PET_ATTACK_SPEED_MUL 独立分流，不受本值牵连。
     /// 与连杀加速、团队攻速增益技能是乘法叠加。
     /// </summary>
-    public const float MERC_ATTACK_SPEED_MUL = 0.7f;
+    public const float MERC_ATTACK_SPEED_MUL = 0.29f;
+
+    /// <summary>
+    /// 宠物攻击速度倍率：宠物继承 Mercenary 但不吃佣兵的再减，保持 11-23 改前口径 0.7。
+    /// 【2026-11-23 主人「我只是让你改佣兵的」】只在 UnitBase.GetAttackCooldown 的 is Mercenary 分支按 Pet 分流。
+    /// </summary>
+    public const float PET_ATTACK_SPEED_MUL = 0.7f;
 
 
     /// <summary>

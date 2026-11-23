@@ -67,20 +67,42 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// </summary>
     public static bool IsOpen => _inst != null && _inst._root != null && _inst._root.activeSelf;
 
+    /// <summary>换装弹窗的三种收场（<see cref="CoShow"/> 的回调真值）。</summary>
+    public enum Outcome
+    {
+        /// <summary>玩家点了「留着旧的」/ 超时按战力选了旧的。</summary>
+        KeepOld,
+        /// <summary>玩家点了「换上新的」/ 超时按战力选了新的。</summary>
+        Replace,
+        /// <summary>局已收尾（换关 / 回城 / 死亡 / 撤离）：本次抽奖作废，不落装备、不折币。</summary>
+        Discarded,
+    }
+
     /// <summary>
     /// 【2026-11-21 主人报「战斗结束后这个界面还带出到冒险界面」】战斗收尾时关掉本弹窗：
     /// 本弹窗是 DDOL 独立 Canvas，CoShow 只等点击或超时，切场景不自关。
     /// 口径与 MercObtainPopupUI.CloseIfOpen 一致 —— 没开着就空操作，不新建实例。
+    ///
+    /// 【2026-11-23 主人报「上个战斗抽奖完了后出现替换界面，点下一关的时候能带到下一关替换上装备」】
+    /// 纯 Hide 不够：协程仍挂到 60s 超时，超时会 AutoPickByPower → TryEquipDirect/ScrapEquip，
+    /// 人已经在新一关 ⇒ 旧局抽到的装备落进新局。故本出口改为<b>作废</b>：置 <see cref="_discarded"/>
+    /// 放行 CoShow，CoShow 回调 <see cref="Outcome.Discarded"/>，调用方不落装备、不折币、不回调。
     /// </summary>
     public static void CloseIfOpen()
     {
-        if (_inst != null && _inst._root != null && _inst._root.activeSelf)
-            _inst.Hide();
+        var ui = _inst;
+        if (ui == null || ui._root == null || !ui._root.activeSelf) return;
+        ui._discarded = true;
+        ui._answer = false;
+        ui._answered = true;   // 放行 CoShow（别挂满 60s），配合 _discarded 表示「不是玩家选的」
+        ui.Hide();
     }
 
-    System.Action<bool> _onDone;
+    System.Action<Outcome> _onDone;
     bool _answered;
     bool _answer;
+    /// <summary>【2026-11-23】局已收尾导致的作废（见 <see cref="CloseIfOpen"/>）。</summary>
+    bool _discarded;
     // 【2026-11-22 主人报「宠物剧情被这个弹窗挡住没看到」】剧情开播要立刻收本弹窗并放行抽奖协程，
     // 不能只 SetActive(false)（那会让 CoShow 挂满 60s 才回调）。存下本次的 newEq/oldEq，
     // 供 CloseForStory 走与超时同一条 AutoPickByPower 结算。
@@ -95,28 +117,31 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     {
         var ui = _inst;
         if (ui == null || ui._root == null || !ui._root.activeSelf || ui._pendingNew == null) return;
+        ui._discarded = false;   // 剧情是「立即结算」，不是作废（与 CloseIfOpen 的分界）
         ui._answer = AutoPickByPower(ui._pendingNew, ui._pendingOld);
         ui._answered = true;
         ui.Hide();
     }
 
     /// <summary>
-    /// 弹窗并等玩家选择。超时或异常都返回 false（= 留着旧的）。
+    /// 弹窗并等玩家选择。超时按战力自动选；局已收尾（换关/回城/死亡/撤离）则回调
+    /// <see cref="Outcome.Discarded"/>，由调用方把本次抽奖整笔作废。
     /// 调用方用 <c>yield return CoShow(...)</c> 接住。
     /// </summary>
-    public static IEnumerator CoShow(EquipInstance newEq, EquipInstance oldEq, System.Action<bool> onDone)
+    public static IEnumerator CoShow(EquipInstance newEq, EquipInstance oldEq, System.Action<Outcome> onDone)
     {
         var ui = Ensure();
         if (ui == null)
         {
             // UI 建不起来就按「留着旧的」放行 —— 绝不能卡住抽奖协程
             Debug.LogError("[EquipReplaceConfirm] 弹窗建不起来，按「留着旧的」处理");
-            onDone?.Invoke(false);
+            onDone?.Invoke(Outcome.KeepOld);
             yield break;
         }
 
         ui._answered = false;
         ui._answer = false;
+        ui._discarded = false;
         ui._pendingNew = newEq;   // 【2026-11-22】供 CloseForStory 剧情强制收窗时按战力自动结算
         ui._pendingOld = oldEq;
         // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001 盖着本弹窗，
@@ -136,23 +161,34 @@ public class EquipReplaceConfirmUI : MonoBehaviour
         }
 
         float t = 0f;
-        while (!ui._answered && t < TimeoutSec)
+        // 【2026-11-23】局已收尾（换关/回城/死亡/撤离）时当场退场 —— 同 WaitForContinue / CoStageShop
+        // 的既有口径（`!_runClosed`），别让等待拖过换关，超时后 AutoPick 会把旧局的装备落进新局。
+        while (!ui._answered && t < TimeoutSec && !IsRunClosed)
         {
             t += Time.unscaledDeltaTime;
             yield return null;
         }
         if (guideHint != null) guideHint.Hide();
-        bool result = ui._answered ? ui._answer : AutoPickByPower(newEq, oldEq);
+        // 【2026-11-23 主人报「点下一关的时候能带到下一关替换上装备」】作废判定：
+        // ① CloseIfOpen 已标记作废；② 等不到玩家选择时局就收尾了 —— 两种都不落装备、不折币。
+        bool discarded = ui._discarded || (!ui._answered && IsRunClosed);
+        bool result = discarded ? false : (ui._answered ? ui._answer : AutoPickByPower(newEq, oldEq));
+        ui._discarded = false;
         // 【2026-10-12 主人报「点了换上新的，装备却没换上」】→ 三处诊断日志，下次一测就现形：
         // 看这里是「玩家选择=…」还是「超时」—— 若主人点了按钮但这里打的是超时，说明 Answer 没被触发（点击被吃/绑定丢失）。
         // ⚠️ 别把它写回跨行插值字符串：C# 9 报 CS8967（非逐字插值串里不能有换行）—— 拆成两个串再拼。
-        string how = ui._answered
-            ? "玩家选择=" + (result ? "换上新的" : "留着旧的")
-            : "超时 " + TimeoutSec + "s 未选择，按战力自动选=" + (result ? "换上新的" : "留着旧的");
+        string how = discarded
+            ? "局已收尾，本次抽奖作废"
+            : ui._answered
+                ? "玩家选择=" + (result ? "换上新的" : "留着旧的")
+                : "超时 " + TimeoutSec + "s 未选择，按战力自动选=" + (result ? "换上新的" : "留着旧的");
         Debug.Log($"[EquipReplaceConfirm] 弹窗结束：{how}｜新={newEq?.equipName} 旧={oldEq?.equipName}");
         ui.Hide();
-        onDone?.Invoke(result);
+        onDone?.Invoke(discarded ? Outcome.Discarded : result ? Outcome.Replace : Outcome.KeepOld);
     }
+
+    /// <summary>局是否已收尾（唯一判据 = <see cref="BattleManager._runClosed"/>，每局开始自动复位）。</summary>
+    static bool IsRunClosed => BattleManager.Instance != null && BattleManager.Instance._runClosed;
 
     /// <summary>
     /// 【2026-10-16 主人原话「如果玩家没点按钮 自动替换成战力高的」】超时/未选择时的兜底方向：

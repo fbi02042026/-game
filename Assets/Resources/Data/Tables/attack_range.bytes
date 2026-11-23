@@ -11,6 +11,7 @@ job_mage,260,P005 法师
 job_P005,260,alias of job_mage
 job_priest,208,P006 牧师
 job_P006,208,alias of job_priest
+merc_priest,230,牧师佣兵（路加/莉娜等）；【2026-11-23 主人拍板】原吃 weapon_staff 156 —— 主人报「牧师攻击距离太近」，拉到与敌方远程 monster_ranged 同档（2.30 世界单位）；法师(fashi)不动
 weapon_sword,96,单手剑
 weapon_greatsword,120,大剑/双手斧/双手锤；【2026-10-11 主人拍板】原 144 —— 主人实测狂战/重武「攻击范围有点远」，拍板统一压到 120（1.20 单位）。本档同时决定这两个近战职业的起步射程（PlayerJobDefs.Def.PrimaryWeapon=Greatsword）
 weapon_polearm,180,长柄

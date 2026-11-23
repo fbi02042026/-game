@@ -142,6 +142,10 @@ public class FirstRunGuide : MonoBehaviour
     /// 确认前不重弹。起因：角色页 CharacterPageOpen 有 0.5s 防抖，玩家点完「角色」后
     /// 旧气泡/遮罩会多挂半秒才收（主人报「点了角色界面后还在显示了一下」）。</summary>
     bool _holeTriggered;
+    /// <summary>触发洞点击时指向的那个目标（2026-11-23 加）：用来判断「点的是不是当前这一步的目标」。
+    /// 本步目标会随状态换（例：冒险页预热时先指底栏「冒险」，页面就绪后改指页内「开始冒险」），
+    /// 换了目标就说明上一次点击是对旧目标的，不能继续压住新目标的气泡。</summary>
+    RectTransform _holeHitTarget;
 
     /// <summary>剧情/对话此刻是否占着屏幕（遮罩必须让位，否则会吞掉对话的推进点击）。</summary>
     static bool StoryBusy() =>
@@ -435,7 +439,10 @@ public class FirstRunGuide : MonoBehaviour
     {
         // 【2026-10-17 主人拍板】开头白砍到一句：欢迎 + 出师承诺，别繁琐
         // 【2026-10-18 主人拍板】引导全程换前台小姐口吻；【同日再拍板】人设定稿＝御姐傲娇（原可爱版口径作废）
-        const string text = "欢迎来到《像素冒险：裂隙之刃》。我是赛琳——第一次来？没关系，跟着本小姐走就行。";
+        // 【2026-11-23 修「本末倒置」】此时玩家已经过完起名 + 赛琳报备职业（她本人早登场说过话），
+        // 到主界面再喊「欢迎来到《像素冒险：裂隙之刃》…第一次来？」＝重复且顺序倒置。
+        // 这一步的枚举序号进存档（GuideStep.Welcome=0），不能删/不能挪，改成承接职业报备的带路话。
+        const string text = "职业报备好了，那就走吧——这几步跟着本小姐，我带你认认路。";
 
         yield return CoPoint(text, null, null, true, 0f);   // 【2026-11-04】不自动走，等玩家点
         FinishStep(GuideStep.Welcome, "欢迎页");
@@ -626,6 +633,7 @@ public class FirstRunGuide : MonoBehaviour
         _pointOk = false;
         _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
         _holeTriggered = false;   // 2026-10-20：洞点击信号只对当前步骤有效，每步重置
+        _holeHitTarget = null;    // 2026-11-23：点击目标同步作废，别拿上一步的点击压住这一步的气泡
 
         // 条件已经满足（比如目标页这会儿就是开着的）→ 不用再指一遍
         if (!tapToAdvance && Safe(isDone))
@@ -714,6 +722,12 @@ public class FirstRunGuide : MonoBehaviour
                 if (lb != null && !lb.interactable) liveTarget = null;
             }
             if (needTarget) SetTarget(liveTarget);
+
+            // 【2026-11-23 修「点进冒险界面不引导了」】本步目标换了控件（底栏「冒险」→ 页内「开始冒险」），
+            // 说明上一次洞点击打的是旧目标：_holeTriggered 若还留着，会一直压住新目标的气泡不再弹，
+            // 玩家站在已经打开的页面上却没有任何指引（日志实测 step=FirstBattle、target=StartBtn、visible=False）。
+            // 目标换人 = 本步还没被真正点中，清掉标记让重弹逻辑按新目标继续指。
+            if (_holeTriggered && liveTarget != null && liveTarget != _holeHitTarget) _holeTriggered = false;
 
             // 【2026-10-19 修复】目标丢失自愈：目标连续 2s 拿不到（藏页/切页/重建失败），
             // 收掉遮罩放开点击——玩家可以自己把页面点回来，目标恢复后引导自动重新弹出。
@@ -1207,6 +1221,7 @@ public class FirstRunGuide : MonoBehaviour
         if (btn != null && btn.interactable)
         {
             _holeTriggered = true;   // 2026-10-20：玩家已点中目标，遮罩立刻收场（见 CoPoint 循环）
+            _holeHitTarget = _target;   // 2026-11-23：记下点的是哪个目标，目标换人时这个信号要作废
             btn.onClick.Invoke();
         }
     }

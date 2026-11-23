@@ -33,10 +33,15 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
 
     /// <summary>撤离/死亡回城：清空局内背包与已装备（裂缝装备不带出）。
     /// 2026-10-21 主人需求：清空前先把局内获得的<b>道具</b>转入城镇背包（角色页可见）。</summary>
-    public void ClearRunEquipment()
+    /// <param name="carryOut">
+    /// 是否执行「穿戴装备入持久池」快照。默认 true＝正常收尾（死亡/撤离/通关/直进下一关/重开）。
+    /// 唯一传 false 的是<b>引导局阵亡重进</b>（<c>BattleManager.RestartTutorialBattle</c>）：
+    /// 那不是收尾而是重打，若照常快照会把同一批装备反复塞进仓库（可刷装备）。
+    /// </param>
+    public void ClearRunEquipment(bool carryOut = true)
     {
         MoveItemsToTownBag();
-        SnapshotEquippedToPersistent();   // T2：清零前先快照穿戴装备入持久池（含死亡/撤离/直进/重开）
+        if (carryOut) SnapshotEquippedToPersistent();   // T2：清零前先快照穿戴装备入持久池（含死亡/撤离/直进/重开）
         InitNewRun();
     }
 
@@ -47,18 +52,20 @@ public class BattleBagSystem : Singleton<BattleBagSystem>
     /// </summary>
     void SnapshotEquippedToPersistent()
     {
-        // 【T3 返工 8.2 / 2026-11-19】引导局不快照持久装备（剧情固定流程）：剧情流程固定，不带出。
+        // 【2026-11-23 主人拍板「引导关的装备也要带出去」，覆盖 2026-11-19 T3「引导不带出」】
+        // 引导局 Mode 仍是 Normal ⇒ IsFormalMainRun 天然为真，所以这里不再单独排除 IsTutorialRun：
+        // 引导三抽换上的武器/防具，收尾时与主线同一出口快照进随身仓库（legacyEquipPool）。
         // 【第九节 R1 / 2026-11-19 + 第十节 / 2026-11-19 主人拍板】带出范围：主线正式关（三难度）+ 支线岛 + 终章。
         // 主线困难/噩梦 Mode 仍是 Normal，IsFormalMainRun 天然包含；支线岛/终章按主人拍板「算主线可带出」纳入。
         // 竞技场/裂隙/资源本/羁绊本仍排除（但进战注入无玩法守卫，照样穿主线带出的装备）。
         // 🔴 不直接改 IsFormalMainRun 定义：它还管 Boss 加成/结算等主线专属门禁，改了会连带放开。
         // InstanceQuiet 只读查询已有实例，不建物、不刷 Error；战斗收尾期可用。
         var bm = BattleManager.InstanceQuiet;
-        bool carryScope = bm != null && !bm.IsTutorialRun
+        bool carryScope = bm != null
                           && (bm.IsFormalMainRun || bm.IsSideIsland || bm.IsFinale);
         if (!carryScope)
         {
-            Debug.Log("[GridBackpack] 本玩法不在带出范围（引导/竞技场/裂隙/资源本/羁绊本不带出）");
+            Debug.Log("[GridBackpack] 本玩法不在带出范围（竞技场/裂隙/资源本/羁绊本不带出）");
             return;
         }
 

@@ -98,15 +98,15 @@ public partial class TalentUI
 
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(leftContent);
-        // 【2026-11-21 主人拍板】右列图标对准左列从上数第 1/4/7 行（隔两行一个）：
-        // 行心距 = 左列「一格高 + 一行距」× 3（原 ×2 是第 1/3/5 行，本次按主人要求改为隔两行）。
-        // 不再按右列视图数均匀铺满总高（旧算法让图标落在 Lv6/中间/Lv1，与行号对不上）。
+        // 【2026-11-23 主人拍板】右列第一格对准左列第 5 行，后面每格隔 5 行（Lv5/10/15/…/50）。
+        // 行心距 = 左列「一格高 + 一行距」× 5；每格落点由行距公式决定，不写死坐标。
+        const int rightLevelRows = 5;   // 一格对应几行（= 几级），首行锚点与行距共用这一个真源
         var rightVlg = rightContent.GetComponent<VerticalLayoutGroup>();
         if (_rightViews.Count > 1 && rightVlg != null)
         {
             float tplH = rightRowTemplate.GetComponent<RectTransform>().sizeDelta.y;
             float rowH = tplH > 8f ? tplH : RightRowH;
-            rightVlg.spacing = Mathf.Max(4f, (LeftNodeH + LeftGapY) * 3f - rowH);
+            rightVlg.spacing = Mathf.Max(4f, (LeftNodeH + LeftGapY) * rightLevelRows - rowH);
         }
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
@@ -115,30 +115,30 @@ public partial class TalentUI
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
 
-        // 【2026-11-21 主人拍板】右列底部图标（R1，reverseArrangement 下 _rightViews[0] 在视野底部）
-        // 基准仍是实测锚点 _leftViews[1]（Lv2，从底数第 2 个）——只改纵向 y，基准不动：
-        // 行距已由「隔 1 行」改为「隔 2 行」（×3），R1 锚在 Lv2 后，上面各行按新行心距自然顺延，
-        // 形成第 1/4/7 行各一个图标的节奏（具体落点由行距公式决定，不写死坐标）。
-        // 从两边图标的世界 y 现读差值，换算到父节点本地坐标后补进每个右列行的 Opt_0（所有行同模板），不写死手摆坐标。
-        if (_leftViews.Count > 1 && _rightViews.Count > 0)
+        // 【2026-11-23 主人拍板】右列 R1（reverseArrangement 下 _rightViews[0] 在视野底部）锚左列第 5 行。
+        // 【本轮修正】整列平移 = 挪 RightScroll 节点自身的 anchoredPosition.y（视口一起动）：
+        // 旧实现改 padding.bottom，会把右列内容撑高 → ScrollRect 滚动基准被改 → 右侧滑不动；
+        // 更早只挪 Opt_0 → 图标动、文字/锁不动 → 字图分家。两处都已废。
+        // 挪整个 Scroll 节点不改 content 尺寸，行的图标/文字/锁/连线一起平移，滚动照旧。
+        // 世界 y 差现读、换算到父节点本地单位，不写死坐标。
+        int rightFirstIndex = (rightLevelRows - 1) * TalentDefs.LeftPerRow;   // 第 5 行首格（0-based 12）
+        if (_leftViews.Count > rightFirstIndex && _rightViews.Count > 0 && rightScroll != null)
         {
-            var lIcon = _leftViews[1].root != null ? _leftViews[1].root.transform.Find("Iconbg") as RectTransform : null;
+            // WireScroll 刚改了 normalized 位置，先刷新画布再读世界坐标，否则读到的是滚动前的旧值。
+            Canvas.ForceUpdateCanvases();
+            var lIcon = _leftViews[rightFirstIndex].root != null ? _leftViews[rightFirstIndex].root.transform.Find("Iconbg") as RectTransform : null;
             var rIcon = _rightViews[0].root != null ? _rightViews[0].root.transform.Find("Opt_0/Icon") as RectTransform : null;
-            if (lIcon != null && rIcon != null)
+            var scrollRt = rightScroll.transform as RectTransform;
+            if (lIcon != null && rIcon != null && scrollRt != null)
             {
                 float dy = lIcon.position.y - rIcon.position.y;
                 if (Mathf.Abs(dy) > 0.5f)
                 {
-                    foreach (var rv in _rightViews)
-                    {
-                        var opt = rv.root != null ? rv.root.transform.Find("Opt_0") as RectTransform : null;
-                        if (opt == null) continue;
-                        // 世界 y 差 → 本地坐标增量：除以父链总缩放，画布缩放下才准。
-                        float parentScaleY = opt.parent != null ? opt.parent.lossyScale.y : 1f;
-                        if (Mathf.Abs(parentScaleY) < 0.001f) parentScaleY = 1f;
-                        opt.anchoredPosition = new Vector2(opt.anchoredPosition.x, opt.anchoredPosition.y + dy / parentScaleY);
-                    }
-                    LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
+                    float scaleY = scrollRt.parent != null ? scrollRt.parent.lossyScale.y : 1f;
+                    if (Mathf.Abs(scaleY) < 0.001f) scaleY = 1f;
+                    scrollRt.anchoredPosition = new Vector2(scrollRt.anchoredPosition.x,
+                        scrollRt.anchoredPosition.y + dy / scaleY);
+                    Canvas.ForceUpdateCanvases();
                 }
             }
         }
@@ -244,10 +244,26 @@ public partial class TalentUI
             }
             float cardBottom = opt.anchoredPosition.y;
             float cardTop = cardBottom + opt.sizeDelta.y * opt.localScale.y;
+            // 【2026-11-23 主人拍板】线要顶到图标，不是格子边：六边形贴图 preserveAspect 居中绘制在
+            // Opt_0 的 111×155 格里（实际绘制高 ≈110，上下各缩进 ≈22）。端点按格子边缘算就离图标有缝。
+            // 缩进从 sprite 实际尺寸现读（不写死），随图标放大 localScale 同步。
+            float edgeInset = 0f;
+            var hexImg = opt.GetComponent<Image>();
+            if (hexImg != null && hexImg.sprite != null && hexImg.preserveAspect
+                && opt.sizeDelta.x > 1f && opt.sizeDelta.y > 1f)
+            {
+                var sr = hexImg.sprite.rect;
+                float k = Mathf.Min(opt.sizeDelta.x / sr.width, opt.sizeDelta.y / sr.height);
+                float inset = Mathf.Max(0f, (opt.sizeDelta.y - sr.height * k) * 0.5f);
+                float scaleY = Mathf.Abs(opt.localScale.y) < 0.001f ? 1f : opt.localScale.y;
+                edgeInset = inset * scaleY;
+            }
+            float hexBottom = cardBottom + edgeInset;                     // 六边形下缘（图标底）
+            float hexTop = cardTop - edgeInset;                            // 六边形上缘（图标顶）
             float pitch = rowH + spacing;                                 // 相邻两行的行心距
-            float len = Mathf.Max(4f, pitch - (cardTop - cardBottom));    // 恰好＝卡与卡的视觉空隙
-            StretchRail(v.lineUp, cardTop, len, true);                    // 锚行底：起点=自家卡顶缘
-            StretchRail(v.lineDown, cardBottom - rowH * 0.5f, len, false); // 锚行中：起点=自家卡底缘
+            float len = Mathf.Max(4f, pitch - (hexTop - hexBottom));       // 恰好＝图标与图标的视觉空隙
+            StretchRail(v.lineUp, hexTop, len, true);                      // 锚行底：起点=自家图标顶缘
+            StretchRail(v.lineDown, hexBottom - rowH * 0.5f, len, false);  // 锚行中：起点=自家图标底缘
         }
     }
 

@@ -49,7 +49,12 @@ public partial class DailyLoginUI
             if (bg == null) return;
             var parent = bg.parent as RectTransform;
             if (parent == null) return;
-            if (parent.rect.width <= 0f || parent.rect.height <= 0f) return;   // 尺寸还没量好，下次 Open 再算
+            // 这里旧版有 `if (parent.rect.width<=0 || height<=0) return;`：
+            // 场景刚切回、相机还没绑稳时 parent.rect 会是 0（引导中断重进打完回城弹登录即此路径），
+            // 一 return 就跳过下面全部 Bg_Full 设置，背景停在 prefab 原锚点 (0,0)+offset(359,638)，
+            // 瘦屏上表现为「背景偏下、上下露出主城」。下面 anchor/pivot/offset 归零与 k 计算
+            // 都不读 parent.rect（k 用 ResolveLogicalScreenHeight），故直接去掉该早退。
+            // 标准屏/正常流程 rect 本来就正常，行为零变化。
 
             // ① 首次记录基准：原始 sizeDelta（之后等比缩放都从它重算）
             if (!_fitCaptured)

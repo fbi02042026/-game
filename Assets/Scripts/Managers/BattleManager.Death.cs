@@ -441,7 +441,9 @@ public partial class BattleManager
     {
         if (TutorialDirector.Instance != null)
             TutorialDirector.Instance.WaitingEvacuate = false;
-        BattleBagSystem.Instance?.ClearRunEquipment();
+        // 【2026-11-23】引导装备现在能带出（见 BattleBagSystem.SnapshotEquippedToPersistent），
+        // 但「阵亡重进」不是收尾而是重打同一局，照常快照会把同一批装备反复入池 → 这里不快照。
+        BattleBagSystem.Instance?.ClearRunEquipment(carryOut: false);
         // 【2026-10-18 双钱包拆分】currentGold 只是抽奖币池（带不出）；写回走 PersistBattleGold
         // 的「获得金币 − 已付水位」增量，不存在整额 Add 路径
         PersistBattleGold();

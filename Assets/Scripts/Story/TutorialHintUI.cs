@@ -957,7 +957,26 @@ public class TutorialHintUI : MonoBehaviour
         _bannerRt.anchoredPosition = new Vector2(x, y);
     }
 
-    /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（与 HintText 的 BannerPadY 一致）。</summary>
+    /// <summary>
+    /// 【2026-11-23 主人「这类都给我统一，上下要有正常空隙」】横幅上下留白唯一真源。
+    /// 取「通用留白 BannerPadY」与「底框九宫格上下边框」的较大者：底框上下边框是贴图上的装饰边（引导底框 55/45），
+    /// 留白小于它，字就压在金边和星角上 —— 这也是「有的框看着没空隙」的原因。
+    /// 所有普通引导（三职业介绍 / 战斗提示 / 抽奖提示…）都走这一个数，行数多少都只有一个观感。
+    /// 气泡模式（自定义底框）高度固定 400×192，不读这里。
+    /// </summary>
+    float BannerPadYByArt()
+    {
+        float pad = CurPadY;
+        if (_bannerImage == null) return pad;
+        var sp = _bannerImage.sprite;
+        if (sp == null) return pad;
+        float k = _bannerImage.pixelsPerUnit;   // = canvas.referencePPU / sprite.ppu，边框换成本地单位就是这个系数
+        if (k <= 0.001f) return pad;
+        var bd = sp.border;                     // x=左 y=下 z=右 w=上（贴图像素）
+        return Mathf.Max(pad, Mathf.Max(bd.y, bd.w) / k);
+    }
+
+    /// <summary>按当前文案与横幅宽度量文字实际高度 + 上下留白（留白见 BannerPadYByArt）。</summary>
     float MeasureBannerHeight(float bannerWidth)
     {
         // 2026-10-10 主人反馈：横幅要尽量大、字不能顶出框外 ——
@@ -970,8 +989,15 @@ public class TutorialHintUI : MonoBehaviour
         var settings = _label.GetGenerationSettings(new Vector2(textW, 9999f));
         float pref = _label.cachedTextGeneratorForLayout.GetPreferredHeight(_label.text, settings);
         if (pref <= 0f) return minH;
-        // 上下各留 CurPadY，再多给 8 抵消行距取整误差
-        return Mathf.Clamp(Mathf.CeilToInt(pref) + CurPadY * 2f + 8f, minH, maxH);
+        // 【2026-11-23 主人「上下要有正常空隙 / 每个都一样」·真根因】
+        // pref 是「屏幕像素」高度：动态字体下 TextGenerator 的 scaleFactor = Text.pixelsPerUnit = canvas.scaleFactor，
+        // 而这里要写进 sizeDelta（逻辑单位）。不换算回来，同一条文案在 720×1280 上是 154、在 1240×2772 上算成 334，
+        // 上下白出一大截；行数越多白得越多 —— 所以同一批框里每个都不一样高。
+        float ppu = _label.pixelsPerUnit;
+        if (ppu > 0.01f) pref /= ppu;
+        // 上下各留 padY，再多给 8 抵消行距取整误差
+        float padY = BannerPadYByArt();
+        return Mathf.Clamp(Mathf.CeilToInt(pref) + padY * 2f + 8f, minH, maxH);
     }
 
     void BeginSwipeToTarget()

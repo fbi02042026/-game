@@ -1591,6 +1591,9 @@ public partial class BattleManager
             ok = false;
             msg = null;
             yield return dir.CoApplyEquipCard(card, (o, m) => { ok = o; msg = m; });
+            // 【2026-11-23】局已收尾（换关/回城/死亡/撤离）：换装弹窗那笔已作废、不回调 done，
+            // 这里当场退场，不报「无法生效」也不扣币（同 WaitForContinue / CoStageShop 的 _runClosed 口径）。
+            if (_runClosed) yield break;
         }
         else
         {
@@ -2072,6 +2075,10 @@ public partial class BattleManager
                 // 与「买了就出结果」同口径：分不清成功失败就会把「槽位已满」当成获奖弹给玩家
                 landed = dir.TryApplyCard(chosen, out msg);
 
+            // 【2026-11-23】局已收尾：换装弹窗那笔已作废、不回调 done —— 当场退场，
+            // 不走下面的「未生效重选」也不会把旧局装备落到新一局（_runClosed 口径同上）。
+            if (_runClosed) yield break;
+
             // 【2026-10-13 主人拍板】免费抽同口径：详情弹窗（点任意位置关）在前，Toast 延后，防剧透
             if (landed && DraftRewardDetailUI.NeedsDetail(chosen))
                 yield return DraftRewardDetailUI.CoShow(chosen);
@@ -2544,10 +2551,11 @@ public partial class BattleManager
                     true, null, false,
                     ContinueToNextStageInPlace,
                     TrySpendStaminaForNextStage,
-                    () => LevelUpPopup.FlushPending());
+                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); });
             else
                 BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this),
-                    true, null, false, null, null, () => LevelUpPopup.FlushPending());
+                    true, null, false, null, null,
+                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); });
         }
         else
             Mode.SettleStageClear(this);
@@ -3158,6 +3166,10 @@ public partial class BattleManager
 
         // ── ① 局末清账（EndRunAndReturnToTown 前半段，不回城）──
         _runClosed = true;
+        // 【2026-11-23 主人报「上个战斗抽奖完了后出现替换界面，点下一关的时候能带到下一关替换上装备」】
+        // 换装弹窗是 DDOL 独立 Canvas，原地换关不自关；与 EndRunAndReturnToTown 同一出口收掉，
+        // 并把这笔抽奖作废（CloseIfOpen 语义见 EquipReplaceConfirmUI）—— 绝不把旧局装备落进新一局。
+        EquipReplaceConfirmUI.CloseIfOpen();
         BattleBagSystem.Instance?.ClearRunEquipment();
         MercenaryManager.Instance?.ClearAllMercs();
         MercHireSession.ClearHired();
@@ -3276,6 +3288,7 @@ public partial class BattleManager
         BattleStateSaver.Instance?.ClearBattleState();
         // 【2026-11-21 主人报「战斗结束后这个界面还带出到冒险界面」】换装确认弹窗是 DDOL 独立 Canvas，
         // 切场景不自关；收尾统一关掉它（Merc/Skill 两个获得弹窗另由抽奖面板入口关）。
+        // 【2026-11-23】口径升级：本出口现在同时把这笔抽奖作废（不落装备/不折币），见 EquipReplaceConfirmUI.CloseIfOpen。
         EquipReplaceConfirmUI.CloseIfOpen();
         GameSceneManager.Instance?.ReturnToTown();
     }

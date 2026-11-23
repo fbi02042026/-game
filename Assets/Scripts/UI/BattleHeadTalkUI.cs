@@ -201,6 +201,20 @@ public class BattleHeadTalkUI : MonoBehaviour
         // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001，
         // 装备替换确认弹窗(925)开着时恒被气泡盖住 —— 弹窗在屏期间新台词一律不出（单一出口闸）。
         if (EquipReplaceConfirmUI.IsOpen) yield break;
+
+        // 【2026-11-23 23:3x 主人「剧情气泡很快的过了很多字」】剧情台词必须独占气泡：
+        // 词缀提示(MonsterAffixBanter)/佣兵吐槽走 PlayLine→BeginLine→StartCoroutine 存进 _co，
+        // 而剧情这条是由外部 yield 进来的（_co 里没有它）→ 旧协程停不掉。两条协程各自跑打字机、
+        // 同时往同一个 Text 写 Substring：字互相覆盖，一眨眼过完一大片，旧协程末尾的 HideNow 还会
+        // 把剧情气泡提前关掉。这里开头先收掉在播的那条（连它自己的 _co 一起停），再干净播本句。
+        // _uiAnchor 是本次调用入参（CoPlayLineAt 已经设好），HideNow 会清空，收完补回。
+        if (IsShowing || _co != null)
+        {
+            var keepAnchor = _uiAnchor;
+            HideNow();
+            _uiAnchor = keepAnchor;
+        }
+
         _skipTyping = false;
         _advance = false;
         _typingDone = false;
@@ -297,8 +311,23 @@ public class BattleHeadTalkUI : MonoBehaviour
         Vector3 screen;
         if (_uiAnchor != null)
         {
-            // 固定 UI 锚点：锚点世界坐标 → 屏幕，底部抬高一段像素浮在宠物上方（铁律20：只动纵向 y）
-            screen = uiCam.WorldToScreenPoint(_uiAnchor.position);
+            // 固定 UI 锚点：照 TutorialHintUI.MeasureFollowLocalRect 已验证口径 ——
+            // 目标四角世界坐标用【目标所在 canvas 的相机】投影到屏幕，再用【本气泡 canvas 的相机】转回本地。
+            // 旧写法拿本气泡 uiCam 直接投影目标 position：宠物弹窗(TownPopup)与气泡canvas不同相机/层时投影错位，
+            // 气泡被 clamp 到左下角（主人 11-23 报「狗的气泡不对」）。战斗单位跟随分支一行不动。
+            var anchorRt = _uiAnchor as RectTransform;
+            var anchorCanvas = _uiAnchor.GetComponentInParent<Canvas>();
+            Camera followCam = anchorCanvas != null ? anchorCanvas.worldCamera : null;
+            if (followCam == null) followCam = uiCam;
+            Vector3 worldTop;
+            if (anchorRt != null)
+            {
+                var corners = new Vector3[4];
+                anchorRt.GetWorldCorners(corners);
+                worldTop = (corners[2] + corners[3]) * 0.5f;   // 展示区上沿中点
+            }
+            else worldTop = _uiAnchor.position;
+            screen = RectTransformUtility.WorldToScreenPoint(followCam, worldTop);
             screen.y += UiAnchorLiftPx;
             if (screen.z <= 0f)
             {

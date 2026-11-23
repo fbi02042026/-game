@@ -61,28 +61,16 @@ public class MoveAoeExecutor : MonoBehaviour
             ex._maxTargets = Mathf.Min(skill.aoeMaxTargets, MaxHitTargets);
         ex._remainDist = Mathf.Min(skill.aoeRadius > 0f ? skill.aoeRadius : 7f, MaxTravelDist);
 
-        // 圆心 = 屏内怪群质心；半径取施法者到质心的距离（钳 0.8~1.5）。
-        // 圆周起点就是生成点 → 龙卷直接出现在怪群里，第一帧不跳变，也不会一路飘出镜头。
+        // 圆心 = 当前屏内怪群质心，钳进相机安全区（保证整条绕行圆不出屏）。
+        // 【2026-11-23 主人拍板】圆心每帧跟随怪群（ComputeRawCenter 在 Update 调用），
+        // 战场推进时龙卷跟着走，不再锁死在生成瞬间的边界质心导致「跑到地图边回不来」。
         Vector3 origin = caster.GetHitPosition();
         Vector2 self = origin;
         ex._planeZ = origin.z;
-        Vector2 sum = Vector2.zero;
-        int count = 0;
-        var enemyList = caster.isAlly ? bm.monsters : bm.allyUnits;
-        if (enemyList != null)
-        {
-            for (int i = 0; i < enemyList.Count; i++)
-            {
-                var e = enemyList[i];
-                if (e == null || e.isDead) continue;
-                if (!GameConfig.IsInCombatViewport(e)) continue;
-                sum += (Vector2)e.transform.position;
-                count++;
-            }
-        }
-        ex._orbitCenter = count > 0 ? sum / count : self;
+        Vector2 rawCenter = ex.ComputeRawCenter(self);
+        ex._orbitRadius = Mathf.Clamp((self - rawCenter).magnitude, OrbitRadiusMin, OrbitRadiusMax);
+        ex._orbitCenter = ex.ClampCenterToScreen(rawCenter);
         Vector2 off = self - ex._orbitCenter;
-        ex._orbitRadius = Mathf.Clamp(off.magnitude, OrbitRadiusMin, OrbitRadiusMax);
         ex._orbitAngle = Mathf.Atan2(off.y, off.x);
         Vector2 start = ex._orbitCenter
             + new Vector2(Mathf.Cos(ex._orbitAngle), Mathf.Sin(ex._orbitAngle)) * ex._orbitRadius;
@@ -102,6 +90,41 @@ public class MoveAoeExecutor : MonoBehaviour
             // 不兜底：判定照走、演出缺席，让主人看见缺了哪个
             Debug.LogError($"[MoveAoe] 技能特效缺失 skillId={skill.skillId}（VFX/Skills 下无此 prefab）");
         }
+    }
+
+    /// <summary>当前屏内敌群质心；屏内无目标则回落到施法者当前位置。半径计算与每帧跟随共用同一出口。</summary>
+    Vector2 ComputeRawCenter(Vector2 fallback)
+    {
+        var bm = BattleManager.Instance;
+        var enemyList = _caster != null && bm != null ? (_caster.isAlly ? bm.monsters : bm.allyUnits) : null;
+        Vector2 sum = Vector2.zero;
+        int count = 0;
+        if (enemyList != null)
+        {
+            for (int i = 0; i < enemyList.Count; i++)
+            {
+                var e = enemyList[i];
+                if (e == null || e.isDead) continue;
+                if (!GameConfig.IsInCombatViewport(e)) continue;
+                sum += (Vector2)e.transform.position;
+                count++;
+            }
+        }
+        return count > 0 ? sum / count : fallback;
+    }
+
+    /// <summary>把圆心钳进相机可视区，留出绕行半径 + 边距，保证整条圆周不出屏（不含贴边的半圈）。</summary>
+    Vector2 ClampCenterToScreen(Vector2 c)
+    {
+        var cam = Camera.main;
+        if (cam == null || !cam.orthographic) return c;
+        float halfH = cam.orthographicSize;
+        float halfW = halfH * cam.aspect;
+        Vector3 cp = cam.transform.position;
+        float pad = _orbitRadius + GameConfig.COMBAT_VIEWPORT_MARGIN;
+        c.x = Mathf.Clamp(c.x, cp.x - halfW + pad, cp.x + halfW - pad);
+        c.y = Mathf.Clamp(c.y, cp.y - halfH + pad, cp.y + halfH - pad);
+        return c;
     }
 
     void Update()
@@ -124,6 +147,11 @@ public class MoveAoeExecutor : MonoBehaviour
             if (_lingerTimer <= 0f) Destroy(gameObject);
             return;
         }
+
+        // 【2026-11-23 主人拍板】圆心每帧跟随当前怪群质心并钳屏，战场推进时龙卷跟着走、不出边界。
+        // 半径沿用生成瞬间的固定值，只挪圆心；起点/速度/余韵/判定口径不变。
+        Vector2 follow = _caster != null ? (Vector2)_caster.GetHitPosition() : _orbitCenter;
+        _orbitCenter = ClampCenterToScreen(ComputeRawCenter(follow));
 
         // 圆周：角速度 = 线速度 / 半径；位置直接落在圆周上，不累加单向位移。
         _orbitAngle += (MoveSpeed / Mathf.Max(0.01f, _orbitRadius)) * dt;

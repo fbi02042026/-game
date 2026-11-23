@@ -31,8 +31,8 @@ public partial class TalentUI
     // 【参考图排版】卡尺寸与尾巴落位只在这里改一次，建树与贴图标定位共用（禁止第二处硬编码）。
     const float BubbleCardW = 340f;
     const float BubbleCardH = 400f;
-    // 【2026-11-19 主人拍板】气泡卡整体缩小一半：只缩 box 的 localScale，内部相对布局（字号/间距）原样保留。
-    const float BubbleCardScale = 0.55f;
+    // 【2026-11-19 主人拍板】气泡卡整体缩放：只缩 box 的 localScale，内部相对布局（字号/间距）原样保留。
+    const float BubbleCardScale = 0.75f;
     // 菱形尾巴已去掉；卡心距被点图标顶 = 缩放后半高（卡底仍贴图标上方 8px 间隙，与缩前同口径）。
     const float BubbleTailDrop = BubbleCardH * BubbleCardScale * 0.5f;
 

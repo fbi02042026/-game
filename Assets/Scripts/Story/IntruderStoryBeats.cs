@@ -192,42 +192,92 @@ public static class IntruderStoryBeats
         return BuildRescueFirstMeetLines();
     }
 
-    /// <summary>救场·首遇版（第 1 章拍板口径；2~6 章若未来配表也走本段，措辞不绑第 1 章专属名词）。</summary>
+    /// <summary>救场·首遇版（第 1 章拍板口径；2~6 章若未来配表也走本段，措辞不绑第 1 章专属名词）。
+    /// 【2026-11-23 主人「台词太多了 简要的说明就行 其他的战斗完再继续说几句」】战中只留 2 句最短的
+    /// 救场说明（拦怪 + 回血），「谁托的/为什么来」全部挪到战后 <see cref="TryPlayRescueAfterBattle"/>。
+    /// hold 统一压到 1.2s：玩家点一下立刻下一句（BattleHeadTalkUI 既有点击推进），不点也不拖时间。</summary>
     static List<EntryBattleLine> BuildRescueFirstMeetLines()
     {
         return new List<EntryBattleLine>
         {
-            L(EntrySpeaker.Gabriel, "让让！盾在这儿立住了，一只都别想越线！", 2.4f), // 2026-11-23 统一 防没看清
-            L(EntrySpeaker.Ella, "我勒个豆，全队打成这样？胆子肥嘟嘟的啊你们。", 2.2f),
-            L(EntrySpeaker.Lina, "先回血，别的回头说。", 2.4f), // 2026-11-23 统一 防没看清
-            L(EntrySpeaker.Player, "你们是哪位？我没点外援啊，还是那种不讲价的。", 2.2f),
-            L(EntrySpeaker.Gabriel, "有人托了我们，让我们盯着你点。细节打完再聊——先活着。", 2.4f),
+            L(EntrySpeaker.Gabriel, "让让！盾立住了，一只都别想越线！", 1.2f),
+            L(EntrySpeaker.Lina, "先回血，别的回头说。", 1.2f),
         };
     }
 
-    /// <summary>救场·支线岛版：接 IslandStoryBeats 的「独眼字条 / 岛况」口吻，不绑主线进度。</summary>
+    /// <summary>救场·支线岛版：接 IslandStoryBeats 的「独眼字条 / 岛况」口吻，不绑主线进度。
+    /// 战中同口径只留 2 句；岛况/委托来由挪到战后。</summary>
     static List<EntryBattleLine> BuildRescueIslandLines()
     {
         return new List<EntryBattleLine>
         {
-            L(EntrySpeaker.Gabriel, "这岛的怪比字条上写的多三倍——独眼又开始瞒报了。", 2.2f),
-            L(EntrySpeaker.Ella, "队形没散，侧面归我们。你们打你们的，闪身步我们兜着。", 2.2f),
-            L(EntrySpeaker.Lina, "血别硬撑，圣光罩着你。", 2.4f), // 2026-11-23 统一 防没看清
-            L(EntrySpeaker.Player, "你们怎么跟到岛上来的？这船票挺贵吧。", 2.4f), // 2026-11-23 统一 防没看清
-            L(EntrySpeaker.Gabriel, "有人托了我们。托我们的人说，你在哪，我们就在哪。", 2.4f),
+            L(EntrySpeaker.Gabriel, "侧面归我们，你们打你们的。", 1.2f),
+            L(EntrySpeaker.Lina, "血别硬撑，圣光罩着你。", 1.2f),
         };
     }
 
-    /// <summary>救场·揭底版（第 7 章后）：把委托链说透——赛琳受托，托她的那位一直没说破的名字此刻落地。</summary>
+    /// <summary>救场·揭底版（第 7 章后）：把委托链说透——赛琳受托，托她的那位一直没说破的名字此刻落地。
+    /// 战中同口径只留 2 句；揭底整段挪到战后。</summary>
     static List<EntryBattleLine> BuildRescueRevealLines()
     {
         return new List<EntryBattleLine>
         {
-            L(EntrySpeaker.Gabriel, "别问怎么又是我们。委托人你其实天天见——公会前台，赛琳。", 2.4f),
-            L(EntrySpeaker.Ella, "前台背后还有一位。那位姑娘带队走之前就料到凶多吉少，才提前把话托给赛琳。", 2.6f),
-            L(EntrySpeaker.Lina, "她的原话是：看着他，别让他进裂隙。拉不住，就护着他别走太深。", 2.6f),
-            L(EntrySpeaker.Player, "……艾丽娅。你们一路跟着我，就为了这句嘱咐？", 2.2f),
-            L(EntrySpeaker.Gabriel, "对。所以别让那句嘱咐白托付——活着，一起回去。", 2.4f),
+            L(EntrySpeaker.Gabriel, "先站住！别问怎么又是我们。", 1.2f),
+            L(EntrySpeaker.Lina, "护着你，别走太深。", 1.2f),
+        };
+    }
+
+    /// <summary>
+    /// 救场·战后台词入口（2026-11-23 主人「其他的战斗完再继续说几句就行」）：
+    /// 战中只播 2 句最短说明，「谁托的 / 为什么来 / 岛况」这些可以慢慢说的内容挪到这里，
+    /// 由 BattleManager.CoRescueAfterBattleThenDespawn 在波末（Boss 波清完、撤场前）播，
+    /// 与 T6 入场救援谢幕（TryPlayRescueOutcome）同一条 PlayRescueBeats 出口，不新增播放机制。
+    /// </summary>
+    public static bool TryPlayRescueAfterBattle(int chapter, string islandId, Action onDone)
+    {
+        var beats = BuildRescueAfterBeats(chapter, islandId);
+        Debug.Log($"[IntruderStory] 救场战后台词 beats={beats.Count} chapter={chapter} island={islandId}");
+        return PlayRescueBeats(beats, onDone);
+    }
+
+    static List<StoryBeat> BuildRescueAfterBeats(int chapter, string islandId)
+    {
+        if (!string.IsNullOrEmpty(islandId)) return BuildRescueAfterIslandBeats();
+        if (chapter >= 7) return BuildRescueAfterRevealBeats();
+        return BuildRescueAfterFirstMeetBeats();
+    }
+
+    /// <summary>救场·战后首遇版：3 拍，只交代「谁派来的」。</summary>
+    static List<StoryBeat> BuildRescueAfterFirstMeetBeats()
+    {
+        return new List<StoryBeat>
+        {
+            StoryDirector.Solo("艾拉", "全队打成这样？胆子挺肥啊你们。", SquadElla),
+            StoryDirector.Solo("你", "你们是哪位？我没点外援啊。", StoryPortraits.Player),
+            StoryDirector.Solo("加百列", "有人托了我们，让我们盯着你点。细节回头聊——先回镇上歇着。", SquadGabriel),
+        };
+    }
+
+    /// <summary>救场·战后支线岛版：只留岛况 + 来由。</summary>
+    static List<StoryBeat> BuildRescueAfterIslandBeats()
+    {
+        return new List<StoryBeat>
+        {
+            StoryDirector.Solo("艾拉", "这岛的怪比字条上写的多三倍——独眼又瞒报了。", SquadElla),
+            StoryDirector.Solo("你", "你们怎么跟到岛上来的？", StoryPortraits.Player),
+            StoryDirector.Solo("加百列", "有人托了我们。托我们的人说，你在哪，我们就在哪。", SquadGabriel),
+        };
+    }
+
+    /// <summary>救场·战后揭底版（第 7 章后）：委托链在这里说透。</summary>
+    static List<StoryBeat> BuildRescueAfterRevealBeats()
+    {
+        return new List<StoryBeat>
+        {
+            StoryDirector.Solo("加百列", "委托人你其实天天见——公会前台，赛琳。", SquadGabriel),
+            StoryDirector.Solo("艾拉", "前台背后还有一位。她带队走之前就料到凶多吉少，才把话托给赛琳。", SquadElla),
+            StoryDirector.Solo("你", "……艾丽娅。", StoryPortraits.Player),
+            StoryDirector.Solo("加百列", "对。别让那句嘱咐白托付——活着，一起回去。", SquadGabriel),
         };
     }
 

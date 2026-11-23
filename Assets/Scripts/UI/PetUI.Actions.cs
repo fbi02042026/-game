@@ -8,6 +8,11 @@ using UnityEngine;
 /// </summary>
 public partial class PetUI
 {
+    // 本次喂养增量（仅一次刷新可见，RefreshDetail 消费后清空）。皮肤与本体共享 bodyId。
+    internal static string _feedGainBodyId;
+    internal static string _feedGainAttr;
+    internal static int _feedGainAmount;
+
     void OnDeployClicked()
     {
         var def = SelectedDef;
@@ -146,6 +151,11 @@ public partial class PetUI
         save.AddPetAttrBonus(bodyId, hpAdd, atkAdd, defAdd);
 
         SaveSystem.Instance.Save();
+        // 本次喂养的属性增量交给详情页贴在属性数字右侧（主人 11-23：「这样玩家才知道涨了多少属性」）；
+        // 只显示这一次刷新，RefreshDetail 消费后即清，不影响后续任何刷新。
+        _feedGainBodyId = bodyId;
+        _feedGainAttr = attrName;
+        _feedGainAmount = amount;
         GlobalToastUI.Show("喂养 " + def.name + " -" + cost + " 金币，好感 +1，" + attrName + " +" + amount);
         RefreshAll();
         PetFeatureGuide.NotifyFed(def.id);

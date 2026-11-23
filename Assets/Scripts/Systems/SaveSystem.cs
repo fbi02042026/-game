@@ -224,6 +224,12 @@ public class SaveSystem : Singleton<SaveSystem>
         if (data.stamina < 0) data.stamina = 0;
         if (data.totalGold > ResourceWallet.DEFAULT_MAX) data.totalGold = ResourceWallet.DEFAULT_MAX;
         if (data.diamond > ResourceWallet.DEFAULT_MAX) data.diamond = (int)ResourceWallet.DEFAULT_MAX;
+        // 【2026-11-23 满级 80→50】老档等级钳到新上限，溢出经验清掉（已点天赋/金币不动）。
+        if (data.playerLevel > LevelSystem.MaxLevel)
+        {
+            data.playerLevel = LevelSystem.MaxLevel;
+            data.playerExp = 0;
+        }
         // 【2026-10-31】上限口径与 StaminaSystem.Max / ResourceWallet.GetMax 对齐（基础 + 成就加成），
         // 原来只按 STAMINA_MAX 截断，会把带加成的体力静默削掉。
         long staminaCap = GameConfig.STAMINA_MAX + Mathf.Max(0, data.staminaBonusMax);

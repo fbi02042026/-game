@@ -18,7 +18,7 @@ public static class TutorialBattleTable
         public int eliteCount;
         /// <summary>本波远程只数；&lt;0 走旧规则自动折算（近战:远程 ≈ 4:2）。放在 CSV 末列，旧档不写即自动。</summary>
         public int rangedCount;
-        /// <summary>普通怪 HP 下限（乘 MONSTER_HP_GLOBAL_MUL 前）。与旧 Random.Range 整型口径一致：max 为开区间。</summary>
+        /// <summary>普通怪 HP 下限（最终满血，不再乘 MONSTER_HP_GLOBAL_MUL）。与旧 Random.Range 整型口径一致：max 为开区间。</summary>
         public float hpMin;
         public float hpMax;
         public float eliteHpMin;

@@ -45,9 +45,10 @@ public partial class UnitBase
         // 玩家攻速 -20%（仅 Hero；佣兵/怪物节奏不变）
         if (this is Hero)
             atkSpd *= GameConfig.PLAYER_ATTACK_SPEED_MUL;
-        // 佣兵攻速 -30%（仅 Mercenary；怪物节奏不变）【2026-11-05 主人拍板「佣兵攻速比玩家快太多」】
+        // 佣兵攻速倍率（仅 Mercenary；怪物节奏不变）：宠物继承 Mercenary 但不吃佣兵再减，走自己的 0.7。
+        // 【2026-11-23 主人「我只是让你改佣兵的」】Pet 单独分流，避免宠物攻速被 0.49 牵连。
         if (this is Mercenary)
-            atkSpd *= GameConfig.MERC_ATTACK_SPEED_MUL;
+            atkSpd *= this is Pet ? GameConfig.PET_ATTACK_SPEED_MUL : GameConfig.MERC_ATTACK_SPEED_MUL;
         // 残血加成（R1）：低血时提升攻速，越打越快制造反扑手感
         atkSpd *= GetLowHpAttackSpeedMul();
         // 游侠攻速减速（仅 Hero 且职业为游侠 P004）：额外乘 0.85，让游侠出手更慢、与前摇统一手感

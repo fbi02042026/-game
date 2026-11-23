@@ -139,6 +139,26 @@ public partial class TutorialDirector
             TutorialHintUI.Ensure().ShowHard("点下面的「开始冒险」，出发去裂隙啦～", highlight);
     }
 
+    /// <summary>
+    /// 【2026-11-23 主人「任意一步中断再进都要避免」】所有"指路"类硬提示的唯一出口：
+    /// 城镇会把上次打开的页面还原，所以先看当前停在哪一页，再决定指底栏还是交给页内引导——
+    /// 绝不再出现「人已经站在冒险页上，还让他点底栏「冒险」」这种错方向。
+    /// 页内更细的指引由 FirstRunGuide 各步自己接手（它每步都按当前页面判断），这里只负责不重复指。
+    /// </summary>
+    void HintByCurrentPage(Button advNav)
+    {
+        // 冒险页已开：只提示页内的「开始冒险」（首次引导 FirstBattle 步覆盖时它会自动让位）
+        if (AdventureUI.Instance != null) { NotifyAdventureOpened(); return; }
+        // 天赋页已开：FirstRunGuide.Talent 步会自己指下一个节点，不再指回底栏
+        if (TalentUI.Instance != null && TalentUI.Instance.IsOpen) return;
+        // 日志页已开：FirstRunGuide.LogReward 步会自己指领取按钮
+        if (AdventureLogUI.Instance != null && AdventureLogUI.Instance.IsPageVisible) return;
+
+        if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
+            TutorialHintUI.Ensure().ShowHard("点下面的「冒险」，出发去裂隙啦～",
+                advNav != null ? advNav.GetComponent<RectTransform>() : null);
+    }
+
     IEnumerator TownFirstEntryRoutine()
     {
         yield return WaitNotLoading();
@@ -175,9 +195,7 @@ public partial class TutorialDirector
         ClearTownBlockers();
 
         if (adv == null) adv = ResolveAdventureButton();
-        if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
-            TutorialHintUI.Ensure().ShowHard("点下面的「冒险」，出发去裂隙啦～",
-                adv != null ? adv.GetComponent<RectTransform>() : null);
+        HintByCurrentPage(adv);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -204,9 +222,9 @@ public partial class TutorialDirector
             yield return null;
         }
 
-        if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
-            TutorialHintUI.Ensure().ShowHard("点下面的「冒险」，出发去裂隙啦～",
-                adv != null ? adv.GetComponent<RectTransform>() : null);
+        // 【2026-11-23 主人「任意一步中断再进都要避免」】统一出口：先看当前停在哪一页再指路，
+        // 冒险页已开就直接指页内「开始冒险」，不再让人重复点底栏「冒险」。
+        HintByCurrentPage(adv);
         _townFlowBusy = false;
         _flow = null;
     }
@@ -408,7 +426,9 @@ public partial class TutorialDirector
                 line = "你报剑盾？血厚能扛，自带「破阵冲锋」\n——新人报这个，我省心。";
                 break;
             case PlayerJobId.Ranger:
-                line = "你报游侠？远程「散射」一次三箭。\n别光顾着射——我可不捞人哦。";
+                // 【2026-11-23 修】原句「别光顾着射——我可不捞人哦」两处问题：①「捞人」是方言，引导框 5 秒一闪看不懂；
+                // ②「别光顾着射」和后半句（别冲太前、没人救）逻辑不搭。改成直说：站远点、别贴脸。
+                line = "你报游侠？远程「散射」一次三箭。\n站远点打，别贴脸——我可不会冲进去救你。";
                 break;
             case PlayerJobId.Mage:
                 line = "你报法师？「火球」范围轰、身板脆\n——新手我可不推荐。";

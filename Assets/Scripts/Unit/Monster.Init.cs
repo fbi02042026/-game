@@ -285,10 +285,15 @@ public partial class Monster
         float hpScale = (bossUnit || eliteWave) ? (guildScale * diffScale * ttkMul) : (mobScale);
         // 【2026-10-22 主人拍板「无限裂隙先排除了 分成两条线」】血量分两条线：
         // 主线吃全局砍半（MONSTER_HP_GLOBAL_MUL=0.5）；无尽裂隙不吃全局砍半，
-        // 强度只随层数走（EndlessDifficultyMul）。攻击侧同样裂隙不参与（ChapterAtkMul）。
-        // 【2026-10-23 主人拍板「引导的不要动」】新手引导战两条线都不吃——
-        // 引导局怪物（血/攻）保持 10-22 削弱批次之前的原始数值。
+        // 强度只随层数走（EndlessDifficultyMul）。
+        // 【2026-11-23 主人拍板「引导和正式关卡数值一致」，覆盖 10-23「引导的不要动」】
+        // 引导普通小怪走正式关同一套乘区，只是不吃这记全局砍半 ⇒ 最终血 = 正式关同型怪 ×2，
+        // 这就是 11-23「引导怪血量×2、打起来更费劲」的实现点，不要再在别处另加血量倍率。
+        // 精英 / Boss 槽位仍按 10-16 那批拍板的表档演出血量（WavePlanner.ApplyTutorialMonsterTuning），
+        // 攻击侧也保持原值（见下方 tutorialKeepOriginal），「打不完 → 撤离」整段不受影响。
         bool isTutorialRun = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+        // 引导局里只有精英/Boss 保留削弱批次之前的原始攻防；普通小怪与正式关同曲线。
+        bool tutorialKeepOriginal = isTutorialRun && (eliteWave || _isBossUnit);
         // 【2026-11-22 自检收口】玩法身份只判一次：下方词缀池(414) 与后期加强(376) 共用本变量，
         // 杜绝两处各读一次 IsFormalMainRun 将来判据漂移。
         bool formalMainRun = BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
@@ -394,14 +399,17 @@ public partial class Monster
         // 【2026-11-15】裂隙精英血量加倍：裂隙不走 chapterFirstHpRule 的大血量档，单独补一档。
         // 只判裂隙 + 精英槽位，Boss / 小怪 / 其它玩法一律 ×1，行为零变化。
         float endlessEliteHpMul = endlessRift && eliteWave ? GameConfig.ENDLESS_ELITE_HP_MUL : 1f;
-        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul * lateHpMul * adaptiveScale);
+        // 【2026-11-23 主人拍板】仅第1章第3关精英降血 1/3（×2/3）；不动全局 LATE_ELITE_BOSS_HP_MUL。
+        // formalMainRun 门禁排除副本/裂隙/支线/竞技场；eliteWave 自身已排除 Boss；其它关/小怪一律 ×1。
+        float stage3EliteHpMul = formalMainRun && chapter == 1 && stageIdx0 == 2 && eliteWave ? (2f / 3f) : 1f;
+        attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul * lateHpMul * stage3EliteHpMul * adaptiveScale);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
         // 原第2→第5章入口跳档是全曲线唯一断崖）。真源 = GameConfig.ChapterAtkMul(chapter)；
         // 只压攻击/魔攻，血防不动；无尽裂隙不参与（强度只随层数走）。
-        // 【2026-10-23 主人拍板「引导的不要动」】新手引导战不吃章级减免——引导局怪物保持原始攻击
-        //（isTutorialRun 在上面血量段已取）。
-        float earlyAtkMul = !endlessRift && !isTutorialRun ? GameConfig.ChapterAtkMul(gChapter) : 1f;
+        // 【2026-11-23 主人拍板「引导和正式关卡数值一致」】引导普通小怪与正式关同吃章级减免；
+        // 只有引导局里的精英 / Boss 槽位保留 10-23 的原始攻击（压轴「打不完 → 撤离」靠它撑住压力）。
+        float earlyAtkMul = !endlessRift && !tutorialKeepOriginal ? GameConfig.ChapterAtkMul(gChapter) : 1f;
         // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
         // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
         // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。
@@ -410,8 +418,9 @@ public partial class Monster
         // 远程（弓/法球）攻击力倍率（真源 = GameConfig.MONSTER_RANGED_ATK_MUL，唯一出口）。
         // 【2026-10-22 主人拍板「攻击再减50%」后该值 0.675：远程不再上浮、比近战低一截。Boss 不吃。】
         // 放在 style 定稿之后、写 attr 之前，魔法型（已强制 Ranged）也一起吃到。
-        // 【2026-10-23 主人拍板「引导的不要动」】引导局不吃远程削减（10-22 批次的一部分）。
-        if (!_isBossUnit && !isTutorialRun && MonsterAttackStyleTable.IsRanged(_attackStyle))
+        // 【2026-11-23 主人拍板「引导和正式关卡数值一致」】引导普通远程怪同吃这记削减；
+        // 引导精英 / Boss 槽位保留原值（同 earlyAtkMul 的 tutorialKeepOriginal 判据）。
+        if (!_isBossUnit && !tutorialKeepOriginal && MonsterAttackStyleTable.IsRanged(_attackStyle))
             baseAtk *= GameConfig.MONSTER_RANGED_ATK_MUL;
         // 【2026-11-15 口径】词条判定前移：索敌按「这只怪有没有词条」分流，真源 = monster_stats.affix 列。
         // 表定词条怪 / 精英 / Boss 都会挂上词缀（下方挂词缀与这里共用同一份解析结果，不写第二份判定）；

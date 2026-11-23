@@ -118,10 +118,16 @@ public partial class WavePlanner
         // —— 【2026-11-05 主人拍板】本波词条怪槽位：从「安全槽区间」随机取 N 个，
         // 避开波尾的精英 / 签名怪 / 波内 Boss / 亲卫窗口；引导波不插（Rules.UseTutorialSprites 排除）。
         var affixSlotsThisWave = new System.Collections.Generic.HashSet<int>();
-        if (wave != null && wave.affixQuotaInWave > 0 && !Rules.UseTutorialSprites)
+        var arch0 = GetWaveArchetype(waveIndex);
+        int eliteQuota0 = (arch0 != null ? arch0.elite : 0) + (wave != null && wave.eliteBonus > 0 ? wave.eliteBonus : 0);
+        // 【2026-11-23 主人拍板】仅第1章第3关：精英出现的那一波不插词条怪，槽位回落普通选怪（总怪数不变）。
+        // 判精英波复用下方刷怪同一份 eliteQuota0；其它关/波/副本/裂隙/引导一律不变。
+        bool stage3EliteNoAffix = bm != null && bm.IsFormalMainRun && CurrentChapter == 1
+            && stageIdx == 2 && eliteQuota0 > 0;
+        // 【2026-11-23 主人拍板】第5关/第10关（Boss 关）不插词条怪。Boss 本体波本就无配额，此处挡住小怪波。
+        bool bossStageNoAffix = bm != null && bm.IsFormalMainRun && (stageIdx == 4 || stageIdx == 9);
+        if (wave != null && wave.affixQuotaInWave > 0 && !Rules.UseTutorialSprites && !stage3EliteNoAffix && !bossStageNoAffix)
         {
-            var arch0 = GetWaveArchetype(waveIndex);
-            int eliteQuota0 = (arch0 != null ? arch0.elite : 0) + (wave.eliteBonus > 0 ? wave.eliteBonus : 0);
             int tailReserved = Mathf.Max(0, wave.bossCountInWave) + eliteQuota0 + (wave.signatureSpriteIndex > 0 ? 1 : 0);
             int safeCount = Mathf.Max(0, wave.monsterCount - tailReserved);
             int want = Mathf.Min(wave.affixQuotaInWave, safeCount);

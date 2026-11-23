@@ -830,6 +830,8 @@ public static class DraftPool
             if (def.meleeOnly && !PlayerJobDefs.IsSelectedMelee()) continue;
 
             var rar = SkillDraftMeta.Rarity(def.id);
+            // 【2026-11-23 主人拍板】前期彻底不出传奇技能（天雷裁决/风龙卷/星落），通关第 3 章后才进池。
+            if (IsEarlySurvivalPhase() && rar == SkillRarity.Legendary) continue;
             var tag = SkillDraftMeta.Tag(def.id);
             string tagName = SynergyTagUtil.DisplayName(tag);
             string prefix = string.IsNullOrEmpty(tagName) ? "" : $"[{tagName}] ";

@@ -209,6 +209,10 @@ public partial class BattleManager
     {
         yield return null;
         if (!isInBattle || _stageCleared || _portalActive) yield break;
+        // 【2026-11-23 狗营救分镜】演出占用战场期间不判清场/不推下一波：
+        // 末波清空时狗还在被打跑 / 播点评，先让演出播完；演出 finally 会补一次通关判定
+        // （TryStartStageClearAfterCutscene），不会因此漏结算。
+        if (CutsceneOccupyingBattlefield) yield break;
         if (CountAliveMonsters() > 0) yield break;
         if (FindNextUnspawnedWaveIndex() < 0)
         {

@@ -93,7 +93,44 @@ public static class Chapter1Story
         // 【2026-10-18 主人拍板：材料产出全部改发抽奖币】原「分解材料×3」按锚价（1材料=30金）折成金币×90
         // 【2026-11-11 主人拍板：剧情金币奖励全删】+20、+90 两笔都删，本段剧情不再发任何钱
         StoryProgress.QueueChapter1TownReturn();
-        onDone?.Invoke();
+
+        // 【2026-11-23】三选一之后、回城之前接塔克线收尾：没带塔克时该方法直接回调，行为与改动前一致。
+        PlayTuckerClosure(onDone);
+    }
+
+    // ============================================================
+    // 塔克线收尾（2026-11-23 主人定稿：第一章最后 Boss 后填坑）
+    // 起点 = 引导局精英那句「老大特意交代过：当心那个使盾的」——有人知道塔克下裂隙在查什么。
+    // 这里只摊开一半：他受托找一支三个月前没回来的队，跟主角同一个目标；
+    // 队长「见过一面」是真话但不是全部，后续章还能继续（第 2 章空碑、第 3 章梅莉莎都可再对一次脸）。
+    // 判据用 RunLoadout（本局真源）+ 引导佣兵 hireId 常量，不写死字符串；没带塔克整段跳过，主线不受影响。
+    // ============================================================
+    static bool TuckerInParty()
+        => RunLoadout.IsActive && RunLoadout.HasMerc(StoryProgress.TutorialMercHireId);
+
+    static void PlayTuckerClosure(Action onDone)
+    {
+        if (!TuckerInParty())
+        {
+            onDone?.Invoke();
+            return;
+        }
+
+        string tuckName = StoryProgress.TutorialMercDisplayName;
+        string tuckId = StoryProgress.TutorialMercHireId;
+
+        var beats = new List<StoryBeat>
+        {
+            StoryDirector.Solo(tuckName, "那道剑痕……是他们的。", tuckId)
+                .Bg(StoryBackgrounds.Chapter1Stele),
+            StoryDirector.Solo("你", "你认得？", StoryPortraits.Player),
+            StoryDirector.Solo(tuckName, "三个月前，有人托我下裂隙，找一支没回来的队。", tuckId),
+            StoryDirector.Solo("你", "……三个月前那队？", StoryPortraits.Player),
+            StoryDirector.Solo(tuckName, "名字对得上。他们的队长，我见过一面。", tuckId),
+            StoryDirector.Solo(tuckName, "往下我还得走。你要跟，就跟紧点。", tuckId),
+            StoryDirector.Solo("你", "那就一起。", StoryPortraits.Player),
+        };
+        StoryDirector.Ensure().Play(beats, onDone);
     }
 
     /// <summary>
