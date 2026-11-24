@@ -111,6 +111,8 @@ public class FirstRunGuide : MonoBehaviour
     RectTransform _bubbleTextClip;
     ScrollRect _bubbleScrollRect;
     bool _bubbleTypeDone;
+    /// <summary>【2026-11-24】本次气泡优先摆在目标上方（天赋节点步）；Show 从参数取，Hide 复位。</summary>
+    bool _bubbleAboveOnce;
 
     /// <summary>游标：下一个要跑的步骤下标（= 已完成步骤数）。</summary>
     int _stepIndex;
@@ -508,7 +510,7 @@ public class FirstRunGuide : MonoBehaviour
             yield return CoPoint("点这个节点，激活这个天赋，属性立刻生效。",
                 () => TalentNodeRect(before),
                 () => TalentUI.LeftUnlockedCount() > before,
-                false, 0f);
+                false, 0f, bubbleAbove: true);   // 【2026-11-24 主人拍板】气泡在节点上方，别压住天赋面板
         }
 
         Hide();
@@ -628,7 +630,7 @@ public class FirstRunGuide : MonoBehaviour
     /// 【2026-10-27 主人拍板】timeout &lt;= 0 = 不设超时，一直等完成条件/玩家亲手点（配合挂屏看门狗喂狗）。
     /// </summary>
     IEnumerator CoPoint(string text, Func<RectTransform> target, Func<bool> isDone,
-        bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout)
+        bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout, bool bubbleAbove = false)
     {
         _pointOk = false;
         _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
@@ -674,7 +676,7 @@ public class FirstRunGuide : MonoBehaviour
         }
 
         _tapDone = false;
-        Show(follow, text, tapToAdvance);
+        Show(follow, text, tapToAdvance, bubbleAbove);
 
         float t = 0f;
         float lostAccum = 0f;   // 目标连续丢失计时（自愈用，超过 2s 收遮罩放行点击）
@@ -698,12 +700,12 @@ public class FirstRunGuide : MonoBehaviour
                 if (needTarget)
                 {
                     follow = Safe(target);
-                    if (follow != null) Show(follow, text, tapToAdvance);
+                    if (follow != null) Show(follow, text, tapToAdvance, bubbleAbove);
                     // 目标暂不可用就先不弹，交给下方「目标丢失自愈」在恢复时重新弹出
                 }
                 else
                 {
-                    Show(follow, text, tapToAdvance);
+                    Show(follow, text, tapToAdvance, bubbleAbove);
                 }
             }
 
@@ -748,7 +750,7 @@ public class FirstRunGuide : MonoBehaviour
                     && !PlayerJobSelectUI.IsOpen && !_holeTriggered)
                 {
                     follow = liveTarget;
-                    Show(follow, text, tapToAdvance);
+                    Show(follow, text, tapToAdvance, bubbleAbove);
                 }
                 lostAccum = 0f;
             }
@@ -1047,7 +1049,7 @@ public class FirstRunGuide : MonoBehaviour
         _target = target;
     }
 
-    void Show(RectTransform target, string text, bool tapToAdvance)
+    void Show(RectTransform target, string text, bool tapToAdvance, bool bubbleAbove = false)
     {
         Build();
         if (_canvas != null) UICanvasSetup.RefreshPopup(_canvas, SortOrder);
@@ -1056,6 +1058,7 @@ public class FirstRunGuide : MonoBehaviour
         _hasLastRect = false;
         _tapDone = false;
         _tapAdv = tapToAdvance;
+        _bubbleAboveOnce = bubbleAbove;
         _visible = true;
         _shownAt = Time.unscaledTime;   // 【2026-10-22 加】挂屏看门狗计时起点
 
@@ -1709,9 +1712,15 @@ public class FirstRunGuide : MonoBehaviour
 
         const float gap = 20f;
         float half = BubbleHeight * 0.5f;
-        float y = holeMinY - gap - half;
-        if (y - half < root.rect.yMin + 8f)
-            y = holeMaxY + gap + half;
+        float y;
+        if (_bubbleAboveOnce)
+            y = holeMaxY + gap + half;   // 【2026-11-24】天赋节点步：气泡摆到节点上方
+        else
+        {
+            y = holeMinY - gap - half;
+            if (y - half < root.rect.yMin + 8f)
+                y = holeMaxY + gap + half;
+        }
         y = Mathf.Clamp(y, root.rect.yMin + half + 8f, root.rect.yMax - half - 8f);
         _bubbleRt.anchoredPosition = new Vector2(0f, y);
     }

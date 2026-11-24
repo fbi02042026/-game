@@ -366,6 +366,14 @@ public static class MercGrowInventory
         string itemName = itemDef != null && !string.IsNullOrEmpty(itemDef.name)
             ? itemDef.name
             : def.Name + "的本命碎片";
+        // 【2026-11-24 主人拍板「本命碎片也按奖励发放」】只记关卡掉落（stage-drop）；
+        // 酒馆重复 / 邮件 / 登录 / 迁移等城镇来源不混进战斗奖励格。
+        if (reason == "stage-drop")
+        {
+            var battleStats = BattleManager.Instance != null ? BattleManager.Instance.RunStats : null;
+            if (battleStats != null)
+                battleStats.AddActivityReward(itemName, amount, MercGrowSprites.LoadFragmentBase(def.Rarity));
+        }
         UIManager.Instance?.ShowToast($"获得 {itemName} ×{amount}", true);   // 2026-10-06 主人拍板：物品获得 force 弹
         Debug.Log($"[MercGrow] 发碎片 {def.Name}({hireId}) ×{amount} → 城镇背包（reason={reason}）");
         return r;

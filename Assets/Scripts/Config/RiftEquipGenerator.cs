@@ -47,15 +47,24 @@ public static class RiftEquipGenerator
         // 【2026-11-13 主人拍板】初级装备下限：采集一次本局开局发的初始武器 / 盾，
         // 生成主属性与词条时逐条钳制（详见下方 StarterFloor 注释）。
         var starter = CaptureStarterBaseline(job, fixedForTutorial);
-        // 引导确定性化：稀有度恒 NORMAL（Ch1 10% 稀有曲线只影响正式关/非引导抽卡）。
-        var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter);
+        // 引导确定性化：稀有度恒普通（章内蓝装爬坡只影响正式关/非引导抽卡）。
+        // 【2026-11-24 主人拍板】全章蓝率每章+5%、章内线性爬坡：Ch1 0%→5%、Ch2 5%→10%……Ch8 35%→40%。
+        // 仅主线正式关取章内关号；副本/裂隙/竞技场/支线岛无章内关号，传 -1 取该章章末上限。
+        int chapterStage0 = -1;
+        if (ChapterManager.Instance != null
+            && BattleManager.InstanceQuiet != null && BattleManager.InstanceQuiet.IsFormalMainRun)
+            chapterStage0 = Mathf.Clamp(ChapterManager.Instance.currentStageIndex, 0,
+                Mathf.Max(0, GameConfig.StagesPerGrandOf(chapter) - 1));
+        // 【2026-11-24】关型倾斜透传：精英/Boss 关品质上浮、普通关回落（只作用主线正式关）。
+        var rarity = fixedForTutorial ? FindRarityRule("NORMAL") : RollRarity(chapter, stageType, chapterStage0, difficulty);
         // 【2026-11-23 主人拍板】只有真的从白升到稀有才取该档最低属性；表缺行 LogError 时不置位。
         bool pityUpgraded = false;
         // 【2026-10-24 主人拍板】保底稀有：保底抽出的装备不许再是普通（白）。
         // FindRarityRule 失败时返回 FallbackRarity()（Id=NORMAL）而非 null，必须用 Id 判失败 —— fail closed：LogError + 保持原品质，不静默升档。
         // !fixedForTutorial 双保险：引导局恒普通（10-12 拍板「每次引导战力一样」），绝不被保底污染。
         // 【2026-11-23】绿档也是低档：白 / 绿都触发保底升稀有，否则绿占 3 成会把保底稀释掉。
-        if (forceAtLeastRare && !fixedForTutorial && rarity != null
+        // 【2026-11-24】第 1 章第 1 关绝对不蓝：保底也不许把白/绿升成稀有（硬闸，双保险）；其余章不受限。
+        if (forceAtLeastRare && !fixedForTutorial && !(chapter == 1 && chapterStage0 == 0) && rarity != null
             && (rarity.Id == "NORMAL" || rarity.Id == "UNCOMMON"))
         {
             var rareRule = FindRarityRule("RARE");
@@ -107,10 +116,19 @@ public static class RiftEquipGenerator
         // 后果：稀有弓在 1-5 能到 8.09×3.6×0.88×1.50≈38.4（今天 Editor.log 实测 ch=1 档=RARE 最终=36.73），
         // 玩家打完 1-5 带着这件进 2-1，看到的就是「2-1 的 40 攻稀有弓」。
         // 正确出口 = 带章上下文的双参版（2026-11-03 方案A：8/10 节章按节数摊满 10 档，不再吃尾档），
-        // 裂隙装备成长走固定 STAGES_PER_GRAND=5（独立玩法，不随路线B主线 subs=10 漂移）。
-        int subsPerGrand = GameConfig.STAGES_PER_GRAND;
+        // 【2026-11-24 主人拍板「修章内不同步」】主线正式关的章内成长改走真源节数
+        // StagesPerGrandOf（现网每章 10 节），与怪物侧 getStatScale 用的同一个 subs 对齐。
+        // 旧写法恒传 STAGES_PER_GRAND=5，命中 GetStageStatScale 的 subs==5 缓坡分支：
+        // 第 6~10 关被钳在 1.18，怪物同期涨到 1.23~1.50 → 章末装备滞后 21.3%(Ch1)/28.5%(Ch2-8)。
+        // 裂隙/副本/竞技场/支线岛仍走固定 5（独立玩法，不随主线节数漂移；进本 stageIdx 恒 0，两者同为 1.00）。
+        int subsPerGrand = chapterStage0 >= 0
+            ? GameConfig.StagesPerGrandOf(chapter)
+            : GameConfig.STAGES_PER_GRAND;
+        // 【2026-11-24 主人拍板「曲线要起伏」】章内倍率改走<b>单调版</b>（取本章历史最高）：
+        // 波浪表在谷关（关4/6/9）会比前一个峰低 9~12%，装备若跟着回落，
+        // 玩家刚打完精英、正觉得变强，转头看到三选一全是垃圾 —— 与奖励兑现直接打架。
         float chapterGrowth = ChapterStatScaleTable.Get(Mathf.Max(1, chapter))
-                              * GameConfig.GetStageStatScale(stageIdx0, subsPerGrand);
+                              * GameConfig.GetStageStatScaleMonotonic(stageIdx0, subsPerGrand);
         float tplAtk = 0f;   // 先赋值：&& 短路时 TryGetTemplateAttack 可能不执行，out 变量需明确赋值
         // 【2026-10-19 主人拍板·方案A】模板锚定只适用于攻击类主属性（ATK / MAGIC_ATK）。
         // 根因：WEAPON_OFFHAND 主属性池 = 攻击:70|攻速:30，卷出「攻速」时旧代码照样把模板攻击值
@@ -309,36 +327,83 @@ public static class RiftEquipGenerator
     ///   传奇列在当日上调基础上**砍半**（1.5/2.5/3.5/3.75/5.25/6.25/7.25），
     ///   NORMAL / RARE 两列零变动。单开界面见传奇概率：Ch2 ≈4.4% / Ch4 ≈10.2% / Ch8 ≈20%。
     /// 【2026-11-23 主人拍板】第 1 章白多蓝少：稀有 20% → 10%（普通 80% → 90%），传奇仍恒 0；Ch2-8 零变动。
-    /// 同日另定：保底稀有升档时取「高一档里最低属性」（见 GenerateOne 的 pityUpgraded 分支）。
+    /// 同日另定：保底升档时取「高一档里最低属性」（见 GenerateOne 的 pityUpgraded 分支）。
+    /// 【2026-11-24 主人拍板】第 1 章章内爬坡：主线关1 蓝0% → 关10 蓝5%（线性），关1 保底也不升蓝。
+    /// 【2026-11-24 主人再拍板】全章统一：每章蓝率 +5%、章内仍 0→5% 线性 —— Ch1 0→5%、Ch2 5→10%……
+    /// Ch8 35→40%；传奇 Ch1 恒0、Ch2 起固定2%；白绿按各章原有权重比等比让位。
+    /// 【2026-11-24 主人再拍板·关型倾斜】主线正式关：Boss 蓝/橙 ×1.60（蓝封顶随关号 50%→55%、橙封顶 4%）、
+    /// 精英 ×1.35、普通 ×0.82；关5/10(Boss)、关3/8(精英)正是波浪曲线四个峰，
+    /// 六关普通回落抵消后全局期望仅 +8% 左右（「还是按原先几率，可适当提高」）。
+    /// chapterStage0=-1 表示非主线（副本/裂隙/竞技场/支线岛），取该章章末上限，零影响。
+    /// 【2026-11-24 主人再拍板】困难 / 噩梦档的精英 / Boss 关再叠难度品质补偿（困难 ×1.10 / 噩梦 ×1.20），
+    /// 普通关三档完全一致 —— 高难度怪更肉，品质也要更值；封顶随难度微升，不整体放水。
     /// </summary>
-    static void ChapterRarityWeights(int chapter, out float wNormal, out float wUncommon,
-                                     out float wRare, out float wLegend)
+    static void ChapterRarityWeights(int chapter, StageType stageType, int chapterStage0, int difficulty,
+                                     out float wNormal, out float wUncommon, out float wRare, out float wLegend)
     {
-        // 【2026-11-23 主人拍板】加「绿色/优秀」档，走「白多 → 绿多 → 蓝多」的过渡：
-        //   Ch1 白 62 / 绿 31 / 蓝 7（蓝极少、且与白绿拉开一档）；Ch2-3 绿爬到峰值 33~33.5（绿多期）；
-        //   Ch4 起白让位给蓝，Ch5 蓝过半（蓝多期），Ch8 蓝 80.75 / 金 7.25（金列一格未动）。
-        //   原则：只拆原白列，蓝/金绝对值的节奏保持（Ch1 蓝依旧个位数，金仍按 10-24 砍半口径）。
-        switch (Mathf.Clamp(chapter, 1, 8))
+        int ch = Mathf.Clamp(chapter, 1, 8);
+        // 各章原有白:绿权重比（只保留比例，绝对值按剩余份额等比让位）。
+        float baseN, baseU;
+        switch (ch)
         {
-            case 2: wNormal = 42f;   wUncommon = 33f;   wRare = 23.5f;  wLegend = 1.5f;  break;
-            case 3: wNormal = 31f;   wUncommon = 33.5f; wRare = 33f;    wLegend = 2.5f;  break;
-            case 4: wNormal = 22f;   wUncommon = 30f;   wRare = 44.5f;  wLegend = 3.5f;  break;
-            case 5: wNormal = 15f;   wUncommon = 25f;   wRare = 56.25f; wLegend = 3.75f; break;
-            case 6: wNormal = 10f;   wUncommon = 19f;   wRare = 65.75f; wLegend = 5.25f; break;
-            case 7: wNormal = 6f;    wUncommon = 14f;   wRare = 73.75f; wLegend = 6.25f; break;
-            case 8: wNormal = 3f;    wUncommon = 9f;    wRare = 80.75f; wLegend = 7.25f; break;
-            default: wNormal = 62f;  wUncommon = 31f;   wRare = 7f;     wLegend = 0f;   break; // 第 1 章：白绿为主，蓝 7%，无传奇
+            case 2: baseN = 42f;  baseU = 33f;   break;
+            case 3: baseN = 31f;  baseU = 33.5f; break;
+            case 4: baseN = 22f;  baseU = 30f;   break;
+            case 5: baseN = 15f;  baseU = 25f;   break;
+            case 6: baseN = 10f;  baseU = 19f;   break;
+            case 7: baseN = 6f;   baseU = 14f;   break;
+            case 8: baseN = 3f;   baseU = 9f;    break;
+            default: baseN = 62f; baseU = 31f;   break;
         }
+        // 蓝：每章 +5%，章内 0→5% 线性。主线取章内关号；非主线取该章章末上限。
+        // 章末关号取真源 StagesPerGrandOf（现网每章 10 节 → 9）；将来改节数自动跟随，不写死魔法数。
+        float lastStage = Mathf.Max(1f, GameConfig.StagesPerGrandOf(ch) - 1);
+        float stage = chapterStage0 < 0 ? lastStage : Mathf.Clamp(chapterStage0, 0, (int)lastStage);
+        float pRare = 0.05f * (ch - 1) + 0.05f * stage / lastStage;
+        // 传奇：第 1 章恒 0，第 2 章起固定 2%（RollRarity 内 Ch1 另有一道强制 0 双保险）。
+        float pLegend = ch <= 1 ? 0f : 0.02f;
+        // 【2026-11-24 主人拍板·关型倾斜】峰关提高品质、谷关回落，整体仍按原几率略提。
+        // chapterStage0>=0 = 主线正式关（局内抽奖与战后结算均满足）；副本/裂隙/竞技场/支线岛不进。
+        // 加密点：Boss 关5/10、精英关3/8 与其血量峰同位置，抽到的装备也形成四个小高潮。
+        if (chapterStage0 >= 0)
+        {
+            float rareMul = 0.82f, legendMul = 1f;
+            if (stageType == StageType.Boss) { rareMul = 1.60f; legendMul = 1.60f; }
+            else if (stageType == StageType.Elite) { rareMul = 1.35f; legendMul = 1.35f; }
+            // 【2026-11-24 主人拍板】困难 / 噩梦的精英 / Boss 关再叠品质补偿：
+            // 高难度怪更肉，只加属性不加品质会「更难却不更值」；普通关三档一律 ×1，不整体放水。
+            int diffTier = Mathf.Clamp(difficulty, 0, 2);
+            if (stageType == StageType.Boss || stageType == StageType.Elite)
+            {
+                float diffRareMul = diffTier == 2 ? 1.20f : (diffTier == 1 ? 1.10f : 1f);
+                rareMul *= diffRareMul;
+                legendMul *= diffRareMul;
+            }
+            // 蓝封顶随章内关号微升（关5≈52% → 关10 55%）：既压住后期泛滥，
+            // 又保证大 Boss 仍是全章最高峰（固定 55% 会把关5/关10 压成同一高度）。
+            // 传奇封顶 4%，防止第 8 章 Boss 一抽橙装泛滥。
+            // 封顶同步随难度微升（困难 +2% / 噩梦 +4%），保证后期 Boss 也体现档位差异。
+            float rareCap = 0.50f + 0.05f * stage / lastStage + 0.02f * diffTier;
+            pRare = Mathf.Clamp(pRare * rareMul, 0f, rareCap);
+            pLegend = Mathf.Clamp(pLegend * legendMul, 0f, 0.04f + 0.005f * diffTier);
+        }
+        // 直接以「目标概率」当权重：RollRarity 归一化后四档概率即此值（和为 1）。
+        wRare = pRare;
+        wLegend = pLegend;
+        float rest = 1f - pRare - pLegend;
+        float nuSum = baseN + baseU;
+        wNormal = rest * baseN / nuSum;
+        wUncommon = rest * baseU / nuSum;
     }
 
-    static RiftEquipTables.RarityRule RollRarity(int chapter)
+    static RiftEquipTables.RarityRule RollRarity(int chapter, StageType stageType, int chapterStage0 = -1, int difficulty = 0)
     {
         var rules = RiftEquipTables.Rarities;
         if (rules == null || rules.Count == 0)
             return FallbackRarity();
 
         // 稀有度唯一真源：章节曲线（ChapterRarityWeights）。勿改回隐藏等级或关卡段权重。
-        ChapterRarityWeights(chapter, out float wN, out float wU, out float wR, out float wL);
+        ChapterRarityWeights(chapter, stageType, chapterStage0, difficulty, out float wN, out float wU, out float wR, out float wL);
         float total = 0f;
         var weights = new float[rules.Count];
         for (int i = 0; i < rules.Count; i++)

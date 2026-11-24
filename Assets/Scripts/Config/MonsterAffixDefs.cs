@@ -80,6 +80,26 @@ public static class MonsterAffixDefs
     // 消费点唯一 = MonsterAffix.Apply；想调手感只改这两个常量。
     public const float FixedAffixHpMul = 6f;
     public const float FixedAffixAtkMul = 2.5f;
+
+    // 【2026-11-24 主人拍板「随章放大就挺好」】词条机制强度按章递增：第 1 章 1.0 → 第 8 章 1.42。
+    // 消费点唯一 = MonsterAffix.Apply：对「减伤 / 攻速 / 移速 / 荆棘反弹 / 吸血 / 暴击率」
+    // 统一按 Mathf.Lerp(1, 原值, grow) 或等比放大（减伤向 0 收敛），血攻防三项乘子不受本系数影响。
+    // 目的：同一只「铁壁」怪第 8 章就是比第 1 章难啃，机制身份不变，玩家不用重学解法。
+    public const float AffixChapterGrowStep = 0.06f;
+    public static float ChapterGrow(int chapter)
+    {
+        int ch = Mathf.Clamp(chapter <= 0 ? 1 : chapter, 1, 8);
+        return 1f + AffixChapterGrowStep * (ch - 1);
+    }
+
+    // 【2026-11-24 主人拍板】表定词条怪血量再补一层温和的随章增长：6 → 第 8 章 ≈ 7.26（+21%）。
+    // 只补这一小截，是为了让「6 刀」缓降到 4~5 刀，而不是掉到 3 刀；不让它变成血牛。
+    public const float FixedAffixHpGrowPerChapter = 0.03f;
+    public static float FixedAffixHpMulFor(int chapter)
+    {
+        int ch = Mathf.Clamp(chapter <= 0 ? 1 : chapter, 1, 8);
+        return FixedAffixHpMul * (1f + FixedAffixHpGrowPerChapter * (ch - 1));
+    }
     public static readonly Def[] All =
     {
         // 【2026-11-10 主人拍板】全部词条效果再加 50%（在 2026-10-26 词缀怪数值之上整体 ×1.5）：

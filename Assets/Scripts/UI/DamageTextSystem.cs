@@ -145,23 +145,25 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
     /// </summary>
     public void SpawnDamageText(Vector3 pos, int damage, bool isCrit, bool victimIsAlly, int hitVfxFacing, DamageElement element)
     {
-        // 只砍「我方打敌方」的紫色暴击：敌方暴击我方（victimIsAlly）仍然每次都弹，警示信息不能省。
+        // 【2026-11-24 主人拍板「暴击放大爆屏」】原逻辑把「我方打敌方」的暴击飘字按 %2 节流 ——
+        // 一半直接 return 丢掉；暴击率只有 5~8%、一关才 4~5 次暴击，再砍一半几乎看不见。
+        // 现改为全部弹出（计数保留，供将来按密度限流用）。敌方暴击我方本就每次全弹，警示不变。
         if (isCrit && !victimIsAlly)
         {
             _critShowCounter++;
-            if (_critShowCounter % 2 != 0) return;
         }
 
         TextKind kind = isCrit
             ? (victimIsAlly ? TextKind.InCrit : TextKind.OutCrit)
             : (victimIsAlly ? TextKind.InNormal : TextKind.OutNormal);
         string text = FormatDamageText(damage, kind);
-        SpawnDirectional(pos, text, kind, victimIsAlly, hitVfxFacing: hitVfxFacing, element: element);
+        // magnitude 传原始伤害值：飘字按量级放大（前期 -10 小字、后期 -1,234 大字）
+        SpawnDirectional(pos, text, kind, victimIsAlly, hitVfxFacing: hitVfxFacing, element: element, magnitude: damage);
     }
 
     string FormatDamageText(int damage, TextKind kind)
     {
-        string num = damage.ToString();
+        string num = FormatWithThousands(damage);
         bool incoming = kind == TextKind.InNormal || kind == TextKind.InCrit;
         bool crit = kind == TextKind.OutCrit || kind == TextKind.InCrit;
         if (incoming && !string.IsNullOrEmpty(incomingPrefix))
@@ -169,6 +171,45 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         if (crit && !string.IsNullOrEmpty(critPrefix))
             num = critPrefix + num;
         return num;
+    }
+
+    /// <summary>
+    /// 千分位分隔（1234 → 1,234）。
+    /// 【2026-11-24 主人拍板「前期 -10、后期 -356，光看数字就该感到在变强」】
+    /// 逗号让位数一眼可数，「破千」那一跳肉眼可见，比纯连排数字更有份量。
+    /// </summary>
+    static string FormatWithThousands(int v)
+    {
+        if (v > -1000 && v < 1000) return v.ToString();
+        bool neg = v < 0;
+        string digits = (neg ? -v : v).ToString();
+        var sb = new System.Text.StringBuilder(digits.Length + 3);
+        int c = 0;
+        for (int i = digits.Length - 1; i >= 0; i--)
+        {
+            sb.Insert(0, digits[i]);
+            if (++c % 3 == 0 && i > 0) sb.Insert(0, ',');
+        }
+        return neg ? "-" + sb : sb.ToString();
+    }
+
+    /// <summary>
+    /// 伤害量级 → 飘字放大倍率（按位数分档，不连续缩放）。
+    /// 【2026-11-24 主人拍板】「后期打一下 -356，虽然打的刀数少，但看到自己一下能掉这么多血也是增长」
+    /// —— 数字本身就是成长反馈，所以要让它<b>看得见地变大</b>。
+    /// <para>选分档而非对数连续缩放：让「破百 / 破千」成为两次明确可感的跳变，
+    /// 同时给 1 位数留出余地（不至于满屏都是巨字把画面盖死）。</para>
+    /// <para>幅度刻意收在 1.28 封顶：飘字本身还有 popOvershoot 1.42~1.68 的弹出放大，
+    /// 两层叠乘过头会糊屏。传 0（治疗/金币/闪避等非伤害）恒 1。全设 1f 即恢复改动前观感。</para>
+    /// </summary>
+    static float MagnitudeScale(int damage)
+    {
+        if (damage <= 0) return 1f;
+        if (damage < 10) return 0.80f;
+        if (damage < 100) return 0.92f;
+        if (damage < 1000) return 1.00f;
+        if (damage < 10000) return 1.16f;
+        return 1.28f;
     }
 
     public void SpawnHealText(Vector3 pos, int amount)
@@ -224,7 +265,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
     float ResolvePopFlashStrength() =>
         GameConfig.COMBAT_JUICE_DAMAGE_TEXT_BOOST ? 0.72f : popFlashStrength;
 
-    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false, int hitVfxFacing = 0, DamageElement element = DamageElement.None)
+    void SpawnDirectional(Vector3 pos, string text, TextKind kind, bool victimIsAlly, bool forceUp = false, int hitVfxFacing = 0, DamageElement element = DamageElement.None, int magnitude = 0)
     {
         GetStyle(kind, out Color color, out int fontSize, out float scale);
         // 火 / 冰附加伤害：飘字整体换成橙 / 蓝（主人 2026-09-26 口径）
@@ -272,7 +313,7 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         inst.flashColor = kind == TextKind.InNormal || kind == TextKind.InCrit
             ? Color.Lerp(color, Color.white, ResolvePopFlashStrength())
             : Color.Lerp(color, Color.white, ResolvePopFlashStrength() * 0.85f);
-        inst.baseScale = scale * worldTextScale * _nextTextScaleMul;
+        inst.baseScale = scale * worldTextScale * _nextTextScaleMul * MagnitudeScale(magnitude);
         _nextTextScaleMul = 1f;
         float popMul = IsCritDamage(kind) ? ResolvePopOvershootCrit() : ResolvePopOvershootNormal();
         inst.popFromScale = inst.baseScale * popMul;

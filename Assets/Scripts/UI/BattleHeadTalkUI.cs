@@ -198,6 +198,18 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// <summary>可被外部直接 yield（TutorialDirector 上跑，不二次 StartCoroutine）。</summary>
     public IEnumerator CoPlayLine(UnitBase speaker, string content, float hold = -1f)
     {
+        // 【2026-11-24 宠物气泡跑左下根因】CoPlayLineAt 直接 yield 本协程，绕过 BeginLine 里的
+        // RefreshPopup → DDOL 气泡 canvas 的 worldCamera 停在旧场景相机；定位却用新相机，
+        // ScreenPointToLocalPointInRectangle 算出的 local 落屏外被 clamp 成左下角。
+        // 统一在这里重绑（BeginLine 那条路径重复调用幂等，不动战斗侧原逻辑）。
+        var bubbleCanvas = GetComponent<Canvas>();
+        if (bubbleCanvas != null)
+        {
+            UICanvasSetup.RefreshPopup(bubbleCanvas, GameConfig.UiSort.StoryDialogue);
+            bubbleCanvas.sortingLayerName = GameConfig.UiSort.TopLayer;
+            bubbleCanvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
+        }
+
         // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001，
         // 装备替换确认弹窗(925)开着时恒被气泡盖住 —— 弹窗在屏期间新台词一律不出（单一出口闸）。
         if (EquipReplaceConfirmUI.IsOpen) yield break;
@@ -305,7 +317,12 @@ public class BattleHeadTalkUI : MonoBehaviour
     void RefreshFollowPosition()
     {
         if (_root == null || !_root.gameObject.activeSelf) return;
-        var uiCam = ResolveUiCamera();
+        // 用【本 canvas 实际渲染的相机】而不是 ResolveUiCamera() 的猜测值：
+        // 两者不一致时 WorldToScreenPoint / ScreenPointToLocalPointInRectangle 用错相机，
+        // 锚点被投到屏幕外 → clamp 到左下角（2026-11-24 根因之一）。
+        var bubbleCanvas = GetComponent<Canvas>();
+        var uiCam = bubbleCanvas != null ? bubbleCanvas.worldCamera : null;
+        if (uiCam == null) uiCam = ResolveUiCamera();
         if (uiCam == null) return;
 
         Vector3 screen;
@@ -324,7 +341,7 @@ public class BattleHeadTalkUI : MonoBehaviour
             {
                 var corners = new Vector3[4];
                 anchorRt.GetWorldCorners(corners);
-                worldTop = (corners[2] + corners[3]) * 0.5f;   // 展示区上沿中点
+                worldTop = (corners[1] + corners[2]) * 0.5f;   // 展示区上沿中点（Unity 角序 0左下 1左上 2右上 3右下）
             }
             else worldTop = _uiAnchor.position;
             screen = RectTransformUtility.WorldToScreenPoint(followCam, worldTop);

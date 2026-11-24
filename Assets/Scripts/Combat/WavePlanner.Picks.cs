@@ -308,6 +308,9 @@ public partial class WavePlanner
     // 配额语义：词条怪从每章第 3 小关登场，之后每关都「时不时出现」且越往后越多（1-2 只 → 3-4 → 5-6）；
     // 只影响正式主线关（引导局 / 金币本 / 徽记本 / 卷轴本 / 裂隙一律不插，行为与改动前一致）。
     readonly List<int> _affixSpritePool = new List<int>();
+    // 【2026-11-24 主人拍板】实际投放池：固定剧情关只留「该怪所有词条种类都已看过」的编号；
+    // 全量池保持原样继续供普通选怪排除用——否则新词条怪会从普通路径漏出，配额槽形同虚设。
+    readonly List<int> _affixDeployPool = new List<int>();
 
     /// <summary>
     /// 铺波末尾调用：按 <see cref="GameConfig.AffixQuotaRange"/> 曲线定本关配额，按各波怪数加权摊成
@@ -317,6 +320,7 @@ public partial class WavePlanner
     void InitAffixQuota(int stageIdx)
     {
         _affixSpritePool.Clear();
+        _affixDeployPool.Clear();
         for (int i = 0; i < _waves.Count; i++)
             if (_waves[i] != null) _waves[i].affixQuotaInWave = 0;
         // 【2026-11-15 主人口径「让裂隙也刷表定词条怪」】正式主线关与无限裂隙都建词条池；
@@ -342,6 +346,28 @@ public partial class WavePlanner
             .Select(m => m.spriteIndex).Distinct().OrderBy(s => s).ToList();
         if (affixSprites.Count == 0) return;
         _affixSpritePool.AddRange(affixSprites);
+        // 【2026-11-24 主人拍板】固定剧情关不刷「新词条怪」：部署池只留全部词条种类都已看过的编号，
+        // 新词条怪留到非剧情关首刷，避免首次登场的左缘图标提示撞剧情气泡。
+        // data 为空按「没看过」处理（与 MonsterAffix.HasUnseenAffixKind 同口径），剧情关不放任何词条怪。
+        if (BattleManager.IsFixedStoryStage(CurrentChapter, stageIdx))
+        {
+            var affixData = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+            foreach (int sp in affixSprites)
+            {
+                var cfg = pool.Find(m => !m.isBoss && m.spriteIndex == sp && !string.IsNullOrEmpty(m.tableAffix));
+                if (cfg == null) continue;
+                var ids = MonsterAffixDefs.ParseAffixList(cfg.tableAffix);
+                bool allSeen = ids != null && ids.Count > 0 && affixData != null;
+                if (allSeen)
+                {
+                    for (int k = 0; k < ids.Count; k++)
+                        if (!affixData.HasSeenAffixKind(ids[k])) { allSeen = false; break; }
+                }
+                if (allSeen) _affixDeployPool.Add(sp);
+            }
+        }
+        else
+            _affixDeployPool.AddRange(affixSprites);
 
         // 【2026-11-15 主人口径「前面少后面多 越往后普通怪越少」】裂隙按绝对层数比例投放，
         // 不能套主线 AffixQuotaRange(关序号)——裂隙层号映射到 0..4 的输入域，前 18 层恒 0 配额。
@@ -412,7 +438,7 @@ public partial class WavePlanner
         }
         foreach (var kv in perWaveQuota)
             if (kv.Value > 0) _waves[kv.Key].affixQuotaInWave = kv.Value;
-        GamePerf.Log($"[WavePlanner] 词条怪配额 {(endlessQuotaMode ? "裂隙第" + bm.EndlessRiftStage + "层 比例" + ratio : "ch" + CurrentChapter + " 第" + (stageIdx + 1) + "关")} quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");
+        GamePerf.Log($"[WavePlanner] 词条怪配额 {(endlessQuotaMode ? "裂隙第" + bm.EndlessRiftStage + "层 比例" + ratio : "ch" + CurrentChapter + " 第" + (stageIdx + 1) + "关")} quota={assigned} 池=[{string.Join(",", _affixSpritePool)}] 投放=[{string.Join(",", _affixDeployPool)}] 每波=[{string.Join(",", _waves.Select(w => w.affixQuotaInWave))}]");
     }
 
     /// <summary>单波词条怪名额上限：主线按关递增（11-15 19:2x 拍板「数量由少变多」，覆盖 11-14 恒 1）；
@@ -435,8 +461,9 @@ public partial class WavePlanner
     {
         template = null;
         spriteIndexOverride = 1;
-        if (ConfigManager.Instance == null || _affixSpritePool.Count == 0) return false;
-        int sprite = _affixSpritePool[UnityEngine.Random.Range(0, _affixSpritePool.Count)];
+        // 【2026-11-24】投放走部署池（剧情关已剔除新词条怪）；全量池只用于普通选怪排除。
+        if (ConfigManager.Instance == null || _affixDeployPool.Count == 0) return false;
+        int sprite = _affixDeployPool[UnityEngine.Random.Range(0, _affixDeployPool.Count)];
         var pool = ConfigManager.Instance.GetWaveMonsterPool(CurrentChapter, stageIdx);
         if (pool == null || pool.Count == 0) return false;
         template = pool.Find(m => !m.isBoss && m.spriteIndex == sprite && !string.IsNullOrEmpty(m.tableAffix));

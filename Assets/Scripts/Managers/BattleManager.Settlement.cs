@@ -2293,6 +2293,9 @@ public partial class BattleManager
             ResourceWallet.Add(ResourceWallet.ResourceType.Diamond,
                 StageClearRewardDirector.BossChestDiamond, save: false, notify: false);
             GlobalToastUI.Show($"Boss 关 钻石 +{StageClearRewardDirector.BossChestDiamond}", true);
+            // 【2026-11-24 主人拍板「Boss 钻石也按奖励发放」】跳过宝箱链也要进胜利奖励格
+            RunStats?.AddActivityReward("钻石", StageClearRewardDirector.BossChestDiamond,
+                CommonIconSprites.Load("icon_diamond_blue"));
         }
     }
 
@@ -2473,6 +2476,12 @@ public partial class BattleManager
         // 每关通关只写回「本局获得金币」，抽奖币池按现值结转下一关（不重置回基线）——
         // 否则本关抽奖花销被退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）
         PersistBattleGold(resetPool: false);
+        // 【2026-11-24 主人报「弹胜利界面时没有显示天赋石道具」】胜利结果界面读 RunStats.TalentGained，
+        // 该字段原本只在局末 FillSettlementSnapshot（Death.cs:538）赋值 → 通关先播的胜利界面恒 0 不出格。
+        // 与金币同口径，此处提前按钱包快照差补一次；局末 FillSettlementSnapshot 会重算同值，幂等无副作用。
+        var victorySaveData = SaveSystem.Instance?.Data;
+        if (victorySaveData != null)
+            RunStats.TalentGained = Mathf.Max(0, victorySaveData.talentPoints - _talentAtRunStart);
         // 冒险页「获得奖励」弹窗：主线小关首次通关记一条本关实际掉落。
         // 必须夹在 PersistBattleGold（关卡金先进 GoldEarned）与 OnStageComplete（写 clearedStages）之间，
         // 否则首通判定/金币差值都会少一笔（见 RecordStageRewardNoticeIfFirstClear）。

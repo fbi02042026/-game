@@ -16,10 +16,14 @@ using UnityEngine;
 /// </summary>
 public static class StageStatScaleTable
 {
-    /// <summary>与表 1:1：第 1 关 1.00 → 第 10 关（Boss）1.32。</summary>
+    /// <summary>
+    /// 与表 1:1（2026-11-24 已对齐波浪曲线）。
+    /// 旧值结尾是 1.32，而 csv 早已涨到 1.50 —— 表缺失时最后一关会骤降 12%，属过时兜底，今回一并修齐。
+    /// 顺序必须与 csv 逐行一致：引子 / 峰1 / 谷1 / 峰2 / 谷2 / 爬升 / 峰3 / 谷3 / 顶峰。
+    /// </summary>
     public static readonly float[] Fallback =
     {
-        1.00f, 1.03f, 1.06f, 1.10f, 1.14f, 1.18f, 1.22f, 1.25f, 1.27f, 1.32f
+        1.00f, 1.06f, 1.22f, 1.08f, 1.30f, 1.14f, 1.20f, 1.38f, 1.26f, 1.50f
     };
 
     static readonly Dictionary<int, float> _byStage = new Dictionary<int, float>();

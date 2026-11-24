@@ -31,6 +31,7 @@ public static partial class SlgMapUI
     static RectTransform _mapContent;    // 地图内容（缩放 + 平移的对象）
     static RectTransform _pointLayer;
     static RectTransform _marchLayer;    // 行军队伍头像层
+    static RectTransform _battleLayer;   // 战斗头像对冲层（挂 MapContent 下，随缩放平移）
     static SlgMapUIHost _host;           // 协程 + 拖拽宿主（MonoBehaviour）
     static float _zoom = ZoomDefault;
 
@@ -73,7 +74,7 @@ public static partial class SlgMapUI
             Object.Destroy(_canvas.gameObject);
             _canvas = null;
         }
-        _viewRt = null; _mapContent = null; _pointLayer = null; _marchLayer = null; _host = null;
+        _viewRt = null; _mapContent = null; _pointLayer = null; _marchLayer = null; _battleLayer = null; _host = null;
         _pointGos.Clear(); _marchGos.Clear();
         _modal = null;
         ResetSelect(); ResetHud();
@@ -136,6 +137,7 @@ public static partial class SlgMapUI
         // 点位层 / 行军层
         var pt = NewRect("Points", content); Stretch(pt); _pointLayer = pt;
         var mg = NewRect("Marches", content); Stretch(mg); _marchLayer = mg;
+        var bt = NewRect("Battle", content); Stretch(bt); _battleLayer = bt;
 
         _host.content = content;
         _host.view = _viewRt;
@@ -147,7 +149,7 @@ public static partial class SlgMapUI
         BuildMarchPanel(_canvas.transform);      // 右侧固定倒计时栏
         BuildHomeButton(_canvas.transform);      // 左下角主城图 = 返回游戏主界面
         BuildSelectPanel(_canvas.transform);     // 点地点后的选兵界面
-        BuildBattleOverlay(_canvas.transform);
+        BuildBattleOverlay();
         BuildModal();
     }
 

@@ -248,6 +248,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
         // 【2026-11-16 主人「被重斩劈死的怪要有击退效果」】只对重斩这一刀加致死击退，其余 AOE 技能行为不变。
         // 运行时 skillId 是 ally_* 别名 → 先求真 id 再比（与触发条件表同口径）。
         bool deathKb = PlayerSkillDefs.ResolveRealSkillId(skill.skillId) == "heavy_cleave";
+        // 【2026-11-24 主人拍板】技能命中 >=3 目标时补一次震屏：AOE 清场的爽点放大。
+        // 只我方施法者触发，单/双目标不震（避免每下都晃）；触发频率 = 技能释放次数，天然稀疏。
+        int aoeHitCount = enemies.Count;
         foreach (var enemy in enemies)
         {
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
@@ -261,6 +264,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
                 enemy.ApplyDeathKnockback(kbDir, GameConfig.HEAVY_CLEAVE_DEATH_KNOCKBACK);
             }
         }
+        // 【2026-11-24 主人拍板】AOE 命中 >=3 目标 -> 震一次屏（只我方施法者）。
+        if (aoeHitCount >= 3 && caster != null && caster.isAlly)
+            CombatJuice.Shake(0.15f, 0.22f);
     }
 
     private void ExecuteBuff(ActiveSkill skill, UnitBase caster)

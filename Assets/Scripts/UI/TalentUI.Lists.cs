@@ -114,13 +114,14 @@ public partial class TalentUI
         // 滚动同步 WireScrollSync 仍在末尾，不动。
         WireScroll(leftScroll, leftContent);
         WireScroll(rightScroll, rightContent);
+        // 【2026-11-24 主人拍板】左右滑动列表当作同一个：右列视口世界矩形对齐左列，
+        // 上下裁剪边界完全一致（预制体里 LeftColumn/RightColumn 的高度不同，视口天然差几像素）。
+        AlignRightViewportToLeft();
 
-        // 【2026-11-23 主人拍板】右列 R1（reverseArrangement 下 _rightViews[0] 在视野底部）锚左列第 5 行。
-        // 【本轮修正】整列平移 = 挪 RightScroll 节点自身的 anchoredPosition.y（视口一起动）：
-        // 旧实现改 padding.bottom，会把右列内容撑高 → ScrollRect 滚动基准被改 → 右侧滑不动；
-        // 更早只挪 Opt_0 → 图标动、文字/锁不动 → 字图分家。两处都已废。
-        // 挪整个 Scroll 节点不改 content 尺寸，行的图标/文字/锁/连线一起平移，滚动照旧。
-        // 世界 y 差现读、换算到父节点本地单位，不写死坐标。
+        // 【2026-11-24 修】R1 仍锚左列第 5 行，但不再挪 RightScroll 节点：
+        // Viewport 上的 Mask 是 Scroll 的子节点，整列平移会把视口和裁剪边界一起挪出面板，
+        // 表现为长连线穿出屏幕顶且不会被滑动列表裁掉。改为只平移右列每行的直接子节点
+        // （行根仍归 VerticalLayoutGroup 排布，content 尺寸/滚动基准不变），视口与 Mask 留原位。
         int rightFirstIndex = (rightLevelRows - 1) * TalentDefs.LeftPerRow;   // 第 5 行首格（0-based 12）
         if (_leftViews.Count > rightFirstIndex && _rightViews.Count > 0 && rightScroll != null)
         {
@@ -136,13 +137,23 @@ public partial class TalentUI
                 {
                     float scaleY = scrollRt.parent != null ? scrollRt.parent.lossyScale.y : 1f;
                     if (Mathf.Abs(scaleY) < 0.001f) scaleY = 1f;
-                    scrollRt.anchoredPosition = new Vector2(scrollRt.anchoredPosition.x,
-                        scrollRt.anchoredPosition.y + dy / scaleY);
+                    float rowOffsetY = dy / scaleY;
+                    foreach (var rv in _rightViews)
+                    {
+                        if (rv.root == null) continue;
+                        for (int ci = 0; ci < rv.root.transform.childCount; ci++)
+                        {
+                            var child = rv.root.transform.GetChild(ci) as RectTransform;
+                            if (child == null) continue;
+                            child.anchoredPosition = new Vector2(child.anchoredPosition.x,
+                                child.anchoredPosition.y + rowOffsetY);
+                        }
+                    }
                     Canvas.ForceUpdateCanvases();
                 }
             }
         }
-        StretchRightLinkLines();   // 行距/首行对齐落位后重算连线两段，两端仍精确顶卡边
+        StretchRightLinkLines();   // 线 y 从已平移的 Opt_0 现读，偏移自动带上；视口不动＝超出的线被 Mask 裁掉
 
         // 【2026-11-19 三列网格】左探出适配是单列时代产物，Grid 居中排版下跳过（否则会把 grid 强改左对齐）。
 
@@ -392,6 +403,31 @@ public partial class TalentUI
         }
         // 内容比视口高才能滑；自下而上时滚到底，最先解锁的在视野底部
         scroll.verticalNormalizedPosition = 0f;
+    }
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板】右列视口与左列视口用同一个世界矩形：只改 rightScroll 的 y/sizeDelta.y，
+    /// 不动 x、不动 content、不动 Mask 组件；两列的上下裁剪边界由此完全一致。
+    /// 左右 Column 的本地尺寸不同，直接抄 anchoredPosition 会偏移，按世界边界反算到 RightColumn 本地。
+    /// </summary>
+    void AlignRightViewportToLeft()
+    {
+        if (leftScroll == null || rightScroll == null) return;
+        var lvp = leftScroll.viewport as RectTransform;
+        if (lvp == null) return;
+        var rcol = rightScroll.transform.parent as RectTransform;
+        if (rcol == null) return;
+
+        Canvas.ForceUpdateCanvases();
+        var lb = lvp.TransformPoint(new Vector3(0f, lvp.rect.yMin, 0f));
+        var lt = lvp.TransformPoint(new Vector3(0f, lvp.rect.yMax, 0f));
+        var bl = rcol.InverseTransformPoint(lb);
+        var tl = rcol.InverseTransformPoint(lt);
+        float h = Mathf.Max(1f, tl.y - bl.y);
+        var rt = rightScroll.transform as RectTransform;
+        rt.sizeDelta = new Vector2(rt.sizeDelta.x, h - rcol.rect.height);
+        rt.anchoredPosition = new Vector2(rt.anchoredPosition.x,
+            (tl.y + bl.y) * 0.5f - rcol.rect.center.y);
     }
 
     // 【2026-11-19 主人拍板】左右栏双向滚动同步：滑一边另一边跟着动。

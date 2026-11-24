@@ -83,6 +83,10 @@ public class TutorialHintUI : MonoBehaviour
     const float BubbleBannerWidth = 400f;
     const float BubbleBannerHeight = 192f;
 
+    // 【2026-11-24 主人「把箭头旋转90对着图标」】贴屏幕边引导专用：整框旋转 ±90°、尖角转到侧边正对目标。
+    /// <summary>尖角尖端到目标中心的水平留白（逻辑像素）。</summary>
+    const float SideTipGap = 8f;
+
     // ── 一次性自定义底框（【2026-10-31 主人拍板】抽奖引导用「像素风空白对话框指针」当底框）──
     /// <summary>下一次 Show 用的自定义底框；null = 用默认引导底框。Hide 时自动清空，其余引导不受影响。</summary>
     Sprite _bannerSpriteOverride;
@@ -156,6 +160,11 @@ public class TutorialHintUI : MonoBehaviour
         public float BubbleWidth;
         /// <summary>【2026-11-16】本条气泡底框高（0 = 用全局 BubbleBannerHeight 192）。</summary>
         public float BubbleHeight;
+        /// <summary>【2026-11-24 主人「把箭头旋转90对着图标」】一次性「气泡侧放」：
+        /// 整框旋转 ±90°（与「尖角朝上」的 scale 镜像同源，这里改 rotation），尖角从底边转到左/右侧；
+        /// 目标在屏幕左半 → 气泡落其右侧、尖角朝左，右半反之。贴边目标不再因出屏夹取把尖角推偏。
+        /// 只作用于带此标志的一条 Show，Hide 随 layout 清空，其余引导零影响。</summary>
+        public bool SideTipToTarget;
     }
 
     HintLayout? _activeLayout;
@@ -175,6 +184,12 @@ public class TutorialHintUI : MonoBehaviour
     float CurBubbleHeight => _activeLayout.HasValue && _activeLayout.Value.BubbleHeight > 0f
         ? _activeLayout.Value.BubbleHeight : BubbleBannerHeight;
 
+    /// <summary>本条是否侧放：带 SideTipToTarget 的气泡、且不与「尖角朝上」叠加（两者互斥）。</summary>
+    bool SideTip => _bannerSpriteOverride != null && _activeLayout.HasValue
+        && _activeLayout.Value.SideTipToTarget && !_bubblePointUpOnce;
+    /// <summary>目标在屏幕左半 → 气泡放右侧、尖角朝左；右半反之。</summary>
+    static bool SideBubbleOnRight(float targetX) => targetX <= 0f;
+
     /// <summary>Show 时按 override 换底框；没有 override 但上次挂过 override → 还原默认底框。</summary>
     void ApplyBannerSpriteForShow()
     {
@@ -186,7 +201,10 @@ public class TutorialHintUI : MonoBehaviour
             // 九宫格拉宽会把底部尖角横向拉成宽扁三角，「指向按钮」就废了 —— 气泡按原图比例等比放大，
             // 尺寸由 PlaceBanner 的气泡分支给（宽=原宽×2，高按原比例）。
             _bannerImage.type = Image.Type.Simple;
-            _bannerImage.preserveAspect = true;
+            // 【2026-11-24 主人「旋转对了但要拉伸，高窄点宽度拉长」】侧放时气泡局部 rect 是竖的
+            //（宽 130 × 高 270），旋转 90° 后在屏幕上横过来变 270 宽 × 130 高 —— 图片必须非等比
+            // 铺满 rect，否则 preserveAspect 会把横图缩成竖 rect 中一条细横带。普通气泡照旧等比。
+            _bannerImage.preserveAspect = !SideTip;
             _bannerImage.color = Color.white;
             // 【2026-11-16】尖角朝上：整条 banner localScale.y=-1 镜像（底图尖角从底挪到顶）；
             // 文字是 banner 子节点会被一起镜像，故文字自己再 localScale.y=-1 反向补翻，保持正立。
@@ -552,7 +570,7 @@ public class TutorialHintUI : MonoBehaviour
         if (wasHidden || !string.Equals(prevHint, _label != null ? _label.text : ""))
             // 【2026-11-16】方案 b：尖角朝上气泡不播展开动画 —— UpdateOpenMotion 会覆写 localScale，
             // 会把镜像用的 -1 冲掉；_openT 直接置 1 跳过动画。
-            _openT = (_bannerSpriteOverride != null && _bubblePointUpOnce) ? 1f : 0f;
+            _openT = (_bannerSpriteOverride != null && (_bubblePointUpOnce || SideTip)) ? 1f : 0f;
         _follow = highlight;
         // 换了目标就丢掉旧矩形：避免新目标还没量到时，横幅短暂停在旧目标的位置上
         if (targetChanged) _hasLastFollowRect = false;
@@ -652,6 +670,16 @@ public class TutorialHintUI : MonoBehaviour
         _hasLastFollowRect = false;
         _openT = 1f;
         if (_bannerRt != null) _bannerRt.localScale = Vector3.one;
+        // 【2026-11-24】侧放旋转 / 中心锚点复位：不还原会串到下一条引导（含普通横幅）
+        if (_bannerRt != null) _bannerRt.localRotation = Quaternion.identity;
+        if (_label != null)
+        {
+            var lrt = _label.rectTransform;
+            lrt.localRotation = Quaternion.identity;
+            lrt.anchorMin = Vector2.zero;
+            lrt.anchorMax = Vector2.one;
+            lrt.pivot = new Vector2(0.5f, 0.5f);
+        }
         ForceClearBlockers();
         HidePointer();
         RestoreDefaultSort();
@@ -905,9 +933,22 @@ public class TutorialHintUI : MonoBehaviour
             width = CurBubbleWidth;
             bannerH = CurBubbleHeight;
             if (target.HasValue)
-                x = Mathf.Clamp(target.Value.x,
-                                root.rect.xMin + width * 0.5f + 8f,
-                                root.rect.xMax - width * 0.5f - 8f);
+            {
+                if (SideTip)
+                {
+                    // 侧放：整框旋 90°，屏幕显示宽 = 原高度；尖角在侧边正中，
+                    // 气泡中心按「显示宽/2 + 留白」推开，尖角即落在目标中心旁 SideTipGap。
+                    float displayW = bannerH;
+                    x = target.Value.x + (SideBubbleOnRight(target.Value.x) ? 1f : -1f)
+                        * (displayW * 0.5f + SideTipGap);
+                    x = Mathf.Clamp(x, root.rect.xMin + displayW * 0.5f + 4f,
+                                       root.rect.xMax - displayW * 0.5f - 4f);
+                }
+                else
+                    x = Mathf.Clamp(target.Value.x,
+                                    root.rect.xMin + width * 0.5f + 8f,
+                                    root.rect.xMax - width * 0.5f - 8f);
+            }
         }
         _bannerRt.anchorMin = _bannerRt.anchorMax = new Vector2(0.5f, 0.5f);
         _bannerRt.pivot = new Vector2(0.5f, 0.5f);
@@ -925,8 +966,27 @@ public class TutorialHintUI : MonoBehaviour
             // 也跟着镜像（+offsetMin.y 变成屏幕下方），故尖角朝上时 lift 取 +BubbleTextLift 才是原来的屏幕位移。
             float lift = _bannerSpriteOverride != null
                 ? (_bubblePointUpOnce ? BubbleTextLift : BubbleTextLift) * (bannerH / BubbleBannerHeight) : 0f;
-            lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
-            lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
+            // 【2026-11-24】侧放时整框旋 90°，文字节点反向补翻后其局部轴 = 屏幕轴：
+            // 中心锚点 + 屏幕尺寸（旋转后屏幕上 = 270 宽 × 130 高的横向气泡）。
+            // 文字整体沿屏幕水平方向让出 CurPadX 给侧边尖角；父旋转 ∓90° 时屏幕水平 = 父局部 ±y，
+            // 两种选边方向都恰是父局部 y 增大，故 anchoredPosition.y 统一取 +CurPadX。
+            if (SideTip && target.HasValue)
+            {
+                float screenW = bannerH - CurPadX * 2f;
+                float screenH = width - CurPadY * 2f;
+                lrt.anchorMin = lrt.anchorMax = new Vector2(0.5f, 0.5f);
+                lrt.pivot = new Vector2(0.5f, 0.5f);
+                lrt.sizeDelta = new Vector2(screenW, screenH);
+                lrt.anchoredPosition = new Vector2(0f, CurPadX);
+            }
+            else
+            {
+                lrt.anchorMin = Vector2.zero;
+                lrt.anchorMax = Vector2.one;
+                lrt.pivot = new Vector2(0.5f, 0.5f);
+                lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
+                lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
+            }
         }
 
         bool hasText = _label != null && !string.IsNullOrEmpty(_label.text);
@@ -938,22 +998,47 @@ public class TutorialHintUI : MonoBehaviour
             // 0 = 走原默认 0.32f，其余引导观感零变化。
             float yRatio = _bannerNoTargetYRatioOnce > 0f ? _bannerNoTargetYRatioOnce : 0.32f;
             _bannerRt.anchoredPosition = new Vector2(x, root.rect.height * yRatio);
+            // 【2026-11-24】侧放是有目标的一次性形态；无目标一律回正，防旋转/锚点串到别的引导
+            _bannerRt.localRotation = Quaternion.identity;
+            if (_label != null)
+            {
+                var lrt = _label.rectTransform;
+                lrt.localRotation = Quaternion.identity;
+                lrt.anchorMin = Vector2.zero;
+                lrt.anchorMax = Vector2.one;
+                lrt.pivot = new Vector2(0.5f, 0.5f);
+            }
             return;
         }
 
         float half = bannerH * 0.5f;
-        // 手在按钮上方时，横幅要让开整只手，否则字压在手背上
-        // 【2026-11-16】尖角朝上：气泡摆到目标下方（target.Value.y 此刻是目标上沿），尖角指上方按钮
         float y;
-        if (_bubblePointUpOnce)
-            y = target.Value.y - 24f - half;
+        if (SideTip)
+        {
+            // 侧放：旋转后屏幕高 = 原宽度(130)，横向宽扁 → 整框可以留在屏内，尖角在侧边中央对准目标中心。
+            float displayHalf = width * 0.5f;
+            y = (target.Value.y + targetTop) * 0.5f;
+            y = Mathf.Clamp(y, bot + displayHalf + 12f, top - displayHalf - 12f);
+            float angle = SideBubbleOnRight(target.Value.x) ? -90f : 90f;
+            _bannerRt.localRotation = Quaternion.Euler(0f, 0f, angle);
+            if (_label != null) _label.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -angle);
+        }
         else
         {
-            y = targetTop + 24f + extraTopClearance + half;
-            if (y + half > top - 12f)
+            _bannerRt.localRotation = Quaternion.identity;
+            if (_label != null) _label.rectTransform.localRotation = Quaternion.identity;
+            // 手在按钮上方时，横幅要让开整只手，否则字压在手背上
+            // 【2026-11-16】尖角朝上：气泡摆到目标下方（target.Value.y 此刻是目标上沿），尖角指上方按钮
+            if (_bubblePointUpOnce)
                 y = target.Value.y - 24f - half;
+            else
+            {
+                y = targetTop + 24f + extraTopClearance + half;
+                if (y + half > top - 12f)
+                    y = target.Value.y - 24f - half;
+            }
+            y = Mathf.Clamp(y, bot + half + 12f, top - half - 12f);
         }
-        y = Mathf.Clamp(y, bot + half + 12f, top - half - 12f);
         _bannerRt.anchoredPosition = new Vector2(x, y);
     }
 

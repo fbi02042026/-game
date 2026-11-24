@@ -220,8 +220,8 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         if (victim.isAlly)
             amp = isCrit ? 0.09f : 0.06f;
         else
-            amp = isCrit ? 0.08f : 0.04f;
-        cam.AddShake(amp, isCrit ? 0.14f : 0.12f);
+            amp = isCrit ? 0.12f : 0.04f;
+        cam.AddShake(amp, isCrit ? 0.17f : 0.12f);
     }
 
     void PlayHitSfx(UnitBase victim, bool isCrit)

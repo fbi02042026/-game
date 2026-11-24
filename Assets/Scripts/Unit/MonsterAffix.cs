@@ -49,7 +49,7 @@ public class MonsterAffix : MonoBehaviour
             comp._owner = m;
         }
         comp.ResetState();
-        comp.Apply(MonsterAffixDefs.Roll(chapter), m);
+        comp.Apply(MonsterAffixDefs.Roll(chapter), m, chapter);
         return comp;
     }
 
@@ -58,7 +58,7 @@ public class MonsterAffix : MonoBehaviour
     /// 与 <see cref="RollAndAttach"/> 互斥：精英/Boss/签名怪仍走掷骰（调用方在 Monster.Init 里分流）。
     /// 复用语义同 RollAndAttach：Init 前置 ResetState，这里重置后重挂。ids 为空返回 null（不挂组件）。
     /// </summary>
-    public static MonsterAffix AttachFixed(Monster m, List<MonsterAffixId> ids)
+    public static MonsterAffix AttachFixed(Monster m, List<MonsterAffixId> ids, int chapter)
     {
         if (m == null || ids == null || ids.Count == 0) return null;
         var comp = m.GetComponent<MonsterAffix>();
@@ -69,7 +69,7 @@ public class MonsterAffix : MonoBehaviour
         }
         comp.ResetState();
         comp.VisualTinted = true; // 表定词缀怪上色，让玩家一眼看出「这只不一样」
-        comp.Apply(ids, m);
+        comp.Apply(ids, m, chapter);
         comp.ApplyTint();
         return comp;
     }
@@ -92,7 +92,7 @@ public class MonsterAffix : MonoBehaviour
         VisualTinted = false;
         if (hadTint && _owner != null)
             _owner.ClearAffixTint();
-    }    void Apply(List<MonsterAffixId> ids, Monster m)
+    }    void Apply(List<MonsterAffixId> ids, Monster m, int chapter)
     {
         _ids.Clear();
         if (ids == null || ids.Count == 0) return;
@@ -110,6 +110,21 @@ public class MonsterAffix : MonoBehaviour
             if (d.LeechRatio > LeechRatio) LeechRatio = d.LeechRatio;
             if (d.CritChance > CritChance) CritChance = d.CritChance;
             CritDamageMul = Mathf.Max(CritDamageMul, d.CritDamageMul);
+        }
+        // 【2026-11-24 主人拍板「随章放大」】词条机制强度按章递增（第 1 章 1.0 → 第 8 章 1.42）：
+        // 减伤向 0 收敛（0.625 → 0.468）、攻速/移速增益放大、荆棘/吸血/暴击率等比放大并封顶。
+        // 只放大「机制强度」，血攻防三项走下方 HpMul / AtkMul / DefMul 各自路径，不在此处叠。
+        {
+            float grow = MonsterAffixDefs.ChapterGrow(chapter);
+            if (grow > 1.0001f)
+            {
+                taken = Mathf.Lerp(1f, taken, grow);
+                atkSpeed = Mathf.Lerp(1f, atkSpeed, grow);
+                moveSpeed = Mathf.Lerp(1f, moveSpeed, grow);
+                ThornsRatio *= grow;
+                LeechRatio = Mathf.Min(0.90f, LeechRatio * grow);
+                CritChance = Mathf.Min(0.60f, CritChance * grow);
+            }
         }
         DamageTakenMul = taken;
 
@@ -140,7 +155,7 @@ public class MonsterAffix : MonoBehaviour
             // 跟着当前关的小怪一起爬坡；不取第一章表值、不写死常量。
             if (VisualTinted)
             {
-                hpMul *= MonsterAffixDefs.FixedAffixHpMul;
+                hpMul *= MonsterAffixDefs.FixedAffixHpMulFor(chapter);
                 atkMul *= MonsterAffixDefs.FixedAffixAtkMul;
             }
             if (!Mathf.Approximately(hpMul, 1f))

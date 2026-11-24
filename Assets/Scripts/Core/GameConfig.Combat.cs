@@ -837,6 +837,27 @@ public static partial class GameConfig
     }
 
     /// <summary>
+    /// <b>装备产出专用</b>：章内爬坡的<b>单调版</b>（取本章到此为止的最高档）。
+    /// <para>【2026-11-24 主人拍板「曲线要有起伏」】stage_stat_scale 改成波浪（峰/谷交替）后，
+    /// 装备若直接读波浪值，谷关（关4/6/9）掉的装备会比刚打完的峰关更差 ——
+    /// 玩家在关4 看到的三选一全是垃圾，观感是「越打装备越烂」，与「打完精英变强了」直接打架。</para>
+    /// <para>语义：装备水平 = <b>你已经到达过的最高难度</b>。打过关3 精英之后，关4 起掉的装备
+    /// 一律按 1.22 算，不会因为进了谷就回退；到关5 再抬到 1.30，依此类推。</para>
+    /// <para>只给 <c>RiftEquipGenerator</c> 用；怪物侧走波浪版 <see cref="GetStageStatScale(int,int)"/>。</para>
+    /// </summary>
+    public static float GetStageStatScaleMonotonic(int stageIndex0Based, int subsPerGrand)
+    {
+        if (stageIndex0Based < 0) stageIndex0Based = 0;
+        float best = 0f;
+        for (int i = 0; i <= stageIndex0Based; i++)
+        {
+            float v = GetStageStatScale(i, subsPerGrand);
+            if (v > best) best = v;
+        }
+        return best > 0f ? best : GetStageStatScale(stageIndex0Based, subsPerGrand);
+    }
+
+    /// <summary>
     /// <b>怪物属性总倍率的唯一出口</b> = 章倍率 × 章内倍率。
     /// <para>2026-10-05 主人拍板：难度曲线「每章都上升、有高有低，章内关卡也是如此」。
     /// 拆成两张表（chapter_stat_scale / stage_stat_scale）后，<b>相乘只有这一处</b> ——
@@ -847,6 +868,26 @@ public static partial class GameConfig
     public static float GetStatScale(int gameChapter, int stageIndex0Based)
     {
         return GetChapterStatScale(gameChapter) * GetStageStatScale(stageIndex0Based);
+    }
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板「第一关对齐引导关、缓坡过渡，不要 1-1 就 1 刀」】
+    /// 第 1 章前 2 关的<b>血量过渡系数</b>，乘在 <see cref="MONSTER_HP_GLOBAL_MUL"/> 之上；
+    /// 只作用于主线正式关普通小怪（门禁在 Monster.Init：formalMainRun &amp;&amp; !endlessRift &amp;&amp; !isTutorialRun）。
+    /// <para>目标：引导普通怪 38~40 血，正式关 1-1 对齐同一水平 —— 玩家进战攻 21~29、
+    /// 一击 20.6~28.4，≈40 血正好稳定 2 刀，断崖变坡道；1-2 回落到 ≈28~30 血（1~2 刀）；
+    /// 1-3 起交给既有 <see cref="LATE_MOB_HP_MUL"/> 1.3 与原曲线，1-4 及以后完全恢复原值。</para>
+    /// 实测微调只改这两个数；两者设成 1f 即完全恢复改动前手感。
+    /// </summary>
+    public static float EarlyChapterHpCurveMul(int gameChapter, int stageIndex0Based)
+    {
+        if (gameChapter != 1) return 1f;
+        switch (stageIndex0Based)
+        {
+            case 0: return 3.0f;   // 1-1：≈39~41 血，稳定 2 刀（对齐引导）
+            case 1: return 2.0f;   // 1-2：≈28~30 血，1~2 刀
+            default: return 1f;    // 1-3 起：交回 LATE_MOB_HP_MUL / 原曲线
+        }
     }
 
     // ===== 【2026-10-31 B2 落地】篇内多座大关的爬坡 =====
@@ -891,7 +932,17 @@ public static partial class GameConfig
     /// 只作用于第一章主线；2~8 章仍走 GRAND_WALL_STEP，副本/裂隙/支线 stageIdx 恒 0 取 [0]=1f 零影响。
     /// 想调手感只改本数组；实跑后按「Boss 挥几刀/剩多少血」回标。
     /// </summary>
-    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.10f, 1.14f, 1.18f, 1.22f, 1.27f, 1f };
+    // 【2026-11-24 主人拍板「曲线要有峰有谷，且下个高潮比上一个更高」】关 6~9 的逐关递增归 1：
+    //   旧值 1.14/1.18/1.22/1.27 是给「直线爬坡」补味道的，现在 stage_stat_scale 已经是波浪
+    //   （关6 谷2 1.14 / 关7 1.20 / 关8 峰3 1.38 / 关9 谷3 1.26），两层同向叠乘后实算：
+    //     关8 精英 1.38×1.22 = 1.684、关9 普通 1.26×1.27 = 1.600，而关10 大 Boss 只有 1.50×1.00 = 1.500
+    //   → 关 9 比章末大 Boss 还厚，「大高潮收尾」直接失效（关9 成最高点）。
+    //   归 1 之后：关3 精英 1.22 → 关8 精英 1.38（精英渐强）、关5 小Boss 1.30 → 关10 大Boss 1.50（Boss 渐强），
+    //   每个峰后面都紧接谷（关4 1.08 / 关6 1.14 / 关9 1.26），关10 重新成为全章最高。
+    //   本数组只保留关 5（半程小 Boss）的 +10% 卡点；关 10 维持 1f ——
+    //   11-18「Boss 血薄攻高、看得到血条一路掉」口径不变，关10 的难度仍走 CH1_FINAL_BOSS_ATK_DEV（只加攻击）。
+    //   要恢复旧手感把 1f 按旧值填回即可。
+    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.10f, 1f, 1f, 1f, 1f, 1f };
 
     /// <summary>
     /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
@@ -958,8 +1009,13 @@ public static partial class GameConfig
     //   防 = 精英关 +5%、Boss 关 +6%。
     // 篇级大高潮不在这里（座5 半程墙 / 座10 章末墙 +10% 已有 GetGrandWallBonus）。
     // 唯一消费方 = Monster.Init 写 attr 三处（血/攻/防）；裂隙 / 副本 / 支线岛 / 引导不吃。
-    /// <summary>血偏差：奇数关 +6%（0 基 idx 1/3/5…）。</summary>
-    public const float STAGE_DEV_HP_ODD = 0.06f;
+    // 【2026-11-24 主人拍板「要峰要谷，不要一马平川」】血量偏差<b>停用</b>（0）：
+    //   原「奇数关 +6%」与关型无关，恰好把谷1(关4)/谷2(关6) 抬了回去、把峰3(关8)又推高 6%，
+    //   等于削平新波浪。现在起伏<b>只在 stage_stat_scale 一张表里</b>（单点可调、可整体回退）。
+    //   攻/防偏差<b>保留</b>：它们只在精英/Boss 关抬，方向与波浪一致（峰上加峰），不冲突。
+    //   要恢复旧手感把 0f 改回 0.06f 即可。
+    /// <summary>血偏差：奇数关 +6%（0 基 idx 1/3/5…）。2026-11-24 停用（0），起伏交给 stage_stat_scale。</summary>
+    public const float STAGE_DEV_HP_ODD = 0f;
     /// <summary>攻偏差：精英关 +10%（小高潮①）。</summary>
     public const float STAGE_DEV_ATK_ELITE = 0.10f;
     /// <summary>攻偏差：末节 Boss 关 +8%（高潮②）。</summary>
@@ -1215,6 +1271,23 @@ public static partial class GameConfig
         if (endlessRift || !formalMainRun) return true;
         if (chapter > 1) return true;
         return chapter == 1 && stageIdx0 >= 2;
+    }
+
+    // 【2026-11-24 主人拍板「精英/Boss 的增长系数改成从小到大，第3关精英血太多」】
+    // 旧口径：LATE_ELITE_BOSS_HP_MUL 恒 2f —— 1-3 一进门就 ×2（把 1-2 的精英衬得极薄），
+    // 是「前重后轻」的硬台阶；11-23 又拿 stage3EliteHpMul=2/3 打补丁，1-3 净剩 ×1.333。
+    // 新口径：按章递增、无台阶，第 8 章两端都回到 2.05。分成两张表是因为定位不同：
+    //   精英 = 关卡里的小高潮，第 1 章压到 1.0（1-2 / 1-3 一样厚，不再有台阶）；
+    //   Boss = 关卡收尾，第 1 章保 1.35 兜底，不让第一章大 Boss 被这一刀砍半。
+    // 只给主线正式关（formalMainRun）；裂隙 / 活动副本 / 支线岛 / 竞技场仍走常量
+    // LATE_ELITE_BOSS_HP_MUL，行为零变化。要整体更肉/更薄只动这两张表。
+    static readonly float[] LateEliteHpRamp = { 1.00f, 1.15f, 1.30f, 1.42f, 1.55f, 1.68f, 1.85f, 2.05f };
+    static readonly float[] LateBossHpRamp  = { 1.35f, 1.45f, 1.55f, 1.62f, 1.72f, 1.82f, 1.95f, 2.05f };
+    public static float LateEliteBossHpMulForChapter(int chapter, bool isBoss)
+    {
+        var ramp = isBoss ? LateBossHpRamp : LateEliteHpRamp;
+        int ch = Mathf.Clamp(chapter, 1, ramp.Length);
+        return ramp[ch - 1];
     }
 
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关

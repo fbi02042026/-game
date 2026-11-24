@@ -22,15 +22,25 @@ public static class PetFeatureGuide
     const string DoneKey = "petFeatureGuide_1_3";
     internal const float StepTimeoutSeconds = 120f;   // 单步等待玩家操作的看门狗（秒），超时放行不卡死
     internal const float HintSeconds = 9f;            // 软提示自动消失时长
-    /// <summary>本引导四条气泡统一缩到 250×120（文案已精简到两行内）：
-    /// 400 宽气泡的「不出屏」夹取上限只有 ±152，而入口在最左（约 −280）、部署钮在弹窗右侧（约 +180）
-    /// → 尖角两头都被夹偏。250 宽夹取上限 ±227，两端都能落回目标内。
-    /// 只作用于本类四条 ShowBubble；全局 400×192 口径、其余引导、字号色值一律不动。
+    /// <summary>本引导普通气泡 250×120（文案已精简到两行内）：底栏角色 / 上阵 / 喂养三条沿用原样。
+    /// 【2026-11-24 主人「把箭头旋转90对着图标，在图标左边或右边生成引导框」】
+    /// 宠物入口贴屏幕左下角（逻辑 X≈-260、距底仅约 72px），横放气泡尖角被出屏夹取推到人物腿上；
+    /// 该条改用 SideGuideBubbleLayout：整框旋转 ±90° 后非等比拉伸成横向宽扁（屏幕上约 270 宽 × 130 高），
+    /// 尖角转到侧边正对图标、气泡落在图标右侧，整框留在屏内。其余引导/全局口径、字号色值一律不动。
     /// internal：使用点在另一个类 PetFeatureGuideDriver.ShowBubble（同文件同程序集）。</summary>
     internal static readonly TutorialHintUI.HintLayout GuideBubbleLayout = new TutorialHintUI.HintLayout
     {
         BubbleWidth = 250f,
         BubbleHeight = 120f,
+    };
+
+    /// <summary>贴屏幕边的目标专用：整框旋转 90° 后非等比拉伸为屏幕 270 宽 × 130 高的横向气泡，
+    /// 尖角朝左右正对图标（按目标在屏幕左右自动选边）。宽高是「旋转前」的局部尺寸（高窄、宽拉长）。</summary>
+    internal static readonly TutorialHintUI.HintLayout SideGuideBubbleLayout = new TutorialHintUI.HintLayout
+    {
+        BubbleWidth = 130f,
+        BubbleHeight = 270f,
+        SideTipToTarget = true,
     };
 
     static bool _pending;                    // 跨场景 pending：1-3 通关置位，回城消费
@@ -166,7 +176,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var charUi = CharacterUI.Instance;
         var entryRect = charUi != null ? CharacterUI.PetEntryRect : null;
         if (entryRect != null)
-            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.GuideBubbleLayout);
+            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.SideGuideBubbleLayout);
         else
             Debug.LogError("[PetFeatureGuide] 角色页宠物入口取不到，指路气泡跳过");
         yield return WaitStage(3);   // 等玩家点开宠物界面

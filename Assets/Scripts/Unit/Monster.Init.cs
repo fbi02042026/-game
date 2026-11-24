@@ -302,6 +302,10 @@ public partial class Monster
         // 引导局恒 1、竞技场不走本生成链，均零影响。
         float adaptiveScale = AdaptiveDifficulty.GetScale();
         float hpGlobalMul = endlessRift || isTutorialRun ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
+        // 【2026-11-24 主人拍板】主线第 1 章前 2 关血量过渡缓坡（1-1 对齐引导关 / 1-2 回落 / 1-3 起恢复）：
+        // 只乘主线正式关普通小怪，引导 / 裂隙 / 副本 / 支线岛全部 ×1，零影响。
+        if (formalMainRun && !endlessRift && !isTutorialRun)
+            hpGlobalMul *= GameConfig.EarlyChapterHpCurveMul(chapter, stageIdx0);
         // 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2（真源 GameConfig.BOSS_*_MUL）。
         // 放在最终写 attr 处，物理 / 魔法两条攻击线都吃到；非 Boss 恒 x1。
         // 【2026-10-23 主人拍板「引导的不要动」】引导局 Boss 也不吃本批倍率，保持原数值。
@@ -391,8 +395,12 @@ public partial class Monster
         bool lateGameBuff = GameConfig.LateGameBuffActive(
             chapter, stageIdx0, isTutorialRun, endlessRift, formalMainRun);
         bool lateEliteOrBoss = eliteWave || _isBossUnit;
+        // 【2026-11-24 主人拍板】主线精英/Boss 的后期系数改按章递增（第1章无台阶 → 第8章 2.05）；
+        // 裂隙 / 副本 / 支线岛 / 竞技场仍走常量 LATE_ELITE_BOSS_HP_MUL=2，行为零变化。
         float lateHpMul = !lateGameBuff ? 1f
-            : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_HP_MUL : GameConfig.LATE_MOB_HP_MUL);
+            : (lateEliteOrBoss
+                ? (formalMainRun ? GameConfig.LateEliteBossHpMulForChapter(chapter, _isBossUnit) : GameConfig.LATE_ELITE_BOSS_HP_MUL)
+                : GameConfig.LATE_MOB_HP_MUL);
         float lateAtkMul = !lateGameBuff ? 1f
             : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_ATK_MUL : GameConfig.LATE_MOB_ATK_MUL);
 
@@ -401,7 +409,10 @@ public partial class Monster
         float endlessEliteHpMul = endlessRift && eliteWave ? GameConfig.ENDLESS_ELITE_HP_MUL : 1f;
         // 【2026-11-23 主人拍板】仅第1章第3关精英降血 1/3（×2/3）；不动全局 LATE_ELITE_BOSS_HP_MUL。
         // formalMainRun 门禁排除副本/裂隙/支线/竞技场；eliteWave 自身已排除 Boss；其它关/小怪一律 ×1。
-        float stage3EliteHpMul = formalMainRun && chapter == 1 && stageIdx0 == 2 && eliteWave ? (2f / 3f) : 1f;
+        // 【2026-11-24 主人拍板】上面的按章曲线已把第 1 章压到 1.0（1-3 不再有 ×2 台阶），
+        // 11-23 的 ×2/3 补丁若继续生效，1-3 精英会比 1-2 还薄，故停用（恒 1）。
+        // 变量保留：要恢复旧手感把 1f 改回 (2f / 3f)。
+        float stage3EliteHpMul = 1f;
         attr.SetAttr(AttrType.MaxHp, baseHp * hpScale * waveMul * hpGlobalMul * bossHpMul * devHp * endlessEliteHpMul * ch1FinalBossHpMul * lateHpMul * stage3EliteHpMul * adaptiveScale);
         // 【2026-10-25 主人拍板「断崖调缓 不要让玩家察觉」】按章攻击减免改 8 章缓坡表
         //（0.35/0.36/0.40/0.42/0.45/0.52/0.62/0.75，旧三档阶梯 0.35/0.6/0.8 废除——
@@ -557,7 +568,7 @@ public partial class Monster
         // 精英/Boss/签名怪仍走掷骰（签名怪偏好经 pendingBias 进 Roll，优先级高于表定词缀，不能截胡）。
         if (hasFixedAffix)
         {
-            MonsterAffix.AttachFixed(this, tableAffixes);
+            MonsterAffix.AttachFixed(this, tableAffixes, _chapter);
             // 【2026-11-03 主人拍板】表定词条怪首次登场提示：屏幕左缘头像 + 黄叹号，
             // 点击弹窗看词条介绍，确认后存档标记永久消失（不强制观看）。
             AffixMonsterNoticeUI.Notify(template, tableAffixes);

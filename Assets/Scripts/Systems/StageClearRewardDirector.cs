@@ -1034,6 +1034,9 @@ public class StageClearRewardDirector : MonoBehaviour
         if (stageType == StageType.Boss && bossDiamond > 0)
         {
             yield return StartCoroutine(CoFlyDiamond(spawn, bossDiamond));
+            // 【2026-11-24 主人拍板「Boss 钻石也按奖励发放」】宝箱链同样记一格（与跳过宝箱分支同口径）
+            if (bm != null)
+                bm.RunStats?.AddActivityReward("钻石", bossDiamond, CommonIconSprites.Load("icon_diamond_blue"));
         }
 
         yield return new WaitForSecondsRealtime(0.35f);

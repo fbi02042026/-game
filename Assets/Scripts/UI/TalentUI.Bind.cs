@@ -181,7 +181,15 @@ public partial class TalentUI
         if (node.type != TalentDefs.RightNodeType.Mutex)
         {
             var mainOpt = go.transform.Find("Opt_0") as RectTransform;
-            if (mainOpt != null) mainOpt.localScale = Vector3.one * RightIconScale;
+            if (mainOpt != null)
+            {
+                mainOpt.localScale = Vector3.one * RightIconScale;
+                // 【2026-11-24 主人拍板】右列整列在紫色滚动区内水平居中：预制体 Opt_0 手摆 x=97，
+                // 图标放大到 1.5246 后框中心右移约 47px 顶到视口右缘被裁。按行宽与缩放后框宽现读回中（只改 X）。
+                mainOpt.anchoredPosition = new Vector2(
+                    RightRowW * 0.5f - mainOpt.sizeDelta.x * RightIconScale * 0.5f,
+                    mainOpt.anchoredPosition.y);
+            }
         }
         // 【2026-11-19 自适应】连线/菱形运行时对齐到选项卡片中轴（只改 X）。
         // Mutex 合并行两张卡并排、轨道另有语义，跳过不动。
