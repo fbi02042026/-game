@@ -21,6 +21,13 @@ public class LevelUpDraftUI : MonoBehaviour
     bool _restoreUnitsCanAct;
     bool _manageFreeze;
 
+    /// <summary>倒计时截止时刻（unscaledTime；0 = 不超时）。超时随机替玩家选一张（2026-11-24 主人拍板）。</summary>
+    float _timeoutEndAt;
+    /// <summary>hint 原始文案（不含倒计时那行），Update 每帧在它后面追一行秒数。</summary>
+    string _hintPlain;
+    /// <summary>上次写进 hint 的秒数：只有整秒变化才改 text，避免每帧触发 UI 重建。</summary>
+    int _lastHintSec = -1;
+
     List<DraftCard> _cards;
     List<DraftCategory> _cats;
     Func<DraftCategory, List<DraftCard>> _provider;
@@ -45,7 +52,7 @@ public class LevelUpDraftUI : MonoBehaviour
 
     /// <summary>直接出三选一（无方向层）。</summary>
     public static LevelUpDraftUI Show(List<DraftCard> cards, string title, Action<DraftCard> onPick,
-        Action onSkip = null, bool manageFreeze = true)
+        Action onSkip = null, bool manageFreeze = true, float timeoutSec = 0f)
     {
         if (cards == null || cards.Count == 0)
         {
@@ -56,7 +63,7 @@ public class LevelUpDraftUI : MonoBehaviour
         if (ui == null) return null;
         ui._useOrderConfirm = false;
         ui._onOrderConfirmed = null;
-        ui.Open(null, cards, null, title, onPick, onSkip, manageFreeze);
+        ui.Open(null, cards, null, title, onPick, onSkip, manageFreeze, timeoutSec);
         return ui;
     }
 
@@ -210,6 +217,8 @@ public class LevelUpDraftUI : MonoBehaviour
     // ============================================================
 
     RectTransform _root;
+    /// <summary>三选一面板根（设计尺寸 680×620），运行时按屏幕逻辑尺寸缩放自适应。</summary>
+    RectTransform _panel;
     RectTransform _tagRow;
     RectTransform _cardRow;
     /// <summary>V6：已装备技能的顺序条（拖拽调整释放优先级）。</summary>
@@ -238,19 +247,19 @@ public class LevelUpDraftUI : MonoBehaviour
         Stretch(dim.rectTransform);
         dim.raycastTarget = true;
 
-        var panel = CreateImage("Panel", _root, BgDark);
+        _panel = CreateImage("Panel", _root, BgDark).rectTransform;
         // V6：540 → 620，腾出顶部排序条的空间
-        Center(panel.rectTransform, 680f, 620f);
+        Center(_panel, 680f, 620f);
 
-        var border = CreateImage("Border", panel.transform, new Color(0.42f, 0.36f, 0.24f, 1f));
+        var border = CreateImage("Border", _panel, new Color(0.42f, 0.36f, 0.24f, 1f));
         Stretch(border.rectTransform);
         border.transform.SetAsFirstSibling();
 
-        _title = CreateText("Title", panel.transform, "升级！", 32, new Color(1f, 0.94f, 0.78f));
+        _title = CreateText("Title", _panel, "升级！", 32, new Color(1f, 0.94f, 0.78f));
         Anchor(_title.rectTransform, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -26f, 600f, 44f);
 
         // —— 第一层：方向标签 ——
-        _tagRow = CreateRect("Tags", panel.transform);
+        _tagRow = CreateRect("Tags", _panel);
         Anchor(_tagRow, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0f, 6f, 640f, TagH + 10f);
         var tagLayout = _tagRow.gameObject.AddComponent<HorizontalLayoutGroup>();
         tagLayout.spacing = 20f;
@@ -261,7 +270,7 @@ public class LevelUpDraftUI : MonoBehaviour
         tagLayout.childForceExpandHeight = false;
 
         // —— 第二层：卡片 ——
-        _cardRow = CreateRect("Cards", panel.transform);
+        _cardRow = CreateRect("Cards", _panel);
         // V6：整体下移，给顶部排序条让位
         Anchor(_cardRow, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0f, -20f, 620f, CardH + 10f);
         var layout = _cardRow.gameObject.AddComponent<HorizontalLayoutGroup>();
@@ -273,7 +282,7 @@ public class LevelUpDraftUI : MonoBehaviour
         layout.childForceExpandHeight = false;
 
         // —— V6：已装备技能的顺序条（① = 最先释放）——
-        _orderRow = CreateRect("OrderRow", panel.transform);
+        _orderRow = CreateRect("OrderRow", _panel);
         Anchor(_orderRow, 0.5f, 1f, 0.5f, 1f, 0.5f, 1f, 0f, -76f, 620f, OrderChipH + 18f);
         var orderLayout = _orderRow.gameObject.AddComponent<HorizontalLayoutGroup>();
         orderLayout.spacing = OrderGap;
@@ -284,18 +293,18 @@ public class LevelUpDraftUI : MonoBehaviour
         orderLayout.childForceExpandHeight = false;
 
         // 排序确认按钮（仅排序确认阶段显示）
-        _confirmBtn = CreateButton("Confirm", panel.transform, "确认顺序", 22, new Color(1f, 0.92f, 0.72f));
+        _confirmBtn = CreateButton("Confirm", _panel, "确认顺序", 22, new Color(1f, 0.92f, 0.72f));
         Anchor(_confirmBtn.GetComponent<RectTransform>(), 1f, 0f, 1f, 0f, 1f, 0f, -24f, 20f, 180f, 46f);
         _confirmBtn.onClick.AddListener(ConfirmOrderPhase);
         _confirmBtn.gameObject.SetActive(false);
 
         // 返回（只在两段式流程的第二层显示）
-        _backBtn = CreateButton("Back", panel.transform, "← 返回方向", 20, new Color(0.78f, 0.76f, 0.72f));
+        _backBtn = CreateButton("Back", _panel, "← 返回方向", 20, new Color(0.78f, 0.76f, 0.72f));
         Anchor(_backBtn.GetComponent<RectTransform>(), 0f, 1f, 0f, 1f, 0f, 1f, 20f, -26f, 150f, 36f);
         _backBtn.onClick.AddListener(ShowTags);
         _backBtn.gameObject.SetActive(false);
 
-        _hint = CreateText("Hint", panel.transform,
+        _hint = CreateText("Hint", _panel,
             "选择后立即生效，本局结束时构筑作废（金币与天赋石保留）", 20, new Color(0.72f, 0.70f, 0.66f));
         Anchor(_hint.rectTransform, 0.5f, 0f, 0.5f, 0f, 0.5f, 0f, 0f, 28f, 640f, 50f);
 
@@ -308,7 +317,7 @@ public class LevelUpDraftUI : MonoBehaviour
 
     void Open(List<DraftCategory> cats, List<DraftCard> preCards,
         Func<DraftCategory, List<DraftCard>> provider, string title,
-        Action<DraftCard> onPick, Action onSkip, bool manageFreeze)
+        Action<DraftCard> onPick, Action onSkip, bool manageFreeze, float timeoutSec = 0f)
     {
         _cats = cats;
         _cards = preCards;
@@ -317,6 +326,11 @@ public class LevelUpDraftUI : MonoBehaviour
         _onSkip = onSkip;
         _orderConfirmPhase = false;
         _pendingCard = default;
+
+        // 【2026-11-24 主人拍板】倒计时：0 = 不超时（现有调用点零变化）
+        _timeoutEndAt = timeoutSec > 0f ? Time.unscaledTime + timeoutSec : 0f;
+        _hintPlain = null;
+        _lastHintSec = -1;
 
         if (_title != null) _title.text = string.IsNullOrEmpty(title) ? "三选一" : title;
 
@@ -328,6 +342,9 @@ public class LevelUpDraftUI : MonoBehaviour
         IsShowing = true;
         gameObject.SetActive(true);
         transform.SetAsLastSibling();
+
+        // 面板按屏幕逻辑尺寸自适应缩放（2026-11-24 主人：弹窗要自适应到合适大小）
+        ApplyAdaptivePanelScale();
 
         if (_cats != null && _cats.Count > 1) ShowTags();
         else GoToCards(_cats != null && _cats.Count == 1 ? _cats[0] : (DraftCategory?)null);
@@ -681,8 +698,43 @@ public class LevelUpDraftUI : MonoBehaviour
         cb?.Invoke(card);
     }
 
+    /// <summary>
+    /// 倒计时（2026-11-24 主人拍板）：hint 追一行秒数，归零仍未选 = 随机替玩家选一张。
+    /// 用 unscaledTime —— 抽奖/剧情把 timeScale 压到 0 时倒计时照样走，绝不会卡住波次推进。
+    /// </summary>
+    void Update()
+    {
+        if (!IsShowing || _timeoutEndAt <= 0f) return;
+
+        float left = _timeoutEndAt - Time.unscaledTime;
+        if (left > 0f)
+        {
+            int sec = Mathf.CeilToInt(left);
+            if (_hint != null && sec != _lastHintSec)
+            {
+                _lastHintSec = sec;
+                if (_hintPlain == null) _hintPlain = _hint.text;
+                _hint.text = _hintPlain + "\n<b>" + sec + "</b> 秒后随机选一个";
+            }
+            return;
+        }
+
+        _timeoutEndAt = 0f;
+        if (_hint != null && _hintPlain != null) _hint.text = _hintPlain;
+
+        if (_cards == null || _cards.Count == 0)
+        {
+            var cb = _onPick;
+            Close();
+            cb?.Invoke(default);
+            return;
+        }
+        Pick(_cards[UnityEngine.Random.Range(0, _cards.Count)]);
+    }
+
     void Close()
     {
+        _timeoutEndAt = 0f;
         gameObject.SetActive(false);
         IsShowing = false;
         ClearChildren(_cardRow);
@@ -700,6 +752,47 @@ public class LevelUpDraftUI : MonoBehaviour
         _orderConfirmPhase = false;
         _onOrderConfirmed = null;
         _pendingCard = default;
+    }
+
+    // ============================================================
+    // 面板自适应（2026-11-24 主人：弹窗要自适应到合适大小）
+    // ============================================================
+
+    /// <summary>
+    /// Panel 设计尺寸 680×620 写死，在不同屏幕比例下视觉占比会变（瘦屏偏小、方屏溢出）。
+    /// 这里按父根 Canvas 的实际逻辑尺寸，把 Panel 缩放到「宽占屏幕 92% / 高占屏幕 58%」的较小者，
+    /// clamp 到 [0.5, 1.15]，子元素随 Panel 一起缩放（绝对定位布局保持不变）。
+    /// </summary>
+    void ApplyAdaptivePanelScale()
+    {
+        if (_panel == null) return;
+        var canvas = GetComponentInParent<Canvas>();
+        if (canvas == null) return;
+        var rootCanvas = canvas.rootCanvas != null ? canvas.rootCanvas : canvas;
+        var rt = rootCanvas.transform as RectTransform;
+        if (rt == null) return;
+
+        Canvas.ForceUpdateCanvases();
+        float pw = rt.rect.width;
+        float ph = rt.rect.height;
+        if (pw <= 1f || ph <= 1f)
+        {
+            // 首帧根 rect 还没量出来，下一帧重试
+            StartCoroutine(CoApplyAdaptiveNextFrame());
+            return;
+        }
+
+        float targetW = pw * 0.92f;
+        float targetH = ph * 0.58f;
+        float scale = Mathf.Min(targetW / 680f, targetH / 620f);
+        scale = Mathf.Clamp(scale, 0.5f, 1.15f);
+        _panel.localScale = new Vector3(scale, scale, 1f);
+    }
+
+    System.Collections.IEnumerator CoApplyAdaptiveNextFrame()
+    {
+        yield return null;
+        ApplyAdaptivePanelScale();
     }
 
     // ============================================================

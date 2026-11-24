@@ -572,7 +572,9 @@ public static class UiLayoutStretch
         //（中心锚 y=450）。通用重锚定会把它等价改写成贴顶锚——逻辑高一变（窄长屏 match=0 / 编辑器切
         // 分辨率）就与居中金框错位，金框顶到顶部一排（主人实测反馈）。整块豁免后五节点与 Panel/标题
         // 相对位置任何分辨率恒定（逻辑高恒 >=1280，金框顶 570 永在按钮顶 508 之上）。
-        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI", "MercGainCinematic", "ArenaPopupUI" };
+        // BattleHeadTalkUI（2026-11-24）：气泡 Bubble 节点居中锚 + RefreshFollowPosition 自管位置
+        //（anchoredPosition=local 假设锚在中心）。BeginLine 每次 RefreshPopup 若把它重锚贴顶，锚点语义变 → 气泡被算到屏幕底部。整块豁免。
+        new System.Collections.Generic.HashSet<string> { "AdventureUI", "DailyLoginUI", "RewardPopup", "GlobalToastUI", "MercGainCinematic", "ArenaPopupUI", "BattleHeadTalkUI" };
 
     /// <summary>
     /// 判断 root 是否属于「已单独适配」的界面：按 root 自身名字、或 root 上挂载的组件类型名，

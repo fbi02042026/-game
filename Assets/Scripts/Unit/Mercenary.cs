@@ -321,6 +321,17 @@ public partial class Mercenary : UnitBase
 
     public int GetPartyIndexOrZero() => ResolvePartyIndex();
 
+    /// <summary>
+    /// 【2026-11-24 主人拍板】离场表现：转向左 + 播走路动画。
+    /// 位移与销毁由调用方（<see cref="RunDraftDirector.LeaveMerc"/> 的撤离协程）负责，
+    /// 这里只负责「看起来是在走」，不改任何战斗属性。
+    /// </summary>
+    public void PlayWalkOutLeft()
+    {
+        Face(-1);
+        if (unitAnim != null) unitAnim.SetMove(true, -1);
+    }
+
     MercAiPolicy.Policy _aiPolicy;
     string _cachedJob;
     MercRosterDefs.MercRarity _cachedRarity = MercRosterDefs.MercRarity.Common;

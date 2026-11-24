@@ -64,6 +64,13 @@ public partial class UnitBase
         }
     }
 
+    /// <summary>
+    /// 【2026-11-24】打断目标当前读条/蓄力（默认空操作，仅 Monster 覆写为真正取消攒槽）。
+    /// 返回 true 表示确实打断了一次「正在读条」的技能；目标没在读条时返回 false、不产生惩罚。
+    /// 佣兵 / 宠物的打断技能统一调这个入口，不关心目标是不是 Boss。
+    /// </summary>
+    public virtual bool TryInterruptCast() => false;
+
     protected virtual void AIUpdate()
     {
         // 开战传送演出 / 左屏外走进场：冻结 AI，走进场时仍播走路

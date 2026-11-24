@@ -25,24 +25,24 @@ public enum BattleCutsceneStep
 public static class BattleCutsceneDefs
 {
     /// <summary>
-    /// 1-3 狗营救演出链（顺序即分镜；真源只此一处）。
-    /// 【2026-11-23 主人拍板】1-3 拆 3 波后：第 2 波普通怪陪狗打 → 狗被打跑 + 旁白 → 放占用 →
-    /// 「首领来袭」+ 第 3 波精英 → 狗归队 → 精英清完 → 狗叫 + 玩家点评。
+    /// 关 3（精英）狗营救演出链（顺序即分镜；真源只此一处）。
+    /// 【2026-11-24 主人拍板】重排：第一波刚清完狗已提前入场开打（TryPetRescueActivate 生成，不在演出里）→
+    /// 玩家走到狗附近 → 冻场玩家喊话 → 狗叫两声 → 解冻（怪锁玩家）开打 → 第 2 波清完 → 冻场狗主动跑掉 + 旁白 →
+    /// 首领来袭 → 精英打到半血 → 狗归队 → 精英清完 → 狗叫 + 玩家点评。
+    /// 不再 SpawnPetFight（狗提前生成）、不再 WaitDogFled（狗不再等被打空血，第 2 波清完主动撤场）。
     /// </summary>
     public static readonly BattleCutsceneStep[] DogRescue = new BattleCutsceneStep[]
     {
-        BattleCutsceneStep.SpawnPetFight,
-        BattleCutsceneStep.BarkAtDog,
-        BattleCutsceneStep.ShoutAtHero,
-        BattleCutsceneStep.WaitDogFled,
-        BattleCutsceneStep.DogFleeLine,
-        BattleCutsceneStep.WaitSecondWaveCleared,
-        BattleCutsceneStep.ReleaseForElite,
-        BattleCutsceneStep.WaitEliteInView,
-        BattleCutsceneStep.DogRejoinElite,
-        BattleCutsceneStep.WaitWaveCleared,
-        BattleCutsceneStep.BarkThanksAtDog,
-        BattleCutsceneStep.RemarkAtHero,
+        BattleCutsceneStep.ShoutAtHero,        // 冻场段首：玩家喊话
+        BattleCutsceneStep.BarkAtDog,          // 冻场段尾：狗叫两声（说完解冻，怪锁玩家开打）
+        BattleCutsceneStep.WaitWaveCleared,    // 等第 2 波（狗陪打）清完，期间怪锁玩家
+        BattleCutsceneStep.DogFleeLine,        // 冻场：狗主动跑掉 + 逃跑旁白
+        BattleCutsceneStep.ReleaseForElite,    // 释放占用 → 首领来袭（清怪锁）
+        BattleCutsceneStep.WaitEliteInView,    // 等精英打到半血
+        BattleCutsceneStep.DogRejoinElite,     // 狗从左侧跑回归队
+        BattleCutsceneStep.WaitWaveCleared,    // 等第 3 波（精英）清完
+        BattleCutsceneStep.BarkThanksAtDog,    // 冻场：战后狗叫
+        BattleCutsceneStep.RemarkAtHero,       // 冻场：玩家点评
         BattleCutsceneStep.Release,
     };
 }

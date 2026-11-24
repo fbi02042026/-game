@@ -86,6 +86,30 @@ public partial class Monster
         }
     }
 
+    /// <summary>【2026-11-24】打断惩罚冷却：被打断后本次技能作废，且这段时间内不能重新攒槽（与放招冷却同量级）。</summary>
+    const float SkillInterruptLockoutSec = 5f;
+
+    /// <summary>
+    /// 【2026-11-24】打断读条（只断「攒槽期」）：Boss / 精英的血量触发攒槽（_hpSkillCharging）、
+    /// 普通小怪按时间攒的充能（_skillEnergy>0）都算。条满进入演出（_skillTelegraphing）后不再打断
+    /// —— 落地伤害已结算，吞掉观感怪（主人拍板「只断攒槽期」）。
+    /// 行为：清零能量、结束本次攒槽、收掉地面红圈、进 SkillInterruptLockoutSec 冷却作为惩罚（本次作废）。
+    /// 头顶条由 SyncSkillChargeBar 每帧读 SkillEnergy01，能量归零会自动收起（同死亡/放招口径，不另写 UI）。
+    /// 没在读条时返回 false、不进冷却，避免空放惩罚。
+    /// 【2026-11-24 主人拍板】Boss 狂暴（_enraged，血量≤40%）后免疫打断——狂暴阶段读条不被打断，给 Boss 保底大招。
+    /// </summary>
+    public override bool TryInterruptCast()
+    {
+        if (isDead) return false;
+        if (_enraged) return false;   // Boss 狂暴阶段免疫打断（2026-11-24 主人拍板）；精英/小怪 _enraged 恒 false，不受影响
+        if (!_hpSkillCharging && _skillEnergy <= 0.001f) return false;   // 没在读条：不触发惩罚
+        _hpSkillCharging = false;
+        _skillEnergy = 0f;
+        ClearHpChargeTelegraph();
+        _skillCooldown = Mathf.Max(_skillCooldown, SkillInterruptLockoutSec);   // 打断惩罚：本次作废 + 冷却
+        return true;
+    }
+
     /// <summary>
     /// 【2026-11-16 主人「近战 boss 攒槽和红圈应该是同步的，不要攒槽完了还再来一遍红圈」】
     /// 近战 Boss 攒槽启动时就把双圈铺出去：圆心取当时主目标位置（与旧「预警开始锁圆心」同口径，
@@ -388,7 +412,9 @@ public partial class Monster
         var skill = SkillRegistry.Instance?.GetActiveSkill(_skillId);
         float mult = skill != null ? skill.damageMultiplier : 2.2f;
         float extra = skill != null ? skill.baseDamage : 0f;
-        float tier = (_isBossUnit || _eliteWave) ? 1f : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
+        float tier = _isBossUnit ? GameConfig.BOSS_SKILL_DAMAGE_MUL
+                     : _eliteWave ? 1f
+                     : GameConfig.MONSTER_NORMAL_SKILL_DAMAGE_MUL;
         float damage = (GetMainAttackStat() * mult + extra) * tier;
         // 【2026-11-09 主人拍板】红圈分类：精英小一点 / Boss 大一点；精英 3 秒、Boss 4 秒。
         // 表里的 aoeRadius 仍作基准，只按分类夹上下限，不另起一套数值。

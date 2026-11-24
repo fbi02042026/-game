@@ -26,6 +26,11 @@ public partial class BattleManager
     internal int _activeWaveIndex = -1;
     private bool _waveAnnounceRunning;
     Coroutine _waveAnnounceCo;
+    /// <summary>跨大波三选一正在等玩家选：挡住 BeginNextWaveCountdown 每帧重入（2026-11-24）。</summary>
+    bool _waveDraftPending;
+    /// <summary>已为哪个 nextIdx 弹过 crossRound 三选一：防选完卡后 wave 还没刷、Emergency Update 又调 TryShowWaveClearDraft 重复弹（2026-11-24）。
+    /// 每波 isRoundEnd 都该弹（路线 B 下每波都是回合末），故按 nextIdx 区分而非本关只弹一次；wave 刷出后 nextIdx 自然变化，无需手动重置。换关在 ResetWaveProgress 清回 -1。</summary>
+    int _waveDraftDoneForNextIdx = -1;
     // 【2026-11-14 撤除】_waveGatePlayed「全关只播一次 Gate」的闸门已由「跨大波才播」取代，
     // 字段本身没有读取方了，按不留死字段的口径整段删掉（播报条件见波清链 crossRound）。
     // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】波次闸门看门狗计时（真实时间）
@@ -378,6 +383,8 @@ public partial class BattleManager
     {
         _activeWaveIndex = -1;
         _allWavesSpawned = false;
+        _waveDraftPending = false;
+        _waveDraftDoneForNextIdx = -1;
         // 【2026-11-13】换关重置波次时把流式衔接计时一并清掉，防上一关的协程串台
         StopWaveStream();
         _killCombo = 0;
@@ -388,7 +395,7 @@ public partial class BattleManager
         _intruderStoryShownThisStage = false;   // 修点①（T8 关卡级口径）：换关允许下一关的首波乱入剧情再播
         _rescueShownThisStage = false;          // 批次4 T8（关卡级）：换关允许下一关再触发友军救场
         _rescueWaveEndHandled = false;          // 批次4 T8（关卡级）：波末成败/撤场闸随换关复位
-        _petRescueStageActive = false;          // 【2026-11-23】换关允许 1-3 未通关时再演狗剧情
+        _petRescueStageActive = false;          // 【2026-11-23】换关允许关 3 未通关时再演狗剧情
         ResetBattleCutscene();                  // 【2026-11-23 统一编排器】停演出协程 + 清占用标志，防串台
         _battleIntroFinished = false;
         _battleStartTime = Time.unscaledTime;
@@ -1513,7 +1520,7 @@ public partial class BattleManager
 
 
     /// <summary>
-    /// 【2026-11-23 主人拍板·狗营救分镜】1-3 剧情关的精英末波要不要当「首领来袭」播：
+    /// 【2026-11-23 主人拍板·狗营救分镜】整数制关 3 精英关的精英末波要不要当「首领来袭」播：
     /// 狗被打跑后先弹首领大图、再出精英。只认剧情已激活（_petRescueStageActive）的那一关的末波，
     /// 其它精英关 / 其它波恒 false，别处不用另写判定。
     /// </summary>
@@ -1530,7 +1537,9 @@ public partial class BattleManager
     void BeginNextWaveCountdown()
     {
         if (Rules.SkipWaveAnnounce) return;
-        Debug.Log("[CutsceneDiag] BeginNextWave occupied=" + CutsceneOccupyingBattlefield + " next=" + FindNextUnspawnedWaveIndex() + " alive=" + CountAliveMonsters() + " waveCo=" + (_waveAnnounceCo != null));
+        // 【2026-11-24 主人拍板】跨大波三选一没选完不许推进。本方法由 Update 每帧调用，
+        // 弹层期间 _waveAnnounceCo 还是 null，必须自己挡重入，否则会重复弹。
+        if (_waveDraftPending) return;
         // 【2026-11-23 主人「狗剧情在前一波播完、处理完再出首领来袭」】剧情播放期间不推进下一波。
         // 旧版这里没闸：Update 的 Emergency 每帧调本方法，狗插叙把 _preBattleStoryPlaying 置 true
         // 后，下一帧 hook 已 fired 返回 false → 直接排 CoAnnounceThenSpawnNextWave（首领来袭+刷 Boss），
@@ -1580,7 +1589,7 @@ public partial class BattleManager
         // 旧 5 秒倒计时 + 下一波来袭预告整段停用，函数保留不删（下线≠删除）；
         // Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」，羁绊本 Boss 前剧情保留。
         bool boss = _waves != null && nextIdx < _waves.Count && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-        // 【2026-11-23 主人拍板·狗营救分镜】1-3 精英末波也走「首领来袭」大图：狗被打跑后先弹大图再出精英。
+        // 【2026-11-23 主人拍板·狗营救分镜】关 3 精英末波也走「首领来袭」大图：狗被打跑后先弹大图再出精英。
         if (!boss && IsPetRescueEliteWaveAnnounce(nextIdx))
         {
             _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
@@ -1598,6 +1607,9 @@ public partial class BattleManager
                 && _waves[nextIdx - 1] != null && _waves[nextIdx - 1].isRoundEnd;
             if (crossRound)
             {
+                // 【2026-11-24 主人拍板·下线】原「跨大波先冻场三选一」已下线（TryShowWaveClearDraft 恒 false），
+                // 跨大波直接播「下一波来袭」+ 出兵；同一大波内的小波仍是流式直刷。
+                if (TryShowWaveClearDraft()) return;
                 _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
                 return;
             }
@@ -1605,6 +1617,78 @@ public partial class BattleManager
             return;
         }
         _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+    }
+
+    /// <summary>
+    /// 跨大波「三选一」（2026-11-24 主人拍板）：
+    /// 冻场 → 按<b>抽奖的概率</b>掷一个类别 → 该类三选一 → 玩家选完（或倒计时随机选）才出下一波。
+    ///
+    /// <para>为什么用抽奖那套：主人要求「三选一的概率按抽奖的概率来」。<c>AvailableCategories()</c>
+    /// 本身就是「有内容才进候选」——<b>佣兵满了 / 技能槽满了会自动从候选里消失</b>，
+    /// 所以不用另写「满了怎么办」的分支；权重也只认 <see cref="SlotMachineDefs"/> 那一份。</para>
+    ///
+    /// <para>抽奖币方向传 <c>allowGold: false</c>：白送的奖励再抽回币没有意义（与老虎机免费三选一同口径）。</para>
+    ///
+    /// <para>返回 true = 已弹出，调用方不要再推进波次；false = 条件不满足，调用方走原流程。</para>
+    /// </summary>
+    bool TryShowWaveClearDraft()
+    {
+        // 【2026-11-24 主人拍板·下线】去掉波次间三选一（弹了但看不见，主人决定不要了）。
+        // 跨大波直接走原流程：CoAnnounceThenSpawnNextWave 播「下一波来袭」+ 出兵。
+        // 方法体保留不删（下线≠删除），老虎机抽奖 / 通关奖励的三选一仍走 LevelUpDraftUI，不受影响。
+        return false;
+#pragma warning disable CS0162 //  unreachable code 保留，方便日后恢复
+        if (IsTutorialRun) { Debug.Log("[WaveClearDraft] SKIP: IsTutorialRun"); return false; }
+        if (_waveDraftPending) { Debug.Log("[WaveClearDraft] SKIP: _waveDraftPending"); return false; }
+        int draftNextIdx = FindNextUnspawnedWaveIndex();
+        if (_waveDraftDoneForNextIdx == draftNextIdx) { Debug.Log("[WaveClearDraft] SKIP: already drafted for nextIdx=" + draftNextIdx); return false; }
+        if (LevelUpDraftUI.IsShowing) { Debug.Log("[WaveClearDraft] SKIP: LevelUpDraftUI.IsShowing"); return false; }
+
+        // 类别候选 & 权重复用抽奖系统（唯一真源，不另写一份概率）
+        // 【2026-11-24】满员也给佣兵方向：这是免费奖励，选中后弹「换下谁」，不是花钱买到空包。
+        var cats = SlotMachineSystem.AvailableCategories(allowMercWhenFull: true);
+        if (cats == null || cats.Count == 0) { Debug.Log("[WaveClearDraft] SKIP: cats empty (skills=" + DraftPool.HasSkillContent() + " merc=" + DraftPool.HasMercContent(true) + " equip=" + DraftPool.HasEquipContent() + ")"); return false; }
+
+        var cat = SlotMachineSystem.RollCategory(cats, allowGold: false);
+        var cards = DraftPool.BuildCards(cat, true, allowMercWhenFull: true);
+        if (cards == null || cards.Count == 0) { Debug.Log("[WaveClearDraft] SKIP: cards empty (cat=" + cat + ")"); return false; }
+
+        var rd = RunDraftDirector.Instance ?? RunDraftDirector.Ensure(this);
+        if (rd == null) { Debug.LogError("[WaveClearDraft] FATAL: RunDraftDirector.Ensure 也返回 null"); return false; }
+
+        _waveDraftPending = true;
+        Debug.Log("[WaveClearDraft] OK: cats=" + cats.Count + " cat=" + cat + " cards=" + cards.Count);
+        LevelUpDraftUI.Show(cards, "波次奖励 · 选一个", card =>
+        {
+            _waveDraftPending = false;
+            // 记录为哪个 nextIdx 弹过：wave 刷出前 Emergency Update 重复进来时被挡住；wave 刷出后 nextIdx 变化，下一个 crossRound 窗口可再弹。
+            _waveDraftDoneForNextIdx = draftNextIdx;
+            // 统一出口：生效 + 存档 + 刷 HUD + toast（与抽奖面板同一条链）
+            if (card.IsValid) rd.OnCardPicked(card);
+
+            // 【2026-11-24】满员选中佣兵卡会接着弹「换下谁」：等它收场再推进下一波，
+            // 否则下一波会在替换弹窗底下刷出来。
+            if (MercReplaceConfirmUI.IsOpen)
+                StartCoroutine(CoAdvanceWaveAfterMercReplace());
+            else
+                AdvanceNextWaveAfterDraft();
+        }, null, true, GameConfig.WAVE_CLEAR_DRAFT_SEC);
+        return true;
+#pragma warning restore CS0162
+    }
+
+    /// <summary>波间奖励收场后推进下一波（含通关/传送门/已在排队的拦截，口径与原来那段一致）。</summary>
+    void AdvanceNextWaveAfterDraft()
+    {
+        if (_allWavesSpawned || _portalActive || _stageCleared || _waveAnnounceCo != null) return;
+        _waveAnnounceCo = StartCoroutine(CoAnnounceThenSpawnNextWave());
+    }
+
+    /// <summary>满员替换弹窗收场后才推进下一波。</summary>
+    IEnumerator CoAdvanceWaveAfterMercReplace()
+    {
+        while (MercReplaceConfirmUI.IsOpen) yield return null;
+        AdvanceNextWaveAfterDraft();
     }
 
     // ============================================================
@@ -1776,7 +1860,6 @@ public partial class BattleManager
     {
         if (_waveAnnounceRunning || _stageCleared || _portalActive) yield break;
         if (FindNextUnspawnedWaveIndex() < 0) yield break;
-        Debug.Log("[CutsceneDiag] CoAnnounce START next=" + FindNextUnspawnedWaveIndex() + " occupied=" + CutsceneOccupyingBattlefield);
 
         // 【2026-10-17 主人报「切屏回来战斗卡住，人物站着不动」】_waveAnnounceRunning / _waveAnnounceCo
         // 是「有借有还」闸门：预告协程若在播放中被中断（协程被停 / 播放链抛异常 / 切后台恢复首帧异常），
@@ -1789,7 +1872,7 @@ public partial class BattleManager
             int nextIdx = FindNextUnspawnedWaveIndex();
             bool boss = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
                         && _waves[nextIdx] != null && _waves[nextIdx].isBossWave;
-            // 【2026-11-23 主人拍板·狗营救分镜】1-3 精英末波按 Boss 播报（「首领来袭」大图 + 不叠下面那行字）
+            // 【2026-11-23 主人拍板·狗营救分镜】关 3 精英末波按 Boss 播报（「首领来袭」大图 + 不叠下面那行字）
             bool bossLook = boss || IsPetRescueEliteWaveAnnounce(nextIdx);
             var kind = bossLook ? BattleWaveAnnounceUI.Kind.Boss : BattleWaveAnnounceUI.Kind.NextWave;
             // 带上本波原型播报（箭雨 / 夹击 / 围杀…），让玩家知道这波跟上一波不一样。
@@ -1864,7 +1947,6 @@ public partial class BattleManager
             StopWaveCountdown();
         }
 
-        Debug.Log("[CutsceneDiag] CoAnnounce END next=" + FindNextUnspawnedWaveIndex() + " occupied=" + CutsceneOccupyingBattlefield + " alive=" + CountAliveMonsters());
         // 【2026-11-23 统一编排器】演出占用战场期间不补刷下一波（本条出口是唯一没走
         // BeginNextWaveCountdown 闸的路径）：直接跳过，下一帧 Update Emergency 在演出释放后自然补上。
         if (!_stageCleared && !_portalActive && CountAliveMonsters() <= 0 && !CutsceneOccupyingBattlefield)
@@ -1978,7 +2060,8 @@ public partial class BattleManager
             maxX = 6f;
             return;
         }
-        float halfW = cam.orthographicSize * cam.aspect;
+        // 【2026-11-24】判定锁现状：读不随动态视野缩放变化的基准，点击落点 / 刷怪点不漂移。
+        float halfW = GameConfig.CombatJudgeOrthoSize() * cam.aspect;
         float cx = cam.transform.position.x;
         minX = cx - halfW + pad;
         maxX = cx + halfW - pad;
@@ -2057,6 +2140,8 @@ public partial class BattleManager
 
         // 【2026-11-23 统一编排器】第二波刷出时启动狗营救单协程演出（狗归队改由演出步骤驱动）
         TryPlayDogRescueCutscene();
+        // 【2026-11-24 主人「让怪都来打玩家」】演出激活期间每帧把怪强制锁玩家（气泡解冻→首领来袭前）
+        TickDogRescueForceTarget();
 
         // 清理死怪（不要在刷怪同一帧误清：只移真正死亡的）
         for (int i = monsters.Count - 1; i >= 0; i--)

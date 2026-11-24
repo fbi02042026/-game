@@ -163,7 +163,7 @@ public partial class WavePlanner
     /// </param>
     internal void SpawnNextPendingWave(bool allowStackWhileAlive = false)
     {
-        if (_waves == null || _waves.Count == 0 || hero == null) return;
+        if (_waves == null || _waves.Count == 0 || hero == null) { Debug.LogError("[SpawnNextPendingWave] SKIP waves=" + (_waves != null) + " hero=" + (hero != null)); return; }
         EnsureMonsterPrefabReady();
         RestoreHazardPenalty(); // 清掉上一波灾害残留，避免跨波泄漏
 
@@ -179,7 +179,9 @@ public partial class WavePlanner
         // 波流式衔接 allowStackWhileAlive=true 例外，2026-11-13 主人拍板）
         if (!Rules.AllowStackSpawnWhileAlive && !allowStackWhileAlive
             && CountAliveMonsters() > 0 && _activeWaveIndex >= 0)
+        {
             return;
+        }
 
         var wave = _waves[waveIdx];
         // 【2026-11-15 主人拍板「只在精英或者 boss 出现的波次里才换 boss 背景音乐」】
@@ -202,7 +204,6 @@ public partial class WavePlanner
         float heroX = UnitBase.GetCombatX(hero);
         try
         {
-            int aliveBefore = CountAliveMonsters();
             // 事件层：本波若为补给/灾害，出兵前先结算预效果（仅一次）
             if (wave != null && !wave.stageEventApplied)
             {
@@ -210,33 +211,20 @@ public partial class WavePlanner
                 else if (wave.stageEventMovePenalty > 0f) ApplyHazardPenalty(wave);
                 wave.stageEventApplied = true;
             }
+            // wave.spawned / _activeWaveIndex 挪到 SpawnWave 内部（协程启动后同步赋值），
+            // 避免 SpawnNextPendingWave 被并发调时 waveIdx<0（wave 已被标成 spawned）。
             SpawnWave(wave, waveIdx);
-            int aliveAfter = CountAliveMonsters();
-            if (aliveAfter > aliveBefore)
-            {
-                wave.spawned = true;
-                _activeWaveIndex = waveIdx;
-                StopWaveCountdown();
-                GamePerf.Log($"[BattleManager] 刷第{waveIdx + 1}/{_waves.Count}波 OK alive={aliveAfter} heroX={heroX:F2}");
-                // 【2026-11-13 主人拍板】顶部进度条随出波推进（流式衔接后波与波之间不再清场，
-                // 原「波清才推进」的点在普通波上摸不到了）：已刷波数 = waveIdx + 1
-                BattleUI.Instance?.UpdateWaveProgress(waveIdx + 1, _waves != null ? _waves.Count : 0);
-                // 【2026-11-13 v5 两段式】第 1 波（开场波 waveIdx==0）不排流式：单独刷、能清场，让全关唯一一次 Gate 播得出来。
-                // 自第 2 波出完起（waveIdx>=1）才排 1s 波流式衔接（多波连续怪潮）；引导局不走本轨（SkipWaveAnnounce）。
-                // Boss 波仍走「首领来袭」：不在协程里排，等场上清空后由 Update → BeginNextWaveCountdown 处理。
-                if (waveIdx >= 1 && !wave.isBossWave && !Rules.SkipWaveAnnounce)
-                    bm.ScheduleWaveStreamNext();
-            }
-            else
-            {
-                wave.spawned = false;
-                Debug.LogError($"[BattleManager] 刷第{waveIdx + 1}波 SpawnWave 返回但场上无新增活怪");
-            }
+            StopWaveCountdown();
+            BattleUI.Instance?.UpdateWaveProgress(waveIdx + 1, _waves != null ? _waves.Count : 0);
+            // 【2026-11-13 v5 两段式】第 1 波（开场波 waveIdx==0）不排流式：单独刷、能清场，让全关唯一一次 Gate 播得出来。
+            // 自第 2 波出完起（waveIdx>=1）才排 1s 波流式衔接（多波连续怪潮）；引导局不走本轨（SkipWaveAnnounce）。
+            // Boss 波仍走「首领来袭」：不在协程里排，等场上清空后由 Update → BeginNextWaveCountdown 处理。
+            if (waveIdx >= 1 && !wave.isBossWave && !Rules.SkipWaveAnnounce)
+                bm.ScheduleWaveStreamNext();
         }
         catch (System.Exception e)
         {
             Debug.LogError($"[BattleManager] 第{waveIdx + 1}波刷怪异常: {e}");
-            wave.spawned = false;
         }
 
         if (FindNextUnspawnedWaveIndex() < 0)

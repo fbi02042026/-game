@@ -180,11 +180,15 @@ public static class SlotMachineSystem
     //   安慰奖只剩「金币」一档。强化石照旧走铁匠铺 / 休息关 / 商店（那几处不受影响）。
 
     /// <summary>本关可参与老虎机的类型：池空的类型不进（判空直接复用 DraftPool）。</summary>
-    public static List<DraftCategory> AvailableCategories()
+    /// <param name="allowMercWhenFull">
+    /// 【2026-11-24 主人拍板】true = 满员也算佣兵方向有货（波间免费三选一用，选中后弹「换下谁」）。
+    /// 默认 false 保持老虎机原口径：满员不出佣兵方向。
+    /// </param>
+    public static List<DraftCategory> AvailableCategories(bool allowMercWhenFull = false)
     {
         var list = new List<DraftCategory>(3);
         if (DraftPool.HasSkillContent()) list.Add(DraftCategory.Skill);
-        if (DraftPool.HasMercContent()) list.Add(DraftCategory.Merc);
+        if (DraftPool.HasMercContent(allowMercWhenFull)) list.Add(DraftCategory.Merc);
         if (DraftPool.HasEquipContent()) list.Add(DraftCategory.Equip);
         return list;
     }
@@ -382,21 +386,30 @@ public static class SlotMachineSystem
         if (IsTutorialRun && order != null && n >= 0 && n < order.Length && cats != null && cats.Count > 0)
         {
             var want = order[n];
-            if (cats.Contains(want)) return want;
+            if (cats.Contains(want))
+            {
+                Debug.Log($"[SlotMachine诊断] ResolveCategory → 引导定序第{n+1}拍强制 {want}（候选=[{string.Join(",", cats)}]）");
+                return want;
+            }
         }
-        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（n 是当前这抽的 0 基序号，
-        // NoteDraw 在抽完后才推进，n>=3 = 第 4 抽起，2026-10-19 主人拍板「保底佣兵改成3次」）。
+        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（2026-11-24 提前到第 2 抽起保底，
+        // 原 2026-10-19 是第 4 抽起；主人要「第一关抽 2-3 次就能抽到佣兵」）。
         // 窗口内金币方向由 GoldAllowed 同步挡掉 ——
         // 保底必须真的给佣兵，不能让玩家花钱抽回币（2026-10-18 主人报「抽奖 3 次全是抽奖币」）。
         // 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
         // 引导局有自己的定序，不叠加。
-        if (MercGuaranteeActive()
-            && cats != null && cats.Contains(DraftCategory.Merc)
-            && DraftPool.BuildCards(DraftCategory.Merc).Count > 0)
+        bool mercGuarantee = MercGuaranteeActive();
+        bool catHasMerc = cats != null && cats.Contains(DraftCategory.Merc);
+        bool mercPoolHasContent = catHasMerc && DraftPool.BuildCards(DraftCategory.Merc).Count > 0;
+        Debug.Log($"[SlotMachine诊断] ResolveCategory → DrawIndex={RunLoadout.DrawCount} Mercs={RunLoadout.Mercs().Count} MercGuaranteeActive={mercGuarantee} cats=[{string.Join(",", cats ?? new List<DraftCategory>())}] mercPool={mercPoolHasContent}");
+        if (mercGuarantee && catHasMerc && mercPoolHasContent)
         {
+            Debug.Log($"[SlotMachine诊断] ResolveCategory → 保底佣兵强制 Merc");
             return DraftCategory.Merc;
         }
-        return RollCategory(cats);
+        var result = RollCategory(cats);
+        Debug.Log($"[SlotMachine诊断] ResolveCategory → RollCategory 结果 {result}");
+        return result;
     }
 
     /// <summary>
@@ -463,17 +476,17 @@ public static class SlotMachineSystem
     public static void NoteGoldPrize() => _goldPrizesThisRun++;
 
     /// <summary>
-    /// 【2026-10-17 主人拍板「开局卡关」】正式关保底佣兵的**触发条件**（唯一出口）：
-    /// 非引导局、本局已抽 ≥3 次（第 4 抽起，【2026-10-19 主人拍板「保底佣兵改成3次」】由 ≥2 改来）、
+    /// 【2026-11-24 主人拍板「过了第三关慢慢把佣兵保底放到5次」】正式关保底佣兵的**触发条件**（唯一出口）：
+    /// 非引导局、本局已抽 ≥5 次（第 6 抽起保底 —— 前 5 次按概率正常出，第 6 抽还没抽到佣兵就强制给）、
     /// 且本局一只佣兵都没有。
     /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="GoldAllowed"/>
-    /// 据此把金币方向挡在保底窗口外（2026-10-18 主人报「抽奖 3 次全是抽奖币」的根因修复）。
+    /// 据此把金币方向挡在保底窗口外。
     /// ⚠ 是否真的强制还要看佣兵方向**有内容可给**（cats 含 Merc），那道可用性判定留在 <see cref="ResolveCategory"/>。
     /// </summary>
     public static bool MercGuaranteeActive()
     {
         return !IsTutorialRun
-            && DrawIndex >= 3
+            && DrawIndex >= 5
             && RunLoadout.Mercs().Count == 0;
     }
 

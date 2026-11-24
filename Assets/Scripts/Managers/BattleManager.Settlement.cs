@@ -1978,11 +1978,8 @@ public partial class BattleManager
                         yield return WaitForContinue(true,
                             !string.IsNullOrEmpty(guideText) ? $"{RewardTip()}　点「继续」继续战斗。" : null,
                             () => choice == 2);
-                        // 【2026-10-08 主人拍板】点完「继续」立刻弹一句「继续前进」——
-                        // 面板收起、战斗恢复的那一刻，给玩家一个明确的「接着往前走」的信号。
-                        // 只走引导（guideText 非空）；正式关不打扰。想改停留秒数就改这个 2.2f。
-                        if (!string.IsNullOrEmpty(guideText))
-                            TutorialHintUI.Ensure().Show("继续前进", null, 2.2f);
+                        // 【2026-11-24 主人拍板】删掉点「继续」后的「继续前进」引导框（2026-10-08 旧拍板作废）：
+                        // 面板收起即恢复战斗，不再额外弹提示。
                     }
                 }
 
@@ -2486,8 +2483,8 @@ public partial class BattleManager
         // 必须夹在 PersistBattleGold（关卡金先进 GoldEarned）与 OnStageComplete（写 clearedStages）之间，
         // 否则首通判定/金币差值都会少一笔（见 RecordStageRewardNoticeIfFirstClear）。
         RecordStageRewardNoticeIfFirstClear();
-        // 【2026-11-22 宠物功能引导】1-3 正式主线首次通关 → 落一个 pending，回城消费：
-        // 开冒险页 + 前台小姐告知「宠物功能已开启」+ 引导上阵/喂养。判定只认正式主线 1-3，
+        // 【2026-11-22 宠物功能引导】整数制关 3（精英）正式主线首次通关 → 落一个 pending，回城消费：
+        // 开冒险页 + 前台小姐告知「宠物功能已开启」+ 引导上阵/喂养。判定只认正式主线关 3，
         // 其它玩法（裂隙/竞技场/活动本）不触发；一次性标记写在存档，不重播。
         // ⚠ 必须早于 OnStageComplete()——那一步会把 currentStageIndex 推进到下一关，判据会失效。
         if (IsFormalMainRun && NormalOnlyContentAllowed(BattleDifficulty))
@@ -2495,7 +2492,7 @@ public partial class BattleManager
             var guideCm = ChapterManager.Instance;
             if (guideCm != null && guideCm.currentChapter == 1 && guideCm.currentGrand == 1
                 && guideCm.CurrentSubIndex0 == 2)
-                PetFeatureGuide.MarkClearedStage13();
+                PetFeatureGuide.MarkDogRescueCleared();
         }
         // 【2026-11-22 动态难度】过关推进橡皮筋：清本关失败数 + 判定缓坡/陡坡（真源 AdaptiveDifficulty）。
         // ⚠ 必须在 OnStageComplete() 之前——那一步会推进 currentStageIndex，key 会变成下一关。

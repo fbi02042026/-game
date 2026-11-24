@@ -11,6 +11,7 @@ public static class MercSkillExecutor
         HealSingle,
         HealTeam,
         SelfDefBuff,
+        InterruptSingle,   // 【2026-11-24】单体打断技（破阵击等）：命中后打断目标攒槽
         TeamShield,
         TeamHealAtk,
         FearThenFallback,
@@ -37,6 +38,9 @@ public static class MercSkillExecutor
                 return Kind.TeamShield;
             if (Contains(row.TargetType, "自身") && row.Category == MercSkillTable.SkillCategory.Defense)
                 return Kind.SelfDefBuff;
+            // 【2026-11-24】打断读条技：公式或效果描述含「打断」→ 走 InterruptSingle（单体物伤 + 打断攒槽）
+            if (Contains(f, "打断") || Contains(row.EffectDesc ?? "", "打断"))
+                return Kind.InterruptSingle;
             if (row.Category == MercSkillTable.SkillCategory.Magic
                 && (Contains(f, "目标攻击") || Contains(f, "降低")))
                 return Kind.FearThenFallback;

@@ -3,7 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// 宠物功能新手引导（2026-11-22；2026-11-23 主人拍板「胜利界面先报喜、回城只指路」）：
-/// 1-3 正式主线首通 → 胜利结果界面奖励展示完弹「宠物功能已开启」toast（ShowUnlockToastOnVictory）→
+/// 整数制关 3（精英）正式主线首通 → 胜利结果界面奖励展示完弹「宠物功能已开启」toast（ShowUnlockToastOnVictory）→
 /// 回城 → 底栏气泡指角色页 → 玩家自己进角色页后气泡指宠物入口 → 上阵 → 喂养（随机属性 +X + 亲密度）→ 宠物用战斗对话框叫两声。
 /// 【2026-11-23 主人拍板】不替玩家自动切页（旧版 OpenCharacter 的「下滑转场」观感差），一律酒馆气泡模式：
 /// 贴目标 + 尖角 + 无手指滑动 + 点击即收，见 ShowBubble()。
@@ -43,16 +43,16 @@ public static class PetFeatureGuide
         SideTipToTarget = true,
     };
 
-    static bool _pending;                    // 跨场景 pending：1-3 通关置位，回城消费
+    static bool _pending;                    // 跨场景 pending：关 3 通关置位，回城消费
     static PetFeatureGuideDriver _driver;
 
-    /// <summary>1-3 正式主线通关时调（Settlement 已做好章节/模式判定）。</summary>
-    public static void MarkClearedStage13()
+    /// <summary>整数制关 3 正式主线通关时调（Settlement 已做好章节/模式判定）。</summary>
+    public static void MarkDogRescueCleared()
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null || data.HasIntruderStorySeen(DoneKey)) return;
         _pending = true;
-        Debug.Log("[PetFeatureGuide] 1-3 首通，pending 宠物功能引导");
+        Debug.Log("[PetFeatureGuide] 狗营救关首通，pending 宠物功能引导");
     }
 
     /// <summary>
@@ -69,8 +69,8 @@ public static class PetFeatureGuide
     public static void TryConsumeOnTown()
     {
         // 【2026-11-23 主人「打完中断再进也没有引导宠物上阵流程了」】_pending 是内存静态字段，
-        // 1-3 通关置位后只要退出进程（含退出 Play）就丢，再回城永远不引导。
-        // 缺失时从存档补回一次，判据与 MarkClearedStage13 的调用前提完全一致。
+        // 关 3 通关置位后只要退出进程（含退出 Play）就丢，再回城永远不引导。
+        // 缺失时从存档补回一次，判据与 MarkDogRescueCleared 的调用前提完全一致。
         if (_driver != null) return;            // 本会话已启动过（含引导进行中）：不重开、不打断玩家当前进度
         if (!_pending) _pending = ShouldGuideFromSave();
         if (!_pending) return;
@@ -84,8 +84,8 @@ public static class PetFeatureGuide
     }
 
     /// <summary>
-    /// 存档推导「1-3 首通该引导、但还没引导完」——中断后重进补 pending 的唯一判据：
-    /// 宠物功能已解锁（营救剧情看过）+ 完成标记未写 + 1-3 已通关（与 Settlement 调 MarkClearedStage13 的前提一致）。
+    /// 存档推导「关 3 首通该引导、但还没引导完」——中断后重进补 pending 的唯一判据：
+    /// 宠物功能已解锁（营救剧情看过）+ 完成标记未写 + 关 3 已通关（与 Settlement 调 MarkDogRescueCleared 的前提一致）。
     /// </summary>
     static bool ShouldGuideFromSave()
     {

@@ -188,6 +188,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     {
         if (_replacePanel != null) _replacePanel.SetActive(false);
         ExitSwapSelecting();   // 替换点选态跟窗口一起收
+        if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
+            BattleHeadTalkUI.Instance.HideNow();   // 【2026-11-24】关窗收掉上阵气泡，防飘到别的界面
         ResourceStrip.Release();   // 【2026-10-24】资源条归还主界面顶条（与 Open 的 Show 成对）
         if (_root != null) _root.SetActive(false);
     }
@@ -264,7 +266,15 @@ public partial class MercDrawPoolUI : MonoBehaviour
         // 复用 Art.cs 的 MakeBtn 统一外观；显隐由 Refresh 一处按 _swapSelecting 控制，点它走 ExitSwapSelecting。
         if (panel != null)
         {
-            var cancelSwapBtn = MakeBtn(panel.transform, "BtnCancelSwap", "取消替换", new Vector2(0.5f, 0.06f), ExitSwapSelecting);
+            var cancelSwapBtn = MakeBtn(panel.transform, "BtnCancelSwap", "取消", new Vector2(0.5f, 0.06f), ExitSwapSelecting);
+            // 【2026-11-24 主人拍板】按钮底图换用现成「取消按钮」（深红圆角，100×33≈150×48 比例），文字只留「取消」并上移 2px
+            SetBtnSprite(cancelSwapBtn, ArtCommon + "取消按钮");
+            var cancelLabelRt = cancelSwapBtn != null ? cancelSwapBtn.transform.Find("Label") as RectTransform : null;
+            if (cancelLabelRt != null)
+            {
+                cancelLabelRt.offsetMin = new Vector2(cancelLabelRt.offsetMin.x, cancelLabelRt.offsetMin.y + 2f);
+                cancelLabelRt.offsetMax = new Vector2(cancelLabelRt.offsetMax.x, cancelLabelRt.offsetMax.y + 2f);
+            }
             _cancelSwapBtn = cancelSwapBtn != null ? cancelSwapBtn.gameObject : null;
         }
         if (_cancelSwapBtn != null) _cancelSwapBtn.SetActive(false);

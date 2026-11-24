@@ -250,7 +250,12 @@ public class RunDraftDirector : MonoBehaviour
     // 选卡结算
     // ============================================================
 
-    void OnCardPicked(DraftCard card)
+    /// <summary>
+    /// 一张卡落地的<b>统一出口</b>：生效 + 存档 + 刷 HUD + toast。
+    /// 【2026-11-24】由 private 改 public —— 波间三选一（BattleManager.TryShowWaveClearDraft）走同一条链，
+    /// 避免另写一份「选完卡之后刷什么」的逻辑。
+    /// </summary>
+    public void OnCardPicked(DraftCard card)
     {
         string msg = ApplyCard(card);
         RunLoadout.Save();
@@ -557,6 +562,21 @@ public class RunDraftDirector : MonoBehaviour
             skillId = data.skillId,
             passiveSkillId = data.passiveSkillId
         };
+        // 【2026-11-24 主人拍板】满员抽到不同佣兵：不直接拒绝，弹「换下谁」（新佣兵 + 现有两位）。
+        // 只有波间免费三选一会把佣兵卡放进池子（老虎机付费抽仍按原样：满员不出佣兵方向）。
+        if (RunLoadout.IsMercFull)
+        {
+            MercReplaceConfirmUI.Show(entry, idx =>
+            {
+                if (idx < 0)
+                {
+                    Debug.Log("[RunDraft] 满员替换：玩家选择「不要了」，本次佣兵作废");
+                    return;
+                }
+                ReplaceRunMercAt(idx, entry);
+            });
+            return true;
+        }
         if (!RunLoadout.TryAddMerc(entry)) { msg = "佣兵位已满"; return false; }
         // 【2026-10-29 主人需求】战斗抽到佣兵：从左边屏外走到玩家身后的编队位，不再原地闪现。
         SpawnRunMerc(entry, walkInFromLeft: true);
@@ -801,6 +821,112 @@ public class RunDraftDirector : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// 【2026-11-24 主人拍板】佣兵离开本局：战斗头像详情弹窗的「离开」按钮走这条。
+    /// <para>顺序钉死：先摘账本（头像栏下一帧就按新名单重排，不会留着已走的人）→
+    /// 剩下的人重排编队位 → 场上单位往左走出后销毁。已阵亡的没有场上单位，就只掉账本 + 头像，不播动画。</para>
+    /// <para>不碰存档已拥有状态：走掉的佣兵之后还能再被抽到。</para>
+    /// </summary>
+    public void LeaveMerc(int index)
+    {
+        var mercs = RunLoadout.Mercs();
+        if (mercs == null || index < 0 || index >= mercs.Count) return;
+        var e = mercs[index];
+        if (e == null) return;
+
+        string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+        Mercenary unit = FindOutMerc(key);          // 先找场上单位：账本摘掉后就查不到了
+
+        var removed = RunLoadout.RemoveMercAt(index);
+        if (removed == null) return;
+
+        ReindexRunMercs();
+        if (unit != null) StartCoroutine(CoWalkOutAndDespawn(unit));
+        BattleUI.Instance?.UpdateCharacterSlots();
+        Debug.Log($"[RunDraft] 佣兵离开：{removed.displayName}({key})，队伍剩 {RunLoadout.Mercs().Count}/{RunLoadout.MaxRunMercs}");
+    }
+
+    /// <summary>离开/替换后按新名单重排编队位（阵型下标唯一真源 = RunLoadout 的下标）。</summary>
+    void ReindexRunMercs()
+    {
+        var mercs = RunLoadout.Mercs();
+        for (int i = 0; i < mercs.Count; i++)
+        {
+            var e = mercs[i];
+            if (e == null) continue;
+            var m = FindOutMerc(!string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId);
+            if (m != null) m.SetPartyIndex(i);
+        }
+    }
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板】满员替换：把第 <paramref name="index"/> 位换成 <paramref name="entry"/>。
+    /// 旧人往左走出 → 新人从屏外走入站到同一个坑 → 重排编队位 → 刷头像栏。
+    /// 拥有状态与正常入队同口径（首获写永久解锁 + 补池），但不再弹全屏获得演出（避免连着两个大弹窗）。
+    /// </summary>
+    public void ReplaceRunMercAt(int index, RunMercEntry entry)
+    {
+        var mercs = RunLoadout.Mercs();
+        if (mercs == null || entry == null || index < 0 || index >= mercs.Count) return;
+
+        var old = mercs[index];
+        string oldKey = old == null ? null : (!string.IsNullOrEmpty(old.hireId) ? old.hireId : old.mercId);
+        Mercenary oldUnit = string.IsNullOrEmpty(oldKey) ? null : FindOutMerc(oldKey);
+
+        RunLoadout.ReplaceMercAt(index, entry);
+        RunLoadout.Save();
+
+        if (oldUnit != null) StartCoroutine(CoWalkOutAndDespawn(oldUnit));
+        SpawnRunMerc(entry, walkInFromLeft: true, slotOverride: index);
+        ReindexRunMercs();
+        BattleUI.Instance?.UpdateCharacterSlots();
+        // 与正常入队同口径：替换上场也算一次「参战」（S006/S007/S008 喂食口）
+        AdventureLogAchievements.OnMercBattled(entry.hireId);
+
+        bool newlyOwned = false;
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.IsTutorialRun)
+        {
+            var d = SaveSystem.Instance?.Data;
+            if (d != null && d.UnlockMerc(entry.hireId))
+            {
+                d.EnsurePoolFilled();
+                SaveSystem.Instance.Save();
+                newlyOwned = true;
+            }
+        }
+
+        bool hasRoster = MercRosterDefs.TryGetByHireId(entry.hireId, out var rd);
+        string fullName = !string.IsNullOrEmpty(entry.displayName) ? entry.displayName : entry.nickname;
+        MercJoinBannerUI.Show(entry.hireId, fullName,
+            hasRoster ? rd.Rarity : MercRosterDefs.MercRarity.Common);
+
+        Debug.Log($"[RunDraft] 满员替换：{oldKey} → {entry.hireId}（第 {index + 1} 位）"
+                  + (newlyOwned ? "，首次拥有" : ""));
+    }
+
+    /// <summary>
+    /// 往左走出屏幕后销毁。停 AI 的方式 = 关掉单位组件（UnitBase.Update 不再改写速度/朝向），
+    /// 位移仍交给刚体速度，观感与平时走路一致，不瞬移。
+    /// </summary>
+    IEnumerator CoWalkOutAndDespawn(Mercenary merc)
+    {
+        const float walkSpeed = 6.5f;
+        const float walkSec = 0.85f;
+        if (merc == null) yield break;
+        merc.enabled = false;
+        if (merc.rb != null) merc.rb.velocity = new Vector2(-walkSpeed, 0f);
+        merc.PlayWalkOutLeft();
+
+        float t = 0f;
+        while (t < walkSec && merc != null)
+        {
+            t += Time.deltaTime;
+            yield return null;
+        }
+        if (merc != null) MercenaryManager.Instance?.DespawnMercenary(merc);
+    }
+
     /// <summary>抽卡升级/升星后：把场上该佣兵按新等级重算（Init 会重置满血，视为顺带补血）。</summary>
     void RefreshMercUnit(string hireIdOrMercId)
     {
@@ -826,7 +952,7 @@ public class RunDraftDirector : MonoBehaviour
     /// 远程站玩家身后、近战站身前；走路动画由 AI 的 SetMove 播放，无需新写移动代码）。
     /// 还原 / 羁绊进本等其余路径保持原样：按编队位直接生成。
     /// </summary>
-    void SpawnRunMerc(RunMercEntry e, bool walkInFromLeft = false)
+    void SpawnRunMerc(RunMercEntry e, bool walkInFromLeft = false, int slotOverride = -1)
     {
         var bm = BattleManager.Instance;
         var mm = MercenaryManager.Instance;
@@ -855,7 +981,8 @@ public class RunDraftDirector : MonoBehaviour
 
         var hero = bm.hero != null ? bm.hero : Hero.Instance;
         float z = bm.unitRoot != null ? bm.unitRoot.position.z : 0f;
-        int slot = mm.GetActiveMercs().Count;
+        int slot = slotOverride >= 0 ? slotOverride : mm.GetActiveMercs().Count;
+        // 【2026-11-24】满员替换要顶到同一个坑：场上老单位还在走人，active 数量不可靠 → 由调用方给下标。
         float baseX;
         // 【2026-10-31 主人拍板「抽到佣兵要从左侧入场，不许瞬现」】两条路都屏外生成、走入到编队位：
         // · 开打前抽到（首波未刷，LiveStart 抽奖阶段）：屏外生成 + BeginMapEnter(walkWhileFrozen:true)，

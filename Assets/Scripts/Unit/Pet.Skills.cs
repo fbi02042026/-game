@@ -208,6 +208,8 @@ public partial class Pet
             if (target == null || target.isDead || _fled) yield break;
             PlayAnim("Attack");
             target.TakeDamage(dmg, false, false, true, facingDir, this);
+            // 【2026-11-24】狼系裂爪命中时打断目标读条（只在攒槽期生效，其余空操作、不惩罚）
+            target.TryInterruptCast();
             if (vfx != null) vfx.PlaySlash(target.GetHitPosition(), facingDir, VfxFaction.Ally);
             yield return new WaitForSeconds(0.12f);
         }

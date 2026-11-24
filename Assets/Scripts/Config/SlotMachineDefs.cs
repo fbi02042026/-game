@@ -282,12 +282,12 @@ public static class SlotMachineDefs
     // ⚠ 概率公示（`DraftPool.BuildOddsRows`）用**同一套权重**现算 → 弹窗数字永远等于实际。
     // ============================================================
 
-    /// <summary>「装备」类被抽中的权重（<b>2026-10-20 主人拍板：55，三类里最大</b>；10-13 那版是 85）。</summary>
-    public const int CATEGORY_WEIGHT_EQUIP = 55;
-    /// <summary>「技能」类被抽中的权重（<b>2026-10-20 主人拍板：20</b>，与佣兵并列第二；10-13 那版是 10）。</summary>
+    /// <summary>「装备」类被抽中的权重（<b>2026-11-24 主人拍板：45，给佣兵让路</b>；10-20 那版是 55）。</summary>
+    public const int CATEGORY_WEIGHT_EQUIP = 45;
+    /// <summary>「技能」类被抽中的权重（<b>2026-10-20 主人拍板：20</b>，不变）。</summary>
     public const int CATEGORY_WEIGHT_SKILL = 20;
-    /// <summary>「佣兵」类被抽中的权重（<b>2026-10-20 主人拍板：20</b>，与技能并列第二；10-13 那版是 5）。</summary>
-    public const int CATEGORY_WEIGHT_MERC = 20;
+    /// <summary>「佣兵」类被抽中的权重（<b>2026-11-24 主人拍板：30，前期更容易抽到佣兵</b>；10-20 那版是 20）。</summary>
+    public const int CATEGORY_WEIGHT_MERC = 30;
 
     /// <summary>
     /// 【2026-10-24 主人拍板】不保底传奇、保底稀有：每 N 次装备方向抽奖保底 1 次稀有+

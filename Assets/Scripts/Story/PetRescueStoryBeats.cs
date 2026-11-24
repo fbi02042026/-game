@@ -3,16 +3,16 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 宠物营救剧情（2026-11-21 定稿，2026-11-23 分镜重构）：第 1 章第 1 座大关第 3 小关（1-3）。
+/// 宠物营救剧情（2026-11-21 定稿，2026-11-23 分镜重构）：第 1 章第 1 座大关第 3 小关（整数制关 3，精英关）。
 /// 【2026-11-23 主人拍板·完整分镜】不走全屏对白窗，全程战场内演出、保持战斗视角：
 ///   第一波照常打 → 第二波刷出时怪围着狗，狗"汪汪"+玩家喊话（对话步骤冻场，说完解冻）
 ///   → 狗被打跑（血空退场 + 逃跑旁白）→ 释放占用 →「首领来袭」大图 + 第 3 波精英出场
-///   → 狗归队帮打精英 → 精英清完 → 狗叫两声 + 玩家"真是一只有趣的小狗"点评 → 胜利界面功能开启 toast。
-/// 【波次】1-3 剧情关由 2 波拆成 3 波（总怪量不变：走 FormalStageMonsterTotal 按 3 波摊），
+///   → 精英打到半血 → 狗从左侧跑回来帮打 → 精英清完 → 狗叫两声 + 玩家"真是一只有趣的小狗"点评 → 胜利界面功能开启 toast。
+/// 【波次】整数制关 3（精英）剧情关由 2 波拆成 3 波（总怪量不变：走 FormalStageMonsterTotal 按 3 波摊），
 /// 末波 = 精英波（formalEliteSplit 天然生效），第二波 = 纯普通怪（狗陪打）。
 /// 真源只此一处 C# 常量，不进 csv/prefab；台词口吻照项目现成调侃风（「我勒个豆」）。
 /// 演出协程在 BattleManager.CutsceneDirector.cs（单协程按 BattleCutsceneDefs.DogRescue 步骤表驱动）。
-/// 未通关时每次进 1-3 都演，通关后不再演（真源 = clearedStages）。
+/// 未通关时每次进关 3 都演，通关后不再演（真源 = clearedStages）。
 /// </summary>
 public static class PetRescueStoryBeats
 {
@@ -20,15 +20,15 @@ public static class PetRescueStoryBeats
     public const string SeenKey = "petRescue_1_3";
 
     /// <summary>
-    /// 1-3 是否还需要播营救剧情（章节/座/小关 + 未通关）。唯一真源：
+    /// 当前关是否符合狗营救剧情（整数制关 3 + 未通关 + 正式主线 + 普通难度）。唯一真源：
     /// 波次编排（WavePlanner.Plan 拆 3 波）与演出激活（BattleManager.TryPetRescueActivate）共用，
     /// 禁在别处再写第二份关卡判定。
     /// </summary>
-    public static bool IsStage13Uncleared()
+    public static bool IsDogRescueStage()
     {
         var cm = ChapterManager.Instance;
         if (cm == null || cm.currentChapter != 1 || cm.currentGrand != 1) return false;
-        if (cm.CurrentSubIndex0 != 2) return false;   // 1-3（0 基 sub0=2）
+        if (cm.CurrentSubIndex0 != 2) return false;   // 整数制关 3（0 基 sub0=2）
         var save = SaveSystem.Instance?.Data;
         return save != null && !save.HasStageCleared(1, 2);
     }

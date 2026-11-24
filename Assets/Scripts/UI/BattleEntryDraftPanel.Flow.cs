@@ -546,8 +546,43 @@ public partial class BattleEntryDraftPanel
         return _mapBaseScaleX;
     }
 
+    /// <summary>
+    /// 【2026-11-24 主人拍板「放大缩小直接找 map 节点」】队伍动态视野的地图缩放倍率：
+    /// 1 = 终态原样，&lt;1 = 地图缩小（队伍散开拉远视野）。只由
+    /// <see cref="SetFormationMapScale"/> 写；在 <see cref="MapScaleAt"/> 里乘进基准，
+    /// 所以两态动画与恒终态写回仍然只有 <see cref="WriteMapTransform"/> 一个出口，
+    /// 本类不新增任何直接写 map 的地方。
+    /// </summary>
+    public static float FormationMapScale { get; private set; } = 1f;
+
+    /// <summary>
+    /// 【2026-11-24 主人要求「地图缩放时战场上的单位不要有滑动位移」】由
+    /// <see cref="CameraFollow"/> 每帧调：写倍率并<b>立刻</b>落笔一次，
+    /// 让 map 与摄像机 ortho 在同一帧、用同一个倍率。
+    /// <para>为什么不能只写字段等本类 LateUpdate：<c>CameraFollow.LateUpdate</c> 与本类
+    /// <c>LateUpdate</c> 的执行顺序没有保证。若本类先跑，map 会用上一帧的倍率，而 ortho 已是本帧值
+    /// —— 缩放过渡的 0.35 秒里两者差一帧，画面表现为单位相对地图轻微来回「游」。
+    /// 这里提前落一次笔，本类 LateUpdate 随后再写一次同值（有差值闸门，幂等）。</para>
+    /// </summary>
+    public static void SetFormationMapScale(float f)
+    {
+        FormationMapScale = (float.IsNaN(f) || f < 0.01f) ? 1f : f;
+        var inst = Instance;
+        if (inst == null || inst._mapRt == null) return;
+        // 入场归位动画在跑时让路，保持「同一时刻只有一处写 map」
+        if (inst._animCo != null || inst._settleCo != null) return;
+        inst.ApplyMapState(1f);
+    }
+
+    /// <summary>动态视野倍率规整（1 = 现状；非法值一律当 1，绝不把地图缩没）。</summary>
+    static float MapFormationFactor()
+    {
+        float f = FormationMapScale;
+        return (float.IsNaN(f) || f < 0.01f) ? 1f : f;
+    }
+
     /// <summary>倍率 → 绝对缩放（基准来自预制体）。</summary>
-    float MapScaleAt(float mul) => CaptureMapBaseScale() * mul;
+    float MapScaleAt(float mul) => CaptureMapBaseScale() * mul * MapFormationFactor();
 
     /// <summary>
     /// map 的两态：<b>中心 Y = 220 → 315</b>（主人给的绝对值），缩放 = <b>预制体原值 × 倍率</b>
@@ -566,8 +601,15 @@ public partial class BattleEntryDraftPanel
     /// </summary>
     void ApplyMapState(float k)
     {
+        // 【2026-11-24 主人拍板「战场单位要和地图一起放大缩小，相对位置不要变」】
+        // 缩放基准必须是【屏幕中心】，不是 map 自己的中心：map 铺满 BattleUI、pivot 0.5，
+        // 它的中心离屏幕中心有 MapExpandedPosY（315px）那么远。只乘 scale 不搬位置的话，
+        // 地图会以自己中心为轴缩，和以屏幕中心为轴缩的世界单位必然错位。
+        // 让 Y 也乘同一个倍率，等于把 map 中心搬到 Y0*f → 屏幕中心那颗像素原地不动，
+        // 与摄像机 ortho 的世界缩放严格同基准。
+        float f = MapFormationFactor();
         WriteMapTransform(
-            Mathf.Lerp(MapCollapsedPosY, MapExpandedPosY, k),
+            Mathf.Lerp(MapCollapsedPosY, MapExpandedPosY, k) * f,
             MapScaleAt(Mathf.Lerp(MapScaleMulCollapsed, MapScaleMulExpanded, k)));
     }
 
@@ -618,7 +660,7 @@ public partial class BattleEntryDraftPanel
     {
         if (_mapRt == null) return;
 
-        bool atRest = Mathf.Abs(_mapRt.anchoredPosition.y - MapCollapsedPosY) < 0.5f
+        bool atRest = Mathf.Abs(_mapRt.anchoredPosition.y - MapCollapsedPosY * MapFormationFactor()) < 0.5f
                       && Mathf.Abs(_mapRt.localScale.x - MapScaleAt(MapScaleMulCollapsed)) < 0.001f;
         if (atRest)
         {
@@ -638,7 +680,7 @@ public partial class BattleEntryDraftPanel
         {
             t += Time.unscaledDeltaTime / AnimSec;
             float e = Mathf.Clamp01(t);
-            WriteMapTransform(Mathf.Lerp(fromY, MapCollapsedPosY, e),
+            WriteMapTransform(Mathf.Lerp(fromY, MapCollapsedPosY * MapFormationFactor(), e),
                               Mathf.Lerp(fromS, MapScaleAt(MapScaleMulCollapsed), e));
             yield return null;
         }

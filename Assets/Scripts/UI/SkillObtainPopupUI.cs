@@ -134,6 +134,18 @@ public class SkillObtainPopupUI : MonoBehaviour
         if (_root != null) _root.SetActive(false);
     }
 
+    // 【2026-11-24 主人拍板】剧情开播自动收起本弹窗：照 EquipReplaceConfirmUI 的 StoryStarted
+    // 订阅范式，剧情只广播事件；本弹窗自己走 CloseIfOpen 正常出口（照常回调 onClosed，不卡流程）。
+    void OnEnable()
+    {
+        if (_instance == this) StoryDirector.StoryStarted += CloseIfOpen;
+    }
+
+    void OnDisable()
+    {
+        StoryDirector.StoryStarted -= CloseIfOpen;
+    }
+
     void OnDestroy()
     {
         if (_instance == this) _instance = null;

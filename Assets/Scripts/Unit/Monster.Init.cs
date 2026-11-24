@@ -399,7 +399,7 @@ public partial class Monster
         // 裂隙 / 副本 / 支线岛 / 竞技场仍走常量 LATE_ELITE_BOSS_HP_MUL=2，行为零变化。
         float lateHpMul = !lateGameBuff ? 1f
             : (lateEliteOrBoss
-                ? (formalMainRun ? GameConfig.LateEliteBossHpMulForChapter(chapter, _isBossUnit) : GameConfig.LATE_ELITE_BOSS_HP_MUL)
+                ? (formalMainRun ? GameConfig.LateEliteBossHpMulForChapter(chapter, _isBossUnit, stageIdx0) : GameConfig.LATE_ELITE_BOSS_HP_MUL)
                 : GameConfig.LATE_MOB_HP_MUL);
         float lateAtkMul = !lateGameBuff ? 1f
             : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_ATK_MUL : GameConfig.LATE_MOB_ATK_MUL);

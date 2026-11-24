@@ -144,6 +144,20 @@ public partial class BattleUI : MonoBehaviour
         return index < QuickSlotOrder.Length ? QuickSlotOrder[index] : EquipSlotType.Head;
     }
 
+    /// <summary>
+    /// 【2026-11-24】技槽容器 SkillBar 下的「非技槽」子节点（目前只有「自动」勾选框）。
+    /// 判定按名字：勾选框由美术/预制体手摆，没有「槽根 Image + icon 子层」这套结构，
+    /// 按结构判定会误伤老预制体里的空壳槽，所以显式认名字。
+    /// </summary>
+    static bool IsSkillBarExtraNode(Transform t)
+    {
+        if (t == null) return true;
+        string n = t.name;
+        if (string.IsNullOrEmpty(n)) return false;
+        return n == "\u81EA\u52A8"                                   // 自动
+            || n.IndexOf("\u81EA\u52A8", System.StringComparison.Ordinal) >= 0;
+    }
+
     void BindRunSkillSlots()
     {
         if (runSkillSlots == null) runSkillSlots = new List<SkillAvatarUI>();
@@ -160,6 +174,10 @@ public partial class BattleUI : MonoBehaviour
         {
             Transform t = skillSlotRoot.GetChild(i);
             if (t == null) continue;
+            // 【2026-11-24】SkillBar 下除了 4 个技槽还挂了「自动」勾选框（切换自动/手动施法），
+            // 它不是技槽：当槽位绑会把它的子文字 labelText 当技能名刷掉（SetLabelVisible(false) →
+            // 「自动」两字消失），还会在它身上补能量条 / 冷却遮罩 / 序号角标（那条横线就是能量条）。
+            if (IsSkillBarExtraNode(t)) continue;
             EnsureVisibleUpwards(t);
             var av = new SkillAvatarUI { root = t.gameObject };
             // 图标层：不能用 icon底 自身背景（会盖掉美术底图），统一补一个子层

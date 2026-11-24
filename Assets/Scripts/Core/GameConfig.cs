@@ -103,6 +103,20 @@ public static partial class GameConfig
     static int _combatDetectCachedFrame = -1;
 
     /// <summary>
+    /// 【2026-11-24 主人拍板「动态视野放大时判定锁现状」】战斗判定的正交半径真源：
+    /// 恒等于 BattleViewportFit 算出的适配基准（=队伍动态缩放前的视野），不随相机的
+    /// 击杀特写 / 队伍聚散缩放变化。索敌 / 刷怪 / 追敌绳 / 点击落点都读这里，
+    /// 保证放大画面时判定范围不漂移（不会出现看得见却打不到 / 刷怪点跟着缩放跑）。
+    /// </summary>
+    public static float CombatJudgeOrthoSize()
+    {
+        var cam = Camera.main;
+        if (cam != null && cam.orthographic)
+            return BattleViewportFit.ResolveOrthoSize();
+        return CAMERA_ORTHO_SIZE;
+    }
+
+    /// <summary>
     /// 【2026-11-18 主人拍板「不能卡边、敌人能去的地方我方也能、但不能离怪超出1个屏」】
     /// 当前战斗相机一个屏幕的完整宽度（世界单位），作为我方出屏追敌的牵引绳上限。
     /// 竖屏设计比例下约 6.08 世界单位；无正交相机时回退到索敌兜底距离。
@@ -111,7 +125,7 @@ public static partial class GameConfig
     {
         var cam = Camera.main;
         if (cam != null && cam.orthographic)
-            return cam.orthographicSize * cam.aspect * 2f;
+            return CombatJudgeOrthoSize() * cam.aspect * 2f;
         return COMBAT_DETECT_FALLBACK;
     }
 
@@ -124,7 +138,7 @@ public static partial class GameConfig
         var cam = Camera.main;
         if (cam != null && cam.orthographic)
         {
-            float screenW = cam.orthographicSize * cam.aspect * 2f;
+            float screenW = CombatJudgeOrthoSize() * cam.aspect * 2f;
             range = screenW + COMBAT_DETECT_SCREEN_PAD;
         }
 
@@ -152,7 +166,7 @@ public static partial class GameConfig
             Vector3 v = cam.WorldToViewportPoint(worldPos);
             return v.z > 0f && v.x >= -0.02f && v.x <= 1.02f && v.y >= -0.02f && v.y <= 1.02f;
         }
-        float halfH = cam.orthographicSize;
+        float halfH = CombatJudgeOrthoSize();
         float halfW = halfH * cam.aspect;
         Vector3 c = cam.transform.position;
         return worldPos.x >= c.x - halfW - marginWorld

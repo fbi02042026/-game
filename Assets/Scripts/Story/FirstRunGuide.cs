@@ -468,8 +468,19 @@ public class FirstRunGuide : MonoBehaviour
     {
         // 【2026-11-21 主人拍板】11-20 起职业改起名后首次定、进本不再弹职业窗，
         // 原「选个顺眼的职业」是下线流程残留；这里只留「点开始冒险」引导，保留傲娇尾巴。
-        yield return CoPoint("职业报备好了，点「开始冒险」下裂隙。进了裂隙，这步就算你过关了。",
-            () => AdventurePageOpen() ? ButtonRect(AdventureStartBtn()) : NavRect(MainNavTab.Adventure),
+        // 【2026-11-24 主人拍板】页没开 / 已开两种状态各说各的话，别再一句文案盖两个画面。
+        // 【2026-11-24 修回归】判定用 AdventurePageStable(0.5s 防抖)，不用单帧 AdventurePageOpen：
+        // 进镇预热会把冒险页点亮一帧再藏回，单帧判定会误判「页已开」跳过本段 → 主界面没引导。
+        if (!AdventurePageStable())
+        {
+            // done 带 _holeTriggered：点中底栏「冒险」立刻判成，不等 0.5s 防抖
+            yield return CoPoint("职业报备好了，先点底栏「冒险」把地图翻开。",
+                () => NavRect(MainNavTab.Adventure),
+                () => _holeTriggered || AdventurePageStable(),
+                false, 0f);   // 【2026-11-04】不自动走
+        }
+        yield return CoPoint("地图铺开了，点「开始冒险」下裂隙。进了裂隙，这步就算你过关了。",
+            () => ButtonRect(AdventureStartBtn()),
             InBattleOrLeaving,
             false, 0f,   // 【2026-11-04】不自动走
             bindTimeoutOverride: BindTimeoutBattle);
@@ -822,7 +833,20 @@ public class FirstRunGuide : MonoBehaviour
 
     static bool InBattleOrLeaving() => GameSceneGate.IsBattle || !GameSceneGate.IsTown;
 
+    // 【2026-11-24 退役说明】单帧判定，调用点已全改走下方 AdventurePageStable；保留备查不删。
     static bool AdventurePageOpen() => IsVisibleHierarchy(AdventureUI.Instance?.gameObject);
+
+    // 【2026-11-24 修回归】进镇预热 CoWarmupPages 把冒险页点亮一帧再藏回，
+    // 单帧 AdventurePageOpen 会骗过 FirstBattle 的「页没开→先指底栏冒险」判定。
+    // 连续可见 0.5s 才算开页，与 CharacterPageOpen 同款口径；仅 FirstBattle 使用。
+    static float _advOpenSince = -1f;
+    static bool AdventurePageStable()
+    {
+        var go = AdventureUI.Instance?.gameObject;
+        if (go == null || !IsVisibleHierarchy(go)) { _advOpenSince = -1f; return false; }
+        if (_advOpenSince < 0f) { _advOpenSince = Time.unscaledTime; return false; }
+        return Time.unscaledTime - _advOpenSince >= 0.5f;
+    }
 
     // 【2026-11-22 主人追加·里程奖励引导】日志页与里程商店入口（节点路径与 AdventureLogUI 绑定处同源）。
     static bool LogPageOpen() => IsVisibleHierarchy(AdventureLogUI.Instance?.gameObject);

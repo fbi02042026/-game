@@ -111,9 +111,10 @@ public partial class MercDrawPoolUI : MonoBehaviour
 
         if (data.AddToDrawPool(hireId))
         {
-            // 【2026-11-18 主人拍板】上阵 toast 改用佣兵「真名：上阵台词」（GetDeployLine 单一出口，Plain 不套看板娘尾巴）
-            UIManager.Instance?.ShowToast(MercRosterDefs.GetDeployLine(hireId));
+            // 【2026-11-24 主人拍板】上阵台词从 toast 改战斗剧情气泡：Commit 后按 hireId 找刚上阵的队列格做锚点
+            string line = MercRosterDefs.GetDeployLine(hireId);
             Commit();
+            PlayDeployBubble(hireId, line);
             return;
         }
 
@@ -153,17 +154,51 @@ public partial class MercDrawPoolUI : MonoBehaviour
         string outId = ordered[index];
         if (data != null && data.SwapInDrawPool(_replacingInId, outId))
         {
-            // 【2026-11-18 主人拍板】上阵 toast 改用换上佣兵的「真名：上阵台词」；_replacingInId 此处尚未置空
-            UIManager.Instance?.ShowToast(MercRosterDefs.GetDeployLine(_replacingInId));
+            // 【2026-11-24 主人拍板】上阵台词从 toast 改战斗剧情气泡：先存 id 和台词（_replacingInId 即将置空），
+            // Commit 刷新出最新队列后再按 id 找刚上阵的队列格做锚点
+            string inId = _replacingInId;
+            string line = MercRosterDefs.GetDeployLine(inId);
             _swapSelecting = false;
             _replacingInId = null;
             StopSwapSway();   // 先还原格子角度再刷新
             Commit();   // 刷新时点选态已退，SwapSel 标记由 RefreshPrefabPoolSlot 清掉
+            PlayDeployBubble(inId, line);
         }
         else
         {
             Debug.LogError("[MercDrawPoolUI] 替换失败：换上=" + _replacingInId + " 换下=" + outId);
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板】上阵台词从 toast 改用战斗剧情气泡（打字机），贴在刚上阵的队列格上方。
+    /// 队列弹窗是 TownPopup(900)，气泡默认 Default/899 会被盖住 → 一次性抬到 TownPopup+40，HideNow 播完还原。
+    /// 锚点必须在 Commit() 之后取：Refresh 会重排 _picked 并刷新队列格。
+    /// </summary>
+    void PlayDeployBubble(string hireId, string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            Debug.LogError("[MercDrawPoolUI] 上阵气泡台词为空，hireId=" + hireId);
+            return;
+        }
+        int idx = _picked.IndexOf(hireId);
+        if (idx < 0 || idx >= _poolSlots.Count || _poolSlots[idx] == null)
+        {
+            Debug.LogError("[MercDrawPoolUI] 上阵气泡锚点取不到队列格：hireId=" + hireId
+                + " idx=" + idx + " slots=" + _poolSlots.Count);
+            return;
+        }
+        // 【2026-11-24 主人报「上阵气泡跑到底部」】锚点从整个 Slot（含名字条的大格子容器）
+        // 精确到 Iconmask/Icon（立绘 Image）顶边——Slot 比 Icon 高出一大截（边框+内边距+名字牌），
+        // 用 Slot 顶边当锚点 → 抬升 96px 后气泡还在立绘胸口以下；用 Icon 顶边才是角色头顶。
+        var slot = _poolSlots[idx];
+        Transform anchor = slot.transform.Find("Iconmask/Icon");
+        if (anchor == null) anchor = slot.transform.Find("Iconmask");
+        if (anchor == null) anchor = slot.transform;
+        var talk = BattleHeadTalkUI.Ensure();
+        talk.SetSortOrderBoostOnce(GameConfig.UiSort.TownPopup + 40);
+        talk.PlayLineAt(anchor, line);
     }
 
     /// <summary>

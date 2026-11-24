@@ -42,8 +42,13 @@ public static partial class GameConfig
         public const int StoryDialogue = 13000;
         /// <summary>全项目最高 sorting layer（TagManager 顺序：Default &lt; Background &lt; Ground &lt; Monster &lt; Player &lt; Effects）。剧情窗专用。</summary>
         public const string TopLayer = "Effects";
+        /// <summary>Unity 默认 sorting layer：战斗人物气泡降层用（2026-11-24）。</summary>
+        public const string DefaultLayer = "Default";
         public const int StoryNaming = 560;
         public const int TutorialHint = 600;
+        /// <summary>战斗人物头顶气泡（BattleHeadTalkUI）：2026-11-24 主人拍板「不要比佣兵信息等弹窗层级高」，
+        /// 从 Effects/13001 降到 Default/899 —— 低于一切弹窗（TownPopup 900 起），弹窗开着时由弹窗压住气泡。</summary>
+        public const int BattleHeadTalk = 899;
         public const int TownPopup = 900;
         /// 通用「获得奖励」弹窗：必须高于 TownPopup(900)——否则与每日登录界面同为 900 时排序不定、会被盖住；低于 BattlePopup(920) 与 Toast(11000)。
         public const int RewardPopup = 905;
@@ -1103,8 +1108,10 @@ public static partial class GameConfig
     public static readonly Color TELEGRAPH_ENRAGED_COLOR = new Color(1f, 0.02f, 0.02f, 1f);
     /// <summary>精英预警时长（秒）。</summary>
     public const float TELEGRAPH_ELITE_SEC = 3f;
-    /// <summary>Boss 预警时长（秒），阶段 2 与阶段切换同用。</summary>
-    public const float TELEGRAPH_BOSS_SEC = 4f;
+    /// <summary>Boss 预警时长（秒），阶段 2 与阶段切换同用。【2026-11-24 主人拍板】从 4s 减到 2.67s（-1/3）。</summary>
+    public const float TELEGRAPH_BOSS_SEC = 2.6667f;
+    /// <summary>Boss 主动技伤害倍率（相对精英 tier=1f 再乘一次）。【2026-11-24 主人拍板】+20% → 1.2f。</summary>
+    public const float BOSS_SKILL_DAMAGE_MUL = 1.2f;
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏幅度</summary>
     public static float BOSS_SKILL_RELEASE_SHAKE_AMP => CombatTuningTable.Get("BOSS_SKILL_RELEASE_SHAKE_AMP", 0.18f);
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏时长</summary>
@@ -1276,18 +1283,27 @@ public static partial class GameConfig
     // 【2026-11-24 主人拍板「精英/Boss 的增长系数改成从小到大，第3关精英血太多」】
     // 旧口径：LATE_ELITE_BOSS_HP_MUL 恒 2f —— 1-3 一进门就 ×2（把 1-2 的精英衬得极薄），
     // 是「前重后轻」的硬台阶；11-23 又拿 stage3EliteHpMul=2/3 打补丁，1-3 净剩 ×1.333。
-    // 新口径：按章递增、无台阶，第 8 章两端都回到 2.05。分成两张表是因为定位不同：
-    //   精英 = 关卡里的小高潮，第 1 章压到 1.0（1-2 / 1-3 一样厚，不再有台阶）；
-    //   Boss = 关卡收尾，第 1 章保 1.35 兜底，不让第一章大 Boss 被这一刀砍半。
+    // 新口径（2026-11-24 二次收口）：**只调第 1 章**。
+    //   第 1 章：精英 1.00 / Boss 1.35，把「1-3 一进门 ×2」的硬台阶拆掉；
+    //   第 2~8 章：一律回 2.00（= 改动前的旧值），避免「只想改 1-3、却把第 2 章精英砍掉 34~40%」的外溢。
+    //   代价是「按章递增」只剩第 1 章这一段；要恢复递增，把后 7 项按
+    //   1.15/1.30/1.42/1.55/1.68/1.85/2.05 填回即可。
+    //   第 1 章关 8 精英另走 stageIdx 特调（见函数内注释），不在这张表里表达。
+    //   Boss 第 1 章保 1.35 兜底，不让第一章大 Boss 被这一刀砍半。
     // 只给主线正式关（formalMainRun）；裂隙 / 活动副本 / 支线岛 / 竞技场仍走常量
     // LATE_ELITE_BOSS_HP_MUL，行为零变化。要整体更肉/更薄只动这两张表。
-    static readonly float[] LateEliteHpRamp = { 1.00f, 1.15f, 1.30f, 1.42f, 1.55f, 1.68f, 1.85f, 2.05f };
-    static readonly float[] LateBossHpRamp  = { 1.35f, 1.45f, 1.55f, 1.62f, 1.72f, 1.82f, 1.95f, 2.05f };
-    public static float LateEliteBossHpMulForChapter(int chapter, bool isBoss)
+    static readonly float[] LateEliteHpRamp = { 1.00f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f };
+    static readonly float[] LateBossHpRamp  = { 1.35f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f, 2.00f };
+    public static float LateEliteBossHpMulForChapter(int chapter, bool isBoss, int stageIdx0 = -1)
     {
         var ramp = isBoss ? LateBossHpRamp : LateEliteHpRamp;
         int ch = Mathf.Clamp(chapter, 1, ramp.Length);
-        return ramp[ch - 1];
+        float v = ramp[ch - 1];
+        // 【2026-11-24 主人拍板·峰3】第 1 章关 8 精英单独抬厚 1.70 倍（294 → 500 血）：
+        //   关 3 精英 260 → 关 8 精英 500，精英渐强才成立；普通怪 / Boss / 其他章一律 ×1。
+        //   只乘精英这一层，不动 CH1_STAGE_WALL（那个会连普通怪一起抬，关 8 会变成 180 秒长关）。
+        if (chapter == 1 && !isBoss && stageIdx0 == 7) v *= 1.70f;
+        return v;
     }
 
     public const float STAGE_LENGTH = 20f; // 每关长度20单位，走到头通关
@@ -1489,6 +1505,9 @@ public static partial class GameConfig
     // ============================================================
     public const float CAREER_SKILL_START_CHARGE_RATIO = 0.30f;  // 开局送 30% 起步槽
     public const int   CAREER_CHARGE_HITS  = 8;   // 剑盾：攒满所需普攻命中数
+    // 【2026-11-24 主人拍板「把剑盾的冲锋伤害+10%」】只作用于破阵冲锋（CareerSkillExecutor.CoCharge），
+    // 散射箭/法球职业技不受影响。原配表 damageMultiplier × 1.1 = 最终冲锋伤害。
+    public const float CAREER_CHARGE_DAMAGE_MUL = 1.1f;
     public const int   CAREER_SCATTER_HITS = 10;  // 游侠
     public const int   CAREER_ORB_HITS     = 9;   // 法师
 

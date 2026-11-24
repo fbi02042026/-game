@@ -141,6 +141,12 @@ public static class CareerSkillExecutor
         // 【2026-11-14 主人「不要冲锋的时候还在攻击」】整段冲锋独占英雄的行动权：
         // 位移与朝向归本协程，AI 不再索敌/出手/写 rb.velocity（Hero.AIUpdate 读这个标记）。
         MarkCharging();
+        // 【2026-11-24 主人报「冲锋反着身子」】不主动翻朝向，只钉住冲锋开始那一刻的 scale.x 符号——
+        // 原因：Hero 的 ApplyFacing 要配合 spriteDefaultFacesRight 做映射，手动翻 scale.x 会漏这层；
+        // 而 Hero 在冲锋触发瞬间已经朝 target 方向了（AI 追敌先翻朝向），只需把这个朝向冻结全程。
+        var flipRoot = hero.GetFlipRoot();
+        int chargeScaleSign = flipRoot != null && flipRoot.localScale.x >= 0f ? 1 : -1;
+        if (hero.unitAnim != null) hero.unitAnim.ForceWalkAnim();
 
         // 【2026-11-14 主人拍板「用这半个盾跟着玩家前面一起冲锋，不要比玩家大太多，冲锋完就消失」】
         // 半盾（pixelfx impacts/shield-block）= 独立世界对象，坐标每帧同步英雄受击点（CoChargeSlide 的 follow 参数）；
@@ -175,7 +181,7 @@ public static class CareerSkillExecutor
         float dustXOffset = -faceDir * GameConfig.CAREER_CHARGE_DUST_BACK;
 
         var victims = CollectChargeVictims(hero, start, end, hitHalfH);
-        float baseDamage = BuildDamage(hero, skill);
+        float baseDamage = BuildDamage(hero, skill) * GameConfig.CAREER_CHARGE_DAMAGE_MUL;
         var alreadyHit = new HashSet<UnitBase>();
 
         Debug.Log($"[CareerSkill] 破阵冲锋 演出开始 dist={dist:0.00} 路线怪={victims.Count} 顿帧上限={GameConfig.CAREER_CHARGE_HITSTOP_MAX}");
@@ -198,11 +204,17 @@ public static class CareerSkillExecutor
             if (seg <= 0.05f) continue;                                  // 已在身后，不回头
             Vector3 contact = cursor + Vector3.right * dir
                 * Mathf.Max(0f, seg - GameConfig.CAREER_CHARGE_CONTACT_GAP);
-            yield return CoChargeSlide(hero, cursor, contact, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed);
+            yield return CoChargeSlide(hero, cursor, contact, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed, chargeScaleSign);
             cursor = contact;
 
             // 顿帧 / 顶住期间也保持「冲锋中」标记（防 0.6s 心跳过期）
             MarkCharging();
+            // 顿帧期间也钉朝向：WaitForSeconds 这一小段里可能触发别的回调翻朝向
+            if (flipRoot != null)
+            {
+                Vector3 sc2 = flipRoot.localScale;
+                flipRoot.localScale = new Vector3(Mathf.Abs(sc2.x) * chargeScaleSign, sc2.y, sc2.z);
+            }
 
             // —— 真 Boss：推不动，停在跟前「原地冲锋」直到这段冲程本应走完，盾/尘土全程不消失 ——
             if (IsTrueBoss(m))
@@ -221,6 +233,12 @@ public static class CareerSkillExecutor
                     MarkCharging();
                     SyncFollow(chargeShield, hero, shieldY);
                     SyncFollow(chargeDust, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
+                    // Boss 原地顶住期间也钉朝向：AI 恢复前不让它翻回朝 Boss
+                    if (flipRoot != null)
+                    {
+                        Vector3 sc3 = flipRoot.localScale;
+                        flipRoot.localScale = new Vector3(Mathf.Abs(sc3.x) * chargeScaleSign, sc3.y, sc3.z);
+                    }
                     yield return null;
                 }
                 pinnedByBoss = true;
@@ -250,12 +268,18 @@ public static class CareerSkillExecutor
             // 冲完剩余距离（顿帧用完 / 后面没怪的部分一路冲到位），顶着的精英一路跟着后退
             float rest = (end.x - cursor.x) * dir;
             if (rest > 0.02f)
-                yield return CoChargeSlide(hero, cursor, end, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed);
+                yield return CoChargeSlide(hero, cursor, end, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed, chargeScaleSign);
             else
             {
                 GameConfig.SetWorldPosition(hero.transform, end);
                 SyncFollow(chargeShield, hero, shieldY);
                 SyncFollow(chargeDust, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
+                // 收尾直接摆到位时也钉朝向，防止摆完被下一帧翻
+                if (flipRoot != null)
+                {
+                    Vector3 esc = flipRoot.localScale;
+                    flipRoot.localScale = new Vector3(Mathf.Abs(esc.x) * chargeScaleSign, esc.y, esc.z);
+                }
             }
 
             // 落点收尾：只结算伤害，不补刀光（主人 2026-11-14「冲撞的时候不要出现刀光的特效」）
@@ -389,10 +413,12 @@ public static class CareerSkillExecutor
     static IEnumerator CoChargeSlide(Hero hero, Vector3 from, Vector3 to, float speed,
                                      GameObject follow = null, float fixedY = 0f,
                                      GameObject dustFollow = null, float dustXOffset = 0f,
-                                     List<UnitBase> pushUnits = null)
+                                     List<UnitBase> pushUnits = null,
+                                     int scaleSign = 0)
     {
         float dur = Mathf.Max(0.02f, Mathf.Abs(to.x - from.x) / Mathf.Max(0.1f, speed));
         float t = 0f;
+        var root = scaleSign != 0 ? hero.GetFlipRoot() : null;
         while (t < dur)
         {
             t += Time.deltaTime;
@@ -403,6 +429,11 @@ public static class CareerSkillExecutor
             MarkCharging();   // 心跳：即使协程被强停，标记最多残留一小段
             SyncFollow(follow, hero, fixedY);
             SyncFollow(dustFollow, hero, hero.FootY + GameConfig.CAREER_CHARGE_DUST_UP_WORLD, dustXOffset);
+            if (root != null)
+            {
+                Vector3 sc = root.localScale;
+                root.localScale = new Vector3(Mathf.Abs(sc.x) * scaleSign, sc.y, sc.z);
+            }
             yield return null;
         }
         float tailX = hero.transform.position.x;

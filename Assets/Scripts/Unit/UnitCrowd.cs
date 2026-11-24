@@ -14,9 +14,13 @@ public static class UnitCrowd
     /// <summary>玩家与佣兵之间额外间隙倍率（半宽×该值×2）；越小站得越近。</summary>
     const float HeroMercHalfBodyGapMul = 0.22f;
     /// <summary>同排（近战前排 / 远程后排）相邻佣兵步进。</summary>
-    const float MercSameLineStep = 0.48f;
+    /// <summary>【2026-11-24】远程后排步进 0.48→0.30：满编队第3个不再贴屏幕左缘，
+    /// 配合相机近距放大(1.15倍)仍在屏内。近战前排不受此值影响。</summary>
+    const float MercSameLineStep = 0.30f;
     /// <summary>相对玩家的第一档前后距（半宽之外再加这点）。</summary>
-    const float MercLineBasePad = 0.12f;
+    /// <summary>【2026-11-24】相对玩家的首档间距 0.12→0.04（远程后排更贴身），
+    /// 与 MercSameLineStep 一起把满编队最远站位收进放大后的视野。</summary>
+    const float MercLineBasePad = 0.04f;
     /// <summary>两怪 footprint 重叠达较小者宽度的该比例才显示 ×N</summary>
     const float StackOverlapRatio = 0.8f;
     static float _nextStackRefresh;

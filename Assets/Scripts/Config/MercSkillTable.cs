@@ -357,6 +357,7 @@ public static class MercSkillTable
     {
         { "SK021", "SK005" }, // 烈焰龙卷 ← 烈焰斩（火焰）
         { "SK022", "SK016" }, // 等离子爆发 ← 裂隙冲击（能量爆发）
+        { "SK023", "SK001" }, // 破阵击 ← 疾风斩（近战刀光剪影，最贴物理打断技）（2026-11-24）
     };
 
     public static Sprite LoadIcon(string skillId)

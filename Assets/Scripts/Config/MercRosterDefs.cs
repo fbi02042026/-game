@@ -66,7 +66,7 @@ public static class MercRosterDefs
         // 显示处均带真名前缀（米娅·小樱）。CSV + .bytes + 本数组三处同值。
         D("H005", "米娅", "小樱", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, false, true),
         D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 309.6f,49.8f,34.6f, 1.40f, 4.2f, "SK001", null, 2000, false, false),
-        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 269.5f,34f,24.7f, 1.00f, 4.03f, null, "SK002", 600, true, true),
+        D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 269.5f,34f,24.7f, 1.00f, 4.03f, "SK023", "SK002", 600, true, true),   // 2026-11-24 加打断读条主动技破阵击（原为空，仅被动 SK002）
         D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
         D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 1.00f, 4.03f, "SK001", null, 1900, false, false),
         D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 452.3f,58.2f,42.2f, 1.10f, 4.03f, "SK005", "SK012", 6000, false, false),
@@ -92,7 +92,7 @@ public static class MercRosterDefs
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, false, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 211.8f,36.7f,22.5f, 1.35f, 3.5f, null, "SK017", 600, true, true),
         D("H020", "凯尔", "谜面", "fashi102", "法师", MercRarity.Rare, 1.15f, 267.8f,53.2f,32.6f, 1.30f, 3.5f, "SK018", null, 1800, false),
-        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 368.5f,37.8f,27.9f, 0.80f, 2.8f, null, "SK002", 800, false, true),
+        D("H021", "格拉克斯", "懒鬼", "zhongzhan101", "重武者", MercRarity.Common, 1.00f, 368.5f,37.8f,27.9f, 0.80f, 2.8f, "SK023", "SK002", 800, false, true),   // 2026-11-24 加打断读条主动技破阵击（原为空，仅被动 SK002）
         D("H022", "索尔", "铁面", "zhongzhan201", "重武者", MercRarity.Rare, 1.15f, 466.1f,54.8f,40.4f, 0.85f, 2.8f, "SK003", null, 2200, false, false),
         // 【2026-11-03 主人委托生成】H023 加百列：稀有纯坦（SK007 坚守拉仇 + SK009 钢铁意志濒死减伤）。
         //   立绘=酒红教团卫士（H023.png 实检，男）；数值=稀有剑盾现成口径（同 H002/H003：基准 335.5/34.6/39.1 × 血1.265/攻1.45/防1.45）。

@@ -18,7 +18,8 @@ public partial class Mercenary : UnitBase
         get
         {
             if (MercRosterDefs.IsPriestJob(hireId, mercId)) return 1f;
-            return 0.55f;
+            // 【2026-11-24 主人拍板：佣兵进射程即站桩，消掉边走边打；宠物早已是 1f，此处对齐】
+            return 1f;
         }
     }
 
@@ -187,11 +188,13 @@ public partial class Mercenary : UnitBase
     /// 左边屏幕才会被拴绳拉回。而拴绳（UpdateHeroLeash）排在走入段 / 攻击锁 / 受击硬直 / 集结 /
     /// 牧师定身之后，任一分支 return 就整帧不判回队，玩家继续右推 → 越落越远、出屏消失。
     /// 这里只在「快到相机左缘」或「已在回队途中」时抢回行动权，沿玩家方向追回编队距离；
-    /// 屏内正常交战 / 入场 / 集结 / 传送门 / 竞技场敌方完全不介入。
+    /// 屏内正常交战 / 入场 / 传送门 / 竞技场敌方完全不介入（2026-11-24 起集结也介入：
+    /// 点击只驱动玩家期间，佣兵照样按玩家范围回队，不再被 BattleRally.Active 挡住）。
     /// </summary>
     bool TryForceRejoinWhenOffscreen()
     {
-        if (!isAlly || _mapEnterActive || TutorialStunned || BattleRally.Active) return false;
+        // 【2026-11-24】集结只驱动玩家，佣兵仍要按玩家范围自动回队，故去掉 BattleRally.Active 排除。
+        if (!isAlly || _mapEnterActive || TutorialStunned) return false;
         var bm = BattleManager.Instance;
         if (bm == null || !bm.UnitsCanAct || bm.PortalWalkMode) return false;
         var hero = Hero.Instance;
@@ -308,48 +311,16 @@ public partial class Mercenary : UnitBase
         // 硬直动画、出手判定、攻击锁、受击恢复一字不动，敌方竞技场机器人 / 无怪推图行为不变。
         if (TryHoldDuringAttack() || TryHoldDuringDamaged())
         {
-            TryEngageMoveDuringHold();
+            // 2026-11-24 主人拍板「滑步着打」：硬直锁期间不再补前压，停步稳住出手；函数 TryEngageMoveDuringHold 保留不删。
+            // TryEngageMoveDuringHold();
             return;
         }
 
         EnsureAiPolicy();
 
-        // 【2026-11-09】点击集结：我方全体优先走到点击点，期间不索敌 / 不出手。
-        // 敌方佣兵（竞技场机器人）不参与，仍走原 AI。
-        if (isAlly && BattleRally.Active && BattleRally.TryGetMoveDir(this, out Vector2 rallyDir))
-        {
-            if (rallyDir.sqrMagnitude > 0.0001f)
-            {
-                // 【2026-11-12 主人拍板「要」· 与玩家同口径修斜向滑步】TryGetMoveDir 给的是
-                // sign(±1,±1) 的轴向分离值（未归一化）→ 斜向合速 √2 倍，而 MOVE 动画速率是固定常量
-                // （UnitAnimation.MOVE_ANIM_SPEED_SCALE，按基础移速标定）→ 斜着走就滑步。
-                // 归一化成单位向量后各方向速度一致。只改方向，速度倍率 / 动画一字未动。
-                rallyDir = rallyDir.normalized;
-                // 【2026-11-12 主人拍板「要」· 纯纵向倒退走】旧实现无条件 `rallyDir.x > 0f ? 1 : -1`，
-                // 点正上方 / 正下方时 x=0 恒判 -1 → 全体佣兵朝左、侧着走/倒退着走。
-                // 与玩家侧同口径（Hero.cs 的 Abs(_manualDir.x) > 0.05f）：横向分量不够就不翻朝向，保持原朝向走纵向。
-                if (Mathf.Abs(rallyDir.x) > 0.05f)
-                {
-                    facingDir = rallyDir.x > 0f ? 1 : -1;
-                    ApplyFacing(facingDir);
-                }
-                if (rb != null)
-                    rb.velocity = new Vector2(rallyDir.x * GetCombatMoveSpeed(), rb.velocity.y);
-                if (Mathf.Abs(rallyDir.y) > 0.01f)
-                    SetLaneY(LaneY + rallyDir.y * GetCombatMoveSpeed() * Time.deltaTime);
-                if (unitAnim != null) unitAnim.SetMove(true, facingDir);
-            }
-            else
-            {
-                if (rb != null) rb.velocity = Vector2.zero;
-                if (unitAnim != null) unitAnim.SetMove(false, facingDir);
-            }
-            target = null;
-            if (BattleManager.Instance == null || !BattleManager.Instance.PortalWalkMode)
-                ClampToScreen();
-            ApplyLaneY(Time.deltaTime);
-            return;
-        }
+        // 【2026-11-24 主人拍板】点击移动只驱动玩家本人：佣兵不再响应集结点。
+        // 下方正常 AI（拴绳 / 编队跟随 / 边打边跟 / 出屏回队）会按玩家位置自动把佣兵带在身边。
+        // 旧的「佣兵也走到点击点」分支已移除；BattleRally.TryGetMoveDir 现在只服务 Hero。
 
         // 牧师：有伤员且治疗技可放时，站住等自动奶。
         // 【2026-10-20 主人拍板】原实现无条件定身 return，两条路会脱队/死锁：
@@ -421,51 +392,29 @@ public partial class Mercenary : UnitBase
 
             if (IsInBasicAttackRange(target))
             {
-                // 【2026-10-19 主人拍板】交战跟随上限：离玩家超过 MERC_STICK_RADIUS 就「边打边跟」——
-                // 朝玩家方向移动（攻距内照常按 CD 开火），保证佣兵始终聚在玩家身边；
-                // 半径内仍维持站桩不并道（2026-10-09 拍板不变）。
-                // 【2026-11-01 主人报「竞技场敌方弓手总贴很近打」】此逻辑只属我方佣兵（锚玩家聚队）；
-                // 敌方佣兵走它会「一边开火一边朝玩家挪」，远程停不住 → 敌方恒站桩开火。
-                var stickHero = isAlly ? Hero.Instance : null;
-                bool mustStickBack = stickHero != null && !stickHero.isDead
-                    && Mathf.Abs(GetCombatX(this) - GetCombatX(stickHero)) > GameConfig.MERC_STICK_RADIUS;
-                if (mustStickBack)
+                // 【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
+                // 旧实现一进攻击射程就把速度清零站桩：远程怪站在自己射程边缘不贴近时，
+                // 佣兵锁到目标后原地放箭、一步不往前（Editor.log 实证 AIUpdate 大量 Attack、
+                // 位移恒 0）。现改为：我方且场上有怪时，射程内继续朝目标前压到
+                // ENGAGE_DIST_RATIO × 射程 才站桩；前压期间下面这段出手逻辑一字不动，输出不中断。
+                // 敌方竞技场机器人 / 无怪 / 牧师一律走原路径。
+                // 【2026-11-24 主人拍板「佣兵打怪时不要边打边跟」】删掉「离玩家远就边打边挪」的分支：
+                // 进射程后只按前压停步线走；始终可见改由相机动态视野保证（见 CameraFollow）。
+                bool pressForward = isAlly && HasAliveEnemyOnField()
+                                    && distance > attackRange * EngageDistRatio;
+                if (pressForward)
                 {
-                    int backDir = GetCombatX(stickHero) > GetCombatX(this) ? 1 : -1;
                     if (rb != null)
-                        rb.velocity = new Vector2(backDir * GetCombatMoveSpeed(), rb.velocity.y);
+                        rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
                     isMoving = true;
-                    if (attackCd <= 0f
-                        && (unitAnim == null || !unitAnim.InAttackLock))
-                    {
-                        Attack(target);
-                        attackCd = GetAttackCooldown();
-                    }
                 }
-                else
+                else if (rb != null) rb.velocity = Vector2.zero;
+                // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
+                if (attackCd <= 0f
+                    && (unitAnim == null || !unitAnim.InAttackLock))
                 {
-                    // 【2026-11-15 主人拍板「就算怪物不贴近 佣兵也要去寻敌 / 上前战斗」】
-                    // 旧实现一进攻击射程就把速度清零站桩：远程怪站在自己射程边缘不贴近时，
-                    // 佣兵锁到目标后原地放箭、一步不往前（Editor.log 实证 AIUpdate 大量 Attack、
-                    // 位移恒 0）。现改为：我方且场上有怪时，射程内继续朝目标前压到
-                    // ENGAGE_DIST_RATIO × 射程 才站桩；前压期间下面这段出手逻辑一字不动，输出不中断。
-                    // 敌方竞技场机器人 / 无怪 / mustStickBack 回队 / 牧师 / 集结一律走原路径。
-                    bool pressForward = isAlly && HasAliveEnemyOnField()
-                                        && distance > attackRange * EngageDistRatio;
-                    if (pressForward)
-                    {
-                        if (rb != null)
-                            rb.velocity = new Vector2(facingDir * GetCombatMoveSpeed(), rb.velocity.y);
-                        isMoving = true;
-                    }
-                    else if (rb != null) rb.velocity = Vector2.zero;
-                    // 受击动画不挡出手：轮到攻击时 PlayAttack 立即打断 DAMAGED
-                    if (attackCd <= 0f
-                        && (unitAnim == null || !unitAnim.InAttackLock))
-                    {
-                        Attack(target);
-                        attackCd = GetAttackCooldown();
-                    }
+                    Attack(target);
+                    attackCd = GetAttackCooldown();
                 }
             }
             else if (melee && distance <= attackRange)

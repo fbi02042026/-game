@@ -266,6 +266,7 @@ public partial class CharacterUI : MonoBehaviour, ITownPage
         EnsureBagAlwaysOpen();
         // 2026-11-21：入口按背包顶边定位，必须在背包 Fit 之后建，才读得到改写后的坐标
         EnsurePetEntry();
+        RefreshPetEntry();
         EnsureEquipBar();
         EnsureStageShadow();
         // SPUM 仅离屏换装；Portrait 用玩家立绘

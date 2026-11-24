@@ -104,15 +104,17 @@ public static class PlayerSkillPassive
     /// 远处那只怪根本劈不到，白进 25 秒 CD。收到 3 与风龙卷/星落同口径：怪进镜头才放，
     /// 且 3 &lt; 4.5 保证触发时 AOE 覆盖得到目标。其余技能半径不动。
     /// 【2026-11-16 主人「范围判定有点远 减少30% 再往下20」】3 → 2.1（减30%）。
+    /// 【2026-11-24 主人「再缩小10% 往下移10」】2.1 → 1.89（再减10%）。
     /// </summary>
-    const float HeavyCleaveTriggerRadius = 2.1f;
+    const float HeavyCleaveTriggerRadius = 1.89f;
 
     /// <summary>
     /// 【2026-11-16】重斩触发圆心相对英雄的下移量（世界单位，负=往下）。
     /// 主人「再往下20」按 20 像素 ≈ 0.17 世界单位。
+    /// 【2026-11-24 主人「往下移10」】在 -0.17 基础上再下移 0.085（10 像素）→ -0.255。
     /// 只作用于重斩的触发判定（见 CountNearbyMonsters），其余技能 centerOffsetY 默认 0，行为不变。
     /// </summary>
-    const float HeavyCleaveCenterOffsetY = -0.17f;
+    const float HeavyCleaveCenterOffsetY = -0.255f;
 
     /// <summary>
     /// 各玩家技能触发条件（按 skillId，与 player_skills.csv 的 useHint 对应）。
@@ -229,6 +231,9 @@ public static class PlayerSkillPassive
 
     public static void TickAutoCast()
     {
+        // 【2026-11-24 主人拍板】技能栏「自动」取消勾选 = 手动：自动链整条停，
+        // 改由技能栏点头像释放（BattleManager.TryUsePlayerSkillAt）。勾选时行为与本版逐帧一致。
+        if (PlayerSkillCastMode.IsManual) return;
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         if (BattleLootMode.Active) return;

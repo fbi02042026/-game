@@ -667,6 +667,28 @@ public class UnitAnimation : MonoBehaviour
         }
     }
 
+    /// <summary>强制回到 MOVE 态，跳过 stateChanged 守卫。供职业冲锋等需要硬切走路动画的场景。</summary>
+    public void ForceWalkAnim()
+    {
+        if (_isDead) return;
+        _attackAnimLock = 0f;
+        _hitAnimLock = 0f;
+        _isMoving = true;
+        ResetAttackPoseResiduals();
+        if (_spum != null && _spum.OverrideController != null)
+        {
+            ForcePlaySpum(PlayerState.MOVE, 0);
+            ApplyMoveAnimSpeed(true);
+            return;
+        }
+        if (_animator != null && !_monsterClipMode)
+        {
+            _animator.SetBool("1_Move", true);
+            _animator.SetBool("IsMoving", true);
+            ApplyMoveAnimSpeed(true);
+        }
+    }
+
     /// <summary>攻击锁结束后若仍在移动，强制回到 MOVE（否则 SPUM 停在 ATTACK 末帧）。</summary>
     void ForceResumeMoveAnim()
     {

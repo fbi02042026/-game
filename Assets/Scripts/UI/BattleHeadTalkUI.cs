@@ -20,11 +20,26 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// </summary>
     Transform _uiAnchor;
     /// <summary>固定 UI 锚点模式下气泡底部相对锚点的抬高（屏幕像素）。纵向偏移可留（铁律20）。</summary>
-    const float UiAnchorLiftPx = 96f;
+    const float UiAnchorLiftPx = 96f;   // 【2026-11-24】诊断后恢复：相机统一后锚点回到顶部，176 会顶到 clamp 上限
     Coroutine _co;
     bool _skipTyping;
     bool _advance;
     bool _typingDone;
+    /// <summary>
+    /// 【2026-11-24 主人报「每次弹气泡先在下边闪一下，然后才在头顶出来」】
+    /// BeginLine / CoPlayLine 开头的 RefreshPopup → UICanvasSetup.Apply → EnsureRootStretch
+    /// 会把本 canvas 根 RectTransform 重设成 anchor 铺满 + offset 归零；父级为 null 时
+    /// offsetMin/offsetMax 归零会把 sizeDelta 一起写成 0，于是**同一帧** hostRt.rect 是 0×0。
+    /// RefreshFollowPosition 的 minX/maxX/minY/maxY 全由 hostRt.rect 算出，0×0 时 clamp
+    /// 把气泡压到屏幕下沿，渲染一帧后才跳回头顶 —— 这就是「闪一下」。
+    /// 对策：先记 pending，等画布矩形量好、位置真正算完才 SetActive(true) 显形。
+    /// </summary>
+    bool _pendingShow;
+    /// <summary>等画布矩形的帧数兜底：正常 1 帧就好，10 帧后无论如何照常显形，绝不永久不显示。</summary>
+    int _pendingShowFrames;
+    /// <summary>【2026-11-24 主人拍板】一次性排序层抬升：上阵气泡要盖过队列弹窗（TownPopup 900），
+    /// 临时抬到 940；HideNow 播完自动还原默认 899，战斗侧不受影响。</summary>
+    int _sortOrderBoostOnce;
     /// <summary>
     /// 打字机速度（字/秒）。【2026-10-07 主人拍板】36 → 18（慢一倍）：
     /// 主人原话「佣兵说的话太快了没看到…字出现的速度慢点」（此处的佣兵＝引导局那位 H003 塔克）。
@@ -67,10 +82,15 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// 气泡锚点离说话人的抬高（世界单位，脚下原点起算）。【2026-10-20 主人「能不能离得近点」】1.55 → 1.35：
     /// 气泡 pivot 在底部中点，锚点越低气泡越贴头；要再近/再远改这一个常量（低于 1.2 会压到头顶）。
     /// </summary>
-    const float HeadOffsetY = 1.35f;
+    const float HeadOffsetY = 1.2f;
 
-    public bool IsShowing => _root != null && _root.gameObject.activeSelf;
+    // pending（已请求显示、还没量到画布矩形）也算「正在显示」：否则这一帧 IsShowing=false，
+    // 直接 yield CoPlayLine 的调用方（_co 里没有它）就跳不过「先收掉在播的那句」，气泡计数会多压一次。
+    public bool IsShowing => _root != null && (_root.gameObject.activeSelf || _pendingShow);
     public string CurrentLine => _text != null ? _text.text : "";
+
+    /// <summary>一次性抬层：只影响本次气泡，HideNow 播完自动还原默认；0 = 不抬（战斗侧不调即零影响）。</summary>
+    public void SetSortOrderBoostOnce(int order) { _sortOrderBoostOnce = order; }
 
     public static BattleHeadTalkUI Ensure()
     {
@@ -100,13 +120,10 @@ public class BattleHeadTalkUI : MonoBehaviour
     {
         var canvas = gameObject.GetComponent<Canvas>();
         if (canvas == null) canvas = gameObject.AddComponent<Canvas>();
-        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.StoryDialogue);
-        // 【2026-11-05 主人拍板「战斗里的形象上面的小剧情框要置顶」】ApplyPopup 只改 order 不改 layer，
-        // 气泡留在 Default 层，会被 Effects 层的剧情大对话压住。照 StoryDirector.cs:144 先例挪进
-        // 全项目最高 sorting layer「Effects」，order 再 +1，同层内也压过剧情窗（气泡只停两三秒且
-        // blocksRaycasts=false 不吞点击，不影响剧情阅读）。
-        canvas.sortingLayerName = GameConfig.UiSort.TopLayer;
-        canvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
+        UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.BattleHeadTalk);
+        // 【2026-11-24 主人拍板覆盖 11-05「置顶」】气泡不许比佣兵信息等弹窗层级高：
+        // 从 Effects/13001 降回 Default/BattleHeadTalk(899)，低于一切弹窗（TownPopup 900 起）。
+        canvas.sortingLayerName = GameConfig.UiSort.DefaultLayer;
 
         // 不要 GraphicRaycaster：否则会吞点击，引导气泡点不掉
         var oldRay = GetComponent<GraphicRaycaster>();
@@ -179,10 +196,10 @@ public class BattleHeadTalkUI : MonoBehaviour
         var canvas = GetComponent<Canvas>();
         if (canvas != null)
         {
-            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.StoryDialogue);
-            // 【2026-11-05 主人拍板「小剧情框要置顶」】RefreshPopup 同样只改 order 不改 layer，每次补设。
-            canvas.sortingLayerName = GameConfig.UiSort.TopLayer;
-            canvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
+            UICanvasSetup.RefreshPopup(canvas, GameConfig.UiSort.BattleHeadTalk);
+            // RefreshPopup 只改 order 不改 layer，降层后每次补设 Default。
+            canvas.sortingLayerName = GameConfig.UiSort.DefaultLayer;
+            if (_sortOrderBoostOnce > 0) canvas.sortingOrder = _sortOrderBoostOnce;   // 【2026-11-24】补回一次性抬层
         }
         _co = StartCoroutine(CoPlayLine(speaker, content, hold));
         return _co;
@@ -201,17 +218,23 @@ public class BattleHeadTalkUI : MonoBehaviour
         // 【2026-11-24 宠物气泡跑左下根因】CoPlayLineAt 直接 yield 本协程，绕过 BeginLine 里的
         // RefreshPopup → DDOL 气泡 canvas 的 worldCamera 停在旧场景相机；定位却用新相机，
         // ScreenPointToLocalPointInRectangle 算出的 local 落屏外被 clamp 成左下角。
-        // 统一在这里重绑（BeginLine 那条路径重复调用幂等，不动战斗侧原逻辑）。
+        // 统一在这里按需重绑（worldCamera 不是当前 UI 相机时才刷，见下；不动战斗侧原逻辑）。
         var bubbleCanvas = GetComponent<Canvas>();
         if (bubbleCanvas != null)
         {
-            UICanvasSetup.RefreshPopup(bubbleCanvas, GameConfig.UiSort.StoryDialogue);
-            bubbleCanvas.sortingLayerName = GameConfig.UiSort.TopLayer;
-            bubbleCanvas.sortingOrder = GameConfig.UiSort.StoryDialogue + 1;
+            // 【2026-11-24 主人报「每次弹气泡先在下边闪一下」】只在相机真的换了（跨场景 / canvas 重建）
+            // 时才 RefreshPopup。RefreshPopup → UICanvasSetup.Apply → EnsureRootStretch 会把本 canvas 根
+            // 的 sizeDelta 归零，同一帧 rect 就是 0×0，RefreshFollowPosition 的 clamp 边界全塌到原点附近，
+            // 气泡会被压到屏幕下沿渲染一帧。同场景连播时相机没换，不需要重绑。
+            var wantCam = UICanvasSetup.ResolveUiCamera();
+            if (bubbleCanvas.worldCamera == null || bubbleCanvas.worldCamera != wantCam)
+                UICanvasSetup.RefreshPopup(bubbleCanvas, GameConfig.UiSort.BattleHeadTalk);
+            bubbleCanvas.sortingLayerName = GameConfig.UiSort.DefaultLayer;
+            if (_sortOrderBoostOnce > 0) bubbleCanvas.sortingOrder = _sortOrderBoostOnce;   // 【2026-11-24】相机重绑后补回一次性抬层
         }
 
-        // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】气泡在 Effects 层 13001，
-        // 装备替换确认弹窗(925)开着时恒被气泡盖住 —— 弹窗在屏期间新台词一律不出（单一出口闸）。
+        // 【2026-11-11 主人报「佣兵说的话挡住替换装备弹窗了」】弹窗在屏期间新台词一律不出（单一出口闸）；
+        // 2026-11-24 气泡已降到 Default/899 不再盖弹窗，此闸保留作双保险（被弹窗压住的台词白播）。
         if (EquipReplaceConfirmUI.IsOpen) yield break;
 
         // 【2026-11-23 23:3x 主人「剧情气泡很快的过了很多字」】剧情台词必须独占气泡：
@@ -223,8 +246,15 @@ public class BattleHeadTalkUI : MonoBehaviour
         if (IsShowing || _co != null)
         {
             var keepAnchor = _uiAnchor;
+            int keepBoost = _sortOrderBoostOnce;   // 【2026-11-24】HideNow 会清抬层，本次气泡的要补回
             HideNow();
             _uiAnchor = keepAnchor;
+            _sortOrderBoostOnce = keepBoost;
+            if (_sortOrderBoostOnce > 0)
+            {
+                var bcv = GetComponent<Canvas>();
+                if (bcv != null) bcv.sortingOrder = _sortOrderBoostOnce;
+            }
         }
 
         _skipTyping = false;
@@ -238,10 +268,10 @@ public class BattleHeadTalkUI : MonoBehaviour
         _follow = speaker;
 
         if (_root != null)
-        {
             _root.localScale = Vector3.one;
-            _root.gameObject.SetActive(true);
-        }
+        // 不在这里 SetActive：等 RefreshFollowPosition 拿到有效画布矩形、把位置算好再显形。
+        _pendingShow = true;
+        _pendingShowFrames = 0;
         if (_group != null) _group.alpha = 1f;
         GlobalToastUI.PushBubble();
         TutorialHintUI.Instance?.Hide();
@@ -316,7 +346,9 @@ public class BattleHeadTalkUI : MonoBehaviour
 
     void RefreshFollowPosition()
     {
-        if (_root == null || !_root.gameObject.activeSelf) return;
+        if (_root == null) return;
+        // 还没显形（_pendingShow）时也要继续算：算好了才由 RevealBubble 打开。
+        if (!_root.gameObject.activeSelf && !_pendingShow) return;
         // 用【本 canvas 实际渲染的相机】而不是 ResolveUiCamera() 的猜测值：
         // 两者不一致时 WorldToScreenPoint / ScreenPointToLocalPointInRectangle 用错相机，
         // 锚点被投到屏幕外 → clamp 到左下角（2026-11-24 根因之一）。
@@ -324,6 +356,15 @@ public class BattleHeadTalkUI : MonoBehaviour
         var uiCam = bubbleCanvas != null ? bubbleCanvas.worldCamera : null;
         if (uiCam == null) uiCam = ResolveUiCamera();
         if (uiCam == null) return;
+
+        var hostRt = transform as RectTransform;
+        if (hostRt == null) return;
+
+        // 画布根 rect 还没量好（RefreshPopup 刚把它重锚成 0×0）：这一帧不定位、不显形，
+        // 否则 clamp 的四个边界全塌在原点附近，气泡会被压到屏幕下沿闪一下。
+        if ((hostRt.rect.width < 1f || hostRt.rect.height < 1f)
+            && _pendingShow && _pendingShowFrames++ < 10)
+            return;
 
         Vector3 screen;
         if (_uiAnchor != null)
@@ -333,9 +374,11 @@ public class BattleHeadTalkUI : MonoBehaviour
             // 旧写法拿本气泡 uiCam 直接投影目标 position：宠物弹窗(TownPopup)与气泡canvas不同相机/层时投影错位，
             // 气泡被 clamp 到左下角（主人 11-23 报「狗的气泡不对」）。战斗单位跟随分支一行不动。
             var anchorRt = _uiAnchor as RectTransform;
-            var anchorCanvas = _uiAnchor.GetComponentInParent<Canvas>();
-            Camera followCam = anchorCanvas != null ? anchorCanvas.worldCamera : null;
-            if (followCam == null) followCam = uiCam;
+            // 【2026-11-24 诊断修正】投影与反投影统一用本气泡 canvas 的相机（uiCam）：
+            // 锚点在 DDOL 队列弹窗 canvas 里，其 worldCamera 可能停在旧场景相机（该 canvas 每次 Show 才重绑），
+            // 用 followCam 投影、uiCam 反投影时两个相机尺度不一致 → 顶部格子被算到画布中部（气泡掉下来）。
+            // 两个 canvas 同为 Camera 模式 + 同 referenceResolution，用同一个相机必然闭合。
+            Camera followCam = uiCam;
             Vector3 worldTop;
             if (anchorRt != null)
             {
@@ -355,7 +398,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         else
         {
-            if (_follow == null) return;   // 原战斗跟随：无单位不定位（行为不变）
+            if (_follow == null) { RevealBubble(); return; }   // 原战斗跟随：无单位不定位（行为不变）
             Vector3 world = _follow.transform.position + new Vector3(0f, HeadOffsetY, 0f);
             screen = uiCam.WorldToScreenPoint(world);
             if (screen.z <= 0f)
@@ -367,8 +410,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
 
         RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            transform as RectTransform, screen, uiCam, out var local);
-        var hostRt = transform as RectTransform;
+            hostRt, screen, uiCam, out var local);
         float halfW = _root.rect.width * 0.5f;
         float h = _root.rect.height;
         float minX = hostRt.rect.xMin + halfW + 8f;
@@ -378,10 +420,32 @@ public class BattleHeadTalkUI : MonoBehaviour
         _root.anchoredPosition = new Vector2(
             Mathf.Clamp(local.x, minX, maxX),
             Mathf.Clamp(local.y, minY, maxY));
+
+        // [DIAG-bubble] 临时诊断，定位完撤掉
+        if (_pendingShow)
+            Debug.Log("[DIAG-bubble] anchor=" + (_uiAnchor != null ? _uiAnchor.name : "null")
+                + " host=" + hostRt.rect + " cam=" + (uiCam != null ? uiCam.name : "null")
+                + " screen=" + screen + " local=" + local + " lift=" + UiAnchorLiftPx
+                + " clampY=[" + minY + "," + maxY + "]"
+                + " pos=" + _root.anchoredPosition);
+
+        RevealBubble();
+    }
+
+    /// <summary>位置算好后显形：pending 期间不显示，避免用塌掉的画布矩形把气泡定到屏幕下沿。</summary>
+    void RevealBubble()
+    {
+        if (!_pendingShow) return;
+        _pendingShow = false;
+        _pendingShowFrames = 0;
+        if (_root != null && !_root.gameObject.activeSelf)
+            _root.gameObject.SetActive(true);
     }
 
     public void HideNow()
     {
+        _pendingShow = false;
+        _pendingShowFrames = 0;
         _skipTyping = false;
         _advance = false;
         _typingDone = false;
@@ -392,6 +456,10 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         _follow = null;
         _uiAnchor = null;
+        // 【2026-11-24】一次性抬层随本次气泡结束还原默认，战斗气泡层级不受影响
+        _sortOrderBoostOnce = 0;
+        var cv = GetComponent<Canvas>();
+        if (cv != null) cv.sortingOrder = GameConfig.UiSort.BattleHeadTalk;
         if (_group != null) _group.alpha = 1f;
         if (_root != null)
         {

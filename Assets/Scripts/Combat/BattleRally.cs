@@ -72,7 +72,7 @@ public static class BattleRally
         _resumeAt = 0f;
         _point = Vector3.zero;
         // 【2026-11-11 第五版 · 旗子不出现的根因之一】旧版在这里 HideMarker()，与 Tick 里
-        // 「落点动效独立推进：集结提前结束也要能按时消失」自相矛盾。战斗中 AnyAllyArrived
+        // 「落点动效独立推进：集结提前结束也要能按时消失」自相矛盾。战斗中 HeroArrived
         // （只比 X）+ EnemyNearPoint 会在点击同帧触发 Reset，旗子刚 SetActive(true) 就被关掉，
         // 肉眼完全看不到。动效生命周期只由 TickMarker 按动画长度独立管理，Reset 一律不碰。
         Debug.Log($"[BattleRally] Reset wasActive={wasActive} markerAge={_markerAge:F2} markerVisible={_markerVisible}");
@@ -105,7 +105,7 @@ public static class BattleRally
         // 【2026-11-13 主人拍板「集结之后要立即开始寻敌」】第一个我方单位真到点就结束集结：
         // HOLD_SEC=0 → 本帧下面两条出口必命中其一，Reset 让全队同帧恢复自动索敌 / 追敌。
         // 旧口径「到达后再驻留 2 秒」已废：那 2 秒里 Hero / Mercenary 都把 target 置 null 站着不动。
-        if (_firstArriveAt < 0f && AnyAllyArrived(bm))
+        if (_firstArriveAt < 0f && HeroArrived(bm))
         {
             _firstArriveAt = Time.time;
             _resumeAt = _firstArriveAt + HOLD_SEC;
@@ -254,28 +254,15 @@ public static class BattleRally
         PlayMarker(new Vector2(markerScreen.x, markerScreen.y));
     }
 
-    static bool AnyAllyArrived(BattleManager bm)
+    /// <summary>玩家本人到达落点才算集结结束（2026-11-24：点击只驱动玩家，佣兵不再响应集结）。
+    /// 旧版「任一我方单位到点」会让路过落点的佣兵提前 Reset，打断玩家的手动态。</summary>
+    static bool HeroArrived(BattleManager bm)
     {
-        // 【2026-11-13】旧实现只比 X：点队伍正上 / 正下方（X 相同）时点击当帧就误判「已到达」，
-        // 驻留归零后会同帧 Reset，全队根本不出发。补 Y，与 TryGetMoveDir 的到点口径一致。
         var hero = bm.hero;
-        if (hero != null && !hero.isDead
+        return hero != null && !hero.isDead
             && Mathf.Abs(hero.transform.position.x - _point.x) <= ARRIVE_EPS
-            && Mathf.Abs(hero.FootY - _point.y) <= ARRIVE_EPS)
-            return true;
-        var allies = bm.allyUnits;
-        if (allies == null) return false;
-        for (int i = 0; i < allies.Count; i++)
-        {
-            var u = allies[i];
-            if (u == null || u.isDead) continue;
-            if (Mathf.Abs(u.transform.position.x - _point.x) <= ARRIVE_EPS
-                && Mathf.Abs(u.FootY - _point.y) <= ARRIVE_EPS)
-                return true;
-        }
-        return false;
+            && Mathf.Abs(hero.FootY - _point.y) <= ARRIVE_EPS;
     }
-
     static bool EnemyNearPoint(BattleManager bm)
     {
         var monsters = bm.monsters;

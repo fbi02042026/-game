@@ -575,6 +575,21 @@ public static class RunLoadout
         _data.mercs[index] = entry;
     }
 
+    /// <summary>
+    /// 【2026-11-24 主人拍板】把某位佣兵移出本局队伍（战斗头像详情的「离开」按钮 / 满员替换时顶掉旧人）。
+    /// 只动局内账本，<b>不碰存档</b>（unlockedMercIds 不动 → 之后还能再抽到）；调用方负责场上单位撤离与 HUD 刷新。
+    /// 返回被移除的条目；未开局 / 下标越界返回 null。
+    /// </summary>
+    public static RunMercEntry RemoveMercAt(int index)
+    {
+        if (_data?.mercs == null) return null;
+        if (index < 0 || index >= _data.mercs.Count) return null;
+        var removed = _data.mercs[index];
+        _data.mercs.RemoveAt(index);
+        Save();
+        return removed;
+    }
+
     public static bool TryAddMerc(RunMercEntry entry)
     {
         if (_data == null || entry == null || string.IsNullOrEmpty(entry.mercId)) return false;

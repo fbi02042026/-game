@@ -165,6 +165,11 @@ public partial class Monster : UnitBase
         if (!isDead && _canUseActiveSkill)
         {
             _skillCooldown -= Time.deltaTime;
+            // 【2026-11-24】眩晕打断读条：被眩晕时若正在攒槽（_hpSkillCharging 或时间充能 _skillEnergy>0），
+            // 立刻清零作废并进冷却惩罚 —— 与 UnitBase.ApplyStun 停 AI 同口径，让现有眩晕（PS004 暴击等）也能断读条。
+            // 必须放在 base.Update（基类 IsStunned 早返回）之前，否则眩晕帧进不到这里。
+            if (IsStunned && (_hpSkillCharging || _skillEnergy > 0.001f))
+                TryInterruptCast();
             // 【2026-11-16 主人拍板】精英/Boss 不再按时间攒槽：改由血量档位触发（UpdateHpTriggeredSkill）。
             // 满足「满血进场不放、掉 20% 放一次、放完走 CD、CD 后等下一次掉血」；
             // 普通小怪（含远程 0.88 起步槽）仍按时间攒，逐字不变。
@@ -314,6 +319,18 @@ public partial class Monster : UnitBase
 
     protected override void Die(bool isCritKill = false)
     {
+        // 【2026-11-24 修「跳跃中死亡飘在空中」】跳跃协程（CoEliteLeapArc）用 SetWorldPosition 手动把 MoveRoot
+        // 移到抛物线高点，死亡时协程虽因 isDead 检查 yield break 退出，但位置还悬着没落地 → 拉回 FootY；
+        // 同理瞬移遁走（_teleporting）也是空中位移。预警蓄力（_skillTelegraphing）期间 body 被压扁，scale 也要还原。
+        if (_leaping || _teleporting)
+        {
+            var body = MoveRoot;
+            if (body != null)
+                GameConfig.SetWorldPosition(body, new Vector3(body.position.x, FootY, body.position.z));
+        }
+        if ((_skillTelegraphing || _bossPhaseShiftBusy) && MoveRoot != null)
+            MoveRoot.localScale = Vector3.one;
+
         if (_hpBarRoot != null)
             _hpBarRoot.gameObject.SetActive(false);
         if (_worldHpBar != null)
@@ -339,6 +356,12 @@ public partial class Monster : UnitBase
         _isEnteringMap = false;
         _enterAtPauseStop = false;
         _enraged = false;
+        // 【2026-11-24】回池恢复狂暴体型放大：避免下一只复用的怪残留 1.3 倍
+        if (_enrageScaleApplied && MoveRoot != null)
+        {
+            MoveRoot.localScale = _enrageBaseScale;
+            _enrageScaleApplied = false;
+        }
         _forcedTarget = null;
         _worldHpBar = null;
         HideStackLabel();

@@ -21,6 +21,7 @@ public partial class BattleManager
     bool _cutsceneTalkCanActBefore;      // 进入连续对话段前的 UnitsCanAct（整段冻一次、整段末才解，中途不解冻）
     Coroutine _cutsceneCo;               // 唯一协程句柄
     Pet _cutsceneDog;                    // 本场狗战斗单位（真参战，进 allyUnits）
+    bool _dogRescueForceHero;            // 【2026-11-24】第2波战斗期间怪强制锁玩家（气泡解冻→首领来袭前）
     /// <summary>狗跑入时长倍率（2026-11-23 23:2x 主人「狗的移动速度也快 减一半」：3.5 → 1.75）。</summary>
     const float DOG_RUN_SPEED_MUL = 1.75f;
     /// <summary>等「狗被打跑」的看门狗（秒）：超时强制撤场，绝不把演出卡死（2026-11-23 分镜）。</summary>
@@ -29,11 +30,19 @@ public partial class BattleManager
     const float ELITE_REJOIN_TIMEOUT = 10f;
     /// <summary>狗归队的精英血量线：血剩一半或更少（主人「打到一半狗进场助阵」，2026-11-23）。</summary>
     const float ELITE_REJOIN_HP_RATIO = 0.5f;
+    /// <summary>【2026-11-24】玩家走到狗多近才触发冻场气泡（横向世界单位）：狗已提前入场开打，
+    /// 玩家先走过去看一会，靠近了才出剧情。狗在怪群里会移动，阈值留余量。</summary>
+    const float CUTSCENE_TRIGGER_DIST = 5.5f;
 
     /// <summary><see cref="IsOccupyingBattlefield"/> 只读出口：波次系统（Waves.cs）唯一依赖。</summary>
     internal bool CutsceneOccupyingBattlefield => IsOccupyingBattlefield;
 
-    /// <summary>第二波刷出时由 Update 调用：启动狗营救演出（幂等，重复调用不叠加）。</summary>
+    /// <summary>
+    /// 玩家走到狗附近时由 Update 调用：启动狗营救演出（幂等，重复调用不叠加）。
+    /// 【2026-11-24 主人拍板】狗已在第一波清完时提前入场开打（TryPetRescueActivate 生成），
+    /// 这里等玩家走到狗附近（CUTSCENE_TRIGGER_DIST）才触发冻场气泡——玩家先走过去看狗打一会，
+    /// 靠近了才出剧情，不是第二波一刷出来就打断。解锁存档与生成已前移，本方法只负责启动协程。
+    /// </summary>
     void TryPlayDogRescueCutscene()
     {
         if (_cutsceneActive || _cutsceneCo != null) return;
@@ -42,27 +51,21 @@ public partial class BattleManager
         if (CountAliveMonsters() <= 0) return;
         if (!isInBattle || _stageCleared || _portalActive) return;
 
-        _cutsceneActive = true;
-        IsOccupyingBattlefield = true;               // 立即占用，拦住波次推进（防 wave1 清完抢跑 Boss）
-        BattleBossHpBar.SetCutsceneSuppressed(true);  // 演出期屏幕精英血条不弹（主人拍板 A，演完自动补显）
-
-        // 【2026-11-23 主人「打完第一波往右走、看到怪围着狗后再出剧情」】
-        // 狗在演出启动时就生成——不是在对话那一刻凭空冒出来。
-        // 【2026-11-23 22:4x 主人「狗没有从左边跑进来，还是突然出现的」】生成点改到画面左缘【外】，
-        // 下一步 SpawnPetFight 里由 CoRunDogIntoScene 跑到怪群：玩家看到的是狗从屏幕左侧跑进来，
-        // 不是原地 pop 出现。解锁+生成仍走 DeployRescuedPet 单一出口。
-        var rescueData = SaveSystem.Instance?.Data;
-        if (rescueData != null)
-        {
-            rescueData.UnlockPet(PetRescueStoryBeats.DogId);
-            rescueData.MarkIntruderStorySeen(PetRescueStoryBeats.SeenKey);
-            SaveSystem.Instance.Save();
-        }
-        DeployRescuedPet(ResolveRescueDogLeftSpawnX());
+        // 狗已提前生成；找不到说明已被怪打跑（销毁）——不拦演出：气泡退到玩家锚点，
+        // 狗归队步骤（DogRejoinElite）会重新生成。活着时才判「玩家走近」距离。
         _cutsceneDog = FindRescueDog();
+        if (_cutsceneDog != null && hero != null)
+        {
+            float dx = Mathf.Abs(hero.transform.position.x - _cutsceneDog.transform.position.x);
+            if (dx > CUTSCENE_TRIGGER_DIST) return;   // 玩家还没走到狗附近
+        }
+
+        _cutsceneActive = true;
+        IsOccupyingBattlefield = true;               // 立即占用，拦住波次推进（防 wave2 清完抢跑首领）
+        BattleBossHpBar.SetCutsceneSuppressed(true);  // 演出期屏幕精英血条不弹
 
         _cutsceneCo = StartCoroutine(CoRunDogRescue(BattleCutsceneDefs.DogRescue));
-        Debug.Log("[Cutscene] 狗营救演出启动（狗已提前入场，对话冻场，占用战场） dogFound=" + (_cutsceneDog != null));
+        Debug.Log("[Cutscene] 狗营救演出启动（玩家走近触发，狗已在打，占用战场）");
     }
 
     /// <summary>换关复位：停协程 + 清占用标志 + 解除血条压制，绝不把上一关的演出状态带进下一关。</summary>
@@ -76,11 +79,25 @@ public partial class BattleManager
         if (_cutsceneFrozeUnits) { UnitsCanAct = true; _cutsceneFrozeUnits = false; }
         _cutsceneTalkCanActBefore = true;
         _cutsceneDog = null;
+        // 【2026-11-24】换关清掉怪锁玩家标志 + 强制目标，绝不让下一关的怪还锁着玩家
+        _dogRescueForceHero = false;
+        ClearMonsterForcedTargets();
         if (_cutsceneCo != null)
         {
             StopCoroutine(_cutsceneCo);
             _cutsceneCo = null;
         }
+    }
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板「让怪都来打玩家」】第2波战斗期间每帧由 Update 调用：
+    /// 演出激活且未到首领来袭前，把场上所有怪（含本波内新刷的）强制目标锁成玩家。
+    /// 精英波（首领来袭后）不锁，怪正常选最近目标。
+    /// </summary>
+    internal void TickDogRescueForceTarget()
+    {
+        if (!_dogRescueForceHero || hero == null) return;
+        RetargetAllMonsters(hero);
     }
 
     IEnumerator CoRunDogRescue(BattleCutsceneStep[] steps)
@@ -200,8 +217,8 @@ public partial class BattleManager
             case BattleCutsceneStep.BarkAtDog:
             {
                 Debug.Log("[CutsceneDiag] BarkAtDog ENTER talkNull=" + (talk == null) + " dogNull=" + (_cutsceneDog == null));
-                if (talk == null) { Debug.LogError("[Cutscene] 气泡 UI 取不到，BarkAtDog 跳过"); break; }
-                if (_cutsceneDog != null)
+                if (talk == null) { Debug.LogError("[Cutscene] 气泡 UI 取不到，BarkAtDog 跳过"); }
+                else if (_cutsceneDog != null)
                 {
                     yield return talk.CoPlayLineAt(_cutsceneDog.transform, PetRescueStoryBeats.DogBark, PetRescueStoryBeats.WhimperHold);
                     Debug.Log("[CutsceneDiag] BarkAtDog DONE show=" + talk.IsShowing + " line=" + talk.CurrentLine);
@@ -211,6 +228,9 @@ public partial class BattleManager
                     yield return talk.CoPlayLine(hero, PetRescueStoryBeats.DogBark, PetRescueStoryBeats.WhimperHold);
                     Debug.Log("[CutsceneDiag] BarkAtDog DONE(hero锚点) show=" + talk.IsShowing + " line=" + talk.CurrentLine);
                 }
+                // 【2026-11-24】气泡段尾：本步是冻场段最后一句，协程 finally 解冻后置标志，
+                // 让 Update 每帧把场上怪（含新刷的）强制锁玩家开打（主人「让怪都来打玩家」）。
+                _dogRescueForceHero = true;
                 break;
             }
             case BattleCutsceneStep.ShoutAtHero:
@@ -249,16 +269,22 @@ public partial class BattleManager
             }
             case BattleCutsceneStep.DogFleeLine:
             {
-                // 逃跑旁白贴玩家（狗正往外跑，气泡不跟着跑，避免字飞出屏幕）
+                // 【2026-11-24 主人拍板】第 2 波清完后狗主动跑掉（不再等被怪打空血），
+                // 先让狗起跑（CoFleeAway 往屏左跑），再冻场播逃跑旁白——观感是狗边跑边出字。
+                if (_cutsceneDog != null && !_cutsceneDog.IsFled) _cutsceneDog.FleeNow();
                 if (talk == null) { Debug.LogError("[Cutscene] 气泡 UI 取不到，DogFleeLine 跳过"); break; }
+                // 逃跑旁白贴玩家（狗正往外跑，气泡不跟着跑，避免字飞出屏幕）
                 if (hero != null)
                     yield return talk.CoPlayLine(hero, PetRescueStoryBeats.DogFlee, PetRescueStoryBeats.FleeHold);
                 break;
             }
             case BattleCutsceneStep.ReleaseForElite:
             {
+                // 【2026-11-24】首领来袭前清掉怪锁玩家：精英波怪正常选最近目标，不再强锁玩家
+                _dogRescueForceHero = false;
+                ClearMonsterForcedTargets();
                 // 【2026-11-23 主人拍板】狗跑掉 + 第 2 波清完后才放行第 3 波：BeginNextWaveCountdown 下一帧自然推进 →
-                // 1-3 精英末波走「首领来袭」大图（IsPetRescueEliteWaveAnnounce）→ 精英刷出。演出本身继续。
+                // 关 3 精英末波走「首领来袭」大图（IsPetRescueEliteWaveAnnounce）→ 精英刷出。演出本身继续。
                 IsOccupyingBattlefield = false;
                 // 精英战是真打，屏幕精英血条从这里恢复显示（第 2 波是狗陪打的普通波，全程没有精英血条）
                 BattleBossHpBar.SetCutsceneSuppressed(false);

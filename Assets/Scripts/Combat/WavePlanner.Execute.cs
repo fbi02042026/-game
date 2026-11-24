@@ -91,6 +91,12 @@ public partial class WavePlanner
             StopCoroutine(_spawnWaveCo);
             _spawnWaveCo = null;
         }
+        // 【2026-11-24】在 StartCoroutine 前同步标记 wave.spawned / _activeWaveIndex：
+        // 一旦决定刷这波就立即占住 waveIdx，防止 SpawnNextPendingWave 被并发调时
+        // FindNextUnspawnedWaveIndex 还返回同一波 → 重复刷。协程硬失败（ConfigManager 空 / pool 空）
+        // 在上方已 return 走 SpawnFallbackWave，不会走到这里标记，保留重试机会。
+        wave.spawned = true;
+        _activeWaveIndex = waveIndex;
         _spawnWaveCo = StartCoroutine(CoSpawnWaveMonsters(
             wave, waveIndex, stageIdx, stageType, waveScaleMultiplier,
             engageBaseX, heroCombatX, spawnZ));

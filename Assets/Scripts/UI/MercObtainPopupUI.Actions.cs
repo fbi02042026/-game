@@ -72,6 +72,16 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     /// <summary>
+    /// 【2026-11-24 主人拍板】「替换」钮文案：传 null/空 = 还原预制体原文案。
+    /// 战斗头像详情复用这枚按钮显示「离开」，不新增节点、不动排版。
+    /// </summary>
+    void SetReplaceLabel(string text)
+    {
+        if (_replaceLabel == null) return;
+        _replaceLabel.text = string.IsNullOrEmpty(text) ? _replaceLabelText0 : text;
+    }
+
+    /// <summary>
     /// 【2026-10-22 主人拍板】点「进阶」：开 MercAscendUI.Show(当前佣兵 hireId)。
     /// 只在已拥有时可见（Fill 里刷），理论点不到空 hireId，兜底 LogError 防静默。
     /// </summary>
@@ -230,6 +240,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (_fallenMode) ExitFallenMode();     // 同上：还原「复活/取消」双钮，下次普通入口不串味
         ApplyAscendGlow(false);                // 【2026-10-24】关窗摘发光材质、停呼吸动效、缩放还原（下次 Fill 重评）
         ApplyGuideNode(false);                 // 【2026-10-25】关窗藏指引、停浮动、位置还原（下次 Fill 重评）
+        SetReplaceLabel(null);                 // 【2026-11-24】「离开」文案还原，下次开窗不串味
         if (_root != null) _root.SetActive(false);
         MercSwapHint.DismissReplaceIfVisible();   // 【2026-11-16】关窗即收第④条气泡，别让它浮在队列界面上
         var cb = _onClosed;

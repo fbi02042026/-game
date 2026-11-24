@@ -32,13 +32,19 @@ public partial class BattleManager
         if (m.IsEliteWave)
         {
             RunStats.EliteKillCount++;
-            if (!_eliteToastShownThisStage)
+            // 【2026-11-24】Boss 死时有专属播报，不再重弹「精英击破！」（Boss 波可能同时带精英标记）
+            if (!_eliteToastShownThisStage && !m.IsBossUnit)
             {
                 _eliteToastShownThisStage = true;
                 GlobalToastUI.ShowFlythrough("精英击破！");
             }
         }
-        if (m.IsBossUnit) RunStats.BossKillCount++;
+        if (m.IsBossUnit)
+        {
+            RunStats.BossKillCount++;
+            // 【2026-11-24 主人拍板】Boss 击杀专属播报，给足击杀激动感（复用精英飞字，不碰 timeScale/镜头/压暗）
+            GlobalToastUI.ShowFlythrough(GameConfig.BOSS_KILL_FLYTEXT);
+        }
 
         // 【2026-10-29】每日任务击杀计数（除害/清剿 = 非 Boss，精英算小怪；弑君 = Boss）
         SaveSystem.Instance?.Data?.CountKill(m.IsBossUnit);
@@ -55,8 +61,8 @@ public partial class BattleManager
             else if (m.IsEliteWave)
                 ResourceWallet.GrantMercGold(GameConfig.MERC_GOLD_PER_ELITE, "击杀精英");
         }
-        // 【2026-10-20 主人拍板】天赋石不再每关首通发放，改精英/Boss 击杀概率掉落：
-        // 精英 30%×1、Boss 60%×2（Boss 优先、不与精英叠加，与佣兵币同口径）。
+        // 【2026-11-24 主人拍板】天赋石改必掉：精英 2 颗、Boss 5 颗（Boss 优先、不与精英叠加，与佣兵币同口径）。
+        // 真源在 GameConfig.ELITE/BOSS_TALENT_DROP_CHANCE(=1f 必掉) / AMOUNT(2/5)，下方判定链不动。
         // 【2026-11-11 主人拍板】天赋石只从主线正式关 / 支线岛的精英、Boss 击杀掉落，
         // 活动副本 / 羁绊 / 竞技场 / 终章 / 裂隙 / 引导一律不掉（无限裂隙层首通宝箱另走 SettleEndlessStageClear）。
         bool talentDropAllowed = IsFormalMainRun || IsSideIsland;
@@ -233,6 +239,25 @@ public partial class BattleManager
 
     /// <summary>释放玩家技能（需要能量满）— 头像点击。执行在 SkillCastService。</summary>
     public bool TryUsePlayerSkill() => SkillCast.TryUsePlayerSkill();
+
+    /// <summary>
+    /// 手动模式：释放<b>指定</b>技能槽（技能栏点第 slot 格）。
+    ///
+    /// <para>【2026-11-24 主人拍板】与自动链共用 <c>SkillCastService.TryUsePlayerSkillSlot</c> ——
+    /// 那里已经统一过 GCD / 蓝量 / 场上目标 / 治疗读条 / 残血闸。这里只补自动链在
+    /// <c>PlayerSkillPassive.TickAutoCast</c> 里做过、而释放函数本身不查的四道「调用方上下文」闸。</para>
+    ///
+    /// <para>返回 false 时调用方（技能栏）退回「弹技能详情」，两个功能都不丢。</para>
+    /// </summary>
+    public bool TryUsePlayerSkillAt(int slot)
+    {
+        if (slot < 0) return false;
+        if (!UnitsCanAct) return false;                    // 开战演出 / 结算 / 冻结
+        if (IsTutorialRun) return false;                   // 引导局锁死自动
+        if (BattleLootMode.Active) return false;           // 领奖模式
+        if (CareerSkillExecutor.IsCharging) return false;  // 冲锋期间行动权归冲锋协程
+        return SkillCast.TryUsePlayerSkillSlot(slot);
+    }
 
     /// <summary>释放佣兵技能（槽位 index 0/1）— 手动模式</summary>
     public bool TryUseMercSkill(int mercIndex)

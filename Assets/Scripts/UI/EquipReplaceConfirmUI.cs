@@ -130,6 +130,10 @@ public class EquipReplaceConfirmUI : MonoBehaviour
     /// </summary>
     public static IEnumerator CoShow(EquipInstance newEq, EquipInstance oldEq, System.Action<Outcome> onDone)
     {
+        // 【2026-11-24 主人拍板】替换装备弹窗开播时自动收起「佣兵信息 / 技能信息」弹窗：
+        // 同 BattleEntryDraftPanel.Show 先例走各自 CloseIfOpen 正常出口，不新建实例、不卡回调。
+        MercObtainPopupUI.CloseIfOpen();
+        SkillObtainPopupUI.CloseIfOpen();
         var ui = Ensure();
         if (ui == null)
         {

@@ -62,13 +62,54 @@ public static class DraftPool
 
     public static bool HasSkillContent()
     {
-        if (!RunLoadout.IsSkillFull && CollectNewSkills().Count > 0) return true;
-        return CollectUpgradableSkills().Count > 0;
+        bool full = RunLoadout.IsSkillFull;
+        int slotCount = RunLoadout.SkillIds().Count;
+        int maxSlot = RunLoadout.MaxSkillSlots;
+        var newSkills = full ? new List<WeightedCard>() : CollectNewSkills();
+        var upSkills = CollectUpgradableSkills();
+
+        if (!full && newSkills.Count > 0)
+        {
+            Debug.Log($"[DraftPool诊断] HasSkillContent=true → 槽未满({slotCount}/{maxSlot}) + 新技能池有 {newSkills.Count} 张");
+            return true;
+        }
+        if (upSkills.Count > 0)
+        {
+            Debug.Log($"[DraftPool诊断] HasSkillContent=true → 可升星池有 {upSkills.Count} 张{(full ? "（槽已满）" : "")}");
+            return true;
+        }
+
+        // 落到这里就是 false，打印原因
+        if (full)
+        {
+            Debug.LogWarning($"[DraftPool诊断] HasSkillContent=false → 槽已满({slotCount}/{maxSlot}) + 可升星池空（所有技能都满星了？）");
+            // 列出所有已装技能的星级，帮主人看是不是真的全满
+            var skills = RunLoadout.Data?.skills;
+            if (skills != null)
+            {
+                for (int i = 0; i < skills.Count; i++)
+                {
+                    var s = skills[i];
+                    if (s == null || string.IsNullOrEmpty(s.id)) continue;
+                    int cap = SkillRarityUtil.StarCap(SkillDraftMeta.Rarity(s.id));
+                    Debug.LogWarning($"[DraftPool诊断]   已装 #{i} {s.id} ★{s.star}/{cap} 满星={s.star >= cap}");
+                }
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[DraftPool诊断] HasSkillContent=false → 槽未满({slotCount}/{maxSlot}) + 新技能池空 + 可升星池空");
+        }
+        return false;
     }
 
-    public static bool HasMercContent()
+    /// <param name="allowWhenFull">
+    /// 【2026-11-24 主人拍板】true = 满员也给招募卡（波间免费三选一用：抽到就弹「换下谁」）。
+    /// 默认 false = 原有口径（满员不出佣兵方向），老虎机付费抽不受影响。
+    /// </param>
+    public static bool HasMercContent(bool allowWhenFull = false)
     {
-        if (!RunLoadout.IsMercFull && CollectRecruitMercs().Count > 0) return true;
+        if ((allowWhenFull || !RunLoadout.IsMercFull) && CollectRecruitMercs(allowWhenFull).Count > 0) return true;
         // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子没有升级卡」的口径不一致（与 2026-10-20 升星下架同款）。
         // 恢复时把这行注释放开即可。
@@ -110,11 +151,11 @@ public static class DraftPool
     /// 独立方向，权重 5 不随佣兵联动），不再混进任何类的池子 → 本参数不再往池里塞金币卡（见 <see cref="AddConsolation"/>）。
     /// 保留签名是为了不动六处调用点；<see cref="SlotMachineSystem.GoldAllowed"/> 才是「这一抽出不出金币方向」的唯一出口。
     /// </param>
-    public static List<DraftCard> BuildCards(DraftCategory c, bool consolation)
+    public static List<DraftCard> BuildCards(DraftCategory c, bool consolation, bool allowMercWhenFull = false)
     {
         switch (c)
         {
-            case DraftCategory.Merc: return BuildMercCards(consolation);
+            case DraftCategory.Merc: return BuildMercCards(consolation, allowMercWhenFull);
             case DraftCategory.Equip: return BuildEquipCards(consolation);
             case DraftCategory.Gold: return new List<DraftCard>(1) { CollectGoldCard().Card };
             default: return BuildSkillCards(consolation);
@@ -129,10 +170,10 @@ public static class DraftPool
         return cards;
     }
 
-    static List<DraftCard> BuildMercCards(bool consolation)
+    static List<DraftCard> BuildMercCards(bool consolation, bool allowWhenFull = false)
     {
         var cards = new List<DraftCard>(CardCount);
-        FillFromWeighted(BuildWeightedPool(DraftCategory.Merc, consolation), cards);
+        FillFromWeighted(BuildWeightedPool(DraftCategory.Merc, consolation, false, allowWhenFull), cards);
         FillFallback(cards, DraftCategory.Merc);
         return cards;
     }
@@ -144,13 +185,13 @@ public static class DraftPool
     /// 抽奖币是独立方向（<see cref="DraftCategory.Gold"/>），只在 <see cref="PickOne"/> 的 Gold 分支出卡。
     /// </summary>
     /// <param name="forceAtLeastRare">【2026-10-24 主人拍板】保底稀有：true 时装备生成 roll 出普通（白）强制升档稀有。默认 false，概率公示等既有调用点零改动。</param>
-    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation, bool forceAtLeastRare = false)
+    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation, bool forceAtLeastRare = false, bool allowMercWhenFull = false)
     {
         var pool = new List<WeightedCard>();
         switch (c)
         {
             case DraftCategory.Merc:
-                pool.AddRange(CollectRecruitMercs());
+                pool.AddRange(CollectRecruitMercs(allowMercWhenFull));
                 // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡不再进池（佣兵升级改走局外养成线）。
                 // 恢复时把下面这行注释放开即可；CollectMercLevelCards 方法本体保留未动。
                 //pool.AddRange(CollectMercLevelCards());
@@ -736,14 +777,23 @@ public static class DraftPool
     static List<WeightedCard> CollectUpgradableSkills()
     {
         var list = new List<WeightedCard>();
-        if (RunLoadout.Data?.skills == null) return list;
+        if (RunLoadout.Data?.skills == null)
+        {
+            Debug.Log("[DraftPool诊断] CollectUpgradableSkills → Data.skills == null，返回空");
+            return list;
+        }
 
         for (int i = 0; i < RunLoadout.Data.skills.Count; i++)
         {
             var s = RunLoadout.Data.skills[i];
             if (s == null || string.IsNullOrEmpty(s.id)) continue;
             var rar = SkillDraftMeta.Rarity(s.id);
-            if (s.star >= SkillRarityUtil.StarCap(rar)) continue;
+            int cap = SkillRarityUtil.StarCap(rar);
+            if (s.star >= cap)
+            {
+                Debug.Log($"[DraftPool诊断] CollectUpgradableSkills 跳过 {s.id}：★{s.star} 已达上限 {cap}（{rar}）");
+                continue;
+            }
 
             var def = PlayerSkillDefs.GetById(s.id);
             int nextStar = s.star + 1;
@@ -775,7 +825,11 @@ public static class DraftPool
     static List<WeightedCard> CollectNewSkills()
     {
         var list = new List<WeightedCard>();
-        if (RunLoadout.IsSkillFull) return list;
+        if (RunLoadout.IsSkillFull)
+        {
+            Debug.Log("[DraftPool诊断] CollectNewSkills → 技能槽已满，直接返回空（满槽不出新技能）");
+            return list;
+        }
 
         // 2026-10-12 主人拍板「每次引导战力一样」：引导局第三拍固定发 SlotMachineDefs.TutorialFixedSkillId
         // （治愈之泉，Common 档）—— 否则随机技能的稀有度差会让引导战力每次不同。
@@ -813,25 +867,30 @@ public static class DraftPool
         }
 
         var all = PlayerSkillDefs.All;
-        if (all == null) return list;
+        if (all == null)
+        {
+            Debug.Log("[DraftPool诊断] CollectNewSkills → PlayerSkillDefs.All == null，返回空");
+            return list;
+        }
 
+        int totalSkills = 0, skippedHas = 0, skippedPool = 0, skippedUnlock = 0, skippedMelee = 0, skippedEarlyLeg = 0;
         for (int i = 0; i < all.Length; i++)
         {
             var def = all[i];
             if (def == null || string.IsNullOrEmpty(def.id)) continue;
-            if (RunLoadout.HasSkill(def.id)) continue;
-            if (!SkillDraftMeta.InDraftPool(def.id)) continue;
-            // 分层解锁（2026-09-15）：未解锁的技能不进局内抽卡池。
-            // 前期只会遇到 Early 那 10 个，中后期技能靠章节 / 天赋 / 商店 / 成就逐步放出。
-            // 详见 Docs/玩家技能分层解锁_2026-09-15.md
-            if (!PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data)) continue;
-            // 近战专属：远程职业（游侠/法师/牧师）抽不到冲锋、剑刃风暴这类贴身技。
-            // 只过滤语义上过不去的少数几个，其余技能对全职业通用。
-            if (def.meleeOnly && !PlayerJobDefs.IsSelectedMelee()) continue;
+            totalSkills++;
+            if (RunLoadout.HasSkill(def.id)) { skippedHas++; continue; }
+            if (!SkillDraftMeta.InDraftPool(def.id)) { skippedPool++; continue; }
+            if (!PlayerSkillDefs.IsUnlocked(def, SaveSystem.Instance?.Data)) { skippedUnlock++; continue; }
+            if (def.meleeOnly && !PlayerJobDefs.IsSelectedMelee()) { skippedMelee++; continue; }
 
             var rar = SkillDraftMeta.Rarity(def.id);
-            // 【2026-11-23 主人拍板】前期彻底不出传奇技能（天雷裁决/风龙卷/星落），通关第 3 章后才进池。
-            if (IsEarlySurvivalPhase() && rar == SkillRarity.Legendary) continue;
+            if (IsEarlySurvivalPhase() && rar == SkillRarity.Legendary)
+            {
+                Debug.Log($"[DraftPool诊断] CollectNewSkills 跳过 {def.id}：前期不出传奇（通关第3章才进池）");
+                skippedEarlyLeg++;
+                continue;
+            }
             var tag = SkillDraftMeta.Tag(def.id);
             string tagName = SynergyTagUtil.DisplayName(tag);
             string prefix = string.IsNullOrEmpty(tagName) ? "" : $"[{tagName}] ";
@@ -856,17 +915,15 @@ public static class DraftPool
                 Key = "skill_" + def.id
             });
         }
+        Debug.Log($"[DraftPool诊断] CollectNewSkills → 总 {totalSkills} / 已装跳过 {skippedHas} / 非池内跳过 {skippedPool} / 未解锁跳过 {skippedUnlock} / 近战专属跳过 {skippedMelee} / 前期传奇跳过 {skippedEarlyLeg} / 最终候选 {list.Count}");
         return list;
     }
-
-    // ============================================================
-    // 候选收集：佣兵
     // ============================================================
 
-    static List<WeightedCard> CollectRecruitMercs()
+    static List<WeightedCard> CollectRecruitMercs(bool allowWhenFull = false)
     {
         var list = new List<WeightedCard>();
-        if (RunLoadout.IsMercFull) return list;
+        if (RunLoadout.IsMercFull && !allowWhenFull) return list;
 
         SaveData data = SaveSystem.Instance?.Data;
 

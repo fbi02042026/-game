@@ -256,6 +256,9 @@ public class SkillSystem : Singleton<SkillSystem>, ICombatBoundSingleton
             float finalDamage = DamageFormula.ApplyCrit(damage, caster.attr, out bool isCrit);
             finalDamage = DamageFormula.ApplyAttackerSpecials(finalDamage, caster, enemy);
             enemy.TakeDamage(finalDamage, isCrit, false, true, vfxDir, caster);
+            // 【2026-11-24】重斩命中打断读条：复用上方 heavy_cleave 判定（deathKb），
+            // 只在目标攒槽期生效（TryInterruptCast 内部判 _hpSkillCharging / _skillEnergy>0），其余空操作、不惩罚。
+            if (deathKb) enemy.TryInterruptCast();
             // 这一刀打死的才击退；方向从 AOE 落点往外推，落点重合时回退施法者朝向。
             if (deathKb && enemy.isDead)
             {

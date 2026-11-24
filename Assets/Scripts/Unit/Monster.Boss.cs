@@ -9,6 +9,8 @@ public partial class Monster
     bool _bossPhase2Started;
     bool _bossPhaseShiftBusy;
     bool _enraged;
+    Vector3 _enrageBaseScale;       // 【2026-11-24】狂暴体型放大前的原始 MoveRoot 缩放
+    bool _enrageScaleApplied;       // 是否已施加狂暴放大（恢复判空用）
 
     public int GetBossPhase()
     {
@@ -114,6 +116,14 @@ public partial class Monster
         if (maxHp < 1f) return;
         if (currentHp / maxHp > GameConfig.BOSS_ENRAGE_HP_RATIO) return;
         _enraged = true;
+        // 【2026-11-24 主人拍板】狂暴体型放大1.3倍：纯视觉，只改 MoveRoot
+        // （血条 _hpBarRoot 挂在根 transform 下、不在 MoveRoot 下，所以不会被放大；朝向翻转改的是 _visualRoot，也不冲突）
+        if (MoveRoot != null && !_enrageScaleApplied)
+        {
+            _enrageBaseScale = MoveRoot.localScale;
+            MoveRoot.localScale = _enrageBaseScale * 1.3f;
+            _enrageScaleApplied = true;
+        }
         UIManager.Instance?.ShowToast("Boss 进入狂暴！");
         // 视觉反馈：直接复用现有「受击」特效（PlayVictimHit），不新造特效系统
         if (BattleVFXSystem.Instance != null)

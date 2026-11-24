@@ -24,6 +24,7 @@ public static class NewGameReset
         DailyLoginUI.ResetRuntimeStateForNewGame(); // 领过登录 / 指路过 / 等主界面待弹
         TownSceneBootstrap.ResetRuntimeStateForNewGame(); // 进镇只查一次的两把闸
         NewMailToast.ResetRuntimeStateForNewGame(); // 「稍后再弹邮件」登记
+        PlayerSkillCastMode.ResetToDefault();      // 技能「自动/手动」开关回默认自动（2026-11-24）
 
         // 引导提示横幅：清档前那句话不该停在新档屏幕上（Hide 幂等，实例没建过就跳过）
         if (TutorialHintUI.Instance != null) TutorialHintUI.Instance.Hide();

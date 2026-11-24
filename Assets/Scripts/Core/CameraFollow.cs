@@ -30,6 +30,13 @@ public class CameraFollow : MonoBehaviour
     private float _baseOrthoSize;
     private float _zoomMul = 1f;
     Coroutine _zoomCo;
+
+    // ===== 视野缩放 =====
+    // 【2026-11-24 主人拍板·下线】原「队伍聚散动态拉远视野」已去掉：镜头只跟玩家，
+    // 不再按佣兵距离调 ortho。_formationZoom 恒收敛到 1，仅保留击杀特写 _zoomMul 通路。
+    const float FORMATION_SMOOTH = 0.35f;       // _formationZoom 收敛平滑时间
+    float _formationZoom = 1f;                  // 恒 1（ApplyOrthoZoom 用它算 total，保留便于恢复）
+    float _formationZoomVel;                    // Mathf.SmoothDamp ref 参数
     private float _velocityX = 0f;
     private float _camY;
     private float _camZ;
@@ -112,12 +119,37 @@ public class CameraFollow : MonoBehaviour
         _shakeTimeLeft = Mathf.Max(_shakeTimeLeft, duration);
     }
 
+    /// <summary>
+    /// 【2026-11-24 主人拍板·下线】去掉队伍聚散缩放：镜头只跟玩家，不用管佣兵在不在镜头里。
+    /// wantZoom 恒 1 → _formationZoom 平滑回到 1 → ortho / map 都恢复基准大小；
+    /// 击杀特写 _zoomMul 通路（ApplyOrthoZoom）保留不动。
+    /// <para>原逻辑（已删）：每帧按「玩家到最远存活我方佣兵的 X 距离」把 ortho 拉远，
+    /// 让落后佣兵进画面；同倍率同步缩放 map 保持单位落点不动。主人决定不要此功能。</para>
+    /// </summary>
+    void UpdateFormationView()
+    {
+        const float wantZoom = 1f;
+        _formationZoom = Mathf.SmoothDamp(_formationZoom, wantZoom, ref _formationZoomVel, FORMATION_SMOOTH);
+        // map scale 跟随回到 1（恢复基准大小）；ortho 由 ApplyOrthoZoom 写回
+        BattleEntryDraftPanel.SetFormationMapScale(_formationZoom);
+        ApplyOrthoZoom();
+    }
+
     void ApplyOrthoZoom()
     {
         if (_cam == null) return;
-        if (_baseOrthoSize < 0.01f)
-            _baseOrthoSize = _cam.orthographicSize;
-        _cam.orthographicSize = _baseOrthoSize * _zoomMul;
+        // 【2026-11-24】基准改读适配真源：_baseOrthoSize 是 Awake 的一次性缓存，
+        // ViewportFitDriver 分辨率变化重跑 BattleViewportFit.Apply 后会过期，
+        // 每帧写回会把新适配值覆盖回旧值、打破瘦屏横向视野锁定。
+        // ResolveOrthoSize 与判定真源（GameConfig.CombatJudgeOrthoSize）同源，画面/判定一致。
+        float baseSize = _cam.orthographic
+            ? BattleViewportFit.ResolveOrthoSize()
+            : (_baseOrthoSize < 0.01f ? 1f : _baseOrthoSize);
+        // 【2026-11-24 主人拍板·下线】原「队伍聚散拉远视野」已去掉，_formationZoom 恒 1，
+        // total 实际就等于击杀特写 _zoomMul（<1 = 拉近特写）；map 同倍率同步缩放保持落点不变。
+        float total = _zoomMul / Mathf.Max(0.01f, _formationZoom);
+        _cam.orthographicSize = baseSize * total;
+        BattleUI.ApplyKillCamHudCompensation(total);
     }
 
     /// <summary>击杀前摇：ortho 拉近（targetMul &lt; 1），unscaled 时长。</summary>
@@ -161,7 +193,6 @@ public class CameraFollow : MonoBehaviour
         {
             _zoomMul = targetMul;
             ApplyOrthoZoom();
-            BattleUI.ApplyKillCamHudCompensation(_zoomMul);
             _zoomCo = null;
             yield break;
         }
@@ -172,21 +203,19 @@ public class CameraFollow : MonoBehaviour
             t += Time.unscaledDeltaTime;
             float u = Mathf.Clamp01(t / durationUnscaled);
             _zoomMul = Mathf.Lerp(start, targetMul, u);
-            ApplyOrthoZoom();
-            // HUD 随当前 ortho 倍率同步反缩放，避免世界渐变、UI 瞬跳
-            BattleUI.ApplyKillCamHudCompensation(_zoomMul);
+            ApplyOrthoZoom();   // HUD 反缩放已并入本方法，随倍率同步
             yield return null;
         }
 
         _zoomMul = targetMul;
         ApplyOrthoZoom();
-        BattleUI.ApplyKillCamHudCompensation(_zoomMul);
         _zoomCo = null;
     }
 
     void LateUpdate()
     {
         UpdateShake();
+        UpdateFormationView();   // _formationZoom 收敛回 1 + 写回 ortho/map（击杀特写通路），每帧先算
 
         Vector3 pos = transform.position;
         pos.x -= _lastShakeOffset.x;
@@ -209,6 +238,8 @@ public class CameraFollow : MonoBehaviour
         if (target.GetComponent<Hero>() == null && Hero.Instance != null)
             target = Hero.Instance.transform;
 
+        // 【2026-11-24 主人拍板】相机只跟主角：不做队伍平移，也不拉远视野（原聚散缩放已下线）。
+        // 平移会让世界相对地图整体位移（看着就是单位在地面上滑），别再加回来。
         float targetX = target.position.x + offset.x;
         if (float.IsNaN(targetX) || float.IsInfinity(targetX))
         {

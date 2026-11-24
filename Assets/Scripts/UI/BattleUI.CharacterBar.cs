@@ -232,7 +232,19 @@ public partial class BattleUI : MonoBehaviour
         var e = mercs[index];
         // 【2026-11-13 主人拍板「没有重生护符这个道具了」】阵亡佣兵不再弹「复活/取消」双钮：
         // 护符道具已下线，玩家侧复活入口整条收掉，阵亡/存活统一走只读详情弹窗。
-        MercObtainPopupUI.ShowFromEntry(e.hireId, e.mercId, e.level, e.star);
+        //
+        // 【2026-11-24 主人拍板】详情弹窗加「离开」：活着往左走出去，已阵亡的只掉头像。
+        // 三种模式不放开：引导局（塔克是剧情临时队员，走了引导就断）、羁绊本（该佣兵强制上阵）、
+        // 竞技场（对手镜像队伍有独立口径）。放开判据只此一处，别在弹窗里再判一遍。
+        var bm = BattleManager.Instance;
+        bool canLeave = bm != null && !bm.IsTutorialRun && !bm.IsBondDungeon && !bm.IsArena;
+        System.Action onLeave = null;
+        if (canLeave)
+        {
+            int captured = index;
+            onLeave = () => { RunDraftDirector.Instance?.LeaveMerc(captured); };
+        }
+        MercObtainPopupUI.ShowFromEntry(e.hireId, e.mercId, e.level, e.star, onLeave: onLeave);
         if (!e.fallen)
         {
             // 引导（TutorialDirector 二抽后那一步）在等这一下

@@ -63,6 +63,13 @@ public static partial class GameConfig
     /// 唯一消费方 BattleManager.CoWaveStreamNext。
     /// </summary>
     public const float WAVE_STREAM_GAP_SEC = 1f;
+
+    /// <summary>
+    /// 【2026-11-24 主人拍板】跨大波「三选一」的倒计时秒数。
+    /// 冻场弹出 → 玩家选完立刻出下一波；倒计时归零仍未选 = 随机替玩家选一张，绝不让波次卡死。
+    /// 唯一消费方 <c>BattleManager.TryShowWaveClearDraft</c> → <c>LevelUpDraftUI.Show(timeoutSec)</c>。
+    /// </summary>
+    public const float WAVE_CLEAR_DRAFT_SEC = 15f;
     /// <summary>第一章第一关：波间隔（已减半）</summary>
     public const float OPENING_WAVE_SPAWN_INTERVAL = 7f;
     /// <summary>点击加速出兵：剩余每秒兑换金币</summary>
@@ -150,7 +157,12 @@ public static partial class GameConfig
         int grand = Mathf.Max(1, grandIndex1Based);
         if (chapter <= 1)
         {
-            if (grand <= 1) return 28 + i * 3;                     // 第 1 座：原表 28/31/34/37/40
+            if (grand <= 1)
+            {
+                if (i == 0) return (28 + i * 3) / 2;               // 2026-11-24 主人拍板：第一关敌人减半 28→14，其余关不动
+                if (i == 1) return Mathf.RoundToInt((28 + i * 3) * 2f / 3f);  // 2026-11-24 主人拍板：第二关减三分之一 31→21
+                return 28 + i * 3;                                 // 第 1 座其余关：34/37/40
+            }
             int waves = grand >= 5 ? 6 : 4;                        // [2,2] / [2,2,2]
             int cap = (waves - 1) * FormalWaveMaxOf(chapter) + FORMAL_FIRST_WAVE_MIN;
             return Mathf.Min(40 + (grand - 2) * 12 + i * 3, cap);
@@ -306,16 +318,18 @@ public static partial class GameConfig
     /// </summary>
     public const float FORMAL_WAVE2_DISCOUNT = 0.75f;
 
-    // —— 精英/Boss 概率掉天赋石（2026-10-20 主人拍板：天赋石不再每关首通发放，
-    // 改为精英/Boss 击杀有几率掉落：精英 30%×1、Boss 60%×2）——
-    /// <summary>击杀精英掉天赋石的几率（0~1）。引导里的宿敌精英同样带精英标记，走同一条判定。</summary>
-    public const float ELITE_TALENT_DROP_CHANCE = 0.30f;
-    /// <summary>精英一次掉落的天赋石数量。</summary>
-    public const int ELITE_TALENT_DROP_AMOUNT = 1;
-    /// <summary>击杀 Boss 掉天赋石的几率（0~1）。Boss 波可能同时带精英标记，判定 Boss 优先、不与精英叠加。</summary>
-    public const float BOSS_TALENT_DROP_CHANCE = 0.60f;
-    /// <summary>Boss 一次掉落的天赋石数量。</summary>
-    public const int BOSS_TALENT_DROP_AMOUNT = 2;
+    // —— 精英/Boss 必掉天赋石（2026-11-24 主人拍板：精英 2 颗、Boss 5 颗；概率判定废弃改必掉）——
+    // 旧口径 2026-10-20：精英 30%×1、Boss 60%×2。CHANCE 常量保留=1f 便于一键回退，下方判定链不动。
+    /// <summary>击杀精英掉天赋石的几率（0~1）。1f=必掉。引导里的宿敌精英同样带精英标记，走同一条判定。</summary>
+    public const float ELITE_TALENT_DROP_CHANCE = 1f;
+    /// <summary>精英一次掉落的天赋石数量（2026-11-24：2）。</summary>
+    public const int ELITE_TALENT_DROP_AMOUNT = 2;
+    /// <summary>击杀 Boss 掉天赋石的几率（0~1）。1f=必掉。Boss 波可能同时带精英标记，判定 Boss 优先、不与精英叠加。</summary>
+    public const float BOSS_TALENT_DROP_CHANCE = 1f;
+    /// <summary>Boss 一次掉落的天赋石数量（2026-11-24：5）。</summary>
+    public const int BOSS_TALENT_DROP_AMOUNT = 5;
+    /// <summary>Boss 击杀专属飞字播报文案（2026-11-24 主人拍板，击杀激动感）。</summary>
+    public const string BOSS_KILL_FLYTEXT = "首领击破！漂亮！";
 
     // —— 连杀续杯（R2）：连杀窗口内击杀回血，让"连"成为可持续资源 ——
     /// <summary>连杀回血总开关（2026-10-09 主人拍板关掉）。false = 连杀不再回血。

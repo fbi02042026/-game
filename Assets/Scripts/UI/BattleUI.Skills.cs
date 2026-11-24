@@ -17,6 +17,9 @@ public partial class BattleUI : MonoBehaviour
 
     public void UpdateRunSkillSlots()
     {
+        // 【2026-11-24】技能栏「自动」勾选框：补点击层 + 同步勾选态（幂等，刷技能槽时顺手走一遍）
+        WireAutoCastToggle();
+
         if (runSkillSlots == null || runSkillSlots.Count == 0)
         {
             // 2026-10-11：主人反馈「抽中了技能还是没有立即显示图标」。刷新链路
@@ -332,7 +335,178 @@ public partial class BattleUI : MonoBehaviour
         var ids = RunLoadout.IsActive ? RunLoadout.SkillIds() : null;
         string id = ids != null && index < ids.Count ? ids[index] : null;
         if (string.IsNullOrEmpty(id)) return;
+
+        // 【2026-11-24 主人拍板】手动模式下点击 = 释放：放得出去就不弹详情；
+        // 放不出去（CD 中 / 蓝不够 / 场上没目标 / 冻结中）再退回详情 —— 两个功能都不丢。
+        if (PlayerSkillCastMode.IsManual)
+        {
+            var bm = BattleManager.Instance;
+            if (bm != null && bm.TryUsePlayerSkillAt(index)) return;
+        }
+
         SkillObtainPopupUI.ShowFromId(id);
+    }
+
+    // ============================================================
+    // 技能栏「自动」勾选框（2026-11-24 主人拍板）
+    // 勾选 = 自动（默认）／取消 = 手动（点技能槽才放）
+    // ============================================================
+
+    /// <summary>「自动」节点缺失只报一次，别每次刷新刷屏。</summary>
+    static bool _autoCastToggleWarned;
+
+    /// <summary>
+    /// 给预制体 <c>SkillBar/自动</c> 补点击层。外观是标准 Toggle 结构
+    /// （<c>AgreeToggle/Background</c> + <c>AgreeToggle/Checkmark</c>）但<b>没有 Toggle 组件</b>，
+    /// 按 <see cref="WireSkillSlotClick"/> 同款范式在运行时补透明 Image + Button（不改成预制体）。
+    /// 勾选态的视觉 = <c>AgreeToggle/Checkmark</c> 的 SetActive。幂等：重复调用只重绑 onClick。
+    /// </summary>
+    void WireAutoCastToggle()
+    {
+        if (skillSlotRoot == null) return;
+        var autoNode = FindDeepChildIgnoreCase(skillSlotRoot, "\u81EA\u52A8");   // 「自动」
+        if (autoNode == null)
+        {
+            if (!_autoCastToggleWarned)
+            {
+                _autoCastToggleWarned = true;
+                Debug.LogError("[BattleUI] SkillBar 下找不到「自动」节点 → 技能自动/手动开关无法点击，" +
+                               "玩家会一直停留在自动模式（查 BattleUI 预制体 SkillBar 子节点名）");
+            }
+            return;
+        }
+
+        var toggle = FindDeepChildIgnoreCase(autoNode, "AgreeToggle");
+        var check = toggle != null ? FindDeepChildIgnoreCase(toggle, "Checkmark") : null;
+        if (check == null && !_autoCastToggleWarned)
+        {
+            _autoCastToggleWarned = true;
+            Debug.LogError("[BattleUI] 「自动」节点下找不到 AgreeToggle/Checkmark → 勾选态不会随状态变化");
+        }
+
+        var btn = autoNode.GetComponent<Button>();
+        if (btn == null)
+        {
+            var hitImg = autoNode.GetComponent<Image>();
+            if (hitImg == null)
+            {
+                hitImg = autoNode.gameObject.AddComponent<Image>();
+                hitImg.color = new Color(0f, 0f, 0f, 0f);   // 全透明，纯接射线
+                hitImg.raycastTarget = true;
+            }
+            btn = autoNode.gameObject.AddComponent<Button>();
+            btn.transition = Selectable.Transition.None;
+            btn.targetGraphic = hitImg;
+        }
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(TogglePlayerSkillCastMode);
+
+        // 【2026-11-24 主人拍板】引导局 + 前两关（1-1 / 1-2）不许点：恒灰，并强制自动；
+        // 第 3 关（1-3）起变亮可操作。锁定期若残留手动态，前两关会一个技能都不放 —— 直接掰回自动。
+        bool unlocked = IsAutoCastUnlocked();
+        if (!unlocked && PlayerSkillCastMode.IsManual) PlayerSkillCastMode.SetManual(false);
+        btn.interactable = unlocked;
+        ApplyAutoCastGray(autoNode, !unlocked);
+
+        RefreshAutoCastCheckmark(check);
+    }
+
+    /// <summary>切一次：自动 ⇄ 手动。立即生效，不重开关卡、不重进战斗。</summary>
+    void TogglePlayerSkillCastMode()
+    {
+        if (!IsAutoCastUnlocked()) return;   // 未解锁关卡：按钮置灰，这里再挡一层
+        PlayerSkillCastMode.SetManual(!PlayerSkillCastMode.IsManual);
+        if (skillSlotRoot != null)
+        {
+            var autoNode = FindDeepChildIgnoreCase(skillSlotRoot, "\u81EA\u52A8");
+            var toggle = autoNode != null ? FindDeepChildIgnoreCase(autoNode, "AgreeToggle") : null;
+            RefreshAutoCastCheckmark(toggle != null ? FindDeepChildIgnoreCase(toggle, "Checkmark") : null);
+        }
+    }
+
+    /// <summary>勾选态 = 自动。手动时把勾去掉。</summary>
+    static void RefreshAutoCastCheckmark(Transform check)
+    {
+        if (check == null) return;
+        check.gameObject.SetActive(!PlayerSkillCastMode.IsManual);
+    }
+
+    // ============================================================
+    // 「自动」开关的解锁门槛（2026-11-24 主人拍板）
+    // 引导局与前两关（1-1 / 1-2）恒灰不可点；第 3 关（1-3）起变亮可操作。
+    // 判据 = 篇内小关下标 ChapterManager.CurrentSubIndex0（0 起，1-3 即 2）：
+    // 它在篇内连续累加，不受「第 2 章第 1 关」这类章号重置影响。
+    // ============================================================
+
+    const int AutoCastUnlockSub0 = 2;
+
+    /// <summary>「自动」开关是否已解锁（第 3 关起）。进度取不到时按未解锁 —— 宁灰不亮。</summary>
+    static bool IsAutoCastUnlocked()
+    {
+        var cm = ChapterManager.Instance;
+        return cm != null && cm.CurrentSubIndex0 >= AutoCastUnlockSub0;
+    }
+
+    /// <summary>变灰要覆盖的可见 Graphic：zidong 文字 + AgreeToggle 的框与勾（节点都没有 Image 之外的装饰）。</summary>
+    static Graphic[] _autoCastVisuals;
+    static Color[] _autoCastVisualColors;
+    static bool _autoCastGrayApplied;
+    static bool _autoCastVisualsWarned;
+
+    /// <summary>首次（或跨局重建后）记录原色；之后不再重记，避免把灰色当成原色。</summary>
+    static void EnsureAutoCastVisuals(Transform autoNode)
+    {
+        if (_autoCastVisuals != null && _autoCastVisuals.Length > 0 && _autoCastVisuals[0] != null) return;
+
+        var list = new System.Collections.Generic.List<Graphic>(4);
+        AddAutoCastGraphic(list, FindDeepChildIgnoreCase(autoNode, "zidong"));
+        AddAutoCastGraphic(list, FindDeepChildIgnoreCase(autoNode, "Background"));
+        AddAutoCastGraphic(list, FindDeepChildIgnoreCase(autoNode, "Checkmark"));
+
+        _autoCastVisuals = list.ToArray();
+        _autoCastVisualColors = new Color[list.Count];
+        for (int i = 0; i < list.Count; i++) _autoCastVisualColors[i] = list[i].color;
+        _autoCastGrayApplied = false;
+
+        if (list.Count == 0 && !_autoCastVisualsWarned)
+        {
+            _autoCastVisualsWarned = true;
+            Debug.LogError("[BattleUI] 「自动」下找不到 zidong / Background / Checkmark 任何一个 Graphic " +
+                           "→ 前两关的置灰不会有任何视觉变化（查 BattleUI 预制体 SkillBar/自动 子树）");
+        }
+    }
+
+    /// <summary>
+    /// 一个节点上可能同时挂 Image 和 Text（<c>zidong</c> 就是 Image + Text），
+    /// 必须<b>全取</b>：只取第一个会把「自动」二字的 Text 漏掉，字仍然是亮的。
+    /// </summary>
+    static void AddAutoCastGraphic(System.Collections.Generic.List<Graphic> list, Transform t)
+    {
+        if (t == null) return;
+        var gs = t.GetComponents<Graphic>();
+        for (int i = 0; i < gs.Length; i++)
+            if (gs[i] != null) list.Add(gs[i]);
+    }
+
+    /// <summary>
+    /// 置灰 / 还原（幂等）。灰值取全局禁用色 <see cref="PurchasePriceStyle.BuyDisabledColor"/>，
+    /// 只改颜色，不动字号 / 尺寸 / 图片（美术归预制体）。
+    /// </summary>
+    static void ApplyAutoCastGray(Transform autoNode, bool gray)
+    {
+        EnsureAutoCastVisuals(autoNode);
+        if (_autoCastVisuals == null || _autoCastVisuals.Length == 0) return;
+        if (_autoCastGrayApplied == gray) return;
+
+        Color grayColor = PurchasePriceStyle.BuyDisabledColor;
+        for (int i = 0; i < _autoCastVisuals.Length; i++)
+        {
+            var g = _autoCastVisuals[i];
+            if (g == null) continue;
+            Color c = _autoCastVisualColors[i];
+            g.color = gray ? new Color(grayColor.r, grayColor.g, grayColor.b, c.a) : c;
+        }
+        _autoCastGrayApplied = gray;
     }
 
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>

@@ -19,13 +19,13 @@ public partial class CharacterUI
         ? Instance._petEntryButton.GetComponent<RectTransform>() : null;
 
     /// <summary>
-    /// 宠物入口点击（2026-11-22）：第 3 关营救剧情（宠物功能解锁点）还没播过时，
-    /// 只提示去第 3 关，不打开宠物界面；解锁后照常打开并通知引导推进。
+    /// 宠物入口点击：第 3 关（1-3）通关前
+    /// 只提示去打通第三关，不打开宠物界面；通关后照常打开并通知引导推进。
     /// </summary>
     void OnPetEntryClicked()
     {
         var save = SaveSystem.Instance?.Data;
-        bool unlocked = save != null && save.HasIntruderStorySeen(PetRescueStoryBeats.SeenKey);
+        bool unlocked = save != null && save.HasStageCleared(1, 2);
         if (!unlocked)
         {
             GlobalToastUI.ShowPersona("宠物功能要过了第三关才开哦，先把那关打通再来找我嘛～");
@@ -33,6 +33,18 @@ public partial class CharacterUI
         }
         PetUI.Open();
         PetFeatureGuide.NotifyPetUIOpened();
+    }
+
+    /// <summary>
+    /// 每次进页刷新入口显隐（2026-11-24）：解锁真源 = HasStageCleared(1, 2)（1-3 通关）。
+    /// EnsurePetEntry 开头有创建短路（建过就 return），通关后的更新必须靠这里在 ShowPage 重算。
+    /// </summary>
+    void RefreshPetEntry()
+    {
+        if (_petEntryButton == null) return;
+        var save = SaveSystem.Instance?.Data;
+        bool unlocked = save != null && save.HasStageCleared(1, 2);
+        _petEntryButton.gameObject.SetActive(unlocked);
     }
 
     void EnsurePetEntry()
@@ -97,5 +109,6 @@ public partial class CharacterUI
         btn.targetGraphic = img;
         btn.onClick.AddListener(OnPetEntryClicked);
         _petEntryButton = btn;
+        RefreshPetEntry();
     }
 }

@@ -40,7 +40,7 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 1-3 营救剧情播完后狗中途归队（2026-11-22 补 PetRescueStoryBeats 注释承诺的
+    /// 关 3 营救剧情播完后狗中途归队（2026-11-22 补 PetRescueStoryBeats 注释承诺的
     /// 「末波精英战狗回归助战」）。与开战上阵共用 SpawnBattlePet 单一出口，不新增第二套生成逻辑；
     /// 只认正式主线非引导，场上已有同 id 宠物则幂等早退（不叠加第二只）。
     /// 不写 petDeployedId：上阵真源仍归玩家手动选择，引导流程不被跳过。

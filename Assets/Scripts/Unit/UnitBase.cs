@@ -90,8 +90,8 @@ public abstract partial class UnitBase : MonoBehaviour
     /// <summary>精灵默认是否朝右（SPUM预制体朝向不一致，需子类设置）</summary>
     public bool spriteDefaultFacesRight = true;
 
-    /// <summary>统一动画控制器（自动桥接SPUM或原生Animator）</summary>
-    protected UnitAnimation unitAnim;
+    /// <summary>统一动画控制器（自动桥接SPUM或原生Animator）。public = 职业技协程（CareerSkillExecutor）等外部演出代码直接操作。</summary>
+    public UnitAnimation unitAnim;
     /// <summary>是否正在执行死亡流程（防止重复进入）</summary>
     protected bool _isDying = false;
 }

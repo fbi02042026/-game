@@ -170,7 +170,8 @@ public partial class MercObtainPopupUI : MonoBehaviour
     /// 其余入口默认 true，外观不变。
     /// </summary>
     public static void ShowFromEntry(string hireId, string assetId, int level, int star,
-        bool showReplace = false, System.Action onReplace = null, bool owned = true)
+        bool showReplace = false, System.Action onReplace = null, bool owned = true,
+        System.Action onLeave = null)
     {
         var ui = Ensure();
         if (ui == null) return;
@@ -187,6 +188,15 @@ public partial class MercObtainPopupUI : MonoBehaviour
         if (!ui.Fill(card, owned)) { ui.Close(); return; }
         ui._onReplace = onReplace;
         ui.ApplyReplaceButton(showReplace);
+        // 【2026-11-24 主人拍板】战斗头像详情加「离开」：复用同一枚预制体按钮（Panel/tihaunButton），
+        // 只改文案、不新增节点、不动排版。与佣兵池的「替换」入口互斥（showReplace 优先），
+        // 两条入口不会抢同一枚按钮的回调。
+        if (!showReplace && onLeave != null)
+        {
+            ui._onReplace = onLeave;
+            ui.ApplyReplaceButton(true);
+            ui.SetReplaceLabel("离开");
+        }
         // 【2026-10-18 主人拍板】获得类弹窗互斥：本弹窗要开了，先关掉开着的技能弹窗
         SkillObtainPopupUI.CloseIfOpen();
         ui.OpenRoot();
@@ -280,6 +290,18 @@ public partial class MercObtainPopupUI : MonoBehaviour
         Bind();
         Wire();
         if (_root != null) _root.SetActive(false);
+    }
+
+    // 【2026-11-24 主人拍板】剧情开播自动收起本弹窗：照 EquipReplaceConfirmUI 的 StoryStarted
+    // 订阅范式，剧情只广播事件；本弹窗自己走 CloseIfOpen 正常出口（照常回调 onClosed，不卡流程）。
+    void OnEnable()
+    {
+        if (_instance == this) StoryDirector.StoryStarted += CloseIfOpen;
+    }
+
+    void OnDisable()
+    {
+        StoryDirector.StoryStarted -= CloseIfOpen;
     }
 
     void OnDestroy()

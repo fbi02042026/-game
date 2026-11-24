@@ -313,6 +313,19 @@ public sealed class SkillCastService
             if (!pureDebuff)
                 ExecuteAllySkillFallback(merc, skill);
         }
+        else if (kind == MercSkillExecutor.Kind.InterruptSingle)
+        {
+            // 【2026-11-24】打断读条技：最近敌人 → 单体物伤（与 SkillSystem.ExecuteSingleTarget 同口径：
+            // BuildSkillBase + 暴击 + 攻击者特攻）→ 打断其攒槽（只在攒槽期生效，其余空操作、不惩罚）。
+            // 无目标返回 false 不放（与 MercSkillCaster.MercSkillNeedsTarget 同口径二次保险）。
+            UnitBase t = merc.FindNearestEnemy();
+            if (t == null) return false;
+            float raw = DamageFormula.BuildSkillBase(skill.baseDamage, skill.damageMultiplier, merc.attr, merc.IsMagicDamageDealer());
+            float final = DamageFormula.ApplyCrit(raw, merc.attr, out bool isCrit);
+            final = DamageFormula.ApplyAttackerSpecials(final, merc, t);
+            t.TakeDamage(final, isCrit, false, true, merc.GetVfxFacingDir(), merc);
+            t.TryInterruptCast();
+        }
         else if (skill.skillType == SkillSystem.SkillType.Buff)
             ExecuteAllySkillFallback(merc, skill);
         else

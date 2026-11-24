@@ -135,18 +135,18 @@ public partial class WavePlanner
         {
             formalRoundWaves = RollFormalRoundWaveCounts(CurrentChapter, CurrentGrand);
             formalRoundEnd = FormalRoundEndFlags(formalRoundWaves);
-            // 【2026-11-23 主人拍板·狗营救分镜】1-3 剧情关波数 +1（ch1 2→3）：
+            // 【2026-11-23 主人拍板·狗营救分镜】整数制关 3（精英）剧情关波数 +1（ch1 2→3）：
             // 把「狗陪打普通怪 / 狗被打跑 + 首领来袭 / 精英出场 + 狗归队」拆成三段戏。
             // 总怪量仍走 FormalStageMonsterTotal 按 3 波摊（总量不变，只是每波更少）；
             // 末波仍是精英波（下方 formalEliteSplit 天然生效）；回合末标记只留新末波一枚，
             // 清波链判定/抽奖窗次数与原来一致（仍 1 次）。
-            // formalRoundWaves 不扩：它只被 ch3+ 双段爆发 RecomputeClimaxRoundEnd 消费，1-3（ch1）不触发。
+            // formalRoundWaves 不扩：它只被 ch3+ 双段爆发 RecomputeClimaxRoundEnd 消费，关 3（ch1）不触发。
             if (elite && bm != null && bm.IsPetRescueStageUncleared)
             {
                 int extLen = formalRoundEnd.Length + 1;
                 formalRoundEnd = new bool[extLen];
                 formalRoundEnd[extLen - 1] = true;
-                Debug.Log("[WavePlanner] 1-3 狗营救剧情关：波数 " + (extLen - 1) + " → " + extLen + "（末波精英，总怪量不变）");
+                Debug.Log("[WavePlanner] 关 3 狗营救剧情关：波数 " + (extLen - 1) + " → " + extLen + "（末波精英，总怪量不变）");
             }
         }
         int formalTotalWaves = formalRoundEnd != null ? formalRoundEnd.Length : 0;
