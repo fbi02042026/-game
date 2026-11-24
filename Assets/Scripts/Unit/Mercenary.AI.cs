@@ -450,6 +450,8 @@ public partial class Mercenary : UnitBase
     {
         // 【2026-10-30 竞技场】敌方佣兵不拴玩家绳：无「回队/收召」概念，自由交战（己方路径一行不动）
         if (!isAlly) return false;
+        // 【2026-11-25】子类豁免钩子：营救狗护送期不被拴回队（Pet override，其余单位恒 false 行为不变）
+        if (IgnoresHeroLeash) return false;
 
         var hero = Hero.Instance;
         if (hero == null || hero.isDead)
@@ -505,6 +507,12 @@ public partial class Mercenary : UnitBase
         ClearAcquireLock();
     }
 
+    /// <summary>【2026-11-25】拴绳豁免钩子：true=本单位不拴玩家绳（Pet 护送期 override，基类恒 false）。</summary>
+    protected virtual bool IgnoresHeroLeash => false;
+
+    /// <summary>【2026-11-25】索敌目标过滤钩子：false=拒锁该目标（Pet 护送期只咬右侧怪，基类全收）。</summary>
+    protected virtual bool AcceptAcquireTarget(UnitBase t) => t != null;
+
     void ClearAcquireLock()
     {
         _acquireLock = null;
@@ -540,10 +548,17 @@ public partial class Mercenary : UnitBase
                 _acquireLock = null;
             else if (!GameConfig.CanAcquireTarget(this, _acquireLock))
                 _acquireLock = null;
+            else if (!AcceptAcquireTarget(_acquireLock))
+                _acquireLock = null;   // 【2026-11-25】子类过滤（Pet 护送只咬右侧怪），基类恒收
         }
 
         if (_acquireLock == null)
+        {
             _acquireLock = seekOnField ? FindNearestEnemyOnField() : FindNearestEnemyInDetectRange();
+            // 全场最近怪被过滤掉（护送期身后怪）就空手等待，不回退锁第二个最近目标
+            if (_acquireLock != null && !AcceptAcquireTarget(_acquireLock))
+                _acquireLock = null;
+        }
 
         target = _acquireLock;
         if (target != null && target.isAlly == isAlly)

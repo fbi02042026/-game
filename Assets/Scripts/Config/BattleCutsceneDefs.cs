@@ -26,22 +26,19 @@ public static class BattleCutsceneDefs
 {
     /// <summary>
     /// 关 3（精英）狗营救演出链（顺序即分镜；真源只此一处）。
-    /// 【2026-11-24 主人拍板】重排：第一波刚清完狗已提前入场开打（TryPetRescueActivate 生成，不在演出里）→
-    /// 玩家走到狗附近 → 冻场玩家喊话 → 狗叫两声 → 解冻（怪锁玩家）开打 → 第 2 波清完 → 冻场狗主动跑掉 + 旁白 →
-    /// 首领来袭 → 精英打到半血 → 狗归队 → 精英清完 → 狗叫 + 玩家点评。
-    /// 不再 SpawnPetFight（狗提前生成）、不再 WaitDogFled（狗不再等被打空血，第 2 波清完主动撤场）。
+    /// 【2026-11-24 主人拍板「狗别跑了，跟着玩家一直打」】简化：第一波刚清完狗已提前入场（TryPetRescueActivate 生成）→
+    /// 玩家走到狗入镜 → 冻场玩家喊话 + 狗叫 → 解冻（怪锁玩家）开打 → 第 2 波清完 → 放行首领来袭 →
+    /// 精英清完 → 战后狗叫 + 玩家点评。狗全程在场跟着打，不再跑掉/归队
+    /// （去掉 DogFleeLine / WaitEliteInView / DogRejoinElite；Pet 侧血空回血续战，绝不退场）。
     /// </summary>
     public static readonly BattleCutsceneStep[] DogRescue = new BattleCutsceneStep[]
     {
         BattleCutsceneStep.ShoutAtHero,        // 冻场段首：玩家喊话
         BattleCutsceneStep.BarkAtDog,          // 冻场段尾：狗叫两声（说完解冻，怪锁玩家开打）
         BattleCutsceneStep.WaitWaveCleared,    // 等第 2 波（狗陪打）清完，期间怪锁玩家
-        BattleCutsceneStep.DogFleeLine,        // 冻场：狗主动跑掉 + 逃跑旁白
         BattleCutsceneStep.ReleaseForElite,    // 释放占用 → 首领来袭（清怪锁）
-        BattleCutsceneStep.WaitEliteInView,    // 等精英打到半血
-        BattleCutsceneStep.DogRejoinElite,     // 狗从左侧跑回归队
         BattleCutsceneStep.WaitWaveCleared,    // 等第 3 波（精英）清完
-        BattleCutsceneStep.BarkThanksAtDog,    // 冻场：战后狗叫
+        BattleCutsceneStep.BarkThanksAtDog,    // 冻场：战后狗叫（狗全程在场，贴真狗）
         BattleCutsceneStep.RemarkAtHero,       // 冻场：玩家点评
         BattleCutsceneStep.Release,
     };

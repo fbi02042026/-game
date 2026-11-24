@@ -110,6 +110,21 @@ public partial class TalentUI
         }
         LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
 
+        // 【2026-11-24 修·对齐根因】左右滚动同步走的是 normalized（比例）换算：两列 content 总高不相等时，
+        // 比例换算只有「基准行」对得上，越往上滚错位越大 —— 表现就是只有第一个右侧图标和左侧对齐。
+        // 右列行数 = 左列行数 ÷ rightLevelRows、行距已按 5 行高撑开，把总高差额补到右列 padding.top：
+        // 只加顶部空白，行位置与行距都不变，但两列总高一相等，比例同步即等价像素同步，全程对齐。
+        if (leftContent != null && rightVlg != null)
+        {
+            float lh = leftContent.rect.height;
+            float rh = rightContent.rect.height;
+            if (lh > 1f && rh > 1f && lh - rh > 0.5f)
+            {
+                rightVlg.padding.top += Mathf.RoundToInt(lh - rh);
+                LayoutRebuilder.ForceRebuildLayoutImmediate(rightContent);
+            }
+        }
+
         // 读数前先把两列滚到同一基准（normalized=0，L1/R1 在视野底部）——世界 y 差值才有意义。
         // 滚动同步 WireScrollSync 仍在末尾，不动。
         WireScroll(leftScroll, leftContent);
@@ -118,40 +133,51 @@ public partial class TalentUI
         // 上下裁剪边界完全一致（预制体里 LeftColumn/RightColumn 的高度不同，视口天然差几像素）。
         AlignRightViewportToLeft();
 
-        // 【2026-11-24 修】R1 仍锚左列第 5 行，但不再挪 RightScroll 节点：
-        // Viewport 上的 Mask 是 Scroll 的子节点，整列平移会把视口和裁剪边界一起挪出面板，
-        // 表现为长连线穿出屏幕顶且不会被滑动列表裁掉。改为只平移右列每行的直接子节点
-        // （行根仍归 VerticalLayoutGroup 排布，content 尺寸/滚动基准不变），视口与 Mask 留原位。
-        int rightFirstIndex = (rightLevelRows - 1) * TalentDefs.LeftPerRow;   // 第 5 行首格（0-based 12）
-        if (_leftViews.Count > rightFirstIndex && _rightViews.Count > 0 && rightScroll != null)
+        // 【2026-11-24 修·逐行对齐】R1 锚左列第 5 行，之后每行隔 5 行（Lv5/10/15/…）。
+        // 过去只按 R1 算一次整列平移：右列只要有一行的落点/行高与「5 行节距」有差，除基准行外就一路带偏 ——
+        // 表现就是只有第一个右侧图标和左侧对齐，越往上越偏。改成每行各按「左列第 (i+1)×rightLevelRows 行
+        // 首格的图标中心」现读现对：网格行号不写死，误差不累积，右列行距也被钉成与左列 5 行严格一致。
+        // 只平移行的直接子节点（行根仍归 VerticalLayoutGroup 排布，content 尺寸/滚动基准不变），视口与 Mask 不动。
+        if (_leftViews.Count > 0 && _rightViews.Count > 0 && rightScroll != null)
         {
             // WireScroll 刚改了 normalized 位置，先刷新画布再读世界坐标，否则读到的是滚动前的旧值。
             Canvas.ForceUpdateCanvases();
-            var lIcon = _leftViews[rightFirstIndex].root != null ? _leftViews[rightFirstIndex].root.transform.Find("Iconbg") as RectTransform : null;
-            var rIcon = _rightViews[0].root != null ? _rightViews[0].root.transform.Find("Opt_0/Icon") as RectTransform : null;
             var scrollRt = rightScroll.transform as RectTransform;
-            if (lIcon != null && rIcon != null && scrollRt != null)
+            float scaleY = scrollRt != null && scrollRt.parent != null ? scrollRt.parent.lossyScale.y : 1f;
+            if (Mathf.Abs(scaleY) < 0.001f) scaleY = 1f;
+            // 两侧统一取「六边形外框的几何中心」：左 Iconbg pivot=(0.5,0.5)，position 就是中心；
+            // 右 Opt_0 pivot=(0,0)，position 是框左下角，必须 TransformPoint(rect.center) 才是中心。
+            // （旧代码右取 Opt_0/Icon 内层图案且用 pivot 点比较，语义与 pivot 双重错配。）
+            float dyLimit = (LeftNodeH + LeftGapY) * rightLevelRows * 2f;
+            for (int i = 0; i < _rightViews.Count; i++)
             {
-                float dy = lIcon.position.y - rIcon.position.y;
-                if (Mathf.Abs(dy) > 0.5f)
+                int targetRow = (i + 1) * rightLevelRows - 1;      // 左列 0-based 行号
+                int li = targetRow * TalentDefs.LeftPerRow;        // 该行首格
+                if (li >= _leftViews.Count) continue;              // 左列没有对应行：该行保持原位
+                var lv = _leftViews[li];
+                var rv = _rightViews[i];
+                if (lv == null || lv.root == null || rv == null || rv.root == null) continue;
+                var lIcon = lv.root.transform.Find("Iconbg") as RectTransform;
+                var rIcon = rv.root.transform.Find("Opt_0") as RectTransform;
+                if (lIcon == null || rIcon == null) continue;
+                float dy = (lIcon.TransformPoint(lIcon.rect.center).y
+                            - rIcon.TransformPoint(rIcon.rect.center).y) / scaleY;
+                if (Mathf.Abs(dy) <= 0.5f) continue;
+                if (Mathf.Abs(dy) > dyLimit)
                 {
-                    float scaleY = scrollRt.parent != null ? scrollRt.parent.lossyScale.y : 1f;
-                    if (Mathf.Abs(scaleY) < 0.001f) scaleY = 1f;
-                    float rowOffsetY = dy / scaleY;
-                    foreach (var rv in _rightViews)
-                    {
-                        if (rv.root == null) continue;
-                        for (int ci = 0; ci < rv.root.transform.childCount; ci++)
-                        {
-                            var child = rv.root.transform.GetChild(ci) as RectTransform;
-                            if (child == null) continue;
-                            child.anchoredPosition = new Vector2(child.anchoredPosition.x,
-                                child.anchoredPosition.y + rowOffsetY);
-                        }
-                    }
-                    Canvas.ForceUpdateCanvases();
+                    Debug.LogError("[TalentUI] 右列第 " + (i + 1) + " 行对齐偏移异常 dy=" + dy
+                        + "（目标左列行 " + targetRow + "），左右行数映射对不上，不兜底");
+                    continue;
+                }
+                for (int ci = 0; ci < rv.root.transform.childCount; ci++)
+                {
+                    var child = rv.root.transform.GetChild(ci) as RectTransform;
+                    if (child == null) continue;
+                    child.anchoredPosition = new Vector2(child.anchoredPosition.x,
+                        child.anchoredPosition.y + dy);
                 }
             }
+            Canvas.ForceUpdateCanvases();
         }
         StretchRightLinkLines();   // 线 y 从已平移的 Opt_0 现读，偏移自动带上；视口不动＝超出的线被 Mask 裁掉
 
@@ -232,31 +258,31 @@ public partial class TalentUI
     }
 
     /// <summary>
-    /// 【2026-11-19 主人拍板】右列连线只填「卡与卡之间的空隙」：冲上段从自家卡顶缘拉到上邻卡底缘、
-    /// 冲下段从自家卡底缘拉到下邻卡顶缘，两端精确顶到卡边——不留缝，也不再穿到相邻卡片上面
-    /// （旧口径「中心距+12 穿卡、靠卡图遮住」跨行遮不住：上行冲下段画在下行卡上面＝线压图标）。
-    /// 卡上下缘从 Opt_0 实际 RectTransform 现读（锚左下 / pivot 左下：底缘 = anchoredPosition.y）。
+    /// 【2026-11-24 修·定稿】连线两端只按「相邻两行六边形的实际可见边缘」现读，
+    /// 不再用模板行高 + spacing 推算行距：特殊行的图标落点偏离标准节距时，推算会把线头留缝或压到图标上。
     /// 只改纵向长度与 y 落点；X 中轴仍由 EnsureRightLinkAxis 管，这里不动。
     /// </summary>
     void StretchRightLinkLines()
     {
-        var vlg = rightContent.GetComponent<VerticalLayoutGroup>();
-        if (vlg == null) return;
-        float tplH = rightRowTemplate.GetComponent<RectTransform>().sizeDelta.y;
-        float rowH = tplH > 8f ? tplH : RightRowH;
-        float spacing = vlg.spacing;
-        foreach (var v in _rightViews)
+        int n = _rightViews.Count;
+        if (n == 0) return;
+        var localBottom = new float[n];   // 六边形可见下缘（相对行根左下）
+        var localTop = new float[n];      // 六边形可见上缘（相对行根左下）
+        var rowBottom = new float[n];     // 行根下缘（公共坐标）
+        var hexBottom = new float[n];     // 六边形可见下缘（公共坐标）
+        var hexTop = new float[n];        // 六边形可见上缘（公共坐标）
+        var hasHex = new bool[n];
+        for (int i = 0; i < n; i++)
         {
+            var v = _rightViews[i];
+            var root = v.root != null ? v.root.transform as RectTransform : null;
             var opt = v.root != null ? v.root.transform.Find("Opt_0") as RectTransform : null;
-            if (opt == null)
+            if (root == null || opt == null)
             {
                 Debug.LogError("[TalentUI] 右列行缺 Opt_0，连线长度算不出（不兜底）");
                 continue;
             }
-            float cardBottom = opt.anchoredPosition.y;
-            float cardTop = cardBottom + opt.sizeDelta.y * opt.localScale.y;
-            // 【2026-11-23 主人拍板】线要顶到图标，不是格子边：六边形贴图 preserveAspect 居中绘制在
-            // Opt_0 的 111×155 格里（实际绘制高 ≈110，上下各缩进 ≈22）。端点按格子边缘算就离图标有缝。
+            // 六边形贴图 preserveAspect 居中绘制在 Opt_0 格里（绘制高 ≈110 / 格高 155，上下各缩进 ≈22）。
             // 缩进从 sprite 实际尺寸现读（不写死），随图标放大 localScale 同步。
             float edgeInset = 0f;
             var hexImg = opt.GetComponent<Image>();
@@ -265,16 +291,39 @@ public partial class TalentUI
             {
                 var sr = hexImg.sprite.rect;
                 float k = Mathf.Min(opt.sizeDelta.x / sr.width, opt.sizeDelta.y / sr.height);
-                float inset = Mathf.Max(0f, (opt.sizeDelta.y - sr.height * k) * 0.5f);
-                float scaleY = Mathf.Abs(opt.localScale.y) < 0.001f ? 1f : opt.localScale.y;
-                edgeInset = inset * scaleY;
+                edgeInset = Mathf.Max(0f, (opt.sizeDelta.y - sr.height * k) * 0.5f);
             }
-            float hexBottom = cardBottom + edgeInset;                     // 六边形下缘（图标底）
-            float hexTop = cardTop - edgeInset;                            // 六边形上缘（图标顶）
-            float pitch = rowH + spacing;                                 // 相邻两行的行心距
-            float len = Mathf.Max(4f, pitch - (hexTop - hexBottom));       // 恰好＝图标与图标的视觉空隙
-            StretchRail(v.lineUp, hexTop, len, true);                      // 锚行底：起点=自家图标顶缘
-            StretchRail(v.lineDown, hexBottom - rowH * 0.5f, len, false);  // 锚行中：起点=自家图标底缘
+            float scaleY = Mathf.Abs(opt.localScale.y) < 0.001f ? 1f : opt.localScale.y;
+            localBottom[i] = opt.anchoredPosition.y + edgeInset * scaleY;
+            localTop[i] = opt.anchoredPosition.y + opt.sizeDelta.y * scaleY - edgeInset * scaleY;
+            rowBottom[i] = root.anchoredPosition.y - root.sizeDelta.y;
+            hexBottom[i] = rowBottom[i] + localBottom[i];
+            hexTop[i] = rowBottom[i] + localTop[i];
+            hasHex[i] = true;
+        }
+        for (int i = 0; i < n; i++)
+        {
+            var v = _rightViews[i];
+            if (!hasHex[i]) continue;
+            // visualIndex 0 在视觉最底（reverseArrangement）⇒ i+1 是上一行。
+            // 【2026-11-24 定稿·线只填空隙】lineUp 只画「本行图标顶 → 上一行图标底」这一段空白：
+            // 线段整段落在两枚六边形之间的空白里、不进入任何图标区域 ⇒ 行间渲染顺序无论谁在上层，
+            // 都不可能压住图标。旧口径画到相邻行中心，线必然穿过图标本身，叠在上层就露在剑上。
+            // 两端各压进尖端 2：六边形贴图上下 alpha 留白仅 1~2px，留这 2 逻辑像素刚好贴死、不露缝。
+            if (v.lineUp != null)
+            {
+                if (i + 1 < n && hasHex[i + 1])
+                {
+                    const float tipOverlap = 2f;
+                    // 【2026-11-24 主人拍板】所有连线整体往下 10：段长不变、只把起点下移 linkDown，
+                    // 线在两枚六边形之间相对图标整体下移。只改这一处；框/图标/行距/中轴一概不动。
+                    const float linkDown = 10f;
+                    float startY = localTop[i] - tipOverlap - linkDown;
+                    float len = hexBottom[i + 1] - hexTop[i] + tipOverlap * 2f;
+                    if (len > 2f) StretchRail(v.lineUp, startY, len, true);
+                    else v.lineUp.gameObject.SetActive(false);   // 两行贴到一起时不留线头
+                }
+            }
         }
     }
 

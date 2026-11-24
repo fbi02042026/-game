@@ -392,8 +392,8 @@ public static class SlotMachineSystem
                 return want;
             }
         }
-        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（2026-11-24 提前到第 2 抽起保底，
-        // 原 2026-10-19 是第 4 抽起；主人要「第一关抽 2-3 次就能抽到佣兵」）。
+        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（2026-11-24 主人拍板：按章保底，
+        // 第 1 章第 4 抽起，往后每章 +1 抽，第 4 章起封顶第 7 抽）。
         // 窗口内金币方向由 GoldAllowed 同步挡掉 ——
         // 保底必须真的给佣兵，不能让玩家花钱抽回币（2026-10-18 主人报「抽奖 3 次全是抽奖币」）。
         // 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
@@ -476,17 +476,19 @@ public static class SlotMachineSystem
     public static void NoteGoldPrize() => _goldPrizesThisRun++;
 
     /// <summary>
-    /// 【2026-11-24 主人拍板「过了第三关慢慢把佣兵保底放到5次」】正式关保底佣兵的**触发条件**（唯一出口）：
-    /// 非引导局、本局已抽 ≥5 次（第 6 抽起保底 —— 前 5 次按概率正常出，第 6 抽还没抽到佣兵就强制给）、
-    /// 且本局一只佣兵都没有。
+    /// 【2026-11-24 主人拍板「第一章保底 4 抽，往后每章 +1，封顶 7 抽」】正式关保底佣兵的**触发条件**（唯一出口）：
+    /// 非引导局、本局已抽次数达到<b>按章阈值</b>（第 1 章 3 抽＝第 4 抽起；每 +1 章阈值 +1；封顶 6 抽＝第 7 抽）、
+    /// 且本局一只佣兵都没有。章号真源 = <c>ChapterManager.currentChapter</c>（1 起）。
     /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="GoldAllowed"/>
     /// 据此把金币方向挡在保底窗口外。
     /// ⚠ 是否真的强制还要看佣兵方向**有内容可给**（cats 含 Merc），那道可用性判定留在 <see cref="ResolveCategory"/>。
     /// </summary>
     public static bool MercGuaranteeActive()
     {
-        return !IsTutorialRun
-            && DrawIndex >= 5
+        if (IsTutorialRun) return false;
+        int chapter = ChapterManager.Instance != null ? Mathf.Clamp(ChapterManager.Instance.currentChapter, 1, 8) : 1;
+        int need = Mathf.Clamp(2 + chapter, 3, 6);   // ch1=3(第4抽)、ch2=4、ch3=5、ch4+=6(第7抽封顶)
+        return DrawIndex >= need
             && RunLoadout.Mercs().Count == 0;
     }
 

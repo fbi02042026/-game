@@ -53,7 +53,7 @@ public static class TalentSystem
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null || !data.HasStageCleared(CHANGE_JOB_UNLOCK_CHAPTER, CHANGE_JOB_UNLOCK_STAGE_INDEX0))
         {
-            reason = $"通关第{CHANGE_JOB_UNLOCK_CHAPTER}章第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁切换职业";
+            reason = $"切换职业\n通过第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁";
             return false;
         }
         reason = null;

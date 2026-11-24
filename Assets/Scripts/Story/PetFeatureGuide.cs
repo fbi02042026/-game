@@ -176,7 +176,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var charUi = CharacterUI.Instance;
         var entryRect = charUi != null ? CharacterUI.PetEntryRect : null;
         if (entryRect != null)
-            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.SideGuideBubbleLayout);
+            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.GuideBubbleLayout);
         else
             Debug.LogError("[PetFeatureGuide] 角色页宠物入口取不到，指路气泡跳过");
         yield return WaitStage(3);   // 等玩家点开宠物界面

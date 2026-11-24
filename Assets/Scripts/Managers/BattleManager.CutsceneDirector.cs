@@ -17,11 +17,14 @@ public partial class BattleManager
 {
     bool _cutsceneActive;                // 本关演出是否在跑（换关复位中止协程）
     bool IsOccupyingBattlefield;         // 唯一对外占用信号；true 时波次系统只读它、不推进
+    /// <summary>演出占用战场（狗营救演出全程 true）：供 MercBattleBanter 等外部系统闭嘴，避免闲聊插话和剧情打架。</summary>
+    public bool IsOccupying => IsOccupyingBattlefield;
     bool _cutsceneFrozeUnits;            // 本演出当前是否正冻着场（只解自己冻的场，防误解冻别人）
     bool _cutsceneTalkCanActBefore;      // 进入连续对话段前的 UnitsCanAct（整段冻一次、整段末才解，中途不解冻）
     Coroutine _cutsceneCo;               // 唯一协程句柄
     Pet _cutsceneDog;                    // 本场狗战斗单位（真参战，进 allyUnits）
     bool _dogRescueForceHero;            // 【2026-11-24】第2波战斗期间怪强制锁玩家（气泡解冻→首领来袭前）
+    float _rescueDiagTimer;              // 【临时诊断 2026-11-24，验证后删】触发前几何日志计时器
     /// <summary>狗跑入时长倍率（2026-11-23 23:2x 主人「狗的移动速度也快 减一半」：3.5 → 1.75）。</summary>
     const float DOG_RUN_SPEED_MUL = 1.75f;
     /// <summary>等「狗被打跑」的看门狗（秒）：超时强制撤场，绝不把演出卡死（2026-11-23 分镜）。</summary>
@@ -30,8 +33,8 @@ public partial class BattleManager
     const float ELITE_REJOIN_TIMEOUT = 10f;
     /// <summary>狗归队的精英血量线：血剩一半或更少（主人「打到一半狗进场助阵」，2026-11-23）。</summary>
     const float ELITE_REJOIN_HP_RATIO = 0.5f;
-    /// <summary>【2026-11-24】玩家走到狗多近才触发冻场气泡（横向世界单位）：狗已提前入场开打，
-    /// 玩家先走过去看一会，靠近了才出剧情。狗在怪群里会移动，阈值留余量。</summary>
+    /// <summary>【2026-11-24 已弃用，保留待回退】触发判据已改为「狗入镜」（见 TryPlayDogRescueCutscene），
+    /// 此常量不再参与判断。保留是为了万一要恢复 dx 距离判据时不用重新找数。</summary>
     const float CUTSCENE_TRIGGER_DIST = 5.5f;
 
     /// <summary><see cref="IsOccupyingBattlefield"/> 只读出口：波次系统（Waves.cs）唯一依赖。</summary>
@@ -52,12 +55,22 @@ public partial class BattleManager
         if (!isInBattle || _stageCleared || _portalActive) return;
 
         // 狗已提前生成；找不到说明已被怪打跑（销毁）——不拦演出：气泡退到玩家锚点，
-        // 狗归队步骤（DogRejoinElite）会重新生成。活着时才判「玩家走近」距离。
+        // 狗归队步骤（DogRejoinElite）会重新生成。活着时判「狗是否已入镜」：玩家必须走到
+        // 狗入镜（dog.x ≤ visMax）才触发，确保玩家看到狗再出剧情，不在清波瞬间打断。
         _cutsceneDog = FindRescueDog();
-        if (_cutsceneDog != null && hero != null)
+        if (_cutsceneDog != null)
         {
-            float dx = Mathf.Abs(hero.transform.position.x - _cutsceneDog.transform.position.x);
-            if (dx > CUTSCENE_TRIGGER_DIST) return;   // 玩家还没走到狗附近
+            GetBattleVisibleX(out _, out float visMax, 0.35f);
+            float dogX = _cutsceneDog.transform.position.x;
+            // 【临时诊断 2026-11-24，验证后删】打印几何，确认狗入镜时才触发
+            _rescueDiagTimer += Time.deltaTime;
+            if (_rescueDiagTimer >= 0.5f)
+            {
+                _rescueDiagTimer = 0f;
+                float hx = hero != null ? hero.transform.position.x : -9999f;
+                Debug.Log($"[DIAG-Rescue] wave={_activeWaveIndex} alive={CountAliveMonsters()} heroX={hx:0.0} dogX={dogX:0.0} visMax={visMax:0.0} dogOnScreen={dogX <= visMax}");
+            }
+            if (dogX > visMax) return;   // 狗还在屏外，等玩家走近入镜
         }
 
         _cutsceneActive = true;
@@ -79,6 +92,7 @@ public partial class BattleManager
         if (_cutsceneFrozeUnits) { UnitsCanAct = true; _cutsceneFrozeUnits = false; }
         _cutsceneTalkCanActBefore = true;
         _cutsceneDog = null;
+        _rescueDiagTimer = 0f;
         // 【2026-11-24】换关清掉怪锁玩家标志 + 强制目标，绝不让下一关的怪还锁着玩家
         _dogRescueForceHero = false;
         ClearMonsterForcedTargets();
@@ -133,6 +147,8 @@ public partial class BattleManager
                         if (_cutsceneTalkCanActBefore) UnitsCanAct = true;
                         _cutsceneFrozeUnits = false;
                         _cutsceneTalkCanActBefore = true;
+                        // 开场台词播完解冻、怪锁玩家开打：关护送，狗交还正常 AI 参战。
+                        _cutsceneDog?.SetRescueEscort(false);
                     }
                 }
                 if (!_cutsceneActive) yield break;               // 换关中止
@@ -220,7 +236,9 @@ public partial class BattleManager
                 if (talk == null) { Debug.LogError("[Cutscene] 气泡 UI 取不到，BarkAtDog 跳过"); }
                 else if (_cutsceneDog != null)
                 {
-                    yield return talk.CoPlayLineAt(_cutsceneDog.transform, PetRescueStoryBeats.DogBark, PetRescueStoryBeats.WhimperHold);
+                    // 【2026-11-24】狗是战斗世界单位，用 CoPlayLine(UnitBase) 跟随分支（和英雄/佣兵同一条、已验证贴头），
+                    // 别用 CoPlayLineAt(transform) —— 那是给城镇 UI 锚点设计的，投到世界狗身上会错位、气泡不贴狗。
+                    yield return talk.CoPlayLine(_cutsceneDog, PetRescueStoryBeats.DogBark, PetRescueStoryBeats.WhimperHold);
                     Debug.Log("[CutsceneDiag] BarkAtDog DONE show=" + talk.IsShowing + " line=" + talk.CurrentLine);
                 }
                 else if (hero != null)
@@ -289,7 +307,16 @@ public partial class BattleManager
                 // 精英战是真打，屏幕精英血条从这里恢复显示（第 2 波是狗陪打的普通波，全程没有精英血条）
                 BattleBossHpBar.SetCutsceneSuppressed(false);
                 Debug.Log("[CutsceneDiag] 释放战场占用，等「首领来袭」+ 精英出场");
-                yield return null;
+                // 【2026-11-24】必须等精英波实际刷出来再进 WaitWaveCleared：否则第 2 波刚清完、场上空着
+                // （alive=0、无刷怪协程），WaitWaveCleared 的 while 第一次判断就 false、watchdog=0 立刻退，
+                // 直接跳战后点评——玩家看不到「首领来袭」过渡，精英怪在演出结束后才刷。30s 看门狗兜底防卡死。
+                float wt = 0f;
+                while (_cutsceneActive && CountAliveMonsters() <= 0 && wt < 30f)
+                {
+                    wt += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                Debug.Log("[CutsceneDiag] 精英已出场 alive=" + CountAliveMonsters() + " wait=" + wt.ToString("F1"));
                 break;
             }
             case BattleCutsceneStep.WaitEliteInView:
@@ -337,7 +364,8 @@ public partial class BattleManager
             {
                 if (talk == null) { Debug.LogError("[Cutscene] 气泡 UI 取不到，BarkThanksAtDog 跳过"); break; }
                 if (_cutsceneDog != null)
-                    yield return talk.CoPlayLineAt(_cutsceneDog.transform, PetRescueStoryBeats.DogThanks, PetRescueStoryBeats.ThanksHold);
+                    // 同 BarkAtDog：战斗单位走跟随分支，气泡才贴狗。
+                    yield return talk.CoPlayLine(_cutsceneDog, PetRescueStoryBeats.DogThanks, PetRescueStoryBeats.ThanksHold);
                 else if (hero != null)
                     yield return talk.CoPlayLine(hero, PetRescueStoryBeats.DogThanks, PetRescueStoryBeats.ThanksHold);
                 break;

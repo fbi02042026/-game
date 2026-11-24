@@ -63,6 +63,8 @@ public sealed class CareerSkillAccumulator
     public void Tick()
     {
         if (_need <= 0 || string.IsNullOrEmpty(_skillId)) return;
+        // 【2026-11-24 主人拍板】职业自带技能（剑盾冲锋/法师奥术弹/游侠弹幕等）保持原来的自动行为，
+        // 不受技能栏「自动/手动」开关影响：两种模式下都按普攻攒槽→满了自动放。开关只控制 4 槽抽卡技能。
         var bm = BattleManager.Instance;
         if (bm == null || !bm.isInBattle || !bm.UnitsCanAct) return;
         if (BattleLootMode.Active) return;

@@ -391,6 +391,13 @@ public class TownHubController : MonoBehaviour
             return;
         }
 
+        // 【2026-11-24】切到别的页时收掉「换人引导」外层气泡：气泡跟随的目标页已被 Hide，
+        // TutorialHintUI 的目标失效 ghost 分支会沿用旧位置继续挂满 5s（保位设计，全局不能动），
+        // 表现就是切到冒险页气泡不消失。回滚标记，玩家回原页（还没完成上阵）时重新弹。
+        // 只认 MercSwapHint 外层①③，其它引导零影响。
+        if (_current != tab && tab != MainNavTab.Guild && tab != MainNavTab.Tavern)
+            MercSwapHint.DismissOuterOnPopup(rollback: true);
+
         _current = tab;
         _nav?.SetSelected(tab, notify: false);
 

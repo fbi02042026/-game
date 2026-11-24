@@ -399,7 +399,9 @@ public class BattleHeadTalkUI : MonoBehaviour
         else
         {
             if (_follow == null) { RevealBubble(); return; }   // 原战斗跟随：无单位不定位（行为不变）
-            Vector3 world = _follow.transform.position + new Vector3(0f, HeadOffsetY, 0f);
+            // 宠物体型矮，按自身身高比例给更小抬高（气泡贴狗头）；人型单位沿用全局 HeadOffsetY。
+            float offY = (_follow is Pet petTalker) ? petTalker.GetHeadTalkOffsetY() : HeadOffsetY;
+            Vector3 world = _follow.transform.position + new Vector3(0f, offY, 0f);
             screen = uiCam.WorldToScreenPoint(world);
             if (screen.z <= 0f)
             {
@@ -420,14 +422,6 @@ public class BattleHeadTalkUI : MonoBehaviour
         _root.anchoredPosition = new Vector2(
             Mathf.Clamp(local.x, minX, maxX),
             Mathf.Clamp(local.y, minY, maxY));
-
-        // [DIAG-bubble] 临时诊断，定位完撤掉
-        if (_pendingShow)
-            Debug.Log("[DIAG-bubble] anchor=" + (_uiAnchor != null ? _uiAnchor.name : "null")
-                + " host=" + hostRt.rect + " cam=" + (uiCam != null ? uiCam.name : "null")
-                + " screen=" + screen + " local=" + local + " lift=" + UiAnchorLiftPx
-                + " clampY=[" + minY + "," + maxY + "]"
-                + " pos=" + _root.anchoredPosition);
 
         RevealBubble();
     }

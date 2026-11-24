@@ -236,13 +236,16 @@ public partial class TalentUI
                     if (sp != null) ApplySprite(icon, sp, true);
                     // 【2026-11-23 主人拍板】图标与紫色六边形框同心：框是 Opt_0 本体（preserveAspect 居中），
                     // 图标按自身锚点与父框高度现读回中；只改纵向 y，x / sizeDelta / 贴图 / prefab 一概不动。
+                    // 【2026-11-24 主人拍板】右侧图标整体下移 10（几何居中后再往下 10，框不动）。
+                    const float iconDown = 10f;
                     var iconRt = icon.rectTransform;
                     var parentRt = iconRt.parent as RectTransform;
                     if (parentRt != null)
                     {
                         float parentH = parentRt.rect.height > 1f ? parentRt.rect.height : parentRt.sizeDelta.y;
                         float anchorY = (iconRt.anchorMin.y + iconRt.anchorMax.y) * 0.5f;
-                        iconRt.anchoredPosition = new Vector2(iconRt.anchoredPosition.x, (0.5f - anchorY) * parentH);
+                        iconRt.anchoredPosition = new Vector2(iconRt.anchoredPosition.x,
+                            (0.5f - anchorY) * parentH - iconDown);
                     }
                 }
             }
@@ -386,17 +389,16 @@ public partial class TalentUI
 
         // 连线与普通行同一口径（visualIndex 0 在视觉最底，reverseArrangement）
         bool showUp = v.visualIndex < _rightViews.Count - 1;
-        bool showDown = v.visualIndex > 0;
+        // 【2026-11-24 定稿】下段 Line(1) 统一不显示：每段连接只由下方行的上段 Line 画。
+        // reverseArrangement 下上一行后渲染，下段会压在下一行六边形图标之上（表现＝线穿过剑）。
+        // 上方行的连接由它自己那行的上段负责，隐藏下段不丢任何一段线。
         if (v.lineUp != null)
         {
             v.lineUp.gameObject.SetActive(showUp);
             if (showUp) ApplySprite(v.lineUp, picked ? sprRightLinkOn : sprRightLinkOff, false);
         }
         if (v.lineDown != null)
-        {
-            v.lineDown.gameObject.SetActive(showDown);
-            if (showDown) ApplySprite(v.lineDown, picked ? sprRightLinkOn : sprRightLinkOff, false);
-        }
+            v.lineDown.gameObject.SetActive(false);
 
         if (v.root != null) v.root.SetActive(true);
         SetRowGray(v.root, locked ? 0.72f : 1f);

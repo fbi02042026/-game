@@ -268,7 +268,7 @@ public partial class CharacterUI
         // 2026-10-31：格子快满 → 播一次「可以左右滑」的引导箭头（纯装饰，不拦点击）
         TryPlayBagSwipeHint(used, unlocked);
         // 2026-10-24 主人拍板：角色页背包标题「随身仓库」每刷一次都兜底重写，防止被别处重置。
-        if (bagTitleText != null) bagTitleText.text = "随身仓库";
+        if (bagTitleText != null) bagTitleText.text = "仓库";
         RefreshStaminaPotionRow();
     }
 

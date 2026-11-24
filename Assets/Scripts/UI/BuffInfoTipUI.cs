@@ -178,15 +178,26 @@ public class BuffInfoTipUI : MonoBehaviour
         if (_rootRt == null || _panelRt == null || anchor == null) return;
         Canvas.ForceUpdateCanvases();   // 首帧 rect 还没算好，先刷一次再量
 
-        // 2026-11-23：浮框与 anchor 同处战斗 Canvas 的世界空间，直接反向变换到 _rootRt 本地坐标。
-        // 旧写法走 WorldToScreenPoint/ScreenPointToLocalPoint 往返；浮框自身挂了 Overlay Canvas，
-        // GetComponentInParent<Canvas>() 取到它自己 → cam 判成 null → 把 ScreenSpaceCamera 下的
-        // 世界坐标当成屏幕像素，浮框整体偏移，跑到佣兵头像上。改为同空间直接反变换，不出屏。
+        // 定位口径与 EquipStatTipUI 完全一致：世界坐标 → 屏幕像素 → _rootRt 本地。
+        // 必须走屏幕像素这一步：buff 图标挂在预制体 CharacterBar（localScale=1.3）子树下，
+        // 而本浮框 _rootRt 挂在更外层的战斗根 Canvas 下，两者隔了这个缩放节点。
+        // 若直接 _rootRt.InverseTransformPoint(anchorWorld)，1.3 倍缩放不抵消，坐标带偏差 → 框跑到佣兵头上（2026-11-24 复发）。
+        // 屏幕坐标法把世界坐标归一到屏幕像素再反投，自动吸收中间任何缩放 / 嵌套 Canvas。
+        // cam 必须从 anchor 取 rootCanvas.worldCamera：不能从本浮框 GetComponentInParent<Canvas>，
+        // 否则会命中浮框自己身上挂的子 Canvas，其 worldCamera 可能为 null，同样导致偏移（2026-11-23 踩过）。
+        var anchorCanvas = anchor.GetComponentInParent<Canvas>();
+        Canvas rootCanvas = anchorCanvas != null ? anchorCanvas.rootCanvas : null;
+        Camera cam = rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? rootCanvas.worldCamera
+            : null;
+
         var corners = new Vector3[4];
         anchor.GetWorldCorners(corners);
-        Vector3 topCenter = (corners[1] + corners[2]) * 0.5f;
-        Vector3 localTop = _rootRt.InverseTransformPoint(topCenter);
-        Vector2 lp = new Vector2(localTop.x, localTop.y);
+        Vector3 topCenter = (corners[1] + corners[2]) * 0.5f;   // 图标顶边中点（世界坐标）
+        Vector2 sp = RectTransformUtility.WorldToScreenPoint(cam, topCenter);
+        Vector2 lp;
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(_rootRt, sp, cam, out lp))
+            lp = Vector2.zero;
 
         Rect r = _rootRt.rect;
         float halfW = r.width * 0.5f;

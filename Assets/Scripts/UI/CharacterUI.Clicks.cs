@@ -131,7 +131,9 @@ public partial class CharacterUI
         // 【2026-11-20 主人拍板】按钮常显；没通第1章第5关时点击只提示，不弹职业界面。
         if (!TalentSystem.CanChangeJobByProgress(out string reason))
         {
-            UIManager.Instance?.ShowToast(reason);
+            // 【2026-11-24】门槛提示不容被引导气泡压制（第一次点「切换职业」没反应就是这个）：
+            // ShowToast 默认 force=false 会被 AnyBubbleShowing 整条吞掉；force=true 让提示照常弹。
+            UIManager.Instance?.ShowToast(reason, true);
             return;
         }
         // 【2026-11-23】换完职业除了属性/立绘，角色页 6 槽装备栏也要切到新职业那套：

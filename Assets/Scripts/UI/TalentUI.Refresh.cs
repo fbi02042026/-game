@@ -55,7 +55,10 @@ public partial class TalentUI
             var def = TalentDefs.Left[i];
             bool on = i < unlocked;
             bool can = TalentSystem.IsLeftUpgradeable(i, talents);
-            bool locked = !on && !can;
+            // 【2026-11-24 主人拍板】三态分开：已解锁=亮；当前可解锁（下一节点）=暗；
+            // 排在后面的未解锁节点=灰。两者旧版合并成同一态，玩家分不清。
+            bool locked = i > unlocked;                    // 后续未解锁 → 灰
+            bool dormant = !on && i == unlocked;           // 当前待解锁 → 暗
 
             if (v.nameText != null) v.nameText.text = def.name;
             // 【2026-11-19】数值角标：只显示数值（+15 / +4%），不再整句「生命 +15」
@@ -66,7 +69,8 @@ public partial class TalentUI
                 if (sp != null) ApplySprite(v.icon, sp, true);
                 v.icon.preserveAspect = true;
                 v.icon.type = Image.Type.Simple;
-                v.icon.color = locked ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white;
+                v.icon.color = dormant ? new Color(0.32f, 0.32f, 0.32f, 1f)
+                             : locked ? new Color(0.55f, 0.55f, 0.55f, 1f) : Color.white;
             }
             if (v.check != null)
             {
@@ -82,9 +86,9 @@ public partial class TalentUI
             }
             // 锁定节点也保持可点（与右列同口径）：点了弹气泡卡看效果与花费缺口，不「点不动又没说法」。
             if (v.button != null) v.button.interactable = true;
-            // 节点始终显示；仅灰态表示锁定
+            // 节点始终显示；灰/暗两档表达不同锁定原因
             if (v.root != null) v.root.SetActive(true);
-            SetRowGray(v.root, locked);
+            SetRowGray(v.root, dormant ? 0.5f : locked ? 0.72f : 1f);
             // 左列行右缘超出视口被 Mask 裁（左内边距 51 + 行宽 258.6 = 309.6 > 视口 302），
             // 默认贴角 (-12,-12) 的红点右侧约 11px 会被裁掉 —— 左列红点内收到 (-26,-12)，
             // 右缘 299 距裁切线留 3px。右列行居中不越界，仍走默认贴角。
@@ -206,22 +210,20 @@ public partial class TalentUI
         }
         if (v.diamond != null)
             ApplySprite(v.diamond, unlocked ? sprDiamondOn : sprDiamondOff, true);
-        // 【2026-10-13 主人拍板】右列小圆点的连线要「连满」：每行两段（冲上 / 冲下），
-        // 最上一行没得连 → 隐藏冲上段；**最下一行**没得连 → 隐藏冲下段
-        //（主人原话「最下面的第一个不用有冲下的线」）。
+        // 连线「连满」口径不变（主人原话「最下面的第一个不用有冲下的线」）；
+        // 但每段连接只由「下方行的上段 Line」一条画（同口径见 TalentUI.Bind.cs）。
         // ⚠ 行序真源 = VerticalLayoutGroup.reverseArrangement（index 0 在**视觉最底**），别按「0 在最上」猜。
+        // 【2026-11-24 定稿】下段 Line(1) 在这里也必须恒隐：本方法每次 Refresh 都跑，旧代码按 showDown
+        // 把它重新打开，而它自「只重排 Line」起就没人再算位置，一直停在 prefab 的 8×150 静态几何（锚行中心）
+        // ⇒ 表现是下半段线僵在原处、调偏移毫无反应。
         bool showUp = v.visualIndex < _rightViews.Count - 1;
-        bool showDown = v.visualIndex > 0;
         if (v.lineUp != null)
         {
             v.lineUp.gameObject.SetActive(showUp);
             if (showUp) ApplySprite(v.lineUp, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
         }
         if (v.lineDown != null)
-        {
-            v.lineDown.gameObject.SetActive(showDown);
-            if (showDown) ApplySprite(v.lineDown, unlocked ? sprRightLinkOn : sprRightLinkOff, false);
-        }
+            v.lineDown.gameObject.SetActive(false);
 
         if (v.root != null) v.root.SetActive(true);
         SetRowGray(v.root, locked ? 0.72f : 1f);

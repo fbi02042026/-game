@@ -17,9 +17,17 @@ public partial class BattleManager
     const float PET_FOLLOW_OFFSET = 0.8f;
 
     /// <summary>营救登场落点（2026-11-23 主人「狗要已经在和怪战斗，不是从玩家左面进来」）：
-    /// 落在玩家前方 → 至少比玩家靠前这么远，绝不站到玩家身后；场上没怪时用默认前冲距离。</summary>
+    /// 落在玩家前方 → 至少比玩家靠前这么远，绝不站到玩家身后。</summary>
     const float PET_RESCUE_AHEAD_MIN = 0.9f;
-    const float PET_RESCUE_AHEAD_DEFAULT = 2.2f;
+    /// <summary>【2026-11-24】第一波刚清完（场上还没怪）时，狗不落玩家眼前，改落画面右缘【外】：
+    /// 越过 visMax（已含 0.35 内收）这么远，玩家走过去才看见，不在清波瞬间凭空出现。
+    /// 【2026-11-24 拉近 1.5→0.5】日志实测玩家第二波只走约 0.6 单位（怪在面前拦住），
+    /// 1.5 会让狗一直停在屏外、玩家没看到就触发；0.5 使狗出生时刚出屏、玩家走 0.6 即入镜。</summary>
+    const float PET_RESCUE_OFFSCREEN_AHEAD = 0.5f;
+    /// <summary>屏外预生成时狗至少离玩家这么远（玩家走过去才看见，不在清波瞬间凭空出现）。
+    /// 【2026-11-24 拉近 5.5→3.0】配合上方 AHEAD，保证 max() 取 visMax+0.5 而非 heroX+5.5，
+    /// 否则狗会被 5.5 拉到屏外深处、永远入不了镜。</summary>
+    const float PET_RESCUE_OFFSCREEN_HERO_GAP = 3.0f;
 
     /// <summary>取场上当前上阵宠物（宠物不在 MercenaryManager 列表里，单独从 allyUnits 找）。</summary>
     Pet GetDeployedPet()
@@ -45,11 +53,20 @@ public partial class BattleManager
     /// 只认正式主线非引导，场上已有同 id 宠物则幂等早退（不叠加第二只）。
     /// 不写 petDeployedId：上阵真源仍归玩家手动选择，引导流程不被跳过。
     /// </summary>
-    /// <summary>spawnX 有值用指定落点（归队从左侧进场）；不传=狗登场落前方怪群（旧行为不变）。</summary>
+    /// <summary>spawnX 有值用指定落点（归队从左侧进场）；不传=首登场（第一波清完）：无怪时落画面右缘外预生成、有怪时落怪群。</summary>
     void DeployRescuedPet(float? spawnX = null)
     {
         if (!IsFormalMainRun || IsTutorialRun) return;
         SpawnBattlePet(PetRescueStoryBeats.DogId, "营救回归", spawnX ?? ResolveRescueDogSpawnX());
+        // 只给首次登场（第一波清完、屏外预生成）的营救狗开护送：免拴绳、只咬右侧怪、一直朝右，
+        // 等玩家走近触发气泡；传了 spawnX 的精英归队走正常 AI，不开护送。
+        // 营救狗全程不跑（2026-11-24 主人「狗别跑了，跟着玩家一直打」）：血空回血续战，不退场。
+        var dog = FindRescueDog();
+        if (dog != null)
+        {
+            dog.SetRescueNoFlee(true);
+            if (spawnX == null) dog.SetRescueEscort(true);
+        }
     }
 
     /// <summary>狗从左侧进场的生成点（2026-11-23 主人「狗没有从左边跑进来，还是突然出现的」）：
@@ -63,10 +80,11 @@ public partial class BattleManager
     }
 
     /// <summary>
-    /// 营救狗的横向落点（2026-11-23 主人拍板）：落在<b>玩家前方</b>的活怪群里，
-    /// 玩家打完一波往前走时看到的是「狗已经在跟怪打」，而不是狗从玩家左后方进场。
-    /// 取活怪平均 X（怪还在屏外走进来时收到画面右缘内），下限 = 玩家前方 PET_RESCUE_AHEAD_MIN，
-    /// 上限 = 画面右缘内 1.2；极窄屏 lo>hi 时直接贴上限，绝不把狗甩到屏外（前 9 轮的坑）。
+    /// 营救狗的横向落点：
+    ///   · 有活怪（精英归队 / 跑进怪群的目标点）→ 取活怪平均 X，钳到画面内（下限玩家前方
+    ///     PET_RESCUE_AHEAD_MIN、上限 visMax−1.2），狗在怪群里开打；
+    ///   · 无活怪（第一波刚清完、第二波还没刷）→ 【2026-11-24】不落玩家眼前，改走
+    ///     ResolveRescueDogOffscreenAheadX 落画面右缘外，玩家走过去才看见，避免清波瞬间凭空出现。
     /// </summary>
     float ResolveRescueDogSpawnX()
     {
@@ -83,12 +101,31 @@ public partial class BattleManager
             sum += m.transform.position.x;
             n++;
         }
-        float x = n > 0 ? sum / n : heroX + PET_RESCUE_AHEAD_DEFAULT;
+        if (n == 0)
+        {
+            // 第一波刚清完、第二波怪还没刷：不套用下方 hi=屏内 的钳制，
+            // 直接落画面右缘外（玩家走过去才看见），并钳到相机右界内防甩出关卡。
+            return ResolveRescueDogOffscreenAheadX(visMax, heroX);
+        }
+        float x = sum / n;
 
         float lo = Mathf.Max(visMin + 0.6f, heroX + PET_RESCUE_AHEAD_MIN);
         float hi = visMax - 1.2f;
         if (lo > hi) return hi;
         return Mathf.Clamp(x, lo, hi);
+    }
+
+    /// <summary>
+    /// 第一波清完狗的屏外预生成落点（2026-11-24 主人「屏幕外先生成，玩家再走过去」）：
+    /// 取「越过画面右缘」与「离玩家足够远」的较大值，再钳到相机右界内
+    /// （follow.maxX 默认 spawnX+80，足够远；钳制只防个别短关卡把狗甩到界外）。
+    /// </summary>
+    float ResolveRescueDogOffscreenAheadX(float visMax, float heroX)
+    {
+        float x = Mathf.Max(visMax + PET_RESCUE_OFFSCREEN_AHEAD, heroX + PET_RESCUE_OFFSCREEN_HERO_GAP);
+        var follow = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
+        if (follow != null) x = Mathf.Min(x, follow.maxX - 1f);
+        return x;
     }
 
     /// <summary>生成宠物战斗单位到玩家身侧；开战上阵与营救中途归队共用此唯一出口。

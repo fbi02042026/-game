@@ -45,6 +45,7 @@ public partial class Pet : Mercenary
     public string petDefId;          // PetDefs.Def.id（dog / toucan / goat / lizard / wolf + 皮肤 id）
     PetDefs.Def _def;
     bool _fled;                      // 本局已跑掉（防重复触发逃跑）
+    bool _rescueNoFlee;              // 营救狗不跑：血空回血续战，绝不退场（2026-11-24 主人「狗别跑了跟着打」）
     bool _cutsceneControlled;        // 演出接管位移（跑入镜头）：继承 AI 早退，速度由演出协程独占
 
     /// <summary>
@@ -74,6 +75,44 @@ public partial class Pet : Mercenary
         if (_fled || isDead) return;
         Die();
     }
+
+    /// <summary>营救狗不跑开关：开后血空不逃跑，回血到一半继续打（DeployRescuedPet 首登场开启）。</summary>
+    public void SetRescueNoFlee(bool on) => _rescueNoFlee = on;
+
+    // ============================================================
+    // 营救狗护送模式（2026-11-25：补 0981c333 漏提交的定义，调用点
+    // BattleManager.PetDeploy.cs:65 / BattleManager.CutsceneDirector.cs:163）
+    // 口径（PetDeploy 注释拍板）：免拴绳站住前方、只咬右侧怪、一直朝右，
+    // 等玩家走过来触发气泡；开场台词播完解冻时由演出侧关掉，交还正常 AI。
+    // ============================================================
+    /// <summary>护送进行中：免拴绳 + 只锁右侧怪（演出侧 SetRescueEscort(false) 关闭后恢复正常 AI）。</summary>
+    bool _rescueEscort;
+
+    /// <summary>首次登场（屏外预生成）的营救狗开护送：置位即面朝右待怪；精英归队（传 spawnX）不开。</summary>
+    public void SetRescueEscort(bool on)
+    {
+        _rescueEscort = on;
+        if (on)
+        {
+            facingDir = 1;
+            ApplyFacing(1);
+        }
+    }
+
+    /// <summary>护送期间免拴绳：狗钉在玩家前方怪群开打，不被 MERC_LEASH_RADIUS 拉回队。</summary>
+    protected override bool IgnoresHeroLeash => _rescueEscort;
+
+    /// <summary>护送期间只咬右侧怪（x ≥ 自身）：不掉头咬身后的怪，保持「一直朝右」的观感。</summary>
+    protected override bool AcceptAcquireTarget(UnitBase t)
+        => !_rescueEscort || t == null || UnitBase.GetCombatX(t) >= UnitBase.GetCombatX(this) - 0.05f;
+
+    /// <summary>
+    /// 头顶对话气泡抬高（BattleHeadTalkUI 战斗跟随分支，2026-11-24）：
+    /// 宠物体型矮（约玩家一半高），按自身身高给比人型 HeadOffsetY(1.2) 更小的抬高，气泡贴狗头。
+    /// bounds 取不到（prefab 刚实例化）退回固定 0.6，不静默兜底到人型值。
+    /// </summary>
+    public float GetHeadTalkOffsetY()
+        => TryGetBodyHeight(out float h) && h > 0.01f ? h * 1.05f : 0.6f;
     MonsterHealthBar _hpBar;
     // 移动动画状态：null=待重切（攻击/受击打断后），true=Walk，false=Idle。
     bool? _petWalkState;
@@ -323,10 +362,18 @@ public partial class Pet : Mercenary
     /// 按原影子世界尺寸还原椭圆，再染黑 0.35；不动 prefab / meta / 节点层级 / 排序。
     /// 缺 Shadow 节点只告警不新建（项目红线：不静默造资源）。
     /// </summary>
-    /// <summary>阴影可见尺寸放大倍数（随 PET_HEIGHT_RATIO 同比：6→3.6→4.32→5.4，11-23 主人「宠物放大到玩家一半」阴影同比）：实心圆软边让可见核心比标称小。</summary>
-    const float BATTLE_SHADOW_SIZE_SCALE = 5.4f;  // 11-23 主人「宠物放大到玩家一半，阴影同比」：4.32→5.4
+    /// <summary>
+    /// 阴影可见尺寸放大倍数（相对宠物 prefab 自带影子）。
+    /// 2026-11-24 起这个值才真正生效：之前尺寸写在节点 localScale 上，
+    /// 被 Animator 每帧抹回 1（见 EnsureBattleShadow 注释），1.5 / 3 / 6 / 8 看起来一样小。
+    /// 嫌小/嫌大只调这一个常量。
+    /// </summary>
+    const float BATTLE_SHADOW_SIZE_SCALE = 1.2f;  // 2026-11-24 主人看图「太大了」：真正生效后的 3 倍缩回 1.2（约狗身宽 1.6 倍）
     /// <summary>阴影纵向压扁系数（11-22 主人「压扁一些」）：横向放大同时收高度，更像贴地椭圆。</summary>
     const float BATTLE_SHADOW_FLATTEN = 0.6f;
+
+    bool _shadowApplied;    // 尺寸只算一次：sprite 换过之后再量 bounds 会拿到放大后的假基准
+    Sprite _shadowSprite;
 
     void EnsureBattleShadow()
     {
@@ -339,14 +386,26 @@ public partial class Pet : Mercenary
             if (r.name != "Shadow" && r.name.IndexOf("shadow", System.StringComparison.OrdinalIgnoreCase) < 0) continue;
             found = true;
 
-            // 换图前先量原影子的世界尺寸（从 prefab 现读、不写死），换满 alpha 圆后按它放大还原。
-            Vector2 origSize = (r.sprite != null ? (Vector2)r.bounds.size : new Vector2(0.9f, 0.3f)) * BATTLE_SHADOW_SIZE_SCALE;
-            var solid = GetSolidShadowSprite();
-            r.sprite = solid;
-            float native = solid.bounds.size.x > 0.001f ? solid.bounds.size.x : 1f;
-            float parentX = Mathf.Abs(r.transform.lossyScale.x); if (parentX < 0.001f) parentX = 1f;
-            float parentY = Mathf.Abs(r.transform.lossyScale.y); if (parentY < 0.001f) parentY = 1f;
-            r.transform.localScale = new Vector3(origSize.x / (native * parentX), origSize.y * BATTLE_SHADOW_FLATTEN / (native * parentY), 1f);
+            if (!_shadowApplied)
+            {
+                // 换图前先量原影子的世界尺寸（从 prefab 现读、不写死）。
+                Vector2 origSize = r.sprite != null ? (Vector2)r.bounds.size : new Vector2(0.9f, 0.3f);
+
+                // 【2026-11-24 真根因】宠物 Animator 的 Idle / Walk / Attack 三个 clip 都带
+                // `path: Shadow` 的 m_LocalScale 恒定 1 曲线，每帧把该节点的 localScale 写回 1；
+                // 旧版在 InitPet 里写放大后的 localScale，下一帧就被抹掉 → 影子永远等于 prefab 原尺寸，
+                // 把 BATTLE_SHADOW_SIZE_SCALE 从 1.5 一路加到 8 都没反应。
+                // 修法：尺寸改由 sprite 自身像素尺寸承担（纹理按目标世界宽高生成），localScale 一个不写，
+                // 与动画曲线的 1 天然一致，不打架。不碰 prefab / anim / meta。
+                float lossyX = Mathf.Abs(r.transform.lossyScale.x); if (lossyX < 0.001f) lossyX = 1f;
+                float lossyY = Mathf.Abs(r.transform.lossyScale.y); if (lossyY < 0.001f) lossyY = 1f;
+                float spriteW = origSize.x * BATTLE_SHADOW_SIZE_SCALE / lossyX;
+                float spriteH = origSize.y * BATTLE_SHADOW_SIZE_SCALE * BATTLE_SHADOW_FLATTEN / lossyY;
+
+                _shadowSprite = BuildShadowSprite(spriteW, spriteH);
+                _shadowApplied = true;
+            }
+            if (_shadowSprite != null) r.sprite = _shadowSprite;   // 同 prefab 多影子节点共用一张
 
             r.color = new Color(0f, 0f, 0f, 0.35f);   // 与 Monster.Visual.EnsureFootShadow 同口径
             r.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
@@ -356,27 +415,29 @@ public partial class Pet : Mercenary
             Debug.LogWarning("[Pet] " + petDefId + " prefab 无 Shadow 节点，脚下阴影未生效（不改 prefab、不新建）");
     }
 
-    static Sprite _solidShadowSprite;
-
-    /// <summary>程序化实心软边圆阴影：与 Monster.Skills.MakeCircleSprite 同源，满 alpha 白圆，染黑后清晰可见。</summary>
-    static Sprite GetSolidShadowSprite()
+    /// <summary>
+    /// 程序化实心软边椭圆阴影：与 Monster.Skills.MakeCircleSprite 同源算法（满 alpha 白），
+    /// 但纹理本身按目标世界宽高生成 → 压扁与放大都写进贴图，不依赖 Transform.localScale。
+    /// </summary>
+    static Sprite BuildShadowSprite(float worldW, float worldH)
     {
-        if (_solidShadowSprite != null) return _solidShadowSprite;
-        const int S = 64;
-        var tex = new Texture2D(S, S, TextureFormat.RGBA32, false);
+        const float PPU = 50f;   // 每世界单位 50px：软边够平滑，纹理也不大
+        int tw = Mathf.Clamp(Mathf.RoundToInt(Mathf.Max(0.02f, worldW) * PPU), 8, 2048);
+        int th = Mathf.Clamp(Mathf.RoundToInt(Mathf.Max(0.02f, worldH) * PPU), 4, 2048);
+        var tex = new Texture2D(tw, th, TextureFormat.RGBA32, false);
         tex.filterMode = FilterMode.Bilinear;
-        float c = (S - 1) * 0.5f;
-        for (int y = 0; y < S; y++)
-        for (int x = 0; x < S; x++)
+        float cx = (tw - 1) * 0.5f, cy = (th - 1) * 0.5f;
+        float rx = Mathf.Max(1f, tw * 0.5f), ry = Mathf.Max(1f, th * 0.5f);
+        for (int y = 0; y < th; y++)
+        for (int x = 0; x < tw; x++)
         {
-            float dx = (x - c) / c, dy = (y - c) / c;
+            float dx = (x - cx) / rx, dy = (y - cy) / ry;
             float d = Mathf.Sqrt(dx * dx + dy * dy);
             float a = d <= 1f ? Mathf.Clamp01(1.15f - d) : 0f;
             tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
         }
         tex.Apply();
-        _solidShadowSprite = Sprite.Create(tex, new Rect(0, 0, S, S), new Vector2(0.5f, 0.5f), S);
-        return _solidShadowSprite;
+        return Sprite.Create(tex, new Rect(0, 0, tw, th), new Vector2(0.5f, 0.5f), PPU);
     }
 
     /// <summary>
@@ -442,6 +503,15 @@ public partial class Pet : Mercenary
     protected override void Die(bool isCritKill = false)
     {
         if (_fled || _isDying) return;
+        if (_rescueNoFlee)
+        {
+            // 营救狗不跑：血空时回血到一半继续打，绝不退场（2026-11-24 主人「狗别跑了，跟着玩家一直打」）。
+            // 不进 _fled、不 Remove allyUnits、不播逃跑——狗全程留在场上参战。
+            float maxHp = attr != null ? Mathf.Max(1f, attr.GetAttr(AttrType.MaxHp)) : 100f;
+            currentHp = Mathf.Max(1f, maxHp * 0.5f);
+            BattleUI.Instance?.ForceRefreshLiveBars();
+            return;
+        }
         _fled = true;
         if (rb != null) rb.velocity = Vector2.zero;
         if (_hpBar != null) _hpBar.gameObject.SetActive(false);

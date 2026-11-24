@@ -35,6 +35,7 @@ public class MercBattleBanter : MonoBehaviour
         // ChapterBattleFlavor 本就只认 Normal 模式，这里把个人台词一并关掉）
         if (_bm.IsEndlessRift) return;
         if (TutorialRules.Current.SkipMercBanter || _bm.PartyIntroWalking || !_bm.UnitsCanAct) return;
+        if (_bm.IsOccupying) return;   // 【2026-11-24】狗营救演出占用战场期间禁佣兵闲聊，避免「公会样本瓶…」插话和剧情打架
         if (_nextAt < 0f) ArmNext();
         if (Time.unscaledTime < _nextAt) return;
 
@@ -72,7 +73,9 @@ public class MercBattleBanter : MonoBehaviour
         if (_bm == null || _bm.allyUnits == null) return list;
         for (int i = 0; i < _bm.allyUnits.Count; i++)
         {
-            if (_bm.allyUnits[i] is Mercenary m && m != null && !m.isDead && !m.TutorialStunned)
+            // 【2026-11-24】Pet 继承 Mercenary，会被 is Mercenary 误收进来；宠物没有 hireId/不在花名册，
+            // 选中后 MercLineTable 兜底成字面「佣兵：上！」（主人报「佣兵还说自己是佣兵」）。闲聊池只收真佣兵。
+            if (_bm.allyUnits[i] is Mercenary m && m != null && !m.isDead && !m.TutorialStunned && !(m is Pet))
                 list.Add(m);
         }
         return list;

@@ -438,31 +438,35 @@ public partial class BattleManager
     int _galeWindowHits;
     int _galeCdTier;
 
+    /// <summary>
+    /// 取本局携带的疾风槽（运行时 id 是 ally_* 别名，统一解析真 id 判定）。
+    /// 自动开窗（TickGaleWindow）与手动开窗（TryOpenGaleWindowManual）共用，避免两套取法漂移。
+    /// </summary>
+    bool TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill)
+    {
+        runtimeId = null;
+        skill = null;
+        var sys = SkillSystem.Instance;
+        if (sys == null) return false;
+        var skills = sys.GetPlayerSkills();
+        if (skills == null) return false;
+        for (int i = 0; i < skills.Count; i++)
+        {
+            var s = skills[i];
+            if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
+            if (PlayerSkillDefs.ResolveRealSkillId(s.skillId) != "gale_stance") continue;
+            runtimeId = s.skillId;
+            skill = s;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>每帧调度（BattleManager.Update 调，与 TickAutoCast 同挂点、同早退口径）。</summary>
     void TickGaleWindow()
     {
-        var sys = SkillSystem.Instance;
-        if (sys == null) return;
-
-        // 找本局携带的疾风槽（运行时 id 是 ally_* 别名，统一解析真 id 判定）
-        string runtimeId = null;
-        SkillSystem.ActiveSkill skill = null;
-        var skills = sys.GetPlayerSkills();
-        if (skills != null)
-        {
-            for (int i = 0; i < skills.Count; i++)
-            {
-                var s = skills[i];
-                if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
-                if (PlayerSkillDefs.ResolveRealSkillId(s.skillId) != "gale_stance") continue;
-                runtimeId = s.skillId;
-                skill = s;
-                break;
-            }
-        }
-
         // 没带疾风：窗口若挂着就静默收掉（不进 CD）
-        if (runtimeId == null)
+        if (!TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill))
         {
             if (_galeWindowActive) EndGaleWindow(false);
             return;
@@ -471,6 +475,7 @@ public partial class BattleManager
         if (_galeWindowActive)
         {
             // 窗口内点击：战场空白区 → 多打一次（伤害 ×0.8）
+            // 【2026-11-24】两种模式都走这里：手动开的窗也要倒计时 / 点多打 / 结算，不能停。
             if (UnitsCanAct && IsBattlefieldTap())
                 TryGaleWindowHit();
 
@@ -484,12 +489,40 @@ public partial class BattleManager
             return;
         }
 
-        // 未开窗：CD 好 + 触发条件满足（身边有敌人，含精英/Boss 进半径）+ 蓝够（与 FindReadySkillSlot 同口径）
+        // 未开窗：自动模式才自动开；手动模式由玩家点技能槽手动开（TryOpenGaleWindowManual）。
+        // 【2026-11-24 主人拍板】疾风手动 / 自动都能用：自动模式照原行为自动开窗，
+        // 手动模式不自动开、但点槽可开（与 4 槽抽卡技能同口径）。
+        if (PlayerSkillCastMode.IsManual) return;
+        var sys = SkillSystem.Instance;
+        if (sys == null) return;
+        // CD 好 + 触发条件满足（身边有敌人，含精英/Boss 进半径）+ 蓝够（与 FindReadySkillSlot 同口径）
         if (sys.IsOnCooldown(runtimeId)) return;
         if (!PlayerSkillPassive.IsTriggerMet(runtimeId)) return;
         float mpCost = PlayerSkillDefs.MpCostOf("gale_stance");
         if (mpCost > 0f && _playerMp + 0.001f < mpCost) return;
         StartGaleWindow(runtimeId, skill);
+    }
+
+    /// <summary>
+    /// 手动开窗（技能栏点疾风槽触发）。与自动开窗同入口 <see cref="StartGaleWindow"/>，
+    /// 只查 CD + 蓝（与 4 槽手动同口径：跳过「身边有敌」触发条件，由玩家决定时机）；
+    /// 窗口已开时直接返回 false，不重复开窗重置计时。返回 false 时调用方退回弹技能详情。
+    /// </summary>
+    public bool TryOpenGaleWindowManual()
+    {
+        if (_galeWindowActive) return false;
+        if (!UnitsCanAct) return false;
+        if (IsTutorialRun) return false;
+        if (BattleLootMode.Active) return false;
+        if (CareerSkillExecutor.IsCharging) return false;
+        if (!TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill)) return false;
+        var sys = SkillSystem.Instance;
+        if (sys == null) return false;
+        if (sys.IsOnCooldown(runtimeId)) return false;
+        float mpCost = PlayerSkillDefs.MpCostOf("gale_stance");
+        if (mpCost > 0f && _playerMp + 0.001f < mpCost) return false;
+        StartGaleWindow(runtimeId, skill);
+        return true;
     }
 
     void StartGaleWindow(string runtimeId, SkillSystem.ActiveSkill skill)

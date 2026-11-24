@@ -12,11 +12,11 @@ public static class BackpackGridVisual
     const string LayerName = "ItemOverlayLayer";
     const float IconPad = 2f;
 
-    /// <summary>碎片视觉 X 偏移真源（2026-11-11 主人指令：背包里的碎片整体往右 3）。
-    /// 2026-11-15 起只覆盖角色页本命碎片展示位卡（OwnerFragCard，仍挂在 Overlay 宿主下）；
+    /// <summary>碎片视觉 X 偏移真源（2026-11-11 主人指令往右 3；2026-11-24 主人「又偏左，往右 2」再 +2 = 5）。
+    /// 只覆盖角色页本命碎片展示位卡（OwnerFragCard，仍挂在 Overlay 宿主下）；
     /// 单格道具/展示位图标已改用主人预制体里摆好的 Icon 节点，位置真源归预制体，
     /// 不允许任何代码偏移再写到那个节点上。数量角标/锁标不跟。</summary>
-    const float FragmentOffsetX = 3f;
+    const float FragmentOffsetX = 5f;
     const string LockOverlayName = "LockedOverlay";
     const string LockIconName = "LockIcon";
 

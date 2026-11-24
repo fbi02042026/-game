@@ -62,6 +62,14 @@ public sealed class SkillCastService
         var skill = ResolvePlayerSkillAt(slot);
         if (skill == null) return false;
 
+        // 【2026-11-24】手动链补冷却检查（single source of truth）：自动链走 FindReadySkillSlot
+        // 已先查过 IsOnCooldown 才选中槽位；手动链（BattleManager.TryUsePlayerSkillAt）跳过了它，
+        // 直接进这里 → 点冷却中的技能会绕过 CD：攻击技走 fallback 打假释放 + 上 GCD，治疗/buff 技
+        // 更是直接绕过冷却生效。这里统一拦截：冷却中直接返回 false，由调用方退回弹技能详情。
+        // （治疗读条重入口 committed=true 时冷却尚未注册，本检查不拦它，结算后才在下方 RegisterCooldown。）
+        if (SkillSystem.Instance != null && SkillSystem.Instance.IsOnCooldown(skill.skillId))
+            return false;
+
         // 2026-10-10：运行时 skillId 是 ally_* 别名（SkillRegistry 按别名索引 VFX）。
         // 查表（耗蓝/触发/冷却）一律用真 id，只有下面 PlaySkillVfx 继续用别名。
         string realId = PlayerSkillDefs.ResolveRealSkillId(skill.skillId);
