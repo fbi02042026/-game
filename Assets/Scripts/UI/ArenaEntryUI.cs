@@ -21,19 +21,18 @@ public static class ArenaEntryUI
 
     const string IconPath = "UI/Art/Main/对战";   // 主界面美术包里的对战图标（交叉双剑+蓝红火焰，2026-10-30 主人指定）
 
-    // ── 解锁门槛（2026-11-02 主人拍板）──────────────────────────────
-    // 显示关卡 2-5（第 1 章第 2 关 Boss 节）打完 = 3-1 开启后，入口才出现在主界面。
-    // 关卡号按 2026-11-01 跨章连续编号口径（ActProgressionDefs）；节下标只走数学层换算，禁止自己除/取模。
-    const int UnlockAct = 1;     // 第 1 章
-    const int UnlockGrand = 2;   // 第 2 关（全局关卡号 2；第 1 章每关 5 节 → Boss 节 sub0 = 9，存档 key "1_9"）
+    // ── 解锁门槛（2026-11-02 主人拍板；2026-11-25 提前到第 5 关）──────
+    // 2026-11-25 主人原话「第 5 关吧」：通关第 1 章第 5 关（章内小 Boss 节，sub0 = 4）就开，
+    // 原「通关 1-10 = 完成第 1 章才开」作废；与佣兵招募（FeatureUnlock.MercRecruitOpen = HasStageCleared(1,4)）同批。
+    // 🔴 路线 B 后每章 = 1 座大关 × 10 节（关号 = sub0 + 1），别再按「第 N 座大关末关」换算——
+    //    旧注释里的「显示关卡 2-5 / 3-1 开启」是路线 B 之前的残留口径，已废。
+    /// <summary>解锁所需的章内节下标（0 起）：第 5 关 = 4。真源在 FeatureUnlock.ARENA_UNLOCK_SUB0，
+    /// 本类只读它——门槛只许有一处常量，别在这里再写一份数字。</summary>
+    public static int UnlockSub0 => FeatureUnlock.ARENA_UNLOCK_SUB0;
 
-    /// <summary>2-5（Boss 节）的章内节下标（0 起）＝ <see cref="ActProgressionDefs.Sub0Of"/> 换算，第 1 章下应为 9。</summary>
-    public static int UnlockSub0
-        => ActProgressionDefs.Sub0Of(UnlockAct, UnlockGrand, ActProgressionDefs.SubsPerGrandOf(UnlockAct) - 1);
-
-    /// <summary>试炼场是否已解锁（＝显示关卡 2-5 已通关）。入口显隐与冒险页 toast 共用这一个判断。</summary>
-    public static bool IsUnlocked(SaveData data)
-        => data != null && data.HasStageCleared(UnlockAct, UnlockSub0);
+    /// <summary>试炼场是否已解锁（＝通关第 5 关）。2026-11-25 起判定收口到 FeatureUnlock.ArenaOpen，
+    /// 入口显隐、冒险页 toast、日常任务门槛共用同一个出口（别再在这里写第二份 HasStageCleared）。</summary>
+    public static bool IsUnlocked(SaveData data) => FeatureUnlock.ArenaOpen(data);
 
     /// <summary>在右列补「竞技场」入口。可重复调用（已有则只重新接线，不重建）。</summary>
     public static void EnsureInGuildHall(Button dailyLoginButton)
@@ -50,7 +49,7 @@ public static class ArenaEntryUI
             return;
         }
 
-        // 【2026-11-02 主人拍板】显示关卡 2-5 打完（即 3-1 开启）后入口才出现：未达标整颗隐藏、不接线。
+        // 【2026-11-02 拍板；2026-11-25 提前】通关第 5 关后入口才出现：未达标整颗隐藏、不接线。
         // 每次主界面打开都会走到这里（GuildHallUI.WireHallClicks），达标后自动重新点亮。
         // 解锁判断单一真源 = IsUnlocked（冒险页 toast 同用一处）。
         if (!IsUnlocked(SaveSystem.Instance?.Data))

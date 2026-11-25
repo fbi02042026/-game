@@ -257,22 +257,6 @@ public partial class BattleManager
         if (BattleLootMode.Active) return false;           // 领奖模式
         if (CareerSkillExecutor.IsCharging) return false;  // 冲锋期间行动权归冲锋协程
 
-        // 疾风走独立窗口通道：点槽手动开窗（TryOpenGaleWindowManual），
-        // 不能走通用 TryUsePlayerSkillSlot——那里会把疾风当 Buff 直接加攻速、绕过窗口机制。
-        // GetPlayerSkills() 顺序与槽位 index 对齐（ResolvePlayerSkillAt 也是 skills[slot]）。
-        var sys = SkillSystem.Instance;
-        if (sys != null)
-        {
-            var skills = sys.GetPlayerSkills();
-            if (skills != null && slot < skills.Count)
-            {
-                var s = skills[slot];
-                if (s != null && !string.IsNullOrEmpty(s.skillId)
-                    && PlayerSkillDefs.ResolveRealSkillId(s.skillId) == "gale_stance")
-                    return TryOpenGaleWindowManual();
-            }
-        }
-
         return SkillCast.TryUsePlayerSkillSlot(slot);
     }
 

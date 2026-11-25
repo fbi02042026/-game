@@ -27,7 +27,7 @@ public static class QuestBarData
     {
         public MainQuestView main;        // 主线：当前该做的一条（null = 本章全完成/未配表）
         public SideIslandView? side;      // 支线：当前待打的支线岛（null = 隐藏行）
-        public DailyQuestView? daily;     // 日常：第一条未完成的（null = 今日全做完）
+        public DailyQuestView? daily;     // 日常：第一条未完成的（null = 今日全做完，或日常未开启 1-3 未通 —— 栏按 DailyTasksUnlocked 分别显示文案）
     }
 
     /// <summary>组装当前快照。纯读，不写存档、不触发结算（结算归 MainQuestSystem.Tick）。</summary>

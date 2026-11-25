@@ -382,8 +382,7 @@ public static class DraftPool
     static string QualityBucket(DraftCard card)
     {
         if (card.Kind == DraftCardKind.Gold) return "抽奖币";
-        // 【2026-11-23】绿档单列一行：SkillRarity 只有三档，绿已被并进 Common，
-        // 公示要精确就得回读装备实例自己的 Rarity（唯一真源 = EquipInstance.rarity）。
+        // 【2026-11-23】装备绿档单列一行：装备稀有度唯一真源 = EquipInstance.rarity。
         if (card.Kind == DraftCardKind.Equip && card.Equip != null && card.Equip.rarity == Rarity.Uncommon)
             return "优秀";
         return RarityBucket(card.Rarity);
@@ -398,6 +397,7 @@ public static class DraftPool
             case SkillRarity.Legendary: return "传说";
             case SkillRarity.Epic: return "传说";
             case SkillRarity.Rare: return "稀有";
+            case SkillRarity.Uncommon: return "优秀";   // 2026-11-25 技能加优秀（绿）档
             default: return "普通";
         }
     }
@@ -415,6 +415,7 @@ public static class DraftPool
             case SkillRarity.Legendary: return RarityPalette.Legendary;   // 橙金 #FFB833
             case SkillRarity.Epic: return RarityPalette.Legendary;   // 2026-10-05 拍板史诗并入传说档：Epic 与 Legendary 同色（保持原口径）
             case SkillRarity.Rare: return RarityPalette.Rare;   // 蓝 #59ADFA
+            case SkillRarity.Uncommon: return RarityPalette.Uncommon;   // 优秀（绿）
             default: return RarityPalette.Common;   // 灰白 #CCD1DB
         }
     }
@@ -752,16 +753,47 @@ public static class DraftPool
     const int EarlySurvivalBoostSurvival = 4; // heal_spring / holy_barrier
     const int EarlySurvivalBoostOther = 2;    // 其余技能
 
+    // 【2026-11-25 主人拍板】第一章蓝技能抽得太多 → 第一章单独一档：白（普通）再放大、蓝（稀有）不放大。
+    // 技能只有 普通(白)/稀有(蓝)/传说(橙) 三档，且前期传奇不进池 → 第一章实际只有白+蓝两档。
+    // 白：heal_spring / holy_barrier 60、其余白 30（保持原 4:2 比例）→ 白合计 150；
+    // 蓝：三张各 6（不再 ×2）→ 合计 18 → 蓝占比 ≈10.7%（改前 ≈26.5%，带升星卡的第二抽 ≈32%）。
+    const int Chapter1BoostSurvival = 6;
+    const int Chapter1BoostOther = 3;
+    const int Chapter1BoostUncommon = 2;      // 优秀（绿）×2：2026-11-25 加绿档后，第一章排序仍要保持 白 > 绿 > 蓝
+
     static bool IsEarlySurvivalPhase()
     {
         var data = SaveSystem.Instance?.Data;
         return data == null || !data.HasClearedChapter(EarlySurvivalGateChapter);
     }
 
+    /// <summary>
+    /// 第一章档（2026-11-25）：当前就在第 1 章，且还没通关过第 1 章。
+    /// 只影响技能权重；金币本等支线副本会临时把 currentChapter 设成 1，所以叠「未通关第 1 章」防误用。
+    /// </summary>
+    static bool IsChapter1Phase()
+    {
+        var cm = ChapterManager.Instance;
+        if (cm == null || cm.currentChapter > 1) return false;
+        var data = SaveSystem.Instance?.Data;
+        return data == null || !data.HasClearedChapter(1);
+    }
+
     /// <summary>前期生存向技能权重唯一出口：新技能（CollectNewSkills）与升星卡（CollectUpgradableSkills）同源。</summary>
-    static int EarlySurvivalSkillWeight(string skillId, int baseWeight)
+    static int EarlySurvivalSkillWeight(string skillId, SkillRarity rarity, int baseWeight)
     {
         if (!IsEarlySurvivalPhase()) return baseWeight;
+
+        // 第一章：白（普通）压倒性多、绿居中、蓝（稀有）不放大（2026-11-25 主人拍板，见 Chapter1Boost* 注释）
+        if (IsChapter1Phase())
+        {
+            if (rarity == SkillRarity.Uncommon) return baseWeight * Chapter1BoostUncommon;
+            if (rarity != SkillRarity.Common) return baseWeight;   // 蓝 / 橙：不放大
+            return skillId == "heal_spring" || skillId == "holy_barrier"
+                ? baseWeight * Chapter1BoostSurvival
+                : baseWeight * Chapter1BoostOther;
+        }
+
         if (skillId == "heal_spring" || skillId == "holy_barrier") return baseWeight * EarlySurvivalBoostSurvival;
         if (skillId == "thunder_verdict") return baseWeight; // 天雷不放大 = 前期相对份额减半
         return baseWeight * EarlySurvivalBoostOther;
@@ -815,7 +847,7 @@ public static class DraftPool
                     PowerDelta = 140
                 },
                 // 【2026-10-25 主人拍板】前期生存向：恢复/护盾最大、天雷相对减半，见 EarlySurvivalSkillWeight。
-                Weight = EarlySurvivalSkillWeight(s.id, SkillRarityUtil.Weight(rar) * 2),
+                Weight = EarlySurvivalSkillWeight(s.id, rar, SkillRarityUtil.Weight(rar) * 2),
                 Key = "skill_" + s.id
             });
         }
@@ -911,7 +943,7 @@ public static class DraftPool
                     PowerDelta = PowerCalc.SkillPowerDelta(rar, 1)
                 },
                 // 【2026-10-25 主人拍板】前期生存向：恢复/护盾最大、天雷相对减半，见 EarlySurvivalSkillWeight。
-                Weight = EarlySurvivalSkillWeight(def.id, SkillRarityUtil.Weight(rar)),
+                Weight = EarlySurvivalSkillWeight(def.id, rar, SkillRarityUtil.Weight(rar)),
                 Key = "skill_" + def.id
             });
         }

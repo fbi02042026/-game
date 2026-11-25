@@ -294,6 +294,9 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
         bool autoRefreshReady = MercHireSession.CanManualRefresh(out int remainSec);
         bool canDiamond = MercHireSession.CanDiamondRefresh(out int usedToday, out int diamondCost);
         int leftToday = MercHireSession.DiamondRefreshPerDay - usedToday;
+        // 【2026-11-25 主人拍板「双通道 · 先广告后钻石」】广告能播 → 按钮写「广告刷新」、不挂钻石图标；
+        // 播不了 → 原样「{价}刷新」+ 钻石图标。文案恒 4 字，与原「50刷新」同宽，不碰排版。
+        bool canWatchAd = AdGateway.Ready;
 
         if (refreshCostText != null)
             refreshCostText.text = autoRefreshReady ? "" : $"{remainSec / 3600:D2}:{remainSec / 60 % 60:D2}:{remainSec % 60:D2}";
@@ -306,10 +309,12 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
                 img.color = canDiamond ? Color.white : new Color(0.45f, 0.45f, 0.45f, 1f);
             var label = refreshButton.GetComponentInChildren<Text>();
             if (label != null && label != _diamondLeftText && label != refreshCostText)
-                label.text = canDiamond ? $"{diamondCost}刷新" : "刷新佣兵";
+                label.text = !canDiamond ? "刷新佣兵"
+                           : canWatchAd ? "广告刷新"
+                           : $"{diamondCost}刷新";
         }
         if (_diamondIcon != null)
-            _diamondIcon.gameObject.SetActive(canDiamond);   // 手动刷新恒为钻石形态，图标常显（次数用完随按钮灰显）
+            _diamondIcon.gameObject.SetActive(canDiamond && !canWatchAd);   // 广告通道下别挂钻石图标（会矛盾）
         if (_diamondLeftText != null)
             _diamondLeftText.text = leftToday > 0 ? $"今日剩{leftToday}次" : "今日已用完";
     }

@@ -5,9 +5,10 @@ using UnityEngine;
 /// 任务表加载器（2026-10-26 新增，任务体系单独成模块的数据层）。
 ///
 /// 表：Assets/Data/Source/Tables/quest.csv → Resources/Data/Tables/quest.bytes（CookAll → CookQuest）。
-/// 内容：主线（category=主线，8 章 × 5~6 条，含 clear_stages 密度行）+ 日常（category=日常，7 条）
-///       + 周常（category=周常，1 条）+ 挑战（category=挑战，2026-11-05 新增：困难 8 条 / 噩梦 6 条）。
-///       （2026-10-29 扩编：日常 2→7、新增周常，见 DailyTaskSystem）
+/// 内容：主线（category=主线，8 章 × 5~6 条，含 clear_stages 密度行）+ 日常（category=日常，12 条：8 条每天 + 4 条限定星期）
+///       + 挑战（category=挑战，2026-11-05 新增：困难 8 条 / 噩梦 6 条）。
+///       （2026-10-29 扩编：日常 2→7；2026-11-25 主人拍板「周常不要单独设置，可以在固定 7 天中的某一天或两天或三天出现一次」
+///         → 原周常「百战精锐」并入日常（周四五六出现），周常分类取消；同日删「清剿 50」、经验整体降一档、新增资源副本/裂隙探底/佣兵闲话）
 /// 支线不进表：支线 = 支线岛（2026-10-23 合并方案），运行时读 SaveData.branchRoll1/2，见 QuestBarData.cs。
 ///
 /// 消费方：MainQuestDefs（主线迁表，结构体字段 1:1 对应）与 MainQuestSystem.DailyViews（日常文案参数化）。
@@ -23,7 +24,7 @@ public static class QuestTable
         public int chapter;         // 章节号；日常填 0
         public string title;
         public string desc;         // 主线留空走 AutoDesc；日常可带 {0}/{1} 占位
-        public string targetType;   // clear_stage / clear_stages / talk_npc / watch_story / recruit_merc / upgrade_talent / daily_login / daily_clear_stages
+        public string targetType;   // clear_stage / clear_stages / talk_npc / watch_story / recruit_merc / upgrade_talent / daily_login / daily_clear_stages / daily_pet_feed / daily_talent_click / daily_merc_starup / daily_activity_clear / daily_rift_clear / daily_merc_talk
         public string param;
         public int targetCount;
         public int rewardStones;    // 主线完成发天赋石
@@ -36,6 +37,19 @@ public static class QuestTable
         /// 现有任务表没有这一列，全部隐含普通难度；任务跳转按本字段落位。
         /// </summary>
         public int difficulty;
+        /// <summary>
+        /// 出现日（2026-11-25 主人拍板「周常不要单独设置，可以在固定 7 天中的某一天或两天或三天出现一次」）：
+        /// 空 = 每天出现；否则是 ISO 星期数字串（1=周一 … 7=周日，如 "16" = 周一/周六、"456" = 周四五六）。
+        /// 只影响**展示与结算**，不改变任务内容；功能未解锁时的过滤见 MainQuestSystem.DailyRowActiveToday。
+        /// </summary>
+        public string weekdays;
+        /// <summary>
+        /// 钻石奖励（2026-11-25 新增，第 17 列）：日常限定日任务专用，0/缺省 = 不发。
+        /// 目前只有 daily_starup（百战精锐）用，沿用原周常「钻石 ×50」口径。
+        /// 以后要接激励视频（看广告翻倍 / 看广告领取）在 DailyTaskSystem.SettleRows 发奖处加分支，
+        /// 广告次数与频次口径参考 ArenaRules.AdBonusTries / ResourceAdRewards，别另造一套。
+        /// </summary>
+        public int rewardDiamond;
     }
 
     static readonly List<Row> _rows = new List<Row>();
@@ -77,7 +91,11 @@ public static class QuestTable
                 rewardExp = c.Length > 12 && GameTableCsv.TryInt(c[12], out int rExp) ? rExp : 0,  // 末列（2026-10-29 扩编）
                 rewardGold = c.Length > 13 && GameTableCsv.TryInt(c[13], out int rGold) ? rGold : 0, // 主线金币奖励（2026-11-01）
                 // 第 15 列（下标 14）可选：任务难度。源表不加列时全部按 0（普通）——老表/老档不受影响。
-                difficulty = c.Length > 14 && GameTableCsv.TryInt(c[14], out int rDiff) ? Mathf.Clamp(rDiff, 0, 2) : 0
+                difficulty = c.Length > 14 && GameTableCsv.TryInt(c[14], out int rDiff) ? Mathf.Clamp(rDiff, 0, 2) : 0,
+                // 第 16 列（下标 15）可选：出现日（2026-11-25）。主线/挑战行只有 15 列 → 空 = 每天，老表零兼容。
+                weekdays = c.Length > 15 ? c[15].Trim() : "",
+                // 第 17 列（下标 16）可选：钻石奖励（2026-11-25）。缺省 0 = 不发。
+                rewardDiamond = c.Length > 16 && GameTableCsv.TryInt(c[16], out int rDia) ? Mathf.Max(0, rDia) : 0
             };
             _rows.Add(row);
         }
@@ -123,6 +141,27 @@ public static class QuestTable
         }
         row = default;
         return false;
+    }
+
+    /// <summary>今天是否是该行的出现日（2026-11-25 新增；weekdays 空 = 每天出现）。</summary>
+    public static bool AppearsToday(Row row) => AppearsOn(row, TodayWeekday1Based());
+
+    /// <summary>
+    /// 指定 ISO 星期（1=周一 … 7=周日）是否命中 weekdays。
+    /// weekdays 空 / 星期越界 → true（按每天处理，缺省即老口径）；"16" 命中周一周六。
+    /// </summary>
+    public static bool AppearsOn(Row row, int weekday1Based)
+    {
+        if (string.IsNullOrEmpty(row.weekdays)) return true;
+        if (weekday1Based < 1 || weekday1Based > 7) return true;
+        return row.weekdays.IndexOf((char)('0' + weekday1Based)) >= 0;
+    }
+
+    /// <summary>今天的 ISO 星期（1=周一 … 7=周日，本地时间，与活动副本开放日同一口径）。</summary>
+    public static int TodayWeekday1Based()
+    {
+        int dow = (int)System.DateTime.Now.DayOfWeek;   // DayOfWeek: 周日 = 0
+        return dow == 0 ? 7 : dow;
     }
 
     /// <summary>某类别全部行，按 order 升序（2026-10-29 扩编：日常 7 条 + 周常，见 DailyTaskSystem）。</summary>

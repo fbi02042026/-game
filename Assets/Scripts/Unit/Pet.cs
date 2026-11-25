@@ -35,7 +35,8 @@ public partial class Pet : Mercenary
     const float MOVE_RATE_DOG = 1.05f;        // 狗：灵活，比其它宠物快但仍比原速慢
     const float MOVE_RATE_WOLF = 1.05f;       // 狼：灵活，同上
     const float MOVE_RATE_GOAT = 0.85f;       // 羊：迟缓
-    const float MOVE_RATE_DEFAULT = 1f;       // 鸟/蜥蜴等：保持基准
+    const float MOVE_RATE_BIRD = 1.1f;       // 鸟（巨嘴鸟/鹦鹉）：2026-11-25 主人拍板 +10%
+    const float MOVE_RATE_DEFAULT = 1f;       // 蜥蜴等：保持基准
 
     // 11-22 主人拍板「宠物血条应该是绿的跟玩家一样」：真源 = 玩家血条图
     // Assets/Resources/UI/Art/battle/血条.png 主色 RGB(78,234,57)（敌人血条.png 是红 234,57,78）。
@@ -214,20 +215,29 @@ public partial class Pet : Mercenary
     void SetupPetAttributes(PetDefs.Def def)
     {
         attr.ResetToBase();
-        // 宠物数值真源 = PetDefs（策划草稿，基准≈玩家 1/10；不进佣兵表、不吃局外加成）
-        attr.SetBaseAndCurrent(AttrType.MaxHp, Mathf.Max(1f, def.hp));
-        attr.SetBaseAndCurrent(AttrType.Attack, Mathf.Max(1f, def.atk));
-        attr.SetBaseAndCurrent(AttrType.Defense, Mathf.Max(0f, def.def));
-        attr.SetBaseAndCurrent(AttrType.MagicDefense, Mathf.Max(0f, def.def));
+        // 2026-11-25 主人「喂养加的属性要生效」：叠加本体喂养加成（键 = 本体 id，皮肤与本体共用，
+        // 与宠物详情页 PetUI.Detail 显示的「基础 + 加成」同一口径）。
+        var save = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        var bonus = save != null ? save.GetPetAttrBonus(PetDefs.IsSkin(def) ? def.skinOf : def.id) : null;
+        int hpBonus = bonus != null ? bonus.hp : 0;
+        int atkBonus = bonus != null ? bonus.atk : 0;
+        int defBonus = bonus != null ? bonus.def : 0;
+        // 宠物数值真源 = PetDefs（策划草稿，基准≈玩家 1/10；不进佣兵表、不吃佣兵/装备局外加成，
+        // 只叠本体喂养加成）。
+        attr.SetBaseAndCurrent(AttrType.MaxHp, Mathf.Max(1f, def.hp + hpBonus));
+        attr.SetBaseAndCurrent(AttrType.Attack, Mathf.Max(1f, def.atk + atkBonus));
+        attr.SetBaseAndCurrent(AttrType.Defense, Mathf.Max(0f, def.def + defBonus));
+        attr.SetBaseAndCurrent(AttrType.MagicDefense, Mathf.Max(0f, def.def + defBonus));
         bool magic = IsMagicPet(def);
-        attr.SetBaseAndCurrent(AttrType.MagicAttack, magic ? Mathf.Max(1f, def.atk) : 0f);
+        attr.SetBaseAndCurrent(AttrType.MagicAttack, magic ? Mathf.Max(1f, def.atk + atkBonus) : 0f);
         attr.SetBaseAndCurrent(AttrType.AttackSpeed, GameConfig.BASE_ATTACK_SPEED);
         attr.SetBaseAndCurrent(AttrType.MoveSpeed, GameConfig.BASE_MOVE_SPEED * PET_MOVE_BASE_RATIO * GetMoveRateBySpecies(def));
+        // 【2026-11-25 主人拍板「远程的宠物攻击距离加长一倍」】下方预乘 0.9 → 1.8，远程/法术宠有效射程翻倍；近战宠不动。
         // 2026-11-23 主人「宠物攻击距离还是远，要和近战一样」：射程全统一近战剑距(0.96)，远程宠不再放风筝。
         // 11-23 二次修：远程/法术宠走 Orb 弹丸(UsesMeleeBasicAttack=false)，吃不到 GetEffectiveAttackRange 里我方近战的
-        // ×0.9 贴身系数，实际 0.96+0.12 Slack 比真近战远一截。这里给远程/法术宠配置射程预乘 0.9，
-        // 使全部宠物有效射程统一到 0.864(=0.96×0.9)，与玩家/近战佣兵一致，弹丸外观(子弹样)保留不变。
-        float petRange = GameConfig.RangeSword * (IsMagicPet(def) || IsRangedPet(def) ? 0.9f : 1f);
+        // ×0.9 贴身系数，实际 0.96+0.12 Slack 比真近战远一截。2026-11-25 加长一倍后预乘 1.8（原 0.9），
+        // 远程/法术宠有效射程翻倍到 1.728(=0.96×1.8)，近战宠仍 0.96；弹丸外观(子弹样)保留不变。
+        float petRange = GameConfig.RangeSword * (IsMagicPet(def) || IsRangedPet(def) ? 1.8f : 1f);
         attr.SetBaseAndCurrent(AttrType.AttackRange, petRange);
         attr.SetBaseAndCurrent(AttrType.CritRate, GameConfig.BASE_CRIT_RATE);
         currentHp = attr.GetAttr(AttrType.MaxHp);
@@ -259,13 +269,14 @@ public partial class Pet : Mercenary
     protected override float GetCombatMoveSpeed()
         => attr != null ? attr.GetAttr(AttrType.MoveSpeed) : base.GetCombatMoveSpeed();
 
-    /// <summary>按外貌给移速系数：狗/狼灵活稍快、羊迟缓稍慢，其余保持基准。皮肤前缀跟随本体。</summary>
+    /// <summary>按外貌给移速系数：狗/狼灵活稍快、羊迟缓稍慢、鸟 +10%（宠物整体基准 0.63 不动），蜥蜴等保持基准。皮肤前缀跟随本体。</summary>
     static float GetMoveRateBySpecies(PetDefs.Def def)
     {
         if (def == null) return MOVE_RATE_DEFAULT;
         string id = def.id;
         if (id.StartsWith("dog")) return MOVE_RATE_DOG;
         if (id.StartsWith("wolf")) return MOVE_RATE_WOLF;
+        if (id.StartsWith("toucan")) return MOVE_RATE_BIRD;   // 鸟：鹦鹉皮肤同前缀一起 +10%
         if (id.StartsWith("goat")) return MOVE_RATE_GOAT;
         return MOVE_RATE_DEFAULT;
     }

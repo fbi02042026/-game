@@ -114,6 +114,9 @@ public static class PetFeatureGuide
         }
     }
 
+    /// <summary>引导是否进行中（stage 1~5）。别的箭头气泡要礼让，别抢同一条横幅（2026-11-25）。</summary>
+    internal static bool IsRunning => _driver != null && _driver.IsRunning;
+
     internal static void MarkDone()
     {
         var data = SaveSystem.Instance?.Data;
@@ -140,6 +143,9 @@ public class PetFeatureGuideDriver : MonoBehaviour
     Coroutine _co;
     int _stage;   // 0 idle / 1 待进角色页 / 2 待开宠物界面 / 3 待上阵 / 4 待喂养 / 5 收尾中
     string _petId;
+
+    /// <summary>引导是否进行中（0 = 空闲/已完成）。供 PetTalentHint 礼让判断，不写任何状态。</summary>
+    public bool IsRunning => _stage > 0;
 
     public void Begin()
     {

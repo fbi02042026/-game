@@ -425,6 +425,16 @@ public class QuestPanelUI : MonoBehaviour
 
     void RefreshDaily()
     {
+        // 【2026-11-25 主人拍板「把每日任务在第三关通关后开启」】未开启只给一行解锁目标：
+        // 不渲染任何任务行，也不追加周常小节（周常与日常同一个门槛）；判定真源 = DailyTasksUnlocked。
+        var save = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (save != null && !save.DailyTasksUnlocked)
+        {
+            if (_headerText != null) _headerText.text = "每日任务";
+            AddRow("通关 1-3 后开启", "打通 1-3 解锁每日 / 周常任务", 0, null);
+            return;
+        }
+
         var list = MainQuestSystem.DailyViews();
 
         int total = list.Count;

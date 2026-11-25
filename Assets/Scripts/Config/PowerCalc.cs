@@ -155,7 +155,9 @@ public static class PowerCalc
     /// 新技能 star 传 1；技能升星传下一星。
     /// </summary>
     public static int SkillPowerDelta(SkillRarity rar, int star)
-        => (int)rar * 90 + Mathf.Max(1, star) * 140;
+        => SkillRarityUtil.Rank(rar) * 90 + Mathf.Max(1, star) * 140;
+        // 2026-11-25 技能加优秀（绿）档：档位高低一律走 SkillRarityUtil.Rank，
+        // 原来直接 (int)rar 会让绿档（枚举值 4，追加在尾部）战力反超传说。
 
     /// <summary>
     /// 佣兵带来的战力增量：等级权重 70，星级权重 110（与 RunLoadout.TotalPower 佣兵段同口径）。

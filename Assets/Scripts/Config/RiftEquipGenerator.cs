@@ -11,6 +11,22 @@ public static class RiftEquipGenerator
     // 只在防具分支读写（武器分支不碰），所以抽到武器不会清掉它。状态放静态字段，跨抽奖调用保留。
     static string _lastArmorSlotId;
 
+    // 【2026-11-25 主人拍板】「抽中一个部位，下回这个部位就降低抽中概率，不要连着抽同一个部位」。
+    // 防具沿用上面的硬排除（_lastArmorSlotId，原有逻辑一字未动）；武器只有主手/副手两个部位，
+    // 且非剑盾职业武器池只有主手一行 —— 排除法无从下手，改为在类别掷骰上降权：
+    //   上一次是主手 → 本次「出武器」概率 45% → RepeatWeaponChance；
+    //   上一次是副手 → 本次「副手命中」概率 30% → RepeatOffHandChance。
+    // 引导局（fixedForTutorial）在 PickSlot 里提前返回，不读也不写这份记忆，确定性不受影响。
+    static EquipSlotType _lastSlotType;
+    static bool _hasLastSlot;          // enum 默认值是 Head，需要标志位区分「从没抽过」
+
+    /// <summary>武器类别基础概率（历史口径 45%，改这里等于改全局武器掉率）。</summary>
+    const float BaseWeaponChance = 0.45f;
+    /// <summary>上一次抽到主手后，本次「出武器」的降权概率（2026-11-25 主人拍板）。</summary>
+    const float RepeatWeaponChance = 0.15f;
+    /// <summary>上一次抽到副手后，本次「副手命中」的降权概率。</summary>
+    const float RepeatOffHandChance = 0.05f;
+
     /// <param name="fixedForTutorial">
     /// 2026-10-12 主人拍板「每次引导战力一样」：引导局（宝箱 / 第一拍抽卡）传 true，
     /// 把所有随机点钉死 —— 稀有度恒普通、必为主手武器、部位/主属性/模板取序一定、
@@ -78,7 +94,7 @@ public static class RiftEquipGenerator
         }
         // forceWeapon 由引导宝箱传入：宝箱只掉武器，避免误给防具；否则保留默认 45% 武器概率。
         // 引导确定性化：必为主手武器（引导第一拍定稿就是「一抽(武器)」）。
-        bool wantWeapon = forceWeapon || (fixedForTutorial ? true : Random.value < 0.45f);
+        bool wantWeapon = forceWeapon || (fixedForTutorial ? true : Random.value < WeaponChance());
         var slot = PickSlot(wantWeapon, job, fixedForTutorial);
         if (slot == null) return null;
 
@@ -509,7 +525,7 @@ public static class RiftEquipGenerator
         //   非剑盾职业命中这 30% 只会抽空少一件（修复前更是抽出一堆防具外观占盾位）。
         //   现在非剑盾职业直接不进副手池，这 30% 落回本职业主手武器池，武器掉率结构不变。
         if (wantWeapon && !fixedForTutorial && job == PlayerJobId.SwordShield
-            && Random.value < OffHandWeaponChance)
+            && Random.value < OffHandChance())
         {
             for (int i = 0; i < slots.Count; i++)
             {
@@ -533,7 +549,8 @@ public static class RiftEquipGenerator
         if (pool.Count == 0) return null;
 
         // 2026-10-09 主人拍板：防连续同槽。pool 全为防具部位时，排除上一次抽到的槽位，
-        // 让「每次都是鞋」不再连着出现；候选只剩 1 个时保持原样（不排除）。武器分支不受影响。
+        // 让「每次都是鞋」不再连着出现；候选只剩 1 个时保持原样（不排除）。
+        // 【2026-11-25】武器分支不走排除（池里常只剩主手一个），改在 WeaponChance / OffHandChance 降权。
         if (!pool[0].IsWeapon && pool.Count > 1 && !string.IsNullOrEmpty(_lastArmorSlotId))
         {
             for (int i = 0; i < pool.Count; i++)
@@ -547,7 +564,34 @@ public static class RiftEquipGenerator
 
         var picked = pool[Random.Range(0, pool.Count)];
         if (!picked.IsWeapon) _lastArmorSlotId = picked.SlotId;
+        // 【2026-11-25】武器/防具统一记一笔，下次抽到同部位时降权（见 WeaponChance / OffHandChance）。
+        _lastSlotType = MapSlotType(picked.SlotId, job);
+        _hasLastSlot = true;
         return picked;
+    }
+
+    /// <summary>抽奖「出武器」的概率：上一次抽到主手时降权，避免连着出同一个部位。
+    /// 非剑盾职业武器池只有主手一行，只能降类别概率；剑盾另有副手可出，同样按此降。</summary>
+    static float WeaponChance()
+    {
+        return _hasLastSlot && _lastSlotType == EquipSlotType.MainHand
+            ? RepeatWeaponChance : BaseWeaponChance;
+    }
+
+    /// <summary>副手命中率：上一次抽到副手时降权（主手不受影响）。</summary>
+    static float OffHandChance()
+    {
+        return _hasLastSlot && _lastSlotType == EquipSlotType.OffHand
+            ? RepeatOffHandChance : OffHandWeaponChance;
+    }
+
+    /// <summary>每局开始清掉「上一次部位」记忆（唯一调用点 = RunDraftDirector.OnRunStart 新局分支）。
+    /// 防具排除与武器降权共用这份记忆，必须一起清，否则新局首抽会继承上一局最后一件的部位。</summary>
+    public static void ResetLastSlotMemory()
+    {
+        _lastArmorSlotId = null;
+        _lastSlotType = EquipSlotType.Head;
+        _hasLastSlot = false;
     }
 
     /// <summary>只从已落地词条里抽，未映射 ID 不占词条位、不进实例。

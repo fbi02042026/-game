@@ -345,6 +345,9 @@ public class SaveData
 
     /// <summary>邮件箱（资源溢出等）</summary>
     public List<MailEntry> mailInbox = new List<MailEntry>();
+    /// <summary>【2026-11-25】欢迎信发放标记：存档级持久——领取并删除后也不再重发。
+    /// 老档箱里已有欢迎信时由 MailSystem.EnsureWelcomeMail 补标记，不重复发放。</summary>
+    public bool welcomeMailIssued;
 
     // === 天赋（List 持久化；运行时用 Dictionary）===
     public List<StringIntEntry> talentEntries = new List<StringIntEntry>();
@@ -886,7 +889,7 @@ public class SaveData
     /// <summary>每日任务阈值：当日通关 3 关。</summary>
     public const int DAILY_CLEAR_TASK_NEED = 3;
     /// <summary>每日任务奖励：5 天赋石。</summary>
-    public const int DAILY_CLEAR_TASK_EXP = 120;  // 2026-11-05 主人拍板：经验预算 6:2:2，日常任务经验 ×2.4（原 50→120；2026-10-30 由 5 天赋石改发经验）
+    public const int DAILY_CLEAR_TASK_EXP = 70;  // 2026-11-25 主人拍板「经验整体降一档」：120→70（档位 190→120、120→70、70→50、50→30；2026-11-05 曾按 6:2:2 预算从 50 抬到 120）
 
     // === 每日/周常任务计数（2026-10-29 扩编，主人拍板：金币/击杀/Boss/佣兵/升星）===
     public string dailyTaskDayKey = "";      // 日计数日期键（yyyyMMdd）
@@ -895,6 +898,12 @@ public class SaveData
     public int dailyKillBoss = 0;            // 今日击杀 Boss
     public int dailyRecruitMerc = 0;         // 今日获取佣兵（新解锁，任何来源）
     public int dailyArenaBattle = 0;         // 今日竞技场对战场次（2026-10-30 新增；写入=ArenaRules.ResolveChallenge，打一场算一场不论胜负）
+    public int dailyPetFeed = 0;             // 今日喂养宠物次数（2026-11-25 新增；写入=PetUI.Actions.TryFeed 成功扣费后）
+    public int dailyTalentClick = 0;         // 今日点亮/升级天赋次数（2026-11-25 新增；写入=TalentSystem 两个成功入口，与 talentClickTotal 同步 +1）
+    public int dailyMercStarUp = 0;          // 今日佣兵升星次数（2026-11-25 新增；原周常改日常限定日，写入=MercStarSystem.TryStarUp）
+    public int dailyActivityClear = 0;       // 今日活动副本通关次数（2026-11-25 新增；写入=ActivityDungeonRules.MarkCleared 四本共同出口）
+    public int dailyRiftClear = 0;           // 今日无限裂隙通关层数（2026-11-25 新增；写入=BattleManager.SettleEndlessStageClear）
+    public int dailyMercTalk = 0;            // 今日佣兵闲聊次数（2026-11-25 新增；写入=MercFavorSystem.Talk 成功）
     public int weeklyTaskWeekKey = 0;        // 周计数键（本周周一 yyyyMMdd，周一刷新）【2026-10-29 修】原 string 与 WeekMondayKey() 的 int 返回对不上（CS0019/CS0029）；字段新增、尚无存档写过它，改类型零兼容风险
     public int weeklyMercStarUp = 0;         // 本周升星佣兵次数
     /// <summary>任务奖励已发放记录（键 = 任务id，值 = 领取日/周键 int；DailyTaskSystem 自动发奖防重复）。</summary>
@@ -2311,6 +2320,9 @@ public class SaveData
     {
         string today = DayKeyUtil.TodayKey();
         if (string.IsNullOrEmpty(today)) return 0;
+        // 【2026-11-25 主人拍板「每日任务在第三关通关后开启」】未开启不累计、不产生待发经验，
+        // 避免玩家在 1-3 之前攒下「今日通关」进度，一解锁就白拿一条奖励。
+        if (!DailyTasksUnlocked) return 0;
         if (dailyStageClearDayKey != today)
         {
             dailyStageClearDayKey = today;
@@ -2337,6 +2349,14 @@ public class SaveData
         return int.Parse(d.ToString("yyyyMMdd"));
     }
 
+    /// <summary>
+    /// 每日 / 周常任务是否已开启（2026-11-25 主人拍板「把每日任务在第三关通关后开启」）。
+    /// 真源 = 正式主线第 1 篇第 3 关通关（clearedStages "1_2"），与宠物功能解锁同一个门槛
+    /// （PetFeatureGuide.ShouldGuideFromSave / CharacterUI.RefreshPetEntry 同判据）。
+    /// 未开启：任务栏日常行只显示「通关 1-3 后开启」、面板日常页只给解锁提示、计数器不累加、Settle 不发放。
+    /// </summary>
+    public bool DailyTasksUnlocked => HasStageCleared(1, 2);
+
     /// <summary>跨天/跨周归零（幂等；所有计数入口与读进度前都先调）。</summary>
     public void EnsureDailyTaskKeys()
     {
@@ -2349,6 +2369,12 @@ public class SaveData
             dailyKillBoss = 0;
             dailyRecruitMerc = 0;
             dailyArenaBattle = 0;
+            dailyPetFeed = 0;
+            dailyTalentClick = 0;
+            dailyMercStarUp = 0;
+            dailyActivityClear = 0;
+            dailyRiftClear = 0;
+            dailyMercTalk = 0;
         }
         int wk = WeekMondayKey();
         if (weeklyTaskWeekKey != wk)
@@ -2362,6 +2388,7 @@ public class SaveData
     public void CountGoldGain(long added)
     {
         if (added <= 0) return;
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加，解锁当天从 0 开始
         EnsureDailyTaskKeys();
         dailyGoldGained += (int)System.Math.Min(added, (long)int.MaxValue);
     }
@@ -2369,6 +2396,7 @@ public class SaveData
     /// <summary>今日击败小怪 / 击杀 Boss（精英按小怪算）。</summary>
     public void CountKill(bool isBoss)
     {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
         EnsureDailyTaskKeys();
         if (isBoss) dailyKillBoss++;
         else dailyKillNormal++;
@@ -2377,6 +2405,7 @@ public class SaveData
     /// <summary>今日获取佣兵（UnlockMerc 新解锁时内调）。</summary>
     public void CountRecruit()
     {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
         EnsureDailyTaskKeys();
         dailyRecruitMerc++;
     }
@@ -2384,8 +2413,49 @@ public class SaveData
     /// <summary>今日竞技场对战一场（ResolveChallenge 结算完调；不论胜负都算场次）。</summary>
     public void CountArenaBattle()
     {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
         EnsureDailyTaskKeys();
         dailyArenaBattle++;
+    }
+
+    /// <summary>今日喂养宠物一次（2026-11-25 新增；PetUI.Actions.TryFeed 扣费成功、属性已落盘后调）。</summary>
+    public void CountPetFeed()
+    {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
+        EnsureDailyTaskKeys();
+        dailyPetFeed++;
+    }
+
+    /// <summary>今日点亮/升级天赋一次（2026-11-25 新增；TalentSystem 两个成功入口各调一次，与 talentClickTotal 同点）。</summary>
+    public void CountTalentClick()
+    {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
+        EnsureDailyTaskKeys();
+        dailyTalentClick++;
+    }
+
+    /// <summary>今日活动副本通关一次（2026-11-25 新增；ActivityDungeonRules.MarkCleared 是四本共同出口，只在这一处挂）。</summary>
+    public void CountActivityClear()
+    {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
+        EnsureDailyTaskKeys();
+        dailyActivityClear++;
+    }
+
+    /// <summary>今日无限裂隙通关一层（2026-11-25 新增；BattleManager.SettleEndlessStageClear 每层调一次）。</summary>
+    public void CountRiftClear()
+    {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
+        EnsureDailyTaskKeys();
+        dailyRiftClear++;
+    }
+
+    /// <summary>今日与佣兵闲聊一次（2026-11-25 新增；MercFavorSystem.Talk 成功后调）。</summary>
+    public void CountMercTalk()
+    {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
+        EnsureDailyTaskKeys();
+        dailyMercTalk++;
     }
 
     /// <summary>
@@ -2395,11 +2465,14 @@ public class SaveData
     /// </summary>
     public long talentClickTotal = 0;
 
-    /// <summary>本周升星佣兵（TryStarUp 成功时调）。</summary>
+    /// <summary>本周升星佣兵（TryStarUp 成功时调）。2026-11-25 起周常分类取消，同点再累一份日计数
+    /// （daily_starup 走日常限定日，周四五六出现）；weekly 字段保留仅为存档兼容，不再有任务读它。</summary>
     public void CountMercStarUp()
     {
+        if (!DailyTasksUnlocked) return;   // 日常未开启（1-3 未通）不累加
         EnsureDailyTaskKeys();
         weeklyMercStarUp++;
+        dailyMercStarUp++;
     }
 
     /// <summary>按任务表 targetType 读当前进度（未知类型返回 0）。</summary>
@@ -2413,6 +2486,12 @@ public class SaveData
             case "daily_kill_boss": return dailyKillBoss;
             case "daily_recruit_merc": return dailyRecruitMerc;
             case "daily_arena_battle": return dailyArenaBattle;
+            case "daily_pet_feed": return dailyPetFeed;   // 2026-11-25 新增（喂养一次宠物）
+            case "daily_talent_click": return dailyTalentClick;   // 2026-11-25 新增（点亮一次天赋）
+            case "daily_merc_starup": return dailyMercStarUp;     // 2026-11-25 由周常改日常限定日
+            case "daily_activity_clear": return dailyActivityClear;   // 2026-11-25 新增（活动副本通关）
+            case "daily_rift_clear": return dailyRiftClear;       // 2026-11-25 新增（裂隙通关）
+            case "daily_merc_talk": return dailyMercTalk;         // 2026-11-25 新增（佣兵闲话）
             case "weekly_merc_starup": return weeklyMercStarUp;
             case "talent_click_total": return (int)Math.Min(talentClickTotal, int.MaxValue);   // 主线 upgrade_talent 独立点击计数（累计）
             case "daily_login": return loginLastDay == DayKeyUtil.TodayKey() ? 1 : 0;   // 打开游戏即完成（DailyLoginSystem.OnEnterGame 落 loginLastDay；2026-10-29 主人拍板「不要强制玩家点击领取」）
@@ -2695,6 +2774,10 @@ public class SaveData
     public int petAdWatchCount = 0;
     /// <summary>满星礼物盒：上次领取的日期 key（跨天刷新，本地日期）。</summary>
     public string petGiftDayKey = "";
+    /// <summary>【2026-11-25 主人「1天只弹1次 只弹3天」】角色页宠物/天赋箭头气泡：
+    /// 最后一次弹出的日期 key（yyyyMMdd）+ 累计弹过的天数（满 3 天永久不弹）。JsonUtility 自动序列化。</summary>
+    public string petTalentHintDayKey = "";
+    public int petTalentHintDays = 0;
     /// <summary>测试用一键全解锁开关（只由宠物界面的调试按钮/F8 切换，正式包不暴露入口）。
     /// 打开时 IsPetUnlocked 恒真，关掉即回到真实存档解锁状态（不往 petUnlocked 里写脏数据）。
     /// ⚠ 读取处（IsPetUnlocked）也在 UNITY_EDITOR || DEVELOPMENT_BUILD 条件编译内：

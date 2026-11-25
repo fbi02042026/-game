@@ -2,21 +2,26 @@ using UnityEngine;
 using System.Collections.Generic;
 
 /// <summary>
-/// 每日/周常任务结算器（2026-10-29 新增，主人拍板扩编任务种类）。
+/// 每日任务结算器（2026-10-29 新增；2026-11-25 主人拍板「周常不要单独设置」→ 周常分类取消，改为限定星期出现）。
 ///
-/// 职责：读 quest.csv（category=日常/周常），按存档计数器（SaveData.GetTaskCounter）判达标
+/// 职责：读 quest.csv（category=日常），按存档计数器（SaveData.GetTaskCounter）判达标
 /// → 自动发奖（主人拍板「达标自动发」，与「今日通关」同款；不做手动领取 UI）。
-/// 每任务一个发放键防重复：日任务 = 今天 yyyyMMdd、周任务 = 本周周一 yyyyMMdd
-/// （存 SaveData.taskRewardClaimDay，跨天/跨周后同任务可再完成再发）。
+/// 每任务一个发放键防重复：按天 yyyyMMdd 记（存 SaveData.taskRewardClaimDay），跨天可再完成再发；
+/// 出现规则由 MainQuestSystem.DailyRowActiveToday 统一判（weekdays 列 + 功能门槛），结算侧调同一出口。
 ///
 /// 计数挂钩（写入侧，散在各咽喉；计数器本体在 SaveData.Count*）：
 ///   金币收入 = ResourceWallet.Add(Gold)；击败小怪/击杀Boss = BattleManager.OnMonsterDead；
 ///   获取佣兵 = SaveData.UnlockMerc（新解锁）；升星佣兵 = MercStarSystem.TryStarUp（成功）；
-///   竞技场对战场次 = ArenaRules.ResolveChallenge（一场一计，不论胜负，2026-10-30 新增）。
+///   竞技场对战场次 = ArenaRules.ResolveChallenge（一场一计，不论胜负，2026-10-30 新增）；
+///   喂养宠物 = PetUI.Actions.TryFeed（扣费成功）；点亮/升级天赋 = TalentSystem.TryUnlock/TryUpgradeRightNode（成功）；
+///   活动副本 = ActivityDungeonRules.MarkCleared（四本共同出口）；裂隙 = BattleManager.SettleEndlessStageClear；
+///   佣兵闲话 = MercFavorSystem.Talk（成功）。后四项 2026-11-25 新增（配套限定日任务）。
+/// 开启门槛（2026-11-25 主人拍板）：日常整体在正式主线 1-3（精英）通关后开启，
+///   真源 = SaveData.DailyTasksUnlocked；未开启时本类直接不结算、计数器不累加、任务栏/面板只显示解锁提示。
 /// 结算驱动 = QuestBarBinder 每 0.5s 轮询（城镇内），奖励与 Toast 统一在城镇落地，不在战斗里弹。
 /// daily_clear 不走本类（ChapterManager 独立发经验链路，2026-10-30 起改发经验不再发石）；daily_login 走通用路径
 /// （2026-10-29 主人拍板「打开游戏就给奖励」：进度=loginLastDay==今天，不再强制点开登录弹窗领取）。
-/// 奖励 = quest.csv 的 reward_stones（日常=天赋石、周常=钻石）+ reward_exp（经验，
+/// 奖励 = quest.csv 的 reward_stones（日常=天赋石）+ reward_exp（经验，
 /// 走 LevelSystem.AddDirectExp，末列；改表即调）。
 /// </summary>
     public static class DailyTaskSystem
@@ -33,6 +38,15 @@ using System.Collections.Generic;
         SaveData data = saveSys != null ? saveSys.Data : null;
         if (data == null) return;
         if (!QuestTable.HasData) return;
+
+        // 【2026-11-25 主人拍板「把每日任务在第三关通关后开启」】未开启（正式主线 1-3 未通）一律不结算：
+        // 任务栏/面板此时只显示解锁提示，计数器与自动发奖必须同口径关掉，否则玩家会在开启前就收到奖励。
+        // LastRunFailed 照清，防止 1-3 那一局的失败标记污染解锁后的第一次成功补发。
+        if (!data.DailyTasksUnlocked)
+        {
+            LastRunFailed = false;
+            return;
+        }
 
         data.EnsureDailyTaskKeys();
 
@@ -62,6 +76,7 @@ using System.Collections.Generic;
         LastRunFailed = false;   // 无论本局有无 pending，失败标记都要清，防止漏清污染下一局成功补发
 
         SettleRows(data, "日常", int.Parse(DayKeyUtil.TodayKey()), daily: true);
+        // 【2026-11-25】周常分类已取消（表里 0 行），这行保留只为空跑兼容；以后要恢复周常任务才用得上。
         SettleRows(data, "周常", SaveData.WeekMondayKey(), daily: false);
     }
 
@@ -71,16 +86,19 @@ using System.Collections.Generic;
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
+            // 【2026-11-25】限定日（weekdays）+ 功能门槛：与展示层同一出口
+            // （MainQuestSystem.DailyRowActiveToday），今天不出现在列表里的行也不发奖。
+            if (!MainQuestSystem.DailyRowActiveToday(row)) continue;
             if (row.id == "daily_clear") continue;   // 独立链路（ChapterManager 达标发经验，2026-10-30 起不再发天赋石），不在这里发
             // daily_login 从 2026-10-29 起走通用路径：进度=loginLastDay==今天（GetTaskCounter），打开游戏即达标自动发。
             int progress = data.GetTaskCounter(row.targetType);
             if (progress < row.targetCount) continue;
             if (data.IsTaskRewardClaimed(row.id, keyInt)) continue;
-            if (row.rewardStones <= 0 && row.rewardExp <= 0) continue;   // 表没配奖励就不发不吞（报一次让人看见）
+            if (row.rewardStones <= 0 && row.rewardExp <= 0 && row.rewardDiamond <= 0) continue;   // 表没配奖励就不发不吞（报一次让人看见）
 
             data.MarkTaskRewardClaimed(row.id, keyInt);
 
-            // 发奖：天赋石（日常）/ 钻石（周常）+ 经验（2026-10-29 扩编，主人拍板「有些奖励可以给些经验」）
+            // 发奖：天赋石（日常）/ 钻石（daily:false 分支；周常分类 2026-11-25 取消、分支留作兼容）+ 经验（2026-10-29 扩编）
             // 【2026-11-13 主人拍板「剧情后不要这一大段文字」】中央那条「完成任务XXX / 获得 …」两行汇总
             // 已整段删净，奖励照发、任务栏/升级弹窗照常反馈；ResourceWallet 仍 notify:false，别让它自己再弹一条。
             // 【2026-11-14 主人拍板】完成提示改由左侧滑入横幅承担（见下方 QuestDoneToast.Show）。
@@ -89,6 +107,12 @@ using System.Collections.Generic;
                 var type = daily ? ResourceWallet.ResourceType.TalentPoint : ResourceWallet.ResourceType.Diamond;
                 ResourceWallet.Add(type, row.rewardStones, save: true, notify: false);
             }
+            // 【2026-11-25 主人拍板「选一条限定日给钻石，最好能看广告，现在不用看、以后可以接」】
+            // reward_diamond 列独立于 reward_stones（后者的日常语义是天赋石，别混用）。
+            // 以后接激励视频（看广告翻倍 / 看广告领取）就在这一支加分支：先把钻石按 0 发，
+            // 看广告成功后再补发一份，广告次数与频次走现成口径（ArenaRules.AdBonusTries / ResourceAdRewards）。
+            if (row.rewardDiamond > 0)
+                ResourceWallet.Add(ResourceWallet.ResourceType.Diamond, row.rewardDiamond, save: true, notify: false);
             // 2026-11-12 主人拍板：其它日常任务按当前等级重算额度（单个任务最多升 1 级），
             // 多个任务累计可升好几级、弹窗逐个显示；不能用固定的关卡额度，否则主线通关后卡在满级之前。
             if (row.rewardExp > 0)
@@ -101,6 +125,7 @@ using System.Collections.Generic;
             QuestDoneToast.Show(row.title, row.rewardText);
 
             Debug.Log("[DailyTask] settle: " + row.id + " +" + row.rewardStones + (daily ? " 石" : " 钻")
+                + (row.rewardDiamond > 0 ? " +" + row.rewardDiamond + " 钻" : "")
                 + (row.rewardExp > 0 ? " +" + row.rewardExp + " exp" : ""));
             Analytics.QuestComplete(row.id);
             MainQuestSystem.NotifyChanged();

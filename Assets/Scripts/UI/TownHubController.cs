@@ -86,6 +86,15 @@ public class TownHubController : MonoBehaviour
             else if (_current == MainNavTab.Tavern && _tavern != null && _tavern.questButton != null)
                 MercSwapHint.TryShowTavernQueue(_tavern.questButton.transform as RectTransform);
         }
+        // 【2026-11-25 主人需求】角色页：能解锁宠物 / 有天赋可点 → 箭头气泡指路。
+        // 两条同时满足也只弹一条（宠物优先，见 PetTalentHint）；本次登录只弹一条，不连弹；
+        // _warmupDone 闸门顺带避开进镇预热点亮（预热也会走 CharacterUI.ShowPage）。
+        if (_warmupDone && _current == MainNavTab.Character && _character != null
+            && _character.talentButton != null)
+        {
+            PetTalentHint.TryShow(CharacterUI.PetEntryRect,
+                _character.talentButton.transform as RectTransform);
+        }
     }
 
     void RefreshTavernNavBannedVisual(bool banned)

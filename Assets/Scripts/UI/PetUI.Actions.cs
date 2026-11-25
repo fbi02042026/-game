@@ -139,6 +139,7 @@ public partial class PetUI
         int cost = FeedCost(fed);
         if (!ResourceWallet.TrySpend(ResourceWallet.ResourceType.Gold, cost, false, true)) return;
         save.SetPetFeedCount(bodyId, fed + 1);
+        save.CountPetFeed();   // 【2026-11-25】日常「喂养宠物」计数（每日清零；日常未开启时方法内部早退）
 
         // 2026-11-22：喂养随机给攻/血/防其中一项 +1~3，落盘（皮肤与本体共享 bodyId）。
         string attrName;
@@ -161,8 +162,74 @@ public partial class PetUI
         PetFeatureGuide.NotifyFed(def.id);
     }
 
+    // ── 入口可操作判定（2026-11-25 主人「宠物图标如果能喂养或者解锁要加红点」）──
+    /// <summary>
+    /// 宠物入口红点 / 箭头气泡的统一口径：宠物功能已解锁（1-3 通关）且
+    /// 「有本体现在就能解锁」或「上阵宠物喂得起一次」。只读判定，不改任何存档。
+    /// </summary>
+    internal static bool HasActionable(SaveData save)
+    {
+        if (save == null) return false;
+        if (!save.HasStageCleared(1, 2)) return false;   // 宠物功能未开：入口本身隐藏，红点无意义
+        return HasUnlockable(save) || HasFeedable(save);
+    }
+
+    /// <summary>
+    /// 任一未解锁本体现在就能解锁：Default（点一下就开）/ 金币够 / 章节已通 / 钻石够 / 广告次数够。
+    /// 皮肤条目不计（皮肤走右上角皮肤槽，不属于「解锁宠物」提醒）。
+    /// </summary>
+    internal static bool HasUnlockable(SaveData save)
+    {
+        if (save == null) return false;
+        var bodies = PetDefs.Bodies;
+        for (int i = 0; i < bodies.Count; i++)
+        {
+            var def = bodies[i];
+            if (def == null || save.IsPetUnlocked(def.id)) continue;
+            switch (def.unlock)
+            {
+                case PetDefs.UnlockType.Default:
+                    return true;
+                case PetDefs.UnlockType.Gold:
+                    if (ResourceWallet.Get(save, ResourceWallet.ResourceType.Gold) >= def.unlockValue) return true;
+                    break;
+                case PetDefs.UnlockType.Chapter:
+                    if (save.IsChapterUnlocked(def.unlockValue)) return true;
+                    break;
+                case PetDefs.UnlockType.Diamond:
+                    if (ResourceWallet.Get(save, ResourceWallet.ResourceType.Diamond) >= def.unlockValue) return true;
+                    break;
+                case PetDefs.UnlockType.AdWatch:
+                    if (save.petAdWatchCount >= def.unlockValue) return true;
+                    break;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 上阵宠物（皮肤归一到本体）喂得起一次：金币 ≥ 当前亲密度档位的喂养价。
+    /// 判定与 TryFeed 同源（同一个 FeedCost），不另抄价格。
+    /// </summary>
+    internal static bool HasFeedable(SaveData save)
+    {
+        if (save == null) return false;
+        var def = PetDefs.Get(save.petDeployedId);
+        if (def == null) return false;
+        string bodyId = PetDefs.IsSkin(def) ? def.skinOf : def.id;
+        if (!save.IsPetUnlocked(bodyId)) return false;
+        long gold = ResourceWallet.Get(save, ResourceWallet.ResourceType.Gold);
+        return gold >= FeedCost(save.GetPetFeedCount(bodyId));
+    }
+
+    /// <summary>宠物入口红点刷新唯一出口（进角色页 / 解锁 / 喂养 / 上阵 / RedDot.RefreshCommon 都调这里）。</summary>
+    internal static void RefreshEntryRedDot()
+    {
+        RedDot.Set(RedDot.Pet, HasActionable(SaveSystem.Instance?.Data));
+    }
+
     /// <summary>喂养定价按亲密度星级分档：1→2星 300、2→3星 400、满星后 500（规格 16:2x）。</summary>
-    static int FeedCost(int fedCount)
+    internal static int FeedCost(int fedCount)
     {
         if (fedCount < PetDefs.FEED_STAR2) return 300;
         if (fedCount < PetDefs.FEED_STAR3) return 400;
@@ -208,6 +275,13 @@ public partial class PetUI
         if (def == null || save == null) return;
 
         var bodyId = PetDefs.IsSkin(def) ? def.skinOf : def.id;
+        // 2026-11-25：未解锁本体选中后皮肤槽可见，禁止先买皮肤（否则会买到「本体没解锁的皮肤」
+        // 并直接写 petDeployedId 上阵）。只提示本体解锁条件，不扣费。
+        if (!save.IsPetUnlocked(bodyId))
+        {
+            ShowUnlockHint(PetDefs.Get(bodyId), save);
+            return;
+        }
         var skin = PetDefs.SkinOf(bodyId);
         if (skin == null) { Debug.LogWarning(TAG + "该宠物无皮肤（" + def.id + "）"); return; }
 
@@ -226,8 +300,9 @@ public partial class PetUI
         long haveDiamond = ResourceWallet.Get(save, ResourceWallet.ResourceType.Diamond);
         if (haveDiamond < skin.unlockValue) StartSkinSlotShake();
 
-        DiamondSpendGate.Request("购买皮肤",
-            "购买「" + skin.name + "」皮肤（仅换外观 / 形态，战力不变）", skin.unlockValue,
+        // 2026-11-25 主人「只说购买皮肤XXX，下一行消耗钻石就行」：正文只给名字，
+        // 「花费钻石 ×N（持有 X → 剩余 Y）」由 DiamondSpendGate 自动追加，不在这里重复。
+        DiamondSpendGate.Request("购买皮肤", skin.name, skin.unlockValue,
             () =>
             {
                 var d = SaveSystem.Instance?.Data;

@@ -83,6 +83,7 @@ public static class RarityPalette
             case SkillRarity.Legendary: return Legendary;
             case SkillRarity.Epic: return Epic;
             case SkillRarity.Rare: return Rare;
+            case SkillRarity.Uncommon: return Uncommon;   // 2026-11-25 技能加优秀（绿）档
             default: return Common;
         }
     }

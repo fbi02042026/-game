@@ -110,6 +110,11 @@ public class TutorialHintUI : MonoBehaviour
     /// </summary>
     bool _bubblePointUpOnce;
     /// <summary>
+    /// 【2026-11-25 主人需求】一次性「手指横着指 + 左右循环」：手指放到目标侧边水平指向，
+    /// 到位后沿 X 轴来回摆动；只作用于带此标志的一条 Show，Hide 自动还原，其余引导零影响。
+    /// </summary>
+    bool _horizontalPointerOnce;
+    /// <summary>
     /// 【2026-11-16 主人需求】一次性「点击任意处立即收掉」：收尾对话小提示 / 技能排序软引导用。
     /// Hide 时清空，其余引导零影响；短时武装门限防弹窗关闭那一下的残余点击误关。
     /// </summary>
@@ -138,6 +143,12 @@ public class TutorialHintUI : MonoBehaviour
     public void SetBubblePointUpOnce(bool on = true)
     {
         _bubblePointUpOnce = on;
+    }
+
+    /// <summary>【2026-11-25】一次性横指 + 左右循环：下一次 Show 生效，Hide 后自动还原。</summary>
+    public void SetHorizontalPointerOnce(bool on = true)
+    {
+        _horizontalPointerOnce = on;
     }
 
     /// <summary>一次性「点击任意处立即收掉」：下一次 Show 生效，Hide 后自动清空。on=false = 取消。</summary>
@@ -655,6 +666,7 @@ public class TutorialHintUI : MonoBehaviour
         _sortBoostOnce = 0;             // 【2026-11-16】一次性抬层同上：Hide 即还原默认层级
         _bannerNoTargetYRatioOnce = 0f; // 【2026-11-21】一次性无目标横幅高度比例：Hide 还原默认 0.32f
         _bubblePointUpOnce = false;     // 【2026-11-16】一次性尖角朝上同上
+        _horizontalPointerOnce = false; // 【2026-11-25】一次性横指 + 左右循环同上
         // 【2026-11-16】banner 的 localScale 由下方 636 行还原；文字补翻节点须在此显式还原，防串到下一条引导。
         if (_label != null) _label.rectTransform.localScale = Vector3.one;
         _tapToHideOnce = false;         // 【2026-11-16】一次性点击收掉同上：Hide 即失效
@@ -885,14 +897,28 @@ public class TutorialHintUI : MonoBehaviour
         // 上方模式旋转 180°，手身往上伸，不会盖住按钮；上方塞不下才退回下方朝上指。
         float handH = _pointerRt != null ? _pointerRt.sizeDelta.y : HandSize;
         const float gap = 10f;
-        _pointerAbove = (maxY + gap + handH) <= (top - 8f);
-        if (_pointerAbove)
-            _pointerTarget = new Vector2(centerX, maxY + gap);
+        if (_horizontalPointerOnce)
+        {
+            // 【2026-11-25】横指：手放到目标侧边（贴屏幕左的任务栏 → 手在右侧朝左指），
+            // 指尖（pivot 在顶部）落在 anchoredPosition，旋转 ±90° 改指向。
+            bool placeRight = centerX <= 0f;
+            _pointerAbove = false;   // 手在侧边，不占上方空间，横幅不预留手部让位
+            _pointerTarget = new Vector2(placeRight ? maxX + gap : minX - gap, (minY + maxY) * 0.5f);
+            _pointerTarget = ClampPointerTarget(root, _pointerTarget);
+            if (_pointerRt != null)
+                _pointerRt.localRotation = Quaternion.Euler(0f, 0f, placeRight ? 90f : -90f);
+        }
         else
-            _pointerTarget = new Vector2(centerX, minY - gap);
-        _pointerTarget = ClampPointerTarget(root, _pointerTarget);
-        if (_pointerRt != null)
-            _pointerRt.localRotation = Quaternion.Euler(0f, 0f, _pointerAbove ? 180f : 0f);
+        {
+            _pointerAbove = (maxY + gap + handH) <= (top - 8f);
+            if (_pointerAbove)
+                _pointerTarget = new Vector2(centerX, maxY + gap);
+            else
+                _pointerTarget = new Vector2(centerX, minY - gap);
+            _pointerTarget = ClampPointerTarget(root, _pointerTarget);
+            if (_pointerRt != null)
+                _pointerRt.localRotation = Quaternion.Euler(0f, 0f, _pointerAbove ? 180f : 0f);
+        }
 
         // 气泡模式没有手，横幅不需要给手让位（让位会把气泡推离按钮，尖角就指不上了）
         // 【2026-11-16】尖角朝上：气泡摆到目标下方、尖角指上方按钮 → 目标传上沿 maxY
@@ -1117,6 +1143,12 @@ public class TutorialHintUI : MonoBehaviour
             _swipeT = Mathf.Clamp01(_swipeT + Time.unscaledDeltaTime / SwipeDur);
             float e = 1f - Mathf.Pow(1f - _swipeT, 3f);
             pos = Vector2.Lerp(_swipeFrom, _pointerTarget, e);
+        }
+        else if (_horizontalPointerOnce)
+        {
+            // 【2026-11-25】横指到位后左右循环：沿 X 轴来回摆动（默认引导仍是上下浮动，零影响）
+            float x = Mathf.Sin(Time.unscaledTime * 6f) * 12f;
+            pos = _pointerTarget + new Vector2(x, 0f);
         }
         else
         {

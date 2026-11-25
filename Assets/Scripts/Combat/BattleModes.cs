@@ -624,6 +624,9 @@ public static class ActivityDungeonRules
     {
         var data = SaveSystem.Instance?.Data;
         if (data == null) return;
+        // 【2026-11-25】日常「资源副本」计数：四本（金币/徽记/卷轴/礼物）通关的共同出口，每次通关 +1；
+        // 死亡/撤离不进本方法（见上面注释），所以不会误计。
+        data.CountActivityClear();
         if (difficulty > data.activityDungeonClearedDiff)
         {
             data.activityDungeonClearedDiff = difficulty;

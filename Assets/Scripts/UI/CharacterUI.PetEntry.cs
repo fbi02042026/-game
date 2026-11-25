@@ -45,6 +45,8 @@ public partial class CharacterUI
         var save = SaveSystem.Instance?.Data;
         bool unlocked = save != null && save.HasStageCleared(1, 2);
         _petEntryButton.gameObject.SetActive(unlocked);
+        // 【2026-11-25 主人「宠物图标如果能喂养或者解锁要加红点」】进页按当前金币/进度重算一次
+        PetUI.RefreshEntryRedDot();
     }
 
     void EnsurePetEntry()
@@ -109,6 +111,8 @@ public partial class CharacterUI
         btn.targetGraphic = img;
         btn.onClick.AddListener(OnPetEntryClicked);
         _petEntryButton = btn;
+        // 【2026-11-25 主人需求】宠物图标红点：统一走 RedDot.Bind 出口（贴图/尺寸/偏移全用默认口径）
+        RedDot.Bind(go.transform, RedDot.Pet);
         RefreshPetEntry();
     }
 }

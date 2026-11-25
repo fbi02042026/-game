@@ -656,7 +656,7 @@ public partial class TutorialDirector
             yield return null;
         }
 
-        // 收尾链压轴：装备小提示（每日登录关掉之后，屏幕上始终只有一件事）
+        // 收尾链压轴：引导完成祝福（每日登录关掉之后，屏幕上始终只有一件事）
         // 【2026-11-15】这一条字号比引导里的其它提示小一档：字 28；上下留白 48（2026-11-22 由 24 再翻倍，框高随留白自适应）。
         // 只经 Show 的单次 layout 传入，Hide 即清空；全局常量与其余引导一字不动。
         // 【2026-11-16】这条是对话类叙述，必须用默认对话底框（深蓝金引导底框）。箭头气泡只给提示类用。
@@ -679,7 +679,7 @@ public partial class TutorialDirector
             outroHint.Hide();
         }
         outroHint.SetTapToHideOnce();   // 【2026-11-16】点任意处即可收掉（一次性，Hide 即失效）
-        outroHint.Show("小提示：裂隙里捡的装备带不出来，金币和材料都可以带回去哦～", null, 4f, false,
+        outroHint.Show("引导完成！祝你好运，接下来的冒险就交给你啦～", null, 4f, false,
             new TutorialHintUI.HintLayout
             {
                 FontSize = 28,

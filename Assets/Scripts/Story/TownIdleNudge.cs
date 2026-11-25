@@ -71,6 +71,26 @@ public static class TownIdleNudge
     /// <summary>记录「刚出过这条引导」，开始它的冷却。</summary>
     public static void MarkShown(MainNavTab tab) => _lastShownAt[tab] = Time.unscaledTime;
 
+    // —— 【2026-11-25】指向任务栏「主线」行的闲置引导（横指 + 左右循环）——
+    const string MainQuestPrefsKey = "IdleNudge_Clicked_MainQuest";
+    /// <summary>「主线」行引导文案（停在主界面闲置后弹，点过一次永久不再出现）。</summary>
+    public const string MainQuestHintText = "主线还在这儿挂着，点一下接着打～";
+    static float _mainQuestLastShownAt = -1f;
+
+    /// <summary>玩家点过主线行一次 → 这条引导永久关闭。</summary>
+    public static bool MainQuestClicked => PlayerPrefs.GetInt(MainQuestPrefsKey, 0) != 0;
+    public static bool MainQuestInCooldown =>
+        _mainQuestLastShownAt > 0f && Time.unscaledTime - _mainQuestLastShownAt < RepeatCooldownSeconds;
+    public static void MarkMainQuestShown() => _mainQuestLastShownAt = Time.unscaledTime;
+
+    /// <summary>玩家点了主线行：落「已看过」标记，并让驱动器收掉本条引导。</summary>
+    public static void NotifyMainQuestClicked()
+    {
+        PlayerPrefs.SetInt(MainQuestPrefsKey, 1);
+        PlayerPrefs.Save();
+        if (_driver != null) _driver.OnMainQuestClicked();
+    }
+
     /// <summary>城镇就绪时调一次；驱动器全局唯一，重复调用安全。</summary>
     public static void Ensure()
     {
@@ -94,6 +114,8 @@ public static class TownIdleNudge
     {
         for (int i = 0; i < Entries.Length; i++)
             PlayerPrefs.DeleteKey(PrefsPrefix + Entries[i].tab);
+        PlayerPrefs.DeleteKey(MainQuestPrefsKey);
+        _mainQuestLastShownAt = -1f;
         PlayerPrefs.Save();
     }
 }
@@ -103,6 +125,7 @@ public class TownIdleNudgeDriver : MonoBehaviour
 {
     float _idle;
     MainNavTab? _showing;
+    bool _showingMainQuest;   // 【2026-11-25】当前展示的是「主线」行横指引导
     MainBottomNav _subscribedNav;
 
     // —— 通用弹窗让位扫描（2026-11-01 主人拍板「看广告送艾拉面板或其他弹窗出现时，不要弹闲置引导」）——
@@ -121,26 +144,43 @@ public class TownIdleNudgeDriver : MonoBehaviour
         // 不在主界面 / 有加载、剧情、对白、强引导、别的提示占屏 → 收掉自己的气泡，闲置清零重来
         if (!CanRun())
         {
-            if (_showing != null)
+            if (_showing != null || _showingMainQuest)
             {
                 TutorialHintUI.Instance?.Hide();
                 _showing = null;
+                _showingMainQuest = false;
             }
             _idle = 0f;
             return;
         }
 
         // 气泡在展示中：等它自消失（或被点击回调收掉），期间不累计闲置
-        if (_showing != null)
+        if (_showing != null || _showingMainQuest)
         {
             var h = TutorialHintUI.Instance;
-            if (h == null || !h.IsVisible) _showing = null;
+            if (h == null || !h.IsVisible) { _showing = null; _showingMainQuest = false; }
             return;
         }
 
         _idle += Time.unscaledDeltaTime;
         if (_idle < TownIdleNudge.IdleSeconds) return;
         _idle = 0f;   // 弹一条就重新计时；没点过的话，再闲置一会儿还会弹（换下一个没点过的）
+
+        // 【2026-11-25】优先指向任务栏「主线」行：横着指 + 左右循环；点过一次永久不再出现。
+        // 任务栏在引导完成前整栏隐藏（QuestBarBinder），目标不可用就跳过，不浪费冷却。
+        var questBinder = QuestBarBinder.Instance;
+        var mainRow = questBinder != null ? questBinder.MainRowRect : null;
+        if (!TownIdleNudge.MainQuestClicked && !TownIdleNudge.MainQuestInCooldown
+            && mainRow != null && mainRow.gameObject.activeInHierarchy)
+        {
+            TownIdleNudge.MarkMainQuestShown();
+            var hint = TutorialHintUI.Ensure();
+            hint.SetHorizontalPointerOnce(true);
+            hint.Show(TownIdleNudge.MainQuestHintText, mainRow, TownIdleNudge.HintSeconds);
+            _showingMainQuest = true;
+            Debug.Log("[TownIdleNudge] 闲置软引导：任务栏「主线」行（横指+左右循环，点过一次后永久不再出现）");
+            return;
+        }
 
         var nav = MainBottomNav.Instance;
         if (nav == null) return;
@@ -183,6 +223,14 @@ public class TownIdleNudgeDriver : MonoBehaviour
             TutorialHintUI.Instance?.Hide();
             _showing = null;
         }
+    }
+
+    /// <summary>玩家点了任务栏主线行：收掉本条横指引导（由 TownIdleNudge.NotifyMainQuestClicked 调）。</summary>
+    public void OnMainQuestClicked()
+    {
+        if (!_showingMainQuest) return;
+        TutorialHintUI.Instance?.Hide();
+        _showingMainQuest = false;
     }
 
     bool CanRun()

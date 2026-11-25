@@ -101,7 +101,7 @@ public class RunDraftDirector : MonoBehaviour
     //       【2026-10-29 主人拍板】正式关档 200 → **100**（「正式关卡每关给100抽奖币」；10-24 打完就清后每关=一局）。
         //     ② 每关通关：50 起，**每关 ×1.4 递增**，单关封顶 200（GrantStageCoins，
         //        金币本不发 —— Mode.GrantsRunCoins=false）
-        //     ③ 抽中「金币」安慰奖（一抽价 × 0.6，首抽 40 → 24；2026-11-14 主人拍板「最少给60%」）
+        //     ③ 抽中「金币」安慰奖（一抽价 × 0.8，首抽 40 → 32；2026-11-25 主人拍板「返还当次抽奖的80%」）
         //   ⚠【2026-10-10 主人拍板】抽价每抽 ×1.1 不封顶、通关产出每关 ×1.4 复利 →
         //     前期紧、后期松（单关产出第 6 关起触顶 200，之后每关都够抽 1~2 次）。
         //   ⚠【2026-10-13 主人拍板】启动金 270 → 200（「正式关的金币改成200 / 抽的太容易了」），
@@ -117,6 +117,8 @@ public class RunDraftDirector : MonoBehaviour
             SlotMachineSystem.ResetRunGoldPrizeCount();
             // 【2026-10-20 主人拍板】本局已抽中装备指纹清零（抽奖不再重复出同一把武器；续关不清）。
             DraftPool.ResetDrawnEquipTemplates();
+            // 【2026-11-25 主人拍板】「上一次抽到的部位」每局清零（不跨局压制武器概率；续关不清）。
+            RiftEquipGenerator.ResetLastSlotMemory();
             // 【2026-10-24 主人拍板】保底稀有计数每局清零（续关不清，同抽奖币计数口径）。
             SlotMachineSystem.ResetRunEquipWhiteStreak();
             SlotMachineSystem.GrantRunStarterGold(tutorial);

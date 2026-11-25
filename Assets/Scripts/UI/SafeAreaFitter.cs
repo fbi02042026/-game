@@ -436,9 +436,10 @@ public class SafeAreaFitter : MonoBehaviour
     /// 同日主人「顶端有点下降的多了 减一半吧 其他界面的同时调整」→ 10 再减半为 5；
     /// 同日晚主人「整体刘海可以再往上20」→ 5 + 20 = 25（方向记反了：值越大越往下）；
     /// 2026-11-02 主人「整体把各个界面的顶条上移20」→ 25 - 20 = 5）：
+    /// 2026-11-25 主人「真机顶条偏下、刘海留多了」→ 5 - 5 = 0（真机端安全区=机型上报不可硬减，唯一可收的旋钮）：
     /// 安全区避让之外再给整条顶栏固定呼吸量；全项目顶栏统一走 TotalTopInsetUnits，一处改全界面一致。
     /// </summary>
-    public const float TopBarExtraDropUnits = 5f;
+    public const float TopBarExtraDropUnits = 0f;
 
     /// <summary>
     /// 顶栏总避让量 = 安全区顶部内缩 + 微信胶囊预留 + 固定额外下移（设计单位）。

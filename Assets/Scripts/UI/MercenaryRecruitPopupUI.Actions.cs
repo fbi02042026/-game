@@ -89,12 +89,38 @@ public partial class MercenaryRecruitPopupUI : MonoBehaviour
 
     void OnRefresh()
     {
-        // 手动刷新一律走钻石刷新（每天 2 次，50/100 钻）+ 二次确认弹窗；
-        // 免费手动刷新已取消 —— 候选由 3 小时到点自动重掷，见 EnsureOffersFresh。
+        // 手动刷新：每天 2 次（免费手动刷新已取消 —— 候选由 3 小时到点自动重掷，见 EnsureOffersFresh）。
         if (!MercHireSession.CanDiamondRefresh(out _, out int cost))
         {
             // 【2026-10-24 主人拍板】钻石/广告次数用光：按钮保持可点，点击弹这句
             UIManager.Instance?.ShowToast("已无刷新次数 请明天再试", force: true);
+            return;
+        }
+
+        // 【2026-11-25 主人拍板「双通道 · 先广告后钻石」】广告能播 → 看广告免费刷新（不扣钻）；
+        // 播不了（未接 / 空广告位 / 远程急停）→ 原样走下面那条钻石确认门，逻辑一行没删。
+        if (AdGateway.Ready)
+        {
+            AdGateway.TryWatch(AdGateway.PlacementMercRefresh, ok =>
+            {
+                if (!ok)
+                {
+                    UIManager.Instance?.ShowToast("激励未完成，未刷新", force: true);
+                    return;
+                }
+                // 广告窗口期可能跨天 / 次数被别处吃掉：回调内重对，绝不超发
+                if (!MercHireSession.CommitAdRefresh())
+                {
+                    UIManager.Instance?.ShowToast("已无刷新次数 请明天再试", force: true);
+                    return;
+                }
+                RerollOffers();
+                RefreshAll();
+                if (!MaybeToastAppearBanter(force: false, avoidLast: true))
+                    UIManager.Instance?.ShowToast("看广告免费刷新！");
+                ScheduleNextIdleBanter();
+                Analytics.AdSlotClick(AdGateway.PlacementMercRefresh, true);
+            });
             return;
         }
 

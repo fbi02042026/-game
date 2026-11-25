@@ -53,6 +53,9 @@ public static class RedDot
     /// <summary>2026-09-29：天赋入口红点 —— 右列有「新开通未点」节点时点亮
     ///（2026-11-05 拍板门槛=人物等级，升级跨门槛由 TalentSystem.NotifyLevelUp 刷，玩家点开对应节点才灭）。</summary>
     public const string Talent = "nav.talent";
+    /// <summary>【2026-11-25 主人「宠物图标如果能喂养或者解锁要加红点」】角色页宠物入口专属红点键。
+    /// 判定唯一出口 = PetUI.HasActionable（宠物功能未解锁 / 无可解锁 / 喂不起 → 灭）。</summary>
+    public const string Pet = "nav.pet";
     /// <summary>2026-10-16：每日登录入口红点 —— 有可领的登录奖励时亮起。</summary>
     public const string DailyLogin = "dailylogin";
     /// <summary>2026-10-31：看广告送佣兵活动入口红点（艾拉）—— 有可领里程碑时亮起；
@@ -198,5 +201,7 @@ public static class RedDot
         // 2026-10-31：看广告送佣兵活动（艾拉）——入口键 + 4 个礼盒键一起刷（内部已判存档未就绪）。
         AdMercEventSystem.RefreshRedDots();
         AdventureCodex.RefreshRedDots();
+        // 【2026-11-25】角色页宠物入口红点：可解锁 / 可喂养（判定与刷新收口在 PetUI，别在这里抄第二份）。
+        PetUI.RefreshEntryRedDot();
     }
 }

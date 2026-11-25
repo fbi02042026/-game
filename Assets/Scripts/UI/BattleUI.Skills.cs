@@ -409,6 +409,10 @@ public partial class BattleUI : MonoBehaviour
         ApplyAutoCastGray(autoNode, !unlocked);
 
         RefreshAutoCastCheckmark(check);
+
+        // 【2026-11-25 主人拍板】「自动」第一次变亮（第 3 关）→ 手指箭头指着它，
+        // 教「取消勾选就能手动放技能」；全局只弹一次。
+        if (unlocked) TryShowManualCastGuide(autoNode);
     }
 
     /// <summary>切一次：自动 ⇄ 手动。立即生效，不重开关卡、不重进战斗。</summary>
@@ -422,6 +426,8 @@ public partial class BattleUI : MonoBehaviour
             var toggle = autoNode != null ? FindDeepChildIgnoreCase(autoNode, "AgreeToggle") : null;
             RefreshAutoCastCheckmark(toggle != null ? FindDeepChildIgnoreCase(toggle, "Checkmark") : null);
         }
+        // 【2026-11-25 主人拍板】手动模式禁拖技能槽：切完立刻重评，不用等下一次刷技能槽。
+        RefreshSkillSlotDragState();
     }
 
     /// <summary>勾选态 = 自动。手动时把勾去掉。</summary>
@@ -507,6 +513,85 @@ public partial class BattleUI : MonoBehaviour
             g.color = gray ? new Color(grayColor.r, grayColor.g, grayColor.b, c.a) : c;
         }
         _autoCastGrayApplied = gray;
+    }
+
+    // ============================================================
+    // 第 3 关「自动」开关的箭头引导（2026-11-25 主人拍板）
+    // 「自动」第一次变亮时，用 TutorialHintUI 的手指箭头指着它：
+    // 取消勾选后技能就不再自动放，改成点技能槽才放。
+    // 全局只弹一次；只在主线正式关弹（裂隙 / 竞技场 / 副本 / 引导局一律不弹）。
+    // ============================================================
+
+    /// <summary>全局只弹一次的标记（与 SkillOrderGuide 同款 PlayerPrefs 口径）。</summary>
+    const string ManualCastGuidePrefsKey = "RiftGuide_ManualCastHint_v1";
+
+    /// <summary>这条引导的文案：唯一来源，改文案只改这里。</summary>
+    const string ManualCastGuideText = "点掉「自动」的勾，技能就交给你自己点着放，想放哪个点哪个。";
+
+    /// <summary>本条引导已排队（协程在等时机）：防每次刷技槽重复开协程。</summary>
+    bool _manualCastGuideQueued;
+
+    /// <summary>
+    /// 条件齐了才排队弹一次：开关已解锁（第 3 关起）、没弹过、当前还是自动、且是主线正式关。
+    /// 不做兜底 —— 目标节点缺失 / UI 没建好都直接返回，下次刷新再试。
+    /// </summary>
+    void TryShowManualCastGuide(Transform autoNode)
+    {
+        if (!isActiveAndEnabled) return;   // 组件还没跑起来：协程起不来，下次刷新再试
+        if (_manualCastGuideQueued) return;
+        if (PlayerPrefs.GetInt(ManualCastGuidePrefsKey, 0) != 0) return;
+        if (PlayerSkillCastMode.IsManual) return;       // 已经是手动：没什么可教
+        var target = autoNode as RectTransform;
+        if (target == null) return;
+        var bm = BattleManager.Instance;
+        // Mode 尚未定（战斗刚起）时先拦不住，交给协程里 2s 后的正式判定
+        if (bm != null && bm.Mode != null && !bm.IsFormalMainRun) return;  // 裂隙 / 竞技场 / 副本不弹
+
+        _manualCastGuideQueued = true;
+        StartCoroutine(CoManualCastGuide(target));
+    }
+
+    /// <summary>
+    /// 等两个时机：① 进战斗后 2s，别跟切场景 / 开场演出抢；
+    /// ② 战斗台词播完（TutorialHintUI.Show 遇到台词占屏会直接丢弃，不自己等就白弹）。
+    /// 与 SkillOrderGuide.CoWaitTalkThenShow 同口径。
+    /// </summary>
+    System.Collections.IEnumerator CoManualCastGuide(RectTransform target)
+    {
+        yield return new WaitForSecondsRealtime(2f);
+        if (!GameSceneGate.IsBattle) { _manualCastGuideQueued = false; yield break; }
+        var bm = BattleManager.Instance;
+        if (bm == null || !bm.IsFormalMainRun) { _manualCastGuideQueued = false; yield break; }
+
+        float t = 0f;
+        while (t < 20f)
+        {
+            if (!GameSceneGate.IsBattle) { _manualCastGuideQueued = false; yield break; }
+            var talk = BattleHeadTalkUI.Instance;
+            if (talk == null || !talk.IsShowing) break;
+            t += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        var hint = TutorialHintUI.Instance;
+        if (hint == null || target == null || !target.gameObject.activeInHierarchy)
+        {
+            _manualCastGuideQueued = false;   // UI 没建好 / 目标被藏：不算弹过，下次刷新再试
+            yield break;
+        }
+
+        hint.Show(ManualCastGuideText, target, 4.5f);
+        if (hint.IsVisible && hint.CurrentHint == ManualCastGuideText)
+        {
+            hint.SetTapToHideOnce(true);
+            PlayerPrefs.SetInt(ManualCastGuidePrefsKey, 1);
+            PlayerPrefs.Save();
+            Debug.Log("[BattleUI] 第 3 关手动技能引导已弹出（全局只弹一次）");
+        }
+        else
+        {
+            _manualCastGuideQueued = false;   // 被别的引导 / 台词吞了：下次刷新再试
+        }
     }
 
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>
@@ -896,6 +981,8 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>
     /// 按「已拥有技能数」开/关技槽拖拽。
     /// 只有 1 个技能时不可拖；2 个技能时只有前 2 个槽可拖（第 3、4 是空槽）。
+    /// 【2026-11-25 主人拍板】手动模式下一律不可拖：该模式下点技能槽 = 释放技能，
+    /// 与「拖动改顺序」是同一排槽上的两种手势，同时开着必然互相误伤 —— 切回自动即恢复。
     /// 【2026-10-11 主人报「拖拽也不管用 调整不了顺序」→ 根因实锤】：
     /// 旧判据 <c>BattleLootMode.Active</c> 的唯一 Enter 调用点（整理阶段）已于 2026-10-11 删除 →
     /// Active 恒 false → 拖拽**永远禁用**。改为只要有 2 个以上技能就允许拖（战斗中也能调优先级）。
@@ -905,7 +992,7 @@ public partial class BattleUI : MonoBehaviour
         if (runSkillSlots == null) return;
         var ids = RunLoadout.SkillIds();
         int owned = ids != null ? ids.Count : 0;
-        bool allow = owned >= 2;
+        bool allow = owned >= 2 && !PlayerSkillCastMode.IsManual;
         for (int i = 0; i < runSkillSlots.Count; i++)
         {
             var av = runSkillSlots[i];

@@ -7,7 +7,8 @@
 /// 以后**改顺序只改这里**，业务代码不许再自己写 `HasClearedChapter(N)` 判功能开没开。
 ///
 /// 口径（纯广告小游戏首日节奏，2026-10-31 主人确认）：
-/// ┌ 引导结束 主线（恒开）+ 天赋 / 背包 / 竞技场 + **佣兵队列**（D1 每日登录已送佣兵本体，得让他配）
+/// ┌ 引导结束 主线（恒开）+ 天赋 / 背包 + **佣兵队列**（D1 每日登录已送佣兵本体，得让他配）
+/// │  ⚠ 竞技场不再「引导结束恒开」：2026-11-25 起 = 通关第 1 章第 5 关（见 ARENA_UNLOCK_SUB0）
 /// ├ D1 通第 1 座大关（≈25 体力）→ 无限裂隙（标签 + 进本）、世界地图入口、支线岛派岛
 /// ├ D1~2 通第 2 座大关（打到 3-1）→ **佣兵招募**（2026-11-01 主人拍板「三选一在第二大关完成后解锁」）
 /// ├ D2 通第 1 章（50 小关）  → 金币副本、定向抽、**进阶/升星**（2026-11-08 主人拍板由 D3 提前）
@@ -43,6 +44,10 @@ public static class FeatureUnlock
 
     /// <summary>礼物副本：通第 1 章（周六才开，开放日限制见 ActivityDungeonRules.IsOpenToday）。</summary>
     public const int GIFT_DUNGEON_CHAPTER_GATE = 1;
+
+    /// <summary>竞技场（试炼场）入口：通关第 1 章第 5 关（2026-11-25 主人拍板「第 5 关吧」，由章末 1-10 提前）。
+    /// 与佣兵招募（HasStageCleared(1,4)）同批开放；门禁判定从 ArenaEntryUI 收口到这里，功能门槛只留这一个出口。</summary>
+    public const int ARENA_UNLOCK_SUB0 = 4;
 
     // ────────────────────────────────────────────────────────────────
     // 佣兵功能门槛（2026-10-31 主人拍板「佣兵的那些功能也要区分一下，不要一下都开，
@@ -85,6 +90,13 @@ public static class FeatureUnlock
 
     /// <summary>无限裂隙是否开放（标签可切 + 可进本，两者必须同源，否则就是假开门）。</summary>
     public static bool RiftOpen(SaveData data) => GrandCleared(data, RIFT_GRAND_GATE);
+
+    /// <summary>竞技场（试炼场）是否开放：入口显隐、冒险页 toast、日常任务门槛共用这一个判断。</summary>
+    public static bool ArenaOpen(SaveData data)
+        => data != null && data.HasStageCleared(1, ARENA_UNLOCK_SUB0);
+
+    /// <summary>竞技场未开放提示。</summary>
+    public static string ArenaLockHint() => "通关第 1 章第 5 关后开启试炼场";
 
     /// <summary>世界地图入口是否显示。</summary>
     public static bool WorldMapOpen(SaveData data) => GrandCleared(data, WORLD_MAP_GRAND_GATE);

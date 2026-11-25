@@ -498,10 +498,39 @@ public static class MainQuestSystem
         return d.dailyStageClearCount;
     }
 
+    /// <summary>
+    /// 某条日常行今天该不该出现 / 该不该结算（2026-11-25 新增，展示与发奖的**唯一**判定出口）。
+    /// ① 出现日：quest.csv 的 weekdays 列（空 = 每天；"16" = 周一/周六，"456" = 周四五六）；
+    /// ② 功能门槛：依赖的系统还没开就不显示，别让新手看到做不了的任务（门槛全部走 FeatureUnlock 唯一出口，
+    ///    以前 daily_recruit 在 1-3~1-4 会提前露出来，招募其实 1-5 才开，这次一并收口）。
+    /// 日常整体开启门槛（1-3 通关）不在这里，由 DailyViews 开头与 DailyTaskSystem.Settle 各自先判一次。
+    /// </summary>
+    public static bool DailyRowActiveToday(QuestTable.Row row)
+    {
+        if (!QuestTable.AppearsToday(row)) return false;
+        var d = Data;
+        if (d == null) return false;
+        switch (row.targetType)
+        {
+            case "daily_recruit": return FeatureUnlock.MercRecruitOpen(d);
+            case "daily_merc_starup": return FeatureUnlock.MercAscendOpen(d);
+            case "daily_merc_talk": return FeatureUnlock.MercBondOpen(d);
+            case "daily_activity_clear": return FeatureUnlock.AnyDungeonOpen(d);
+            case "daily_rift_clear": return FeatureUnlock.RiftOpen(d);
+            case "daily_arena_battle": return FeatureUnlock.ArenaOpen(d);   // 2026-11-25 加回：通第 5 关后可见
+            default: return true;
+        }
+    }
+
     public static List<DailyQuestView> DailyViews()
     {
         var list = new List<DailyQuestView>();
         var d = Data;
+
+        // 【2026-11-25 主人拍板「把每日任务在第三关通关后开启」】未开启返回空表：
+        // 任务栏日常行、任务面板日常页、任务条补充行、跳转全部跟随这一处，不各自判门槛。
+        // 门槛真源 = SaveData.DailyTasksUnlocked（正式主线 1-3 通关，与宠物功能同一判据）。
+        if (d == null || !d.DailyTasksUnlocked) return list;
 
         // 文案/参数来自 quest.csv（2026-10-26 任务体系单独成模块）；缺行 LogError 不兜底。
         // 【2026-10-29 扩编】表驱动：全部日常行按 order 升序输出（简单→困难）。
@@ -516,6 +545,10 @@ public static class MainQuestSystem
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
+
+            // 【2026-11-25】限定日（weekdays）+ 功能门槛：今天不该出现的行直接跳过。
+            // 结算侧 DailyTaskSystem.SettleRows 调同一个出口，避免"看不见却发奖"。
+            if (!DailyRowActiveToday(row)) continue;
 
             // ① 每日登录走通用计数视图（2026-10-29 主人拍板「不要强制玩家点击每日登录领取
             //    只要每天打开游戏就给奖励」：进度=GetTaskCounter(daily_login)=loginLastDay==今天，
@@ -575,6 +608,8 @@ public static class MainQuestSystem
     {
         var list = new List<DailyQuestView>();
         var d = Data;
+        // 【2026-11-25】周常与日常同一个页签，门槛同步走 DailyTasksUnlocked：未开启时页签整体不出现。
+        if (d != null && !d.DailyTasksUnlocked) return list;
         var rows = QuestTable.RowsOfCategory("周常");
         for (int i = 0; i < rows.Count; i++)
         {

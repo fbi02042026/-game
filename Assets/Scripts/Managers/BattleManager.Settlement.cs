@@ -2470,9 +2470,11 @@ public partial class BattleManager
 
         if (hero != null && hero.rb != null) hero.rb.velocity = Vector2.zero;
 
-        // 每关通关只写回「本局获得金币」，抽奖币池按现值结转下一关（不重置回基线）——
-        // 否则本关抽奖花销被退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）
-        PersistBattleGold(resetPool: false);
+        // 【2026-11-25 主人拍板「抽奖币要清空，下回进的时候重新发」】每关通关即清空抽奖币池：
+        // 本关打完 = 本关资源到此为止，下一关（或回城后再进）由 GrantRunStarterGold 重新发启动金。
+        // ⚠【2026-11-25 主人拍板「无限关卡不要清空」】唯一例外 = 无限裂隙：整次进本算一局，
+        //   层与层之间按现值结转（resetPool:false），撤离/死亡出本才清（EndRunLoadout 那条）。
+        PersistBattleGold(resetPool: !IsEndlessRift);
         // 【2026-11-24 主人报「弹胜利界面时没有显示天赋石道具」】胜利结果界面读 RunStats.TalentGained，
         // 该字段原本只在局末 FillSettlementSnapshot（Death.cs:538）赋值 → 通关先播的胜利界面恒 0 不出格。
         // 与金币同口径，此处提前按钱包快照差补一次；局末 FillSettlementSnapshot 会重算同值，幂等无副作用。
@@ -2701,6 +2703,9 @@ public partial class BattleManager
     {
         int stage = Mathf.Max(1, EndlessRiftStage);
         bool isElite = GameConfig.IsEndlessEliteStage(stage);
+
+        // 【2026-11-25】日常「裂隙探底」计数：每层通关 +1（本方法是裂隙每层通关的唯一结算出口）。
+        SaveSystem.Instance?.Data?.CountRiftClear();
 
         // —— 首通 / 复刷奖励分流（2026-11-02 主人拍板）——
         // firstEver = **生涯**首次打通这层（bestStage 判定）；重置进度后重打旧层 → false → 只发 30% 金币。
@@ -3043,15 +3048,19 @@ public partial class BattleManager
     /// 引导局走内存模式：整包丢掉，不动玩家真正的本局存档；
     /// 金币与天赋石已按阶段写回城镇存档，掉落装备本就不带出。
     ///
-    /// ⚠ **局内钱包的作废出口就在这里**（2026-10-05 主人拍板：「打完一章后清零，
-    /// 不过玩家可以选择是否进行下一章，这时不清零」）。
-    ///   · 回城（章末选「回城」）／阵亡／撤离 → 都走本方法 → **局内钱作废**（currentGold 里的
+    /// ⚠ **局内构筑的作废出口在这里**；局内抽奖币池（currentGold）的清零出口在
+    /// <see cref="PersistBattleGold"/> 的 resetPool=true 分支（2026-11-25 主人拍板
+    /// 「只有装备能保留，其他的一切清空」）。
+    ///   · 回城（章末选「回城」）／阵亡／撤离 → 都走本方法 → **局内构筑作废**（currentGold 里的
     ///     启动金 / 通关补贴 / 抽中金币都带不走，只有「本局真正赚到的」经 PersistBattleGold 写回）；
     ///   · 章末选「进下一章」→ <b>不走本方法</b>（`SettleNormalStageClear` 只切章，不收尾）→ **保留**。
     ///   别在别处再写第二份清零。下一局进关由 `SlotMachineSystem.GrantRunStarterGold` 重新补启动金。
     /// </summary>
     void EndRunLoadout()
     {
+        // 存档残留的抽奖币字段（slotCoins）一并清空 —— 与 SlotMachineSystem.ClearRunCoins 的注释对齐；
+        // 死亡 / 撤离 / 回城三条收尾都经这里（2026-11-25 主人拍板「其他的一切清空」）。
+        SlotMachineSystem.ClearRunCoins();
         if (Rules.Active)
         {
             if (Rules.EnableRunDraft)
@@ -3138,8 +3147,8 @@ public partial class BattleManager
     /// 全程不回城不切场景。
     ///
     /// · 清账段 = <see cref="EndRunAndReturnToTown"/> 前半段（装备/佣兵/构筑/中断快照全清，不调 ReturnToTown）；
-    /// · 金币池 resetPool:true = 局末清账口径（本关通关时 PersistBattleGold(resetPool:false) 只结转不清，
-    ///   这里补一刀防抽奖币池跨关结转刷钱，见 PersistBattleGold 注释）；
+    /// · 金币池 resetPool:true = 局末清账口径（2026-11-25 起本关通关那一刻 PersistBattleGold 已清 0，
+    ///   这里再清一次是幂等兜底，防抽奖币池跨关结转刷钱，见 PersistBattleGold 注释）；
     /// · 重置段照抄 <see cref="StartNewRunInternal"/>（BattleManager.cs 92-153 / 176-191）可重入片段 ——
     ///   不整条调它：那条路会 BuildChapter 重建章图 + FirstUnclearedStageIndex0 重定位 + 读 AdventureUI
     ///   Pending 标志，正是 2026-10-24 停用 GoChapterGate 的反面坑；⚠ 改 StartNewRunInternal 的重置清单
@@ -3184,7 +3193,7 @@ public partial class BattleManager
         // 会被崩溃恢复重复入账）
         BattleStateSaver.Instance?.ClearBattleState();
 
-        // ── ② 局末金币清账：写回本局获得 + 抽奖币池重置回基线（resetPool:true，防跨关结转刷钱）──
+        // ── ② 局末金币清账：写回本局获得 + 抽奖币池清零（resetPool:true，2026-11-25 口径）──
         PersistBattleGold(resetPool: true);
 
         // ── ③ 新一局重置（照抄 StartNewRunInternal 92-153：去掉 Mode 重建 / parked 判定 / BuildChapter）──
@@ -3285,6 +3294,12 @@ public partial class BattleManager
     public void EndRunAndReturnToTown()
     {
         _runClosed = true;   // 记录点「撤离结算」也收尾（与 TriggerEvacuation 同口径）
+        // 【2026-11-25 主人拍板「抽奖币要清空，下回进的时候重新发」】回城收尾再清一次局内抽奖币池。
+        // 本关通关那一刻 PersistBattleGold 已清 0（见 FinishStageAfterPortalReached），这里是
+        // 死亡 / 撤离 / 各玩法直接回城的幂等兜底 —— 同一口径，别再开第三条清零路径。
+        currentGold = 0;
+        _goldAtRunStart = 0;
+        BattleEntryDraftPanel.NotifyPoolGoldChanged(0);
         BattleBagSystem.Instance?.ClearRunEquipment();
         MercenaryManager.Instance?.ClearAllMercs();
         MercHireSession.ClearHired();
@@ -3318,7 +3333,8 @@ public partial class BattleManager
     /// <summary>
     /// 【2026-10-24 主人拍板「只要打完就清」】续局（= 中断局弹窗点了继续）还原局内金币池
     /// （来源见 RunDraftDirector.RestoreRunGoldPool / RunLoadout.ConfirmResumeInterruptedRun）。
-    /// _goldAtRunStart 一并抬到还原水位：局末清账（resetPool）回到「续局时的池子」，不会把玩家抽剩的钱清成 0。
+    /// _goldAtRunStart 一并抬到还原水位（续局期间抽奖基线）；局末清账（resetPool）仍按
+    /// 2026-11-25 口径把池子清零 —— 续局只在「本关之内」有效，退出本关照样清空。
     /// </summary>
     public void RestoreRunGoldPool(long gold)
     {
@@ -3330,15 +3346,17 @@ public partial class BattleManager
 
     /// <summary>
     /// 「本局获得金币」写回城镇的<b>唯一出口</b>（每关通关 / 死亡 / 撤离 / 通关回城都会走）。
-    /// <paramref name="resetPool"/>：是否把抽奖币池重置回基线 _goldAtRunStart。
-    /// 只有<b>局末清账</b>（死亡 / 撤离 / 回城）才重置（「带不出本局」口径）；
-    /// 每关通关传 false —— 否则基线只加不减（启动金 / 补贴入基线，抽奖花销不扣基线），
-    /// 重置等于把本关花掉的抽奖币全额退回，下一关的钱凭空变多（2026-10-20 主人反馈修复）。
+    /// <param name="resetPool"/>：是否把抽奖币池**清零**。【2026-11-25 主人拍板「只有装备能保留，
+    /// 其他的一切清空」】旧口径「重置回基线 _goldAtRunStart」作废 —— 基线只加不减，退出后 HUD
+    /// 抽奖币会停在启动金+补贴+击杀币的总数上，看起来像没清。
+    /// 【2026-11-25】主线/副本等每关通关都传 true（本关剩余抽奖币不再结转）；
+    /// <b>唯一传 false 的调用点 = 无限裂隙层间</b>（<see cref="FinishStageAfterPortalReached"/> 里
+    /// <c>resetPool: !IsEndlessRift</c>，主人拍板「无限关卡不要清空」）—— 整次进本一局、逐层累积。
     /// 【2026-10-18 主人拍板「顶部的是玩家本局获得的金币」】双钱包拆分后的口径：
     ///   · 写回的是 <see cref="BattleRunStats.GoldEarned"/>（顶部 HUD 那个数）按 <c>_earnedPaidGold</c>
     ///     水位取增量 —— 逐关写回不重复入账，死亡结算时顶部看到多少城镇就多多少；
     ///   · <c>currentGold</c> 只是抽奖币池（启动金 / 通关补贴 / 抽中金币），**带不出本局**，
-    ///     局末清账（resetPool=true）时重置回基线，通关进下一关则按现值结转。
+    ///     每次落账（resetPool=true）都清零并同步顶栏 —— 下一关由 GrantRunStarterGold 重发启动金。
     /// </summary>
     /// <summary>
     /// 【2026-11-02 改 public】支线岛等「通关结算里才发金币」的模式需要在 <see cref="EndRunAndReturnToTown"/>
@@ -3357,10 +3375,16 @@ public partial class BattleManager
         else
             SaveSystem.Instance.Save();   // 与原实现同款：没有增量也落一次盘，别丢其它待存改动
         _earnedPaidGold = RunStats.GoldEarned;
-        // 抽奖币池重置回基线 —— 仅局末清账（resetPool=true）执行，「带不出本局」口径；
-        // 每关通关（resetPool=false）按现值结转下一关，否则本关抽奖花销会被基线全额退回。
+        // 抽奖币池清零 —— resetPool=true 执行（主线/副本全走 true），「带不出本局」口径；
+        // false = 按现值结转，只有无限裂隙层间用（「无限关卡不要清空」2026-11-25）。
+        // 【2026-11-25 主人拍板「只有装备能保留，其他的一切清空」】退出本关后抽奖币归零，
+        // 不再重置回 _goldAtRunStart（那会让 HUD 停在几百币，看起来像没清）。
         if (resetPool)
-            currentGold = _goldAtRunStart;
+        {
+            currentGold = 0;
+            _goldAtRunStart = 0;
+            BattleEntryDraftPanel.NotifyPoolGoldChanged(0);   // 顶栏抽奖币条当场归零，不留退出前数字
+        }
     }
 
     #endregion

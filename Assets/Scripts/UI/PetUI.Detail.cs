@@ -65,9 +65,16 @@ public partial class PetUI
         if (_hpText != null) SetText(_hpText, hpText);
         if (_atkText != null) SetText(_atkText, atkText);
         if (_defText != null) SetText(_defText, defText);
-        if (_powerText != null) SetText(_powerText, "战力 " + def.power);
+        // 2026-11-25 主人「战力也跟喂养后加的属性变化」：按三围涨幅等比放大策划基准战力，
+        // 不引入新系数常量，也不改 PetDefs.power 基准。
+        int baseSum = def.hp + def.atk + def.def;
+        int powerNow = def.power;
+        if (baseSum > 0)
+            powerNow = Mathf.RoundToInt(def.power * (baseSum + hpBonus + atkBonus + defBonus) / (float)baseSum);
+        if (_powerText != null) SetText(_powerText, "战力 " + powerNow);
 
-        // 品质星级 1~4：Star0..3，前 qualityStar 颗点亮（只换图/色，不动位置）
+        // 品质星级：Star0..3 四种节点，前 qualityStar 颗点亮（只换图/色，不动位置）；
+        // 皮肤 5 星时四颗全亮（2026-11-25）。
         for (int i = 0; i < _stars.Length; i++)
             if (_stars[i] != null)
             {
@@ -216,12 +223,13 @@ public partial class PetUI
         _feedCostBadge = badge;
     }
 
-    /// <summary>品质星级 1~4 的名字色，转发 RarityPalette 唯一真源：1灰白/2绿/3蓝/4橙金。
+    /// <summary>品质星级的名字色，转发 RarityPalette 唯一真源：1灰白/2绿/3蓝/4橙金/5紫（皮肤顶档）。
     /// 11-22 列表图标框底也转发这里，保证「框色 = 字色」同一出口，不另写映射。</summary>
     internal static Color QualityNameColor(int star)
     {
         switch (star)
         {
+            case 5: return RarityPalette.Epic;   // 2026-11-25 皮肤专属顶档（比本体高一档，紫）
             case 4: return RarityPalette.Legendary;
             case 3: return RarityPalette.Rare;
             case 2: return RarityPalette.Uncommon;

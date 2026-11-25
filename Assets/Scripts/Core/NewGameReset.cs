@@ -49,6 +49,8 @@ public static class NewGameReset
         // 【2026-11-20 天赋自检】天赋入口红点「本次登录已看」也是进程级 static：
         // 不清的话新档在本次登录内不再亮红点（定义 TalentSystem.cs:126，置位 TalentUI.cs:287）。
         TalentSystem.TalentDotSeenThisSession = false;
+        // 【2026-11-25】角色页宠物/天赋箭头气泡的 3 天额度（存档字段）与本进程标记一起复位
+        PetTalentHint.ResetForNewGame();
 
         UnityEngine.Debug.Log("[NewGameReset] 清档：进程级状态已复位（引导游标/登录弹窗/进镇闸/邮件提示/BGM/升级弹窗队列/天赋红点/竞技场回城旗/裂隙新纪录旗）");
     }

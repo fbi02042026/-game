@@ -196,8 +196,8 @@ public class SkillSelectUI : MonoBehaviour
         for (int i = 0; i < n; i++) idx.Add(i);
         idx.Sort((a, b) =>
         {
-            int ra = (int)SkillDraftMeta.Rarity(all[a].id);
-            int rb = (int)SkillDraftMeta.Rarity(all[b].id);
+            int ra = SkillRarityUtil.Rank(SkillDraftMeta.Rarity(all[a].id));
+            int rb = SkillRarityUtil.Rank(SkillDraftMeta.Rarity(all[b].id));
             return ra != rb ? ra - rb : a - b;
         });
         _slotToAll = new int[MaxSkills];

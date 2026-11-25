@@ -26,8 +26,10 @@ public static class SkillDraftMeta
     /// <para>2026-10-05 主人拍板：**没有史诗品质**（品质统一三档 普通 / 稀有 / 传奇，
     /// 跟装备表 NORMAL/RARE/LEGEND、佣兵三档对齐）→ 原来的 5 个史诗技能已并进「传说」。</para>
     /// <para>🔴 2026-11-05 主人拍板：技能图标自带稀有度边框，数值与边框对齐 ——
-    /// 普通档 = 攻击提升(战意爆发) / 护盾(圣盾壁垒) / 加血(治愈之泉)；
-    /// 稀有档(蓝) = 重劈(重斩) / 暴击(致命专注) / 攻击加速(疾风架势)；
+    /// 普通档(白) = 护盾(圣盾壁垒) / 加血(治愈之泉)；
+    /// 【2026-11-25 主人拍板：新增优秀(绿)档，边框用装备绿框 zhuangbeilv 同色系】
+    /// 优秀档(绿) = 攻击提升(战意爆发) / 暴击(致命专注)；
+    /// 稀有档(蓝) = 重劈(重斩) / 攻击加速(疾风架势)；
     /// **其余（天雷裁决/风龙卷/星落）为传奇档**。
     /// 改稀有度只动本表；抽卡权重 / 概率公示 / 升星上限 / 卡面战力全部由本表派生，不另改第二处。</para>
     /// </summary>
@@ -36,9 +38,9 @@ public static class SkillDraftMeta
         // —— 基础 6 技（普通 3 + 稀有 2 + 传奇 1，与图标边框一致）——
         { "heal_spring",     M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.Priest) },
         { "holy_barrier",    M(SkillRarity.Common,    SynergyTag.Guard,   (int)PlayerJobId.SwordShield) },
-        { "battle_surge",    M(SkillRarity.Common,    SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
+        { "battle_surge",    M(SkillRarity.Uncommon,  SynergyTag.Combo,   (int)PlayerJobId.Berserker) },
         { "gale_stance",     M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Heavy) },
-        { "deadly_focus",    M(SkillRarity.Rare,      SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
+        { "deadly_focus",    M(SkillRarity.Uncommon,  SynergyTag.Combo,   (int)PlayerJobId.Ranger) },
         { "thunder_verdict", M(SkillRarity.Legendary, SynergyTag.Thunder, (int)PlayerJobId.Mage) },
 
         // —— 2026-11-05 pixelfx 新技（主人边框分类：重劈=稀有(蓝)，龙卷/星落=传奇）——

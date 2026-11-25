@@ -131,14 +131,12 @@ public partial class PetUI
         if (idx < 0 || idx >= _rowGos.Count) return;
         var save = SaveSystem.Instance?.Data;
         var clicked = idx < PetDefs.Bodies.Count ? PetDefs.Bodies[idx] : null;
-        // 未解锁宠物不能被选择：只弹一次解锁条件 toast，不切选中态、不刷详情。
-        // 不刷详情 = 不出它的立绘，也不进入「解锁/上阵」按钮态（detail 只跟已选项走）。
+        // 2026-11-25 主人拍板：未解锁宠物也允许被选中（原「只弹提示、不切选中」导致
+        // DeployBtn 的解锁分支永远走不到，玩家金币够也解不了锁）。
+        // 保留一次条件 toast（点图标提示解锁条件），但继续走选中/刷详情，按钮显示「解锁」。
         // 真源 IsPetUnlocked：测试全解锁开关打开时恒真，调试期照旧可选。
         if (clicked != null && save != null && !save.IsPetUnlocked(clicked.id))
-        {
             ShowUnlockHint(clicked, save);
-            return;
-        }
         _selectedIndex = idx;
         for (int i = 0; i < _rowSelects.Count; i++)
             if (_rowSelects[i] != null) _rowSelects[i].SetActive(i == idx);

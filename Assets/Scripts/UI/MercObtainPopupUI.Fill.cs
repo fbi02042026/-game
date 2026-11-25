@@ -218,22 +218,29 @@ public partial class MercObtainPopupUI : MonoBehaviour
             if (_stars[i] != null) _stars[i].SetActive(i < star);
         if (star > 0) CenterActiveStars(star);   // 0 星全灭，无需居中
 
-        // 6) 技能：没有主动技就空着（主人拍板）；有则填名字/简介/图标
+        // 6) 技能：【2026-11-25 主人拍板】没有主动技不再藏整栏，「无技能」写在下行技能信息位；有则填名字/简介/图标
         FillSkill(def.ActiveSkillId);
 
         return true;
     }
 
     /// <summary>
-    /// 技能栏填充（Fill 与酒馆招募入口共用）：skillId 为空或表里查不到时整栏隐藏，有则填名字/简介/图标。
+    /// 技能栏填充（Fill 与酒馆招募入口共用）：【2026-11-25 主人拍板】skillId 为空时整栏仍显示、
+    /// 下行技能信息位写「无技能」（主人 09:12 拍板要往下，介绍行 y=-15.9），名字与图标留空；
+    /// 表里查不到属数据错误，仍整栏隐藏并报错；有则填名字/简介/图标。
     /// </summary>
     void FillSkill(string skillId)
     {
         if (string.IsNullOrEmpty(skillId))
         {
-            if (_skillRoot == null)
-                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/you/Skill（该佣兵无主动技，整栏不显示）");
-            else _skillRoot.SetActive(false);
+            SetActive(_skillRoot, "Panel/you/Skill", true);
+            SetText(_skillName, "Panel/you/Skill/SkillName", "");
+            SetText(_skillInfo, "Panel/you/Skill/Skillxinxi", "无技能");
+            if (_skillIcon != null)
+            {
+                _skillIcon.sprite = null;
+                _skillIcon.enabled = false;
+            }
             return;
         }
         if (MercSkillTable.TryGet(skillId, out var row))

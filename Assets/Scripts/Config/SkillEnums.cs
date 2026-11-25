@@ -14,7 +14,11 @@ public enum SkillRarity
     Common = 0,
     Rare = 1,
     Epic = 2,        // ⚠ 已废弃（主人 2026-10-05 拍板）：保留数值只为兼容，不要再产出
-    Legendary = 3
+    Legendary = 3,
+    /// <summary>优秀（绿）。2026-11-25 主人拍板新增：介于普通与稀有之间，首发 战意爆发 / 致命专注；
+    /// 边框用装备绿框（zhuangbeilv 同色系）。⚠ 追加在尾部，不动已有数值（旧存档兼容）。
+    /// 排序/战力等「档位高低」一律走 <see cref="SkillRarityUtil.Rank"/>，禁止直接 (int)。</summary>
+    Uncommon = 4
 }
 
 /// <summary>
@@ -40,7 +44,24 @@ public static class SkillRarityUtil
             case SkillRarity.Legendary: return 1;
             case SkillRarity.Epic: return 3;
             case SkillRarity.Rare: return 6;
+            case SkillRarity.Uncommon: return 8;   // 优秀（绿）：介于普通(10)与稀有(6)
             default: return 10;
+        }
+    }
+
+    /// <summary>
+    /// 档位高低唯一出口（2026-11-25 加绿档后立此规矩）：普通 0 / 优秀 1 / 稀有 2 / 史诗 3 / 传说 4。
+    /// 🔴 禁止再对 SkillRarity 直接 (int) 当大小用 —— 枚举数值是存档兼容序，不是档位高低序。
+    /// </summary>
+    public static int Rank(SkillRarity r)
+    {
+        switch (r)
+        {
+            case SkillRarity.Legendary: return 4;
+            case SkillRarity.Epic: return 3;
+            case SkillRarity.Rare: return 2;
+            case SkillRarity.Uncommon: return 1;
+            default: return 0;
         }
     }
 
@@ -62,6 +83,7 @@ public static class SkillRarityUtil
             case SkillRarity.Legendary: return "传说";
             case SkillRarity.Epic: return "史诗";
             case SkillRarity.Rare: return "稀有";
+            case SkillRarity.Uncommon: return "优秀";   // 2026-11-25 叫法与装备绿档统一
             default: return "普通";
         }
     }

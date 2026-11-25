@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 // 战斗编排器 partial —— 2026-10-17 由 BattleManager.cs 纯位移拆出（手法 B，无逻辑改动）
 public partial class BattleManager
@@ -57,9 +56,6 @@ public partial class BattleManager
             if (GameConfig.PLAYER_SKILL_USE_ENERGY && playerSkillEnergy[i] < MAX_SKILL_ENERGY - 0.001f) continue;
             var s = skills[i];
             if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
-            // 2026-10-27 主人拍板：疾风架势改为「手动窗口技」（CD 好 + 身边有敌 → 弹倒计时窗口，点屏幕多打），
-            // 不再走自动释放池 —— 从本遍历跳过，由 TickGaleWindow 单独调度。
-            if (PlayerSkillDefs.ResolveRealSkillId(s.skillId) == "gale_stance") continue;
             if (sys.IsOnCooldown(s.skillId)) continue;
             // 2026-09-17：冷却好≠该放，还要等技能自己的战场状态触发条件（血线/怪群等）。
             if (!PlayerSkillPassive.IsTriggerMet(s.skillId)) continue;
@@ -118,9 +114,6 @@ public partial class BattleManager
             // 各技能 CD 本来就不一样，天然错峰，不再需要 PLAYER_SKILL_OPENING_CD_MUL 那套倍率
             // （常量保留不删，但本函数已不使用，别再拿它改回错峰）。
             float cd = s.cooldown;
-            // 2026-10-27 主人拍板：疾风架势改「手动窗口技」，表内 cooldown(15s) 对它不再使用，
-            // 开局 CD 也走递增公式基值（之后每完成一次窗口 +6s、封顶 60s，见 TickGaleWindow）。
-            if (PlayerSkillDefs.ResolveRealSkillId(s.skillId) == "gale_stance") cd = GameConfig.GALE_BASE_CD;
             if (cd > 0.01f) sys.RegisterCooldown(s.skillId, cd);
         }
     }
@@ -421,166 +414,4 @@ public partial class BattleManager
     /// <summary>传送门是否已激活（所有怪清完后激活，玩家进入后通关）</summary>
     #endregion
 
-    // ============================================================
-    // 疾风架势「手动窗口」（2026-10-27 主人拍板）
-    // CD 好 + 身边有敌人 → 弹 4 秒倒计时窗口；窗口内点战场空白区 = 英雄多打一次普攻（×0.8）。
-    // 窗口结束自动上基础攻速 buff（保留，不点不亏）+ 进 CD（30s 起、每轮 +6s、封顶 60s）。
-    // 疾风已从自动释放池摘出（见 FindReadySkillSlot / PrimePlayerSkillOpeningCooldowns），
-    // 本状态机是它唯一的释放通道。UI = 主人 2026-10-28 摆的预制体「能量槽」节点组
-    //（BattleUI.ShowGaleWindow / UpdateGaleWindow / HideGaleWindow 按名字绑定驱动）。
-    // ============================================================
-    #region 疾风架势手动窗口
-
-    bool _galeWindowActive;
-    float _galeWindowEndTime;
-    string _galeWindowRuntimeId;
-    SkillSystem.ActiveSkill _galeWindowSkill;
-    int _galeWindowHits;
-    int _galeCdTier;
-
-    /// <summary>
-    /// 取本局携带的疾风槽（运行时 id 是 ally_* 别名，统一解析真 id 判定）。
-    /// 自动开窗（TickGaleWindow）与手动开窗（TryOpenGaleWindowManual）共用，避免两套取法漂移。
-    /// </summary>
-    bool TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill)
-    {
-        runtimeId = null;
-        skill = null;
-        var sys = SkillSystem.Instance;
-        if (sys == null) return false;
-        var skills = sys.GetPlayerSkills();
-        if (skills == null) return false;
-        for (int i = 0; i < skills.Count; i++)
-        {
-            var s = skills[i];
-            if (s == null || string.IsNullOrEmpty(s.skillId)) continue;
-            if (PlayerSkillDefs.ResolveRealSkillId(s.skillId) != "gale_stance") continue;
-            runtimeId = s.skillId;
-            skill = s;
-            return true;
-        }
-        return false;
-    }
-
-    /// <summary>每帧调度（BattleManager.Update 调，与 TickAutoCast 同挂点、同早退口径）。</summary>
-    void TickGaleWindow()
-    {
-        // 没带疾风：窗口若挂着就静默收掉（不进 CD）
-        if (!TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill))
-        {
-            if (_galeWindowActive) EndGaleWindow(false);
-            return;
-        }
-
-        if (_galeWindowActive)
-        {
-            // 窗口内点击：战场空白区 → 多打一次（伤害 ×0.8）
-            // 【2026-11-24】两种模式都走这里：手动开的窗也要倒计时 / 点多打 / 结算，不能停。
-            if (UnitsCanAct && IsBattlefieldTap())
-                TryGaleWindowHit();
-
-            // 倒计时推进 + 推 UI
-            float remain = _galeWindowEndTime - Time.time;
-            BattleUI.Instance?.UpdateGaleWindow(
-                Mathf.Clamp01(remain / GameConfig.GALE_WINDOW_DURATION), Mathf.Max(0f, remain));
-
-            if (Time.time >= _galeWindowEndTime)
-                EndGaleWindow(true);
-            return;
-        }
-
-        // 未开窗：自动模式才自动开；手动模式由玩家点技能槽手动开（TryOpenGaleWindowManual）。
-        // 【2026-11-24 主人拍板】疾风手动 / 自动都能用：自动模式照原行为自动开窗，
-        // 手动模式不自动开、但点槽可开（与 4 槽抽卡技能同口径）。
-        if (PlayerSkillCastMode.IsManual) return;
-        var sys = SkillSystem.Instance;
-        if (sys == null) return;
-        // CD 好 + 触发条件满足（身边有敌人，含精英/Boss 进半径）+ 蓝够（与 FindReadySkillSlot 同口径）
-        if (sys.IsOnCooldown(runtimeId)) return;
-        if (!PlayerSkillPassive.IsTriggerMet(runtimeId)) return;
-        float mpCost = PlayerSkillDefs.MpCostOf("gale_stance");
-        if (mpCost > 0f && _playerMp + 0.001f < mpCost) return;
-        StartGaleWindow(runtimeId, skill);
-    }
-
-    /// <summary>
-    /// 手动开窗（技能栏点疾风槽触发）。与自动开窗同入口 <see cref="StartGaleWindow"/>，
-    /// 只查 CD + 蓝（与 4 槽手动同口径：跳过「身边有敌」触发条件，由玩家决定时机）；
-    /// 窗口已开时直接返回 false，不重复开窗重置计时。返回 false 时调用方退回弹技能详情。
-    /// </summary>
-    public bool TryOpenGaleWindowManual()
-    {
-        if (_galeWindowActive) return false;
-        if (!UnitsCanAct) return false;
-        if (IsTutorialRun) return false;
-        if (BattleLootMode.Active) return false;
-        if (CareerSkillExecutor.IsCharging) return false;
-        if (!TryGetGaleSlot(out string runtimeId, out SkillSystem.ActiveSkill skill)) return false;
-        var sys = SkillSystem.Instance;
-        if (sys == null) return false;
-        if (sys.IsOnCooldown(runtimeId)) return false;
-        float mpCost = PlayerSkillDefs.MpCostOf("gale_stance");
-        if (mpCost > 0f && _playerMp + 0.001f < mpCost) return false;
-        StartGaleWindow(runtimeId, skill);
-        return true;
-    }
-
-    void StartGaleWindow(string runtimeId, SkillSystem.ActiveSkill skill)
-    {
-        _galeWindowActive = true;
-        _galeWindowRuntimeId = runtimeId;
-        _galeWindowSkill = skill;
-        _galeWindowEndTime = Time.time + GameConfig.GALE_WINDOW_DURATION;
-        _galeWindowHits = 0;
-        BattleUI.Instance?.ShowGaleWindow();
-        GamePerf.Log($"[GaleWindow] 开窗（第 {_galeCdTier + 1} 轮，窗口 {GameConfig.GALE_WINDOW_DURATION:0}s）");
-    }
-
-    void EndGaleWindow(bool settle)
-    {
-        _galeWindowActive = false;
-        BattleUI.Instance?.HideGaleWindow();
-        int hits = _galeWindowHits;
-        _galeWindowHits = 0;
-        if (!settle) return;
-
-        // ① 基础攻速 buff：保留自动给（主人拍板「保留」→ 不点不亏；窗口内点击只是额外多打）
-        SkillCastService.TriggerTeamAttackSpeedBuffFromLoadout(_galeWindowSkill);
-
-        // ② 蓝耗与自动释放同口径（尽力扣；窗口期间蓝在自然回复，正常都够）
-        float mpCost = PlayerSkillDefs.MpCostOf("gale_stance");
-        if (mpCost > 0f) TrySpendPlayerMp(mpCost);
-
-        // ③ CD 逐次递增封顶：30s 起、每完成一次窗口 +6s、封顶 60s
-        float cd = Mathf.Min(GameConfig.GALE_BASE_CD + _galeCdTier * GameConfig.GALE_CD_STEP, GameConfig.GALE_MAX_CD);
-        _galeCdTier++;
-        if (SkillSystem.Instance != null && !string.IsNullOrEmpty(_galeWindowRuntimeId))
-            SkillSystem.Instance.RegisterCooldown(_galeWindowRuntimeId, cd);
-        GamePerf.Log($"[GaleWindow] 结算：本窗多打 {hits} 次，下次 CD {cd:0}s");
-    }
-
-    void TryGaleWindowHit()
-    {
-        var hero = Hero.Instance;
-        if (hero == null || hero.isDead) return;
-        if (hero.TryGaleExtraAttack(GameConfig.GALE_EXTRA_DMG_MULT))
-            _galeWindowHits++;
-    }
-
-    /// <summary>本帧是否发生了「战场空白区」点按（HUD/弹窗/按钮一律不算，按鼠标与触摸分别过滤）。</summary>
-    bool IsBattlefieldTap()
-    {
-        var es = EventSystem.current;
-        if (Input.GetMouseButtonDown(0))
-            return es == null || !es.IsPointerOverGameObject();
-        if (Input.touchCount > 0)
-        {
-            var t = Input.GetTouch(0);
-            if (t.phase == TouchPhase.Began)
-                return es == null || !es.IsPointerOverGameObject(t.fingerId);
-        }
-        return false;
-    }
-
-    #endregion
 }

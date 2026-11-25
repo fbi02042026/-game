@@ -355,6 +355,23 @@ public static class MercHireSession
         return true;
     }
 
+    /// <summary>
+    /// 【2026-11-25 主人拍板「双通道 · 先广告后钻石」】广告刷新成功后的入账：**不扣钻石，
+    /// 但照占同一个日计数** <c>mercDiamondRefreshUsed</c>。
+    /// 为什么必须占次数：不占就能无限看广告刷新，招募经济直接崩；共用计数还意味着
+    /// 「广告看不了 → 花钻」和「看广告」共享同一份每日 2 次，不会因为两条通道而白送额度。
+    /// 返回 false = 窗口期跨天后又用完 / 存档没了，本次不发（广告已经看完，但没有可发的额度）。
+    /// </summary>
+    public static bool CommitAdRefresh()
+    {
+        if (!CanDiamondRefresh(out _, out _)) return false;   // 内部已重对跨天，别跳
+        var data = SaveSystem.Instance?.Data;
+        if (data == null) return false;
+        data.mercDiamondRefreshUsed++;   // CanDiamondRefresh 刚确认 < DiamondRefreshPerDay，不会溢出
+        MarkRefreshed();                 // 内部 Save：计数 + 刷新时间戳一笔落盘
+        return true;
+    }
+
     // ==========================================================================
     // ★★★ 三套「职业图标」的口径，别再互相搞混（2026-09-26 主人反馈「总和玩家职业icon搞混」）★★★
     //

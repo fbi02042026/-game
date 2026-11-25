@@ -20,9 +20,38 @@ public static class BackpackCellUnlockPopup
     /// </summary>
     public static void Show(int gridX, int gridY, int logicalColumns, Action onUnlocked)
     {
+        // 【2026-11-25 主人拍板「双通道 · 先广告后钻石」】广告能播 → 免费解锁；播不了 → 原 5 钻确认框。
+        // 两条通道共用同一个确认弹窗皮（硬规则：不新建弹窗），只换文案与确认键文字。
+        if (AdGateway.Ready)
+        {
+            StaminaConfirmPopup.Show("解锁背包格子",
+                "看一段广告，免费解锁当前格子？",
+                "看广告解锁",
+                () => WatchAdThenUnlock(gridX, gridY, logicalColumns, onUnlocked));
+            return;
+        }
+
         string body = $"是否花费 {GameConfig.BACKPACK_CELL_UNLOCK_DIAMOND} 钻石解锁当前格子？";
         StaminaConfirmPopup.Show("解锁背包格子", body, "确认解锁",
             () => ConfirmUnlock(gridX, gridY, logicalColumns, onUnlocked));
+    }
+
+    /// <summary>
+    /// 广告通道：核验通过（真看完）才落账；没看完 / 拉不起来一律不解锁、不扣钻，
+    /// 玩家再点一次即可走钻石通道（Show 会按当时 Ready 重新选路）。
+    /// </summary>
+    static void WatchAdThenUnlock(int gridX, int gridY, int logicalColumns, Action onUnlocked)
+    {
+        AdGateway.TryWatch(AdGateway.PlacementBagCell, ok =>
+        {
+            if (!ok)
+            {
+                UIManager.Instance?.ShowToast("激励未完成，格子未解锁", true);
+                return;
+            }
+            ApplyUnlock(gridX, gridY, logicalColumns, onUnlocked);
+            Analytics.AdSlotClick(AdGateway.PlacementBagCell, true);
+        });
     }
 
     static void ConfirmUnlock(int gridX, int gridY, int logicalColumns, Action onUnlocked)
@@ -41,6 +70,23 @@ public static class BackpackCellUnlockPopup
         // save:false —— 扣费与落账合并成一次存档。
         if (!ResourceWallet.TrySpendDiamond(GameConfig.BACKPACK_CELL_UNLOCK_DIAMOND, "背包格子解锁", save: false))
             return;
+
+        ApplyUnlock(gridX, gridY, logicalColumns, onUnlocked);
+    }
+
+    /// <summary>
+    /// 纯落账：置位 + 存档 + toast + 回调。钻石/广告两条通道共用，本方法**不碰任何货币**，
+    /// 扣费与发奖谁先谁后由调用方保证（钻石=先扣后落，广告=核验通过后落）。
+    /// </summary>
+    static void ApplyUnlock(int gridX, int gridY, int logicalColumns, Action onUnlocked)
+    {
+        var save = SaveSystem.Instance;
+        var data = save?.Data;
+        if (data == null)
+        {
+            Debug.LogError("[BagCellUnlock] SaveData 为空，无法落账背包格子解锁");
+            return;
+        }
 
         data.backpackUnlockedCells ??= new List<int>();
         int index = gridY * logicalColumns + gridX;

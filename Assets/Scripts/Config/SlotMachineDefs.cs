@@ -239,7 +239,7 @@ public static class SlotMachineDefs
 
     /// <summary>
     /// 【2026-10-19 主人拍板】抽奖币改成**独立方向** —— 抽中它 = 直接得抽奖币
-    /// （当抽价 × 0.6，见 <see cref="GOLD_PRIZE_PRICE_MULT"/>），不再混进三类池子。
+    /// （当抽价 × 0.8，见 <see cref="GOLD_PRIZE_PRICE_MULT"/>），不再混进三类池子。
     /// 权重 5：2026-10-20 主人确认，佣兵提到 20 后抽奖币<b>不跟佣兵联动</b>，维持 5 不变
     ///（此前 10-19 的「与佣兵同为 5」联动口径就此作废）。
     /// 本局最多出 <see cref="MAX_GOLD_PRIZE_PER_RUN"/> 次，超过后这个方向不进候选。
@@ -256,9 +256,10 @@ public static class SlotMachineDefs
     /// <summary>
     /// 抽中「金币」给多少抽奖币 = 本关一抽价格 × 这个倍率。
     /// 【2026-11-14 主人拍板「抽奖获得抽奖币给的太少了 最少给60%」】0.5 → 0.6（首抽 40 → 给 24）。
+    /// 【2026-11-25 主人拍板「抽中抽奖币返还当次抽奖的80%」】0.6 → 0.8（首抽 40 → 给 32）。
     /// 必须低于 1，否则「抽一次白赚一次」会变成无限抽。
     /// </summary>
-    public const float GOLD_PRIZE_PRICE_MULT = 0.6f;
+    public const float GOLD_PRIZE_PRICE_MULT = 0.8f;
 
     // ⚠【2026-10-05 已删除】强化石安慰奖（`WEIGHT_MATERIAL` / `MATERIAL_PRIZE_*` / `DraftCardKind.Material`）。
     //   主人拍板：「强化石不能抽奖得到」—— 强化石走铁匠铺 / 休息关 / 商店，抽奖只留「金币」一档安慰奖。

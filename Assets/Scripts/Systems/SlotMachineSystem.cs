@@ -168,7 +168,7 @@ public static class SlotMachineSystem
     /// <summary>
     /// 抽中「金币」这一档给多少**局内金币**。
     /// 主人 2026-10-05 拍板：「抽中的金币是当局抽奖用的」—— 给的是局内能继续抽的钱，带不出裂隙。
-    /// 数额 = 当前这一抽的价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血 60%，不会变成无限抽）。
+    /// 数额 = 当前这一抽的价格 × <see cref="SlotMachineDefs.GOLD_PRIZE_PRICE_MULT"/>（回血 80%，不会变成无限抽）。
     /// 【2026-10-10】价改按已抽数走，所以这里也跟着走 <see cref="DrawPrice"/>（旧口径按关卡算的 Price 已删）。
     /// </summary>
     public static int GoldPrize()
@@ -392,8 +392,8 @@ public static class SlotMachineSystem
                 return want;
             }
         }
-        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（2026-11-24 主人拍板：按章保底，
-        // 第 1 章第 4 抽起，往后每章 +1 抽，第 4 章起封顶第 7 抽）。
+        // 正式关保底佣兵：触发条件唯一出口 = MercGuaranteeActive()（2026-11-25 主人拍板：按章保底，
+        // 第 1 章第 3 抽必中佣兵、第 2 章第 4 抽起、第 3 章起封顶第 5 抽）。
         // 窗口内金币方向由 GoldAllowed 同步挡掉 ——
         // 保底必须真的给佣兵，不能让玩家花钱抽回币（2026-10-18 主人报「抽奖 3 次全是抽奖币」）。
         // 佣兵池取不到内容时照旧落回随机（沿用上面「取不到内容自动落回随机」口径）；
@@ -476,8 +476,8 @@ public static class SlotMachineSystem
     public static void NoteGoldPrize() => _goldPrizesThisRun++;
 
     /// <summary>
-    /// 【2026-11-24 主人拍板「第一章保底 4 抽，往后每章 +1，封顶 7 抽」】正式关保底佣兵的**触发条件**（唯一出口）：
-    /// 非引导局、本局已抽次数达到<b>按章阈值</b>（第 1 章 3 抽＝第 4 抽起；每 +1 章阈值 +1；封顶 6 抽＝第 7 抽）、
+    /// 【2026-11-25 主人拍板「第一章前 3 抽必中 1 个佣兵、第二章降到 4 抽、再往后 5 抽，最多 5 抽」】正式关保底佣兵的**触发条件**（唯一出口）：
+    /// 非引导局、本局已抽次数达到<b>按章阈值</b>（第 1 章 2 抽＝第 3 抽起；第 2 章 3 抽＝第 4 抽起；第 3 章起 4 抽＝第 5 抽封顶）、
     /// 且本局一只佣兵都没有。章号真源 = <c>ChapterManager.currentChapter</c>（1 起）。
     /// <see cref="ResolveCategory"/> 据此强制佣兵方向；<see cref="GoldAllowed"/>
     /// 据此把金币方向挡在保底窗口外。
@@ -487,7 +487,7 @@ public static class SlotMachineSystem
     {
         if (IsTutorialRun) return false;
         int chapter = ChapterManager.Instance != null ? Mathf.Clamp(ChapterManager.Instance.currentChapter, 1, 8) : 1;
-        int need = Mathf.Clamp(2 + chapter, 3, 6);   // ch1=3(第4抽)、ch2=4、ch3=5、ch4+=6(第7抽封顶)
+        int need = Mathf.Clamp(1 + chapter, 2, 4);   // 【2026-11-25】ch1=2(第3抽)、ch2=3(第4抽)、ch3+=4(第5抽封顶)
         return DrawIndex >= need
             && RunLoadout.Mercs().Count == 0;
     }

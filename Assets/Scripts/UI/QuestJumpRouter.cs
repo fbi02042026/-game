@@ -89,6 +89,16 @@ public static class QuestJumpRouter
             }
             if (row.targetType == "upgrade_talent")
                 return GoTalent();   // 点天赋/升级类 → 角色界面+天赋
+            // 【2026-11-25】新增两条日常的落点：点亮天赋 → 天赋界面；喂养宠物 → 角色页宠物界面
+            if (row.targetType == "daily_talent_click")
+                return GoTalent();
+            if (row.targetType == "daily_pet_feed")
+                return GoPet();
+            // 【2026-11-25】限定日任务落点：升星 / 闲话都在酒馆佣兵卡；活动本 / 裂隙在冒险页（显式声明，别只靠兜底）
+            if (row.targetType == "daily_merc_starup" || row.targetType == "daily_merc_talk")
+                return GoTavern();
+            if (row.targetType == "daily_activity_clear" || row.targetType == "daily_rift_clear")
+                return GoAdventure(MainQuestSystem.CurrentChapter());
         }
         return GoAdventure(MainQuestSystem.CurrentChapter());
     }
@@ -153,6 +163,17 @@ public static class QuestJumpRouter
         if (character == null) return false;
 
         character.OpenTalent();
+        return true;
+    }
+
+    /// <summary>角色页 + 宠物界面（2026-11-25 新日常「喂养宠物」前往）。</summary>
+    static bool GoPet()
+    {
+        var hub = TownHubController.Instance;
+        if (hub == null) return false;
+
+        hub.OpenCharacter();
+        PetUI.Open();
         return true;
     }
 

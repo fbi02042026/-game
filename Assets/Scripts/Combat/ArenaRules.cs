@@ -57,7 +57,10 @@ public static class ArenaRules
     /// <summary>垫底（rank 101）机器人战力 ≈ 开局玩家水平（POWER_BASE+前期装备量级）。</summary>
     public const float PowerBottom = 450f;
     /// <summary>榜首机器人战力天花板。</summary>
-    public const float PowerTop = 60000f;
+    /// <summary>【2026-11-25 曲线校准】60000 → 24000：旧值下满配玩家（估 ≈16000）只能打到第 46 名，
+    /// 前 45 名的对手战力 2 倍于玩家上限，属于「数学上不可达区域」（体检脚本：.workbuddy/backup/2026-11-25_竞技场提前/_arena_curve_check.py）。
+    /// 新值 = 满配上限 ×1.5，既留挑战空间又不封死榜首；同批 DistVersion 升版，老档整榜重建（积分保留、重新插位）。</summary>
+    public const float PowerTop = 24000f;
     /// <summary>战力榜位曲线凸度（与积分曲线同款 t^2.2：底部平缓、顶部陡峭）。</summary>
     public const float PowerCurveExp = 2.2f;
     /// <summary>
@@ -81,7 +84,8 @@ public static class ArenaRules
     /// <summary>机器人分布版本：调分布时 +1，老档自动整榜重建（玩家按当前积分重新插位，进度不丢）；
     /// 只改积分/名次规则而不动分布初值时无需升版（受控升名只依赖积分序）。
     /// v4（2026-10-29 17:28）：机器人加战力+阵容种子，老档重生成（战力按新曲线、估计值重新起步）。</summary>
-    public const int DistVersion = 7;   // 保持 v7：受控升名只依赖积分序，不依赖机器人分布初值，老档沿用现有榜单即可生效，无需整榜重建（重建会让老档玩家按当前积分直接插到榜首）。v7 历史：删零分区 + 垫底保底 10 分 + 删每日随机换位；v6：天花板随累计场次；v5：首进垫底到第 101 名。
+    public const int DistVersion = 8;   // v8（2026-11-25）：战力曲线 PowerTop 60000→24000（原值下满配只到第 46 名，前 45 名数学上不可达），机器人战力变了必须整榜重建；玩家积分保留、按分重新插位。
+    // 历史：v7 删零分区 + 垫底保底 10 分 + 删每日随机换位；v6 天花板随累计场次；v5 首进垫底到第 101 名。
     /// <summary>输了掉的积分（0 分保护：积分不足只扣到 0，垫底 0 分群不会被扣成负数）。
     /// 2026-10-29 晚主人拍板「积分可以扣的再多点」：2 → 5。</summary>
     // 【2026-10-30 拍板作废】原「输一场 -5」退役：新口径输一场也 +10（安慰奖，鼓励天天来打卡）。
@@ -110,13 +114,15 @@ public static class ArenaRules
     public const int LowScorePityWins = 3;
 
     // ── 保底 & 熔断（主人 2026-10-29 拍板：输了也掉分但别绝望；赢了别一路平推升太快）──
-    /// <summary>连输保底下限：连输 N 次（N 在 PityMin~PityMax 随机）后下一把必赢。</summary>
-    public const int PityMin = 2;
-    /// <summary>连输保底上限（每轮触发保底后重掷，让节奏不可预测）。</summary>
-    public const int PityMax = 4;
-    /// <summary>连赢熔断下限：连赢 N 次（N 在 WinCapMin~WinCapMax 随机）后下一把必输，防上升太快。</summary>
-    public const int WinCapMin = 3;
-    /// <summary>连赢熔断上限（每轮触发熔断后重掷）。</summary>
+    /// <summary>连输保底场次：连输 3 场后，第 4 场起敌方战力放水（2026-11-25 主人拍板「输最多 3 场要赢一场」，
+    /// 由原来的 2~4 随机固定为 3；放水期间一直生效，直到赢一把为止——所以最坏也只连输 3 场）。</summary>
+    public const int PityMin = 3;
+    /// <summary>连输保底上限（与 <see cref="PityMin"/> 同值：2026-11-25 起不再随机）。</summary>
+    public const int PityMax = 3;
+    /// <summary>连赢熔断场次：连赢 5 场后，第 6 场起敌方战力加压（2026-11-25 主人拍板「赢最多不超过 5 场」，
+    /// 由原来的 3~5 随机固定为 5；加压期间一直生效，直到输一把为止）。</summary>
+    public const int WinCapMin = 5;
+    /// <summary>连赢熔断上限（与 <see cref="WinCapMin"/> 同值：2026-11-25 起不再随机）。</summary>
     public const int WinCapMax = 5;
 
     // ── 阀门战力系数（2026-10-30 晚拍板「真战斗版阀门」：不掷骰判胜负，改对手战力压制/放水）──
@@ -127,6 +133,11 @@ public static class ArenaRules
     public const float ValveEasePowerMul = 0.35f;
     /// <summary>熔断加压系数：连赢到熔断目标时敌方战力 × 此值（校准到 ≈95% 输，防升太快，可调）。</summary>
     public const float ValveHardPowerMul = 1.9f;
+    /// <summary>【2026-11-25】连输保底后的放水衰减：每再输一场，放水幅度再乘这个系数
+    /// （0.35 → 0.245 → 0.17 → …），让「输最多 3 场要赢一场」靠数学收敛而不是赌 95% 概率。</summary>
+    public const float ValveEasePowerDecay = 0.7f;
+    /// <summary>【2026-11-25】放水地板：再怎么递进也不低于此值，防止战力被乘成 0/负数。</summary>
+    public const float ValveEasePowerFloor = 0.12f;
     /// <summary>赢一场的金币（2026-10-30 16:45 主人拍板恢复照发；走 ResourceWallet 入账，胜局结算面板有金币格）。</summary>
     public const int WinGold = 200;
     /// <summary>对战记录条数上限（新→旧存，超出裁尾；弹窗展示用，2026-10-29 晚主人拍板新增）。</summary>
@@ -948,14 +959,13 @@ public static class ArenaRules
 
     // ───────────────────────── 阀门战力系数（2026-10-30 晚「真战斗版」） ─────────────────────────
 
-    /// <summary>保底/熔断目标懒初始化（老档 ≤0 / 新档首次挑战时各掷一次；只掷「目标场次」，不定任何一场胜负）。</summary>
+    /// <summary>保底/熔断目标（2026-11-25 主人拍板固定节奏：连输 3 场后必赢、连赢 5 场后必输）。
+    /// 幂等写死，不再随机——老档里遗留的旧随机值（连输 2/4、连赢 3/5）下一次检查就被纠正。</summary>
     static void EnsureValveTargets(SaveData data)
     {
         if (data == null) return;
-        if (data.arenaPityTarget <= 0)
-            data.arenaPityTarget = UnityEngine.Random.Range(PityMin, PityMax + 1);
-        if (data.arenaWinCapTarget <= 0)
-            data.arenaWinCapTarget = UnityEngine.Random.Range(WinCapMin, WinCapMax + 1);
+        data.arenaPityTarget = PityMin;
+        data.arenaWinCapTarget = WinCapMin;
     }
 
     /// <summary>
@@ -969,9 +979,17 @@ public static class ArenaRules
         if (data == null) return 1f;
         EnsureValveTargets(data);
         if (data.arenaFreshWinsLeft > 0) return ValveEasePowerMul;                        // 新手必赢（前 N 场）
-        if (data.arenaLossStreak >= data.arenaPityTarget) return ValveEasePowerMul;       // 连输保底（连输 2~4 必回血）
+        // 连输保底（2026-11-25 固定 3 场，且保底后仍输要**递进加深**）：
+        // 第 4 场 ×0.35 → 再输 ×0.245 → 再输 ×0.17 → 地板 ×0.12，指数收敛，实际不会出现长期连败。
+        if (data.arenaLossStreak >= data.arenaPityTarget)
+        {
+            int over = data.arenaLossStreak - data.arenaPityTarget;
+            if (over > 6) over = 6;   // 防 Mathf.Pow 在极端脏档下算出 Inf/0
+            return Mathf.Max(ValveEasePowerFloor, ValveEasePowerMul * Mathf.Pow(ValveEasePowerDecay, over));
+        }
         if (data.arenaLowPityLeft > 0) return ValveEasePowerMul;                          // 低分保底（LowScorePityAt 口径）
-        if (data.arenaWinStreak >= data.arenaWinCapTarget) return ValveHardPowerMul;      // 连赢熔断（连赢 3~5 必断）
+        // 连赢熔断（2026-11-25 固定 5 场：连赢 5 场后第 6 场起加压 ×1.9，直到输一把为止）
+        if (data.arenaWinStreak >= data.arenaWinCapTarget) return ValveHardPowerMul;
         return 1f;
     }
 
@@ -979,8 +997,8 @@ public static class ArenaRules
     /// 机器人的「战斗战力」（唯一消费口 = ArenaEnemySpawner 组队，喂 <see cref="BuildBotBattleSquad"/>）：
     /// 【2026-10-31 主人拍板「根据玩家的抽奖战力抽取可赢或可输的模板」】阀门生效时（放水/加压），
     /// 锚点从机器人榜位战力改成<b>玩家本局抽奖战力</b>（RunLoadout.TotalPower，抽卡构筑的真实战力）——
-    /// · 可赢门（新手必赢/连输保底/低分保底）：战斗战力 = 玩家抽奖战力 × 0.6（必低于玩家当前构筑，可赢）；
-    /// · 可输门（连赢熔断）：战斗战力 = 玩家抽奖战力 × 1.9（必高于玩家当前构筑，可输）；
+    /// · 可赢门（新手必赢/连输保底/低分保底）：战斗战力 = 玩家抽奖战力 × <see cref="ValveEasePowerMul"/>（现 0.35，必低于玩家构筑）；
+    /// · 可输门（连赢熔断）：战斗战力 = 玩家抽奖战力 × <see cref="ValveHardPowerMul"/>（现 1.9，必高于玩家构筑）；
     /// · 无阀门：机器人榜位战力原样（势均力敌，照榜位曲线走）。
     /// 玩家战力取不到（≤0，异常局）→ 退回机器人榜位战力 × 系数（旧口径，不静默造数）。
     /// </summary>

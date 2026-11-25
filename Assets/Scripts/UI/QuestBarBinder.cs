@@ -36,6 +36,10 @@ public class QuestBarBinder : MonoBehaviour
 
     Transform _rowMain, _rowSide, _rowDaily;
     Text _mainText, _sideText, _dailyText;
+    /// <summary>当前任务栏实例（回主界面闲置引导定位主线行用，2026-11-25）。</summary>
+    public static QuestBarBinder Instance { get; private set; }
+    /// <summary>主线行 RectTransform（回主界面闲置引导横指用，2026-11-25）。</summary>
+    public RectTransform MainRowRect => _rowMain as RectTransform;
     RectTransform _dimRt;            // 黑底真身 = panl/Dim（2026-10-27 修复折叠不收缩：原改「任务栏」节点无效）
     Vector2 _dimBaseSize, _dimBasePos;   // Dim 的预制体基准（从 base 重算，不累加）
     RectTransform _foldRt;           // 折叠按钮（黑底收缩后的依附目标）
@@ -104,6 +108,7 @@ public class QuestBarBinder : MonoBehaviour
 
     void Bind(Transform bar)
     {
+        Instance = this;   // 【2026-11-25】静态实例供闲置引导定位主线行
         _barRoot = bar;   // 整栏显隐用（引导期隐藏，2026-10-29）
 
         // 【2026-10-26 主人问「任务栏窗口做了适配没有」→ 之前没做，这里补上】
@@ -342,9 +347,14 @@ public class QuestBarBinder : MonoBehaviour
         if (_dailyText != null)
         {
             var d = snap.daily;   // DailyQuestView? 可空结构体：判空用 HasValue，取值必须 .Value（CS1061 教训）
-            // 【2026-11-01 主人「今日获取375/500金币后面怎么又有括号375/500」】表文案已带 {0}/{1}
-            //（DailyViews/WeeklyViews 里 string.Format 过），再补括号就是重复 → 只显示 desc。
-            _dailyText.text = d.HasValue ? d.Value.desc : "今日已完成";
+            // 【2026-11-25 主人拍板「把每日任务在第三关通关后开启」】未开启时这一行不展示任务，
+            // 只给一行解锁目标（与「今日已完成」同一处占位，不动排版/黑底高度）。
+            // 已开启：「今日获取375/500金币」这类文案表里已带 {0}/{1}（DailyViews 里 string.Format 过），
+            // 再补括号就是重复 → 只显示 desc（2026-11-01 主人口径）。
+            if (!SaveSystem.Instance.Data.DailyTasksUnlocked)
+                _dailyText.text = "通关 1-3 后开启";
+            else
+                _dailyText.text = d.HasValue ? d.Value.desc : "今日已完成";
             FitInfoFont(_dailyText);   // 超长截断 + 统一字号
         }
     }
@@ -488,6 +498,7 @@ public class QuestBarBinder : MonoBehaviour
     {
         // 场景切换/撤离时把行归位，别把半程位移留在预制体实例上
         RestoreRowPopAnims();
+        if (Instance == this) Instance = null;   // 【2026-11-25】避免跨场景留下旧实例
     }
 
     /// <summary>
@@ -620,6 +631,8 @@ public class QuestBarBinder : MonoBehaviour
 
     void OnClickMain()
     {
+        // 【2026-11-25】玩家点主线行 = 已看过这条闲置引导，永久不再弹（气泡立即收掉）
+        TownIdleNudge.NotifyMainQuestClicked();
         var m = QuestBarData.Build().main;
         // 【2026-11-01 主人拍板「任务完成时不要弹这个界面」】主线已完成/本章走完（m == null）
         // 点任务栏不再回退弹全屏任务面板，忽略即可；有进行中任务时跳转失败仍回退面板（原口径不动）。
@@ -637,6 +650,13 @@ public class QuestBarBinder : MonoBehaviour
 
     void OnClickDaily()
     {
+        // 【2026-11-25】日常未开启（1-3 未通）：这一行是解锁目标，点了给一句去打通第三关的提示，不跳转。
+        if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null
+            && !SaveSystem.Instance.Data.DailyTasksUnlocked)
+        {
+            GlobalToastUI.Show("每日任务要打通 1-3 后开启");
+            return;
+        }
         var d = QuestBarData.Build().daily;
         // 【2026-11-01 主人拍板「任务完成时不要弹这个界面」】日常已完成（d == null，行文案「今日已完成」）
         // 点任务栏不再回退弹全屏任务面板，忽略即可；有进行中任务时跳转失败仍回退面板（原口径不动）。

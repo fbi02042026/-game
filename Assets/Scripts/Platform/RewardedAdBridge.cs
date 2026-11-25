@@ -26,12 +26,15 @@ public static class RewardedAdBridge
     public static bool HasRealSdk { get; set; } = true;
 
     /// <summary>
-    /// 【2026-11-01 主人拍板】TapTap/Android 端放弃，转微信小游戏：TapADN 已拆除、
-    /// 微信激励视频（P2-B）接入前，所有广告入口统一「暂未开放」（不发奖、编辑器也不模拟）。
-    /// 入口置灰提示由本闸统一收口（各调用点在「广告加载中」toast 之前也有各自的提前拦截）。
-    /// 接入微信广告后置 false 并在 TapAdBridge 位置换成微信实现。
+    /// 平台闸：true = 拒绝所有广告请求（全项目一键急停用）。
+    /// 【2026-11-01 主人拍板】TapTap/Android 端放弃、转微信小游戏时置 true，各入口统一「暂未开放」。
+    /// 【2026-11-25 主人拍板】置回 false，并把「能不能播」的判定权交给 <see cref="AdGateway.Ready"/>
+    /// 统管（本项目是安卓端：正式包还没有真广告实现 → Ready=false，点位自动回纯钻石；
+    /// 编辑器/开发包走本地模拟可验链路）。本闸保留给「全项目一键关广告」：置 true 即全部失效。
+    /// 注：置 false 不会让 2026-11-01 折叠的 6 个老点位（体力/金币/复活/结算双倍/竞技场/艾拉活动）
+    /// 冒出来 —— 它们仍被 <c>GameConfig.ADS_ENABLED=false</c> 的档位结构挡着。
     /// </summary>
-    public static bool PlatformClosed = true;
+    public static bool PlatformClosed = false;
 
     /// <summary>
     /// 【2026-10-31】任意广告位成功核验后的全局广播（placement 参数 = 哪个点位）。

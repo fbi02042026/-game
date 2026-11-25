@@ -2130,9 +2130,6 @@ public partial class BattleManager
         PlayerSkillPassive.TickAutoCast();
         // 【2026-11-09】点击地点 → 我方全体集结（吃点击 + 推进 2 秒驻留）
         BattleRally.Tick();
-        // 疾风架势「手动窗口」调度（2026-10-27 主人拍板）：开窗 / 倒计时 / 点击多打 / 结算，
-        // 与 TickAutoCast 同挂点同早退口径（BattleLootMode / isInBattle / _stageCleared 在上面已挡）。
-        TickGaleWindow();
         // 升级三选一：可行动时消费升级队列
         RunDraftDirector.Instance?.Tick();
 

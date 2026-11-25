@@ -460,7 +460,8 @@ public static class MailSystem
     /// 【2026-11-23 主人拍板「只留欢迎信 给800金币 100钻石」】原 200 金币+5 天赋石改 800 金币+100 钻石，
     /// id 升版 v4 重发（老玩家也会收到新版一封；旧版 v3 与停发的补偿礼包由 DevGiftMail 清理）。
     /// 配图走表情包「高兴」（2026-10-16 主人原话：「表情用表情包里的图片 用高兴的那个」——不用佣兵头像顶表情位）。
-    /// 用固定 id 去重，整份存档只发一次；要重新发放（改文案/加奖励/换配图）只需把 id 升版（如 welcome_2026_v3）。
+    /// 【2026-11-25 修】改用存档标记 welcomeMailIssued 去重：整份存档只发一次，删了信也不重发；
+    /// 要重新发放（改文案/加奖励/换配图）需同时升 id 并清标记（如 welcome_2026_v5）。
     /// 触发点：① 玩完新手引导（StoryProgress.MarkTutorialDone，notifyToast=false：提示延后到关登录时）；
     /// ② 已通关老玩家回主界面补发（TownSceneBootstrap，幂等）。
     /// </summary>
@@ -468,10 +469,28 @@ public static class MailSystem
     {
         Ensure();
         const string WelcomeId = "welcome_2026_v4";
-        var list = SaveSystem.Instance.Data.mailInbox;
-        for (int i = 0; i < list.Count; i++)
-            if (list[i] != null && list[i].id == WelcomeId) return;   // 已发过，不重复
+        var data = SaveSystem.Instance.Data;
+        var list = data.mailInbox;
 
+        // 【2026-11-25 修·主人报「欢迎信领了删掉，打一关回城又出现」】
+        // 旧去重只扫收件箱：删除已领邮件后 id 消失，回城 TryDailyLoginOnce 再调本方法
+        // 就重发一封（连 800金币/100钻石 一起重发，可无限刷）。改用存档级持久标记，
+        // 发过一次即永久不再发，与邮件是否被删除无关。
+        if (data.welcomeMailIssued) return;
+
+        // 老档兼容：以前发过（箱里还有欢迎信，含已领未删）但没标记 → 补标记，不重发。
+        // 箱里已删的老档无法区分，会补发一次，之后被标记挡住。
+        for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i] != null && list[i].id == WelcomeId)
+            {
+                data.welcomeMailIssued = true;
+                SaveSystem.Instance.Save();
+                return;
+            }
+        }
+
+        data.welcomeMailIssued = true;   // 先置标记，Enqueue 内部 Save 会一起落盘
         Enqueue(new MailEntry
         {
             id = WelcomeId,

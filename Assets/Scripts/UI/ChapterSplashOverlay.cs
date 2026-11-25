@@ -78,13 +78,15 @@ public class ChapterSplashOverlay : MonoBehaviour
     bool _opaqueBackdrop;
     /// <summary>战斗章节卡：Loading 没关之前一直不透明盖着，别把底下的 LoadingUI 又露出来。</summary>
     bool _coverUntilLoadingGone;
+    /// <summary>引言覆盖：战斗章节卡按「关」传进来（每关一句）；空 = 沿用旧的按章取词。</summary>
+    string _quoteOverride;
     /// <summary>需要逐字显现的三段（标题/描述/引用），按显现顺序登记。</summary>
     readonly List<RevealItem> _revealItems = new List<RevealItem>();
     /// <summary>文字是否已全部显现（点击跳过也视为已显现）；外部用它判断「卡片字演完了」。</summary>
     public bool IsRevealed { get; private set; }
 
     public static ChapterSplashOverlay Show(string title, string body = null, bool isTutorial = false,
-        bool waitLoadingBeforeHold = false, bool opaqueBackdrop = false)
+        bool waitLoadingBeforeHold = false, bool opaqueBackdrop = false, string quote = null)
     {
         var leftovers = Object.FindObjectsOfType<ChapterSplashOverlay>();
         for (int i = 0; i < leftovers.Length; i++)
@@ -100,23 +102,24 @@ public class ChapterSplashOverlay : MonoBehaviour
         driver._isTutorial = isTutorial;
         driver._waitLoadingBeforeHold = waitLoadingBeforeHold;
         driver._opaqueBackdrop = opaqueBackdrop;
+        driver._quoteOverride = quote;
         driver.Build(title, body);
         Current = driver;
         driver.StartCoroutine(driver.RunRoutine());
         return driver;
     }
 
-    /// <summary>战斗开场章节卡：与 BattleManager 原逻辑同款文案。
-    /// 【2026-10-20 主人拍板】由 GameSceneManager 在 Loading 关闭后调用（顺序：Loading → 章节卡 → 开打）。</summary>
-    public static ChapterSplashOverlay ShowBattleChapter(int chapter, bool isTutorial)
+    /// <summary>战斗开场章节卡：由 GameSceneManager 在 Loading 关闭后调用（顺序：Loading → 章节卡 → 开打）。
+    /// 【2026-11-25 主人拍板「每关特有」】title / body / quote 全部按 (章, 章内关下标) 取，
+    /// 真源 ChapterStoryBeats.StageNames / StageBodies / StageQuotes；取不到由那边 LogError 报出来，
+    /// 不回落按章文案（项目口径：不兜底）。教程关只改停留时长，文案与第 1 关同源、不再写死。</summary>
+    public static ChapterSplashOverlay ShowBattleChapter(int chapter, int sub0, bool isTutorial)
     {
-        string title = ChapterStoryBeats.IntroTitle(chapter) ?? GameConfig.GetChapterMapName(chapter);
-        string body = isTutorial
-            ? "阳光还能照进来，怪物也不算太强。\n正好适合一个新人进去摸摸路。"
-            : ChapterStoryBeats.OpeningLine(chapter);
-        if (isTutorial) title = "森林区域，第一层";
+        string title = ChapterStoryBeats.StageIntroTitle(chapter, sub0);
+        string body = ChapterStoryBeats.StageOpeningLine(chapter, sub0);
+        string quote = ChapterStoryBeats.StageQuote(chapter, sub0);
         // 底要全不透明：万一套在 Loading 上（兜底时序），半透会把「加载中 x%」和章节文字叠在一起。
-        var card = Show(title, body, isTutorial, waitLoadingBeforeHold: false, opaqueBackdrop: true);
+        var card = Show(title, body, isTutorial, waitLoadingBeforeHold: false, opaqueBackdrop: true, quote: quote);
         // 保留盖板语义：万一 Loading 因异常没收（5s 兜底超时后仍挂着），卡片演完仍等它关掉再淡出，
         // 不把「加载中 x%」漏给玩家。正常时序下 Loading 已关，这段等待立即通过。
         if (card != null) card._coverUntilLoadingGone = true;
@@ -211,11 +214,15 @@ public class ChapterSplashOverlay : MonoBehaviour
             brt.offsetMax = Vector2.zero;
         }
 
-        // 开章引言：每章一句氛围钩子（ChapterStoryBeats.ChapterQuote）。
+        // 开章引言：战斗章节卡走 ShowBattleChapter 按「关」传进来的 _quoteOverride（每关一句钩子）；
+        // 其它调用方不传时，沿用旧的按章取词（ChapterStoryBeats.ChapterQuote）路径。
         // 落在标题/正文下方的留白处，不改动既有标题/正文的位置字号颜色。
-        // 章节号取自 ChapterManager，与战斗内其他叙事取值一致，不写死。
-        int qChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
-        string quote = ChapterStoryBeats.ChapterQuote(qChapter);
+        string quote = _quoteOverride;
+        if (string.IsNullOrEmpty(quote))
+        {
+            int qChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
+            quote = ChapterStoryBeats.ChapterQuote(qChapter);
+        }
         if (!string.IsNullOrEmpty(quote))
         {
             var quoteGo = new GameObject("Quote");

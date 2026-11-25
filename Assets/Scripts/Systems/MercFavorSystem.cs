@@ -101,6 +101,7 @@ public static class MercFavorSystem
 
         // 最高档额外回 1 个普通品质礼物（发放口 = GrantRandomGift 唯一出口，不多开第二条发放链）
         if (tierFavor == MercFavorDefs.BestTalkFavor) grantedGiftId = GrantRandomGift(commonOnly: true);
+        d.CountMercTalk();   // 【2026-11-25】日常「佣兵闲话」计数：聊天真正生效（过完所有拦截）后 +1
         return after - before;
     }
 
