@@ -178,7 +178,9 @@ public partial class PetUI
 
         // 【2026-11-25 主人拍板】每次喂养都给反馈：立绘中心飘爱心 + 宠物叫一声。
         // 引导那一拍的「叫两声」由 PetFeatureGuide 接管，这里只飘爱心，不叠第二套气泡。
-        PlayFeedHearts();
+        PlayFeedHearts();
+        // 【2026-11-25 主人需求】喂养成功后 biaoqing 随机播一组表情粒子
+        PlayRandomBiaoqingFx();
         if (!PetFeatureGuide.IsFeedGuideActive)
         {
             var anchor = _petArt as RectTransform;

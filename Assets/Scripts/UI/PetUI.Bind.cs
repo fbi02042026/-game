@@ -18,6 +18,10 @@ public partial class PetUI
     // 详情
     Transform _skinSlot, _skinPortrait, _skinLock, _skinName;
     Transform _nameText, _petArt;
+    // 喂养表情粒子（主人 11-25 手工搭的 Stage/biaoqing，7 个 Emoji* 粒子组）
+    Transform _biaoqing;
+    ParticleSystem[] _biaoqingAll = System.Array.Empty<ParticleSystem>();
+    readonly List<ParticleSystem[]> _biaoqingGroups = new List<ParticleSystem[]>();
     Transform _deployBtn, _deployLabel;
     Image _feedCostIcon;      // 喂养按钮上方的金币图标
     Text _feedCostText;       // 喂养消耗数字
@@ -46,6 +50,8 @@ public partial class PetUI
         _skinName = FindDeep(_panel, "Stage/皮肤/NameText");
         _nameText = FindDeep(_panel, "Stage/NamePlate/NameText");
         _petArt = FindDeep(_panel, "Stage/PetArt");
+        _biaoqing = FindDeep(_panel, "Stage/biaoqing");
+        BindBiaoqingFx();
         _deployBtn = FindDeep(_panel, "Stage/DeployBtn");
         _deployLabel = FindDeep(_panel, "Stage/DeployBtn/Label");
         // 喂养消耗：在 DeployBtn 上挂金币图标+数字（prefab 无此节点，运行时新建，不动现有节点）
@@ -98,6 +104,45 @@ public partial class PetUI
         else Debug.LogError(TAG + "皮肤槽补 Button 失败（_skinSlot 为空），点击购买皮肤不可用");
         var deploy = GetButton(_deployBtn);
         if (deploy != null) deploy.onClick.AddListener(OnDeployClicked);
+    }
+
+    /// <summary>
+    /// 绑定喂养表情粒子：biaoqing 下每个顶层子节点（Emoji*）算一组，组内含其 ExtraFX 子粒子。
+    /// prefab 里 playOnAwake=1，不处理的话面板每次打开会 7 组齐喷——
+    /// 运行时一律关 playOnAwake 并清空，只在喂养成功后随机播一组（2026-11-25 主人需求）。
+    /// </summary>
+    void BindBiaoqingFx()
+    {
+        if (_biaoqing == null) { Debug.LogError(TAG + "缺 Stage/biaoqing（喂养表情粒子不会播放）"); return; }
+        for (int i = 0; i < _biaoqing.childCount; i++)
+        {
+            var ps = _biaoqing.GetChild(i).GetComponentsInChildren<ParticleSystem>(true);
+            if (ps != null && ps.Length > 0) _biaoqingGroups.Add(ps);
+        }
+        _biaoqingAll = _biaoqing.GetComponentsInChildren<ParticleSystem>(true);
+        StopAllBiaoqingFx();   // 关 playOnAwake + 清实例化瞬间的齐喷残留（同帧内清掉，看不见）
+    }
+
+    /// <summary>停掉并清空全部表情粒子（含子孙），连喂/重开面板不留残留。</summary>
+    void StopAllBiaoqingFx()
+    {
+        for (int i = 0; i < _biaoqingAll.Length; i++)
+        {
+            var ps = _biaoqingAll[i];
+            if (ps == null) continue;
+            ps.playOnAwake = false;
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+    }
+
+    /// <summary>喂养成功后随机播一组表情粒子：先清上一组，再整组 Play（含 ExtraFX 子粒子）。</summary>
+    void PlayRandomBiaoqingFx()
+    {
+        if (_biaoqingGroups.Count == 0) return;
+        var group = _biaoqingGroups[UnityEngine.Random.Range(0, _biaoqingGroups.Count)];
+        StopAllBiaoqingFx();
+        for (int i = 0; i < group.Length; i++)
+            if (group[i] != null) group[i].Play(true);
     }
 
     static Text T(Transform t) => GetText(t);
