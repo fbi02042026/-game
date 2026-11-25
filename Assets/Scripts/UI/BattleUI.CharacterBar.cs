@@ -286,7 +286,7 @@ public partial class BattleUI : MonoBehaviour
         // 2026-10-11 主人拍板：佣兵名字统一 —— 退路也走**真名**，不再退回昵称（小红），
         // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
-        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
+        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
         // 【2026-10-19 主人拍板】教程佣兵名字同样随稀有度上色（塔克=稀有蓝）
         mercSlot1.SetNameColor(RarityPalette.Get(ResolveMercRarity(m.mercId, m.hireId)));
     }
@@ -328,7 +328,7 @@ public partial class BattleUI : MonoBehaviour
         // 2026-10-11 主人拍板：佣兵名字统一 —— 退路也走**真名**，不再退回昵称（小红），
         // 否则头像栏与场景头顶名又各写一份（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
         string tutName = !string.IsNullOrEmpty(m.DisplayName) ? m.DisplayName : StoryProgress.TutorialMercDisplayName;
-        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp);
+        mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
         // 【2026-10-19 主人拍板】教程佣兵名字同样随稀有度上色（塔克=稀有蓝）
         mercSlot1.SetNameColor(RarityPalette.Get(ResolveMercRarity(m.mercId, m.hireId)));
         mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
@@ -451,14 +451,20 @@ public partial class BattleUI : MonoBehaviour
             {
                 var m = activeMercs[index];
                 float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-                slot.UpdateSlot(mercName, m.mercLevel, m.currentHp, maxHp);
+                slot.UpdateSlot(mercName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
             }
             else
             {
                 // 出战名单有占位但单位未生成（绝大多数就是<b>已阵亡</b>）：也不涨蓝条
                 // 【2026-10-07 主人拍板】阵亡不再 ShowEmpty 清成空框 —— 头像 / 职业 icon 保留，整槽压暗（变灰）。
                 slot.SetEnergyEnabled(false);
-                slot.UpdateSlot(mercName, 1, 0, 0);
+                // 【2026-11-25】阵亡槽也显示等级：等级真源是 RunLoadout 名单（单位已销毁时读账本，
+                // 读数方式与 BuildMercSlotLists 同源，不另判一份）
+                int fallenLv = 1;
+                var runMercs = RunLoadout.Mercs();
+                if (runMercs != null && index < runMercs.Count && runMercs[index] != null)
+                    fallenLv = Mathf.Max(1, runMercs[index].level);
+                slot.UpdateSlot(mercName, fallenLv, 0, 0, showLevel: true);
                 slot.SetFallen(true);
             }
         }

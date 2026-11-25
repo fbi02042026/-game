@@ -111,8 +111,9 @@ public partial class CharacterUI
         btn.targetGraphic = img;
         btn.onClick.AddListener(OnPetEntryClicked);
         _petEntryButton = btn;
-        // 【2026-11-25 主人需求】宠物图标红点：统一走 RedDot.Bind 出口（贴图/尺寸/偏移全用默认口径）
-        RedDot.Bind(go.transform, RedDot.Pet);
+        // 【2026-11-25 主人需求】宠物图标红点：贴图/尺寸仍走 RedDot 唯一出口；
+        // 主人「红点要离图标近点」→ 只把偏移往图标内推（默认 -12,-9 悬在爪印框外）。
+        RedDot.Bind(go.transform, RedDot.Pet, new Vector2(-24f, -22f));
         RefreshPetEntry();
     }
 }

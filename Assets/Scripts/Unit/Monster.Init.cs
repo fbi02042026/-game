@@ -302,9 +302,10 @@ public partial class Monster
         // 引导局恒 1、竞技场不走本生成链，均零影响。
         float adaptiveScale = AdaptiveDifficulty.GetScale();
         float hpGlobalMul = endlessRift || isTutorialRun ? 1f : GameConfig.MONSTER_HP_GLOBAL_MUL;
-        // 【2026-11-24 主人拍板】主线第 1 章前 2 关血量过渡缓坡（1-1 对齐引导关 / 1-2 回落 / 1-3 起恢复）：
-        // 只乘主线正式关普通小怪，引导 / 裂隙 / 副本 / 支线岛全部 ×1，零影响。
-        if (formalMainRun && !endlessRift && !isTutorialRun)
+        // 【2026-11-25 主人拍板】普通小怪按章血量补偿（第1~8章 4.0/3.0/3.2/2.0/1.5/1.2/1.1/1.0）：
+        // 只乘普通怪 —— 精英/Boss 血量另走 chapterFirstHpRule + 专属系数，不在这里叠加（注释与代码对齐）。
+        // 引导 / 裂隙 / 副本 / 支线岛全部 ×1，零影响。
+        if (formalMainRun && !endlessRift && !isTutorialRun && !eliteWave && !bossUnit)
             hpGlobalMul *= GameConfig.EarlyChapterHpCurveMul(chapter, stageIdx0);
         // 【2026-11-05 主人拍板】1-5 及其后所有 Boss：攻击 -40%、血量 x2（真源 GameConfig.BOSS_*_MUL）。
         // 放在最终写 attr 处，物理 / 魔法两条攻击线都吃到；非 Boss 恒 x1。
@@ -402,7 +403,8 @@ public partial class Monster
                 ? (formalMainRun ? GameConfig.LateEliteBossHpMulForChapter(chapter, _isBossUnit, stageIdx0) : GameConfig.LATE_ELITE_BOSS_HP_MUL)
                 : GameConfig.LATE_MOB_HP_MUL);
         float lateAtkMul = !lateGameBuff ? 1f
-            : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_ATK_MUL : GameConfig.LATE_MOB_ATK_MUL);
+            : (lateEliteOrBoss ? GameConfig.LATE_ELITE_BOSS_ATK_MUL
+                               : (formalMainRun ? GameConfig.LateMobAtkMulForChapter(chapter) : GameConfig.LATE_MOB_ATK_MUL));
 
         // 【2026-11-15】裂隙精英血量加倍：裂隙不走 chapterFirstHpRule 的大血量档，单独补一档。
         // 只判裂隙 + 精英槽位，Boss / 小怪 / 其它玩法一律 ×1，行为零变化。

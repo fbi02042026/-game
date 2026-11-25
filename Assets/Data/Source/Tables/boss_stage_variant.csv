@@ -15,6 +15,6 @@
 #
 # ⚠ 数值口径：亲卫与增援怪的强度一律走 monster_stats 表 + 现有缩放，不在本表里发明新倍率。
 id,name,weight,startChapter,telegraph,effect,note
-V01,常规首领,7,1,,NONE,现状：只有 Boss 本体，行为与接入前完全一致
-V02,双护法,3,3,首领带着亲卫,GUARD|count=2,Boss 波多 2 只精英亲卫，先清随从再集火
-V03,裂隙涌动,2,4,裂隙还在往外冒东西,TIMED|delay=40;interval=12;cap=3,拖太久会陆续涌出小怪，最多 3 只
+V01,常规首领,3,1,,NONE,木桩形态，占比压到 30%
+V02,双护法,4,3,首领带着亲卫,GUARD|count=2,Boss 波多 2 只精英亲卫，先清随从再集火
+V03,裂隙涌动,3,4,裂隙还在往外冒东西,TIMED|delay=40;interval=12;cap=3,拖太久会陆续涌出小怪，最多 3 只

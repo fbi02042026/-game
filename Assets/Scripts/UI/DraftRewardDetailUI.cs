@@ -15,7 +15,7 @@ using UnityEngine.UI;
 /// <see cref="RarityLoss"/>）；4 秒无操作自动关兜底（不挡连抽节奏）。</para>
 ///
 /// <para>实现约定：运行时建树、不落预制体；技能参数与 <see cref="RunDraftDirector.BuildRunSkill"/> 同源算式；
-/// 装备属性行借 <see cref="DraftPool.FormatEquipDescLines"/>；佣兵属性走 <see cref="MercRosterDefs.ApplyCombatStats"/>；
+/// 装备属性行借 <see cref="DraftPool.FormatEquipDescLines"/>；佣兵属性走 <see cref="PowerCalc.TryMercFinalStats"/>；
 /// 蓝条走 <see cref="MpProfile"/>（唯一出口，不自己写数字）。</para>
 /// </summary>
 public class DraftRewardDetailUI : MonoBehaviour
@@ -578,7 +578,8 @@ public class DraftRewardDetailUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 佣兵参数行。生命 / 攻击 / 防御走 <see cref="MercRosterDefs.ApplyCombatStats"/>（只随等级），
+    /// 佣兵参数行。生命 / 攻击 / 防御走 <see cref="PowerCalc.TryMercFinalStats"/>
+    /// （等级基底 × 局外星 × 养成资质，与战斗实际同源；2026-11-25 由裸基底口径改过来），
     /// 蓝池 / 回蓝走 <see cref="MpProfile"/>（随星级）；升星时属性不变就只列变化的项。
     /// </summary>
     static string MercParamLines(DraftCard card, bool compare)
@@ -593,25 +594,28 @@ public class DraftRewardDetailUI : MonoBehaviour
 
         // 【2026-11-09】按 hireId 取行：羁绊乘区在属性公式内按 hireId 判，
         // 共用 asset 的佣兵各判各的（H015 艾拉 / H005 米娅共用 gongshou101）。
+        // 【2026-11-25 主人拍板「升星对战斗内有等级的属性不要算错或漏算」】改走唯一出口
+        // PowerCalc.TryMercFinalStats（等级基底 × 局外星 × 养成资质），与战斗实际、战力、信息框同一套乘区；
+        // 旧写法只拿 ApplyCombatStats 裸基底 → 升星过的佣兵在这里显示得比战斗里弱一大截。
         string statHireId = MercKeyOf(card);
-        if (!MercRosterDefs.TryApplyCombatStatsByHire(statHireId, newLv,
-                out float hp, out float atk, out float def0, out _, out _, out _))
+        if (!PowerCalc.TryMercFinalStats(statHireId, def.AssetId, newLv,
+                out float hp, out float atk, out float def0, out _, out _, out _, out _))
         {
             // 卡面只有 assetId（MercKeyOf 的既有形态）属正常回退，不刷日志；
             // 有 hireId 却查不到花名册行才是异常，要报出来。
             if (!string.IsNullOrEmpty(card.HireId))
-                Debug.LogError("[DraftRewardDetailUI] 按 hireId 取属性失败：" + statHireId + "，退回 assetId 首行");
-            MercRosterDefs.ApplyCombatStats(def.AssetId, newLv,
-                out hp, out atk, out def0, out _, out _, out _);
+                Debug.LogError("[DraftRewardDetailUI] 按 hireId 取最终属性失败：" + statHireId + "，退回 assetId 首行");
+            PowerCalc.TryMercFinalStats(null, def.AssetId, newLv,
+                out hp, out atk, out def0, out _, out _, out _, out _);
         }
         var sb = new StringBuilder();
         if (compare)
         {
-            if (!MercRosterDefs.TryApplyCombatStatsByHire(statHireId, oldLv,
-                    out float ohp, out float oatk, out float odef, out _, out _, out _))
+            if (!PowerCalc.TryMercFinalStats(statHireId, def.AssetId, oldLv,
+                    out float ohp, out float oatk, out float odef, out _, out _, out _, out _))
             {
-                MercRosterDefs.ApplyCombatStats(def.AssetId, oldLv,
-                    out ohp, out oatk, out odef, out _, out _, out _);
+                PowerCalc.TryMercFinalStats(null, def.AssetId, oldLv,
+                    out ohp, out oatk, out odef, out _, out _, out _, out _);
             }
             sb.AppendLine(CompareLine("生命", Mathf.RoundToInt(hp).ToString(), Mathf.RoundToInt(ohp).ToString(), hp, ohp, true));
             sb.AppendLine(CompareLine("攻击", Mathf.RoundToInt(atk).ToString(), Mathf.RoundToInt(oatk).ToString(), atk, oatk, true));

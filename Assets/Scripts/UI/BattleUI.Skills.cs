@@ -532,9 +532,10 @@ public partial class BattleUI : MonoBehaviour
     /// <summary>本条气泡专用版式：气泡本体允许出屏（尖角正对「自动」开关），文字单独补偿留屏内。</summary>
     static readonly TutorialHintUI.HintLayout ManualCastBubbleLayout = new TutorialHintUI.HintLayout
     {
-        BubbleWidth = 240f,   // 【2026-11-25 主人「引导框再宽一点」】只加宽，高度/出屏补偿/文案全不变
+        BubbleWidth = 280f,   // 【2026-11-25 主人「框可以宽点」】240→280，高度/出屏补偿/文案全不变
         BubbleHeight = 160f,
         BubbleAllowOffscreenKeepTextIn = true,
+        BubbleOffsetX = -30f, // 【2026-11-25 主人「往左移一点」】气泡整体左移 30px，文字仍由补偿留屏内
     };
 
     /// <summary>

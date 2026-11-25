@@ -5,7 +5,9 @@ using UnityEngine;
 ///
 /// 把主人的四项诉求收敛成一条倍率公式，<b>只有这里算倍率</b>，其它地方只改状态、不算数值：
 ///   ① 整体强度 +10%          —— 静态基准，全玩法（引导局除外，沿用「引导的不要动」）。
-///   ② 该关失败 3 次降数值      —— 该关下次进入 ×0.80，让玩家容易过。
+///   ② 每死一次就放水          —— 【2026-11-25 主人改】门槛 3→1、单档 -20%→每死 -12% 叠加（封顶 3 层），
+///                               「不能让玩家死的次数太多，容易流失」：第 1 次死就 ×0.88，
+///                               第 2 次 ×0.77，第 3 次 ×0.68 封顶，第 4 次必过。
 ///   ③ 过关后橡皮筋            —— 下两关「提升少点」×0.95，第三关起「提升更大」×1.12（反超，净更难）。
 ///   ④ 得厉害武器后放水        —— 按战力涨幅判定，接下来两局冒险 ×0.90。
 ///
@@ -19,10 +21,12 @@ public static class AdaptiveDifficulty
     // ===== 全部可调参数集中在此，改手感只动这里 =====
     /// <summary>① 整体强度基准（主人 2026-11-22 拍板 +10%）。</summary>
     public const float BASE_MUL = 1.10f;
-    /// <summary>② 该关连续失败达到此次数后，下次进入该关放水。</summary>
-    public const int FAIL_EASE_THRESHOLD = 3;
-    /// <summary>② 该关放水倍率（-20%）。</summary>
-    public const float FAIL_EASE_MUL = 0.80f;
+    /// <summary>② 该关死过几次才开始放水。【2026-11-25 主人改 3 → 1】第一次死就放水，不留「连死 3 次」的劝退窗口。</summary>
+    public const int FAIL_EASE_THRESHOLD = 1;
+    /// <summary>② 每死一次的单层放水倍率（-12%），按失败次数叠加，不是固定一档。</summary>
+    public const float FAIL_EASE_MUL = 0.88f;
+    /// <summary>② 放水最多叠几层（3 层 = ×0.681）；再死不再更软，第 4 次基本必过，防「永远打不过」。</summary>
+    public const int FAIL_EASE_MAX_STACK = 3;
     /// <summary>③ 过关后缓坡倍率（「提升少点」）。</summary>
     public const float RUBBER_EASE_MUL = 0.95f;
     /// <summary>③ 缓坡持续关数（「下两关」）。</summary>
@@ -63,8 +67,10 @@ public static class AdaptiveDifficulty
 
         float mul = BASE_MUL;
 
-        // ② 该关连续失败达阈值 → 下次进这关放水（按关卡 key 存，过了就清）
-        if (GetFail(d, CurrentKey()) >= FAIL_EASE_THRESHOLD) mul *= FAIL_EASE_MUL;
+        // ② 每死一次叠一层放水（按关卡 key 存，过了这关就清）；封顶 FAIL_EASE_MAX_STACK 层，之后再死不再更软
+        int fails = GetFail(d, CurrentKey());
+        if (fails >= FAIL_EASE_THRESHOLD)
+            mul *= Mathf.Pow(FAIL_EASE_MUL, Mathf.Min(fails, FAIL_EASE_MAX_STACK));
 
         // ③ 过关后的橡皮筋：先缓两关，再陡三关。
         // 【2026-11-22 主人拍板「按 mode 隔离」】按当前玩法各存一份，活动副本/裂隙通关不会推进主线橡皮筋。
@@ -190,7 +196,7 @@ public static class AdaptiveDifficulty
 
         if (fails >= FAIL_EASE_THRESHOLD)
         {
-            // 卡过关 → 下两关缓坡，之后陡坡反超（只写本玩法那一份）
+            // 死过至少一次才过关 → 下两关缓坡，之后陡坡反超（只写本玩法那一份）
             SetRubber(d, mode, PhaseEase, RUBBER_EASE_STAGES);
             return;
         }

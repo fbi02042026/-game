@@ -18,15 +18,15 @@ using UnityEngine;
 /// </summary>
 public static class LevelSystem
 {
-    /// <summary>升到 level 级所需经验【2026-11-05 主人拍板「前期生的快后期慢」】60+30*lv+lv*lv/2（线性+二次项）：
-    /// 1→2 只要 90，后期二次变贵（49→50 要 2,730）；累计到 50 级总需 59,890，
-    /// 对齐压缩后的主线供给 47,170 + 任务 ≈13,400（见 GameConfig.Progression）→ 主线全通+日常正好 50。</summary>
-    public static int GetExpForLevel(int level) => 60 + level * 30 + level * level / 2;
+    /// <summary>升到 level 级所需经验【2026-11-25 主人拍板「前期升得有点快」】150+30*lv+lv*lv/2（线性+二次项）：
+    /// 只把常数项 60→150 抬高前期门槛（1→2 由 90 变 180），后期二次项不变（49→50 要 2,820）；
+    /// 累计到 50 级总需 64,300，主线供给 47,170 + 任务 ≈13,400 只到 48 级，噩梦满级（主人拍板「可以更难满」）。</summary>
+    public static int GetExpForLevel(int level) => 150 + level * 30 + level * level / 2;
 
     public const int MaxLevel = 50;                 // 【2026-11-23 主人拍板「玩家满级50」】80→50：左列 150 节点 / 3 格一行 = 50 行，升一级开一行；
                                                     // 倾向属性每级 +1 → 满级 +49；
-                                                    // 经验曲线 60+30lv+lv²/2 → 满级总需 59,890；
-                                                    // 主线 47,170+日常 ≈13,400 即可满级（不打困难噩梦也到 50），困难噩梦=加速项（见 GameConfig.Progression）。
+                                                    // 经验曲线 150+30lv+lv²/2 → 满级总需 64,300；
+                                                    // 主线 47,170+日常 ≈13,400 只到 48 级，需噩梦才满 50（见 GameConfig.Progression）。
     public const int ExpOverflowGoldPerExp = 5;      // 满级后每点溢出经验转金币数（可调）
 
     /// <summary>玩家当前等级（存档真源；无存档回落 1）。名牌/抽卡/蓝量等只读消费统一走这里。</summary>
@@ -199,7 +199,7 @@ public static class LevelSystem
     /// 【2026-11-23 主人拍板「经验减少」+ 满级 50】普通 57+2×(章-1)，困难 71+3×(章-1)，噩梦 85+4×(章-1)
     /// （每档都高于前一难度同章；旧「1-1 升 1 级」的 110+32×(章-1) 档随满级 80 一起作废）；
     /// 返回本次实际发放经验量，供结算展示；调用方可忽略返回值
-    /// 主线 47,170+日常 13,400 ≈ 曲线 cum(50)=59,890 → 不打困难噩梦也能满级，困难噩梦只是加速项。</summary>
+    /// 曲线 cum(50)=64,300（2026-11-25 抬高前期门槛）→ 主线 47,170+日常 13,400 只到 48 级，需噩梦满级。</summary>
     public static int AddStageClearExp(int chapter)
     {
         if (!StageFeedsExp) return 0;

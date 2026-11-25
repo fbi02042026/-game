@@ -469,8 +469,23 @@ public static class MailSystem
     {
         Ensure();
         const string WelcomeId = "welcome_2026_v4";
+        // 【2026-11-25 主人「第一封就写个欢迎信、跟剧情相关点」】标题改短+贴游戏名；列表最大字数在 MailListUI。
+        const string WelcomeTitle = "欢迎信·裂隙之刃";
         var data = SaveSystem.Instance.Data;
         var list = data.mailInbox;
+
+        // 【2026-11-25】存量欢迎信只刷标题文案，立刻在当前存档生效；不动 id / 奖励 / 标记，绝不重发。
+        // 只认 welcome_2026_v4 这一封，title 相同则跳过（幂等，不反复 Save）。
+        for (int i = 0; i < list.Count; i++)
+        {
+            var m = list[i];
+            if (m != null && m.id == WelcomeId && m.title != WelcomeTitle)
+            {
+                m.title = WelcomeTitle;
+                SaveSystem.Instance.Save();
+                break;
+            }
+        }
 
         // 【2026-11-25 修·主人报「欢迎信领了删掉，打一关回城又出现」】
         // 旧去重只扫收件箱：删除已领邮件后 id 消失，回城 TryDailyLoginOnce 再调本方法
@@ -494,7 +509,7 @@ public static class MailSystem
         Enqueue(new MailEntry
         {
             id = WelcomeId,
-            title = "欢迎来到《像素冒险：裂隙之刃》！",
+            title = WelcomeTitle,
             sender = "制作组",
             body = "感谢您下载并试玩《像素冒险：裂隙之刃》！\n\n" +
                    "这是制作组的一点小心意——800 金币与 100 钻石请收下，祝您冒险顺利。\n\n" +

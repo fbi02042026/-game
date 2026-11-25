@@ -571,6 +571,14 @@ public class RunDraftDirector : MonoBehaviour
             skillId = data.skillId,
             passiveSkillId = data.passiveSkillId
         };
+        // 【2026-11-25 主人拍板】本局练过的佣兵（换下 / 主动离队过）再抽到，从原级数继续，
+        // 不重置回 Lv1 —— 等级真源仍只有 RunMercEntry.level 一处，面板与战斗同一份。
+        string levelKey = !string.IsNullOrEmpty(entry.hireId) ? entry.hireId : entry.mercId;
+        if (RunLoadout.TryGetMercLevelMemory(levelKey, out int keepLv) && keepLv > entry.level)
+        {
+            Debug.Log($"[RunDraft] 佣兵级数继承：{entry.displayName}({levelKey}) Lv{entry.level} → Lv{keepLv}");
+            entry.level = keepLv;
+        }
         // 【2026-11-24 主人拍板】满员抽到不同佣兵：不直接拒绝，弹「换下谁」（新佣兵 + 现有两位）。
         // 只有波间免费三选一会把佣兵卡放进池子（老虎机付费抽仍按原样：满员不出佣兵方向）。
         if (RunLoadout.IsMercFull)
@@ -944,12 +952,24 @@ public class RunDraftDirector : MonoBehaviour
         if (merc == null || entry == null) return;
 
         merc.Init(entry.mercId, Mathf.Max(1, entry.level));
+        // 【2026-11-25 主人拍板恢复局内升级】Init → ResetForReuse 会把 OnDead 清空（UnitBase.Damage.cs:266），
+        // 升级刷新后必须按 PromoteMerc 同款「先摘再挂」补回来，否则这只佣兵之后阵亡
+        // 不会通知 BattleManager（阵亡标记 / 惩罚复活 / 复活读条整条失效）。
+        var bm = BattleManager.Instance;
+        if (bm != null)
+        {
+            merc.OnDead -= bm.OnMercenaryDead;
+            merc.OnDead += bm.OnMercenaryDead;
+        }
         merc.mercStar = Mathf.Clamp(entry.star, 1, 5);   // 2026-10-06：MP 池/回复的星级真源
         merc.SetupBattleSkills(entry.skillId, entry.passiveSkillId);
         merc.SetDisplayName(entry.displayName);
         if (!string.IsNullOrEmpty(entry.hireId)) merc.SetHireId(entry.hireId);
         if (!string.IsNullOrEmpty(entry.displayName))
             merc.gameObject.name = "Merc_" + entry.displayName;
+        // 【2026-11-25】升级后强制刷一次头像栏：UpdateCharacterSlots 是全量刷（不判血量变化），
+        // 否则满血升级时 currentHp 数值没变 → RefreshLiveBars 的差异闸拦掉 → 卡面等级停在旧值。
+        BattleUI.Instance?.UpdateCharacterSlots();
         Debug.Log($"[RunDraft] 佣兵刷新：{entry.displayName} Lv{entry.level} ★{entry.star}");
     }
 

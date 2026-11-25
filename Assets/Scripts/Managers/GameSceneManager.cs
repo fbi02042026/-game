@@ -201,10 +201,6 @@ public class GameSceneManager : Singleton<GameSceneManager>
         int battleChapter = (arenaChallenge || sideIslandRun) ? 0
             : (activityRun || finaleRun || endlessRun) ? LoadingUI.FallbackChapter
             : ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
-        // 【2026-11-25 每关黑幕】章内关下标（0 起，关 = 节）：与 battleChapter 同一时刻快照，
-        // 免战斗场景初始化改了 ChapterManager 进度后取到下一关的文案。
-        // 只走唯一出口 CurrentSubIndex0（grand 恒 1），不自己除/取模。
-        int battleSub0 = ChapterManager.Instance != null ? ChapterManager.Instance.CurrentSubIndex0 : 0;
         SceneLoadingCoordinator.Begin(SceneLoadingCoordinator.LoadTarget.Battle);
         // 2026-10-11 主人拍板：loading 背景图按章取（Resources/UI/loading/beijing0N）。
         BattleLoadingOverlay.SetChapterBackdrop(battleChapter);
@@ -265,6 +261,11 @@ public class GameSceneManager : Singleton<GameSceneManager>
         // isTutorial 同 BattleManager 原口径，但切场景那一刻 Rules 还没赋值，
         // 必须用 StoryProgress 自己判断，不要读 BattleManager.Rules。
         // 【2026-10-31 主人拍板】竞技场挑战不演章节卡（无限裂隙同口径）；支线岛同（理由见上 battleChapter 归零处）。
+        // 【2026-11-25 修「黑幕显示第一关、实际进第二关」】关号必须在此刻（战斗初始化完成后）实取：
+        // StartNewRunInternal 刚用 FirstUnclearedStageIndex0 把 currentStageIndex 落成本局起始关，
+        // 而切场景前 ChapterManager.currentStageIndex 还是上一局残留值（多为 0 → 黑幕误报第一关）。
+        // 只走唯一出口 CurrentSubIndex0；章节卡只在 mainlineRun 演，此时 ChapterManager 必已初始化。
+        int battleSub0 = ChapterManager.Instance != null ? ChapterManager.Instance.CurrentSubIndex0 : 0;
         var splash = !mainlineRun
             ? null
             : ChapterSplashOverlay.ShowBattleChapter(battleChapter, battleSub0, splashTutorial);

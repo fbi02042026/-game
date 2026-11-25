@@ -112,12 +112,26 @@ public class ChapterSplashOverlay : MonoBehaviour
     /// <summary>战斗开场章节卡：由 GameSceneManager 在 Loading 关闭后调用（顺序：Loading → 章节卡 → 开打）。
     /// 【2026-11-25 主人拍板「每关特有」】title / body / quote 全部按 (章, 章内关下标) 取，
     /// 真源 ChapterStoryBeats.StageNames / StageBodies / StageQuotes；取不到由那边 LogError 报出来，
-    /// 不回落按章文案（项目口径：不兜底）。教程关只改停留时长，文案与第 1 关同源、不再写死。</summary>
+    /// 不回落按章文案（项目口径：不兜底）。
+    /// 【2026-11-25 主人拍板「引导关就叫暮影森林」】引导关不是正式关卡：黑幕只显地图名（暮影森林），
+    /// 不带关号关名、也不带每关正文/引言（那两句是正式关的推进预告）；停留时长仍走 Tutorial 档。</summary>
     public static ChapterSplashOverlay ShowBattleChapter(int chapter, int sub0, bool isTutorial)
     {
-        string title = ChapterStoryBeats.StageIntroTitle(chapter, sub0);
-        string body = ChapterStoryBeats.StageOpeningLine(chapter, sub0);
-        string quote = ChapterStoryBeats.StageQuote(chapter, sub0);
+        string title;
+        string body;
+        string quote;
+        if (isTutorial)
+        {
+            title = GameConfig.GetChapterMapName(chapter);
+            body = null;
+            quote = "";   // 空串 = 明确不要引言（Build 只对 null 走按章回落）
+        }
+        else
+        {
+            title = ChapterStoryBeats.StageIntroTitle(chapter, sub0);
+            body = ChapterStoryBeats.StageOpeningLine(chapter, sub0);
+            quote = ChapterStoryBeats.StageQuote(chapter, sub0);
+        }
         // 底要全不透明：万一套在 Loading 上（兜底时序），半透会把「加载中 x%」和章节文字叠在一起。
         var card = Show(title, body, isTutorial, waitLoadingBeforeHold: false, opaqueBackdrop: true, quote: quote);
         // 保留盖板语义：万一 Loading 因异常没收（5s 兜底超时后仍挂着），卡片演完仍等它关掉再淡出，
@@ -217,8 +231,9 @@ public class ChapterSplashOverlay : MonoBehaviour
         // 开章引言：战斗章节卡走 ShowBattleChapter 按「关」传进来的 _quoteOverride（每关一句钩子）；
         // 其它调用方不传时，沿用旧的按章取词（ChapterStoryBeats.ChapterQuote）路径。
         // 落在标题/正文下方的留白处，不改动既有标题/正文的位置字号颜色。
+        // 只对 null（调用方没传）回落；传空串 = 明确不要引言（引导关黑幕只显地图名）。
         string quote = _quoteOverride;
-        if (string.IsNullOrEmpty(quote))
+        if (quote == null)
         {
             int qChapter = ChapterManager.Instance != null ? ChapterManager.Instance.currentChapter : 1;
             quote = ChapterStoryBeats.ChapterQuote(qChapter);

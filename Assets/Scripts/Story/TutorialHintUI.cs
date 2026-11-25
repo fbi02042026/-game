@@ -182,6 +182,10 @@ public class TutorialHintUI : MonoBehaviour
         /// 目标贴屏幕边时不再把气泡中心夹进屏内（尖角才能正对目标），文字用独立 x 偏移补偿回屏内。
         /// 只作用于带此标志的一条 Show，Hide 随 layout 清空，其余引导零影响。</summary>
         public bool BubbleAllowOffscreenKeepTextIn;
+        /// <summary>【2026-11-25】一次性气泡水平偏移（正右负左，逻辑像素，默认 0 = 原样）：
+        /// 只作用于 keepTextIn 分支，用来让气泡整体相对目标偏一点（尖角会跟着偏）。
+        /// 只作用于带此值的一条 Show，Hide 随 layout 清空，其余引导零影响。</summary>
+        public float BubbleOffsetX;
     }
 
     HintLayout? _activeLayout;
@@ -1020,7 +1024,8 @@ public class TutorialHintUI : MonoBehaviour
                 {
                     // 【2026-11-25】气泡本体允许出屏：中心直接对齐目标，尖角严丝合缝；
                     // 文字靠下面的 offset 补偿留在屏内，不跟着气泡出屏。
-                    x = target.Value.x;
+                    // 【2026-11-25 追加】一次性水平偏移：只按本条 layout 给的值挪，默认 0 = 原样。
+                    x = target.Value.x + (_activeLayout.HasValue ? _activeLayout.Value.BubbleOffsetX : 0f);
                 }
                 else
                     x = Mathf.Clamp(target.Value.x,

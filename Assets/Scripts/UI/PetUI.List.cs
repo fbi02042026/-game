@@ -50,10 +50,14 @@ public partial class PetUI
         var go = new GameObject("DeployBadge", typeof(RectTransform), typeof(Image));
         go.transform.SetParent(portrait, false);
         var rt = go.GetComponent<RectTransform>();
-        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
-        rt.pivot = new Vector2(0.5f, 0f);
-        rt.anchoredPosition = Vector2.zero;
-        rt.sizeDelta = new Vector2(64f, 34f);   // 对齐「建议 / 限定」角标规格（PlayerJobSelectUI）
+        // 【2026-11-25 主人「上阵的字左右反了，放大10%放到图标右上角」】
+        // 父节点 Portrait 自带 localScale.x=-1（头像朝向用），角标挂其下被连带镜像 → 字反。
+        // ① 本地 (0,1) 锚点 = 视觉右上角，往内缩 6px；② 整体 ×1.1；③ 角标根 x=-1 反向抵消父镜像，字正立。
+        rt.anchorMin = rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(6f, -6f);
+        rt.sizeDelta = new Vector2(64f * 1.1f, 34f * 1.1f);
+        go.transform.localScale = new Vector3(-1f, 1f, 1f);
         var img = go.GetComponent<Image>();
         img.sprite = Resources.Load<Sprite>("UI/Art/每日登录/每日登录_0003_限定字底");
         img.color = Color.white;   // 底图自带红色，不叠 tint

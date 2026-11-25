@@ -22,6 +22,10 @@ public partial class PetUI
     Transform _biaoqing;
     ParticleSystem[] _biaoqingAll = System.Array.Empty<ParticleSystem>();
     readonly List<ParticleSystem[]> _biaoqingGroups = new List<ParticleSystem[]>();
+    // 【2026-11-25 主人「弹窗自适应了，特效也要跟着放大」】每组粒子根 + prefab 基准倍率，
+    // 播放时按当前 Panel 自适应系数 s 设定（弹窗 s=1 时特效原样，不叠加固定放大）。
+    readonly List<Transform> _biaoqingRoots = new List<Transform>();
+    readonly List<Vector3> _biaoqingBaseScales = new List<Vector3>();
     Transform _deployBtn, _deployLabel;
     Image _feedCostIcon;      // 喂养按钮上方的金币图标
     Text _feedCostText;       // 喂养消耗数字
@@ -114,10 +118,17 @@ public partial class PetUI
     void BindBiaoqingFx()
     {
         if (_biaoqing == null) { Debug.LogError(TAG + "缺 Stage/biaoqing（喂养表情粒子不会播放）"); return; }
+        _biaoqingGroups.Clear(); _biaoqingRoots.Clear(); _biaoqingBaseScales.Clear();
         for (int i = 0; i < _biaoqing.childCount; i++)
         {
-            var ps = _biaoqing.GetChild(i).GetComponentsInChildren<ParticleSystem>(true);
-            if (ps != null && ps.Length > 0) _biaoqingGroups.Add(ps);
+            var root = _biaoqing.GetChild(i);
+            var ps = root.GetComponentsInChildren<ParticleSystem>(true);
+            if (ps != null && ps.Length > 0)
+            {
+                _biaoqingGroups.Add(ps);
+                _biaoqingRoots.Add(root);
+                _biaoqingBaseScales.Add(root.localScale);   // prefab 手摆基准（10 / 15），只按它乘 s，不累积
+            }
         }
         _biaoqingAll = _biaoqing.GetComponentsInChildren<ParticleSystem>(true);
         StopAllBiaoqingFx();   // 关 playOnAwake + 清实例化瞬间的齐喷残留（同帧内清掉，看不见）
@@ -135,12 +146,18 @@ public partial class PetUI
         }
     }
 
-    /// <summary>喂养成功后随机播一组表情粒子：先清上一组，再整组 Play（含 ExtraFX 子粒子）。</summary>
+    /// <summary>喂养成功后随机播一组表情粒子：先清上一组，再整组 Play（含 ExtraFX 子粒子）。
+    /// 【2026-11-25 主人「弹窗自适应了，特效也要跟着放大」】只此一个播放出口按 Panel 当前 s 等比放大；
+    /// 基准取 prefab 原 scale，每次重设不累积；Panel s=1（无自适应）时特效原样。</summary>
     void PlayRandomBiaoqingFx()
     {
         if (_biaoqingGroups.Count == 0) return;
-        var group = _biaoqingGroups[UnityEngine.Random.Range(0, _biaoqingGroups.Count)];
+        int pick = UnityEngine.Random.Range(0, _biaoqingGroups.Count);
+        var group = _biaoqingGroups[pick];
         StopAllBiaoqingFx();
+        float s = _panel != null && Mathf.Abs(_panel.localScale.x) > 0.01f ? _panel.localScale.x : 1f;
+        if (pick < _biaoqingRoots.Count && _biaoqingRoots[pick] != null && pick < _biaoqingBaseScales.Count)
+            _biaoqingRoots[pick].localScale = _biaoqingBaseScales[pick] * s;
         for (int i = 0; i < group.Length; i++)
             if (group[i] != null) group[i].Play(true);
     }

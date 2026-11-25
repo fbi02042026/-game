@@ -157,7 +157,9 @@ public partial class Monster
             radius = skill != null && skill.aoeRadius > 0 ? skill.aoeRadius : 5f;
             radius = Mathf.Min(radius, GameConfig.TELEGRAPH_ELITE_RADIUS);   // 精英分支保持原样
         }
-        if (_isBossUnit && GetBossPhase() >= 2) radius *= 1.3f;   // 二阶段统一 ×1.3，不再叠加旧 BOSS_PHASE2_RADIUS_MUL
+        // 【2026-11-25】二阶段范围倍率改读调参表真源（BOSS_PHASE2_RADIUS_MUL，1.5）；
+        // 旧版把 1.3 写死在这里、注释却写「不再叠加」，表里怎么调都不生效 —— 本次接回单一出口。
+        if (_isBossUnit && GetBossPhase() >= 2) radius *= GameConfig.BOSS_PHASE2_RADIUS_MUL;
         return radius;
     }
 

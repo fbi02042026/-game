@@ -40,6 +40,10 @@ public class MailListUI : MonoBehaviour
     const float ROW_H = 100f;
     const float ROW_GAP = 8f;
     const float COL_CLAIMED_GRAY = 0.6f;   // 已领取整行乘灰系数（0~1，越小越灰）
+    // 【2026-11-25 主人反馈「字太多而且太小」→「这个字可以大两号」】列表行标题：标题框 210 宽，
+    // 26 号字约 8 个中文一行放下；超出截前 7 字 + "…"。只作用于列表显示，详情窗仍显示完整标题。
+    const int MAIL_TITLE_MAX_CHARS = 8;
+    const int MAIL_TITLE_FONT_SIZE = 26;
 
     readonly List<MailRow> _rows = new List<MailRow>();
     RectTransform _listContent;
@@ -505,8 +509,9 @@ public class MailListUI : MonoBehaviour
         // 模板文字是编辑器里随手摆的（内置 Arial），克隆后统一换中文字体 + 填真实数据
         if (row.title != null)
         {
-            row.title.text = mail.title;
+            row.title.text = FitListTitle(mail.title);
             row.title.font = GameFonts.GetChinese();
+            row.title.fontSize = MAIL_TITLE_FONT_SIZE;   // 字太小：18→22→26（只改字号，几何不动）
         }
         if (row.time != null)
         {
@@ -667,6 +672,15 @@ public class MailListUI : MonoBehaviour
     }
 
     // 【2026-10-22 主人拍板】SeedDemoMailIfEmpty 演示信已整段删除（主人从没见过演示信，无兼容顾虑）。
+
+    /// <summary>
+    /// 【2026-11-25】列表标题最大字数：超长截前 7 字 + 「…」（共 8 字），避免折行挤成一团。详情窗不受影响。
+    /// </summary>
+    static string FitListTitle(string title)
+    {
+        if (string.IsNullOrEmpty(title)) return title;
+        return title.Length > MAIL_TITLE_MAX_CHARS ? title.Substring(0, MAIL_TITLE_MAX_CHARS - 1) + "…" : title;
+    }
 
     /// <summary>
     /// 相对时间（模板样张口径「1天前」）：刚刚 / N分钟前 / N小时前 / N天前。

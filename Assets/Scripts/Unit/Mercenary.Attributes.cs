@@ -223,6 +223,12 @@ public partial class Mercenary : UnitBase
         if (hpPct != 0f)
             attr.AddAttr(AttrType.MaxHp, hpPct, true);
         Debug.Log($"[Mercenary] 养成资质加成生效：{hid} Lv{MercGrowSystem.LevelOf(hid)} → 攻/魔攻 +{atkPct:0%}，防/魔防 +{defPct:0%}，血 +{hpPct:0%}");
+        // 【2026-11-25 主人拍板「升星/等级对战斗属性不要算错或漏算」】养成血乘区挂上后同步拉满：
+        // SetupAttributes 的满血是在<b>基底阶段</b>赋的（:141），星级那层自己带了一句拉满
+        //（见 ApplyOutStarBonus），养成这层原来漏了 → 有养成记录但 0 星级的佣兵出生时
+        // 上限涨了、当前血还停在基底值（血条不满）。RecalcAttr 在外层用 hpBefore 钳回
+        //（只钳上限不回满），所以石像赐福重算不受本行影响。
+        currentHp = attr.GetAttr(AttrType.MaxHp);
     }
 
     // 【2026-11-09】羁绊乘区已并入 MercRosterDefs 属性公式唯一出口（按 hireId 判），

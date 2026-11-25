@@ -287,39 +287,33 @@ public static class PowerCalc
     }
 
     /// <summary>
-    /// 单个佣兵的战力（<b>唯一出口</b>）：佣兵信息面板显示、本局总战力入账、抽卡卡面「+N 战力」
-    /// 三处全部调这里，数字必须一致，禁止另写一份。
-    /// <para>取数链条与战斗侧逐段对齐：花名册等级属性（<see cref="MercRosterDefs.TryApplyCombatStatsByHire"/>，
-    /// 含稀有度成长/羁绊）→ 局外星乘区（<see cref="MercStarDefs"/>，与 Mercenary.ApplyOutStarBonus 同源）
-    /// → 养成资质乘区（<see cref="MercGrowSystem.AptitudePct"/>，与 Mercenary.ApplyGrowBonus 同源）。</para>
-    /// <para>不叠局内 tempBuffs（石像赐福）：这是「这个佣兵本身多强」的比较口径，不是战斗实时面板 ——
-    /// 否则同一佣兵在不同局里数字会变，没法横向比。</para>
-    /// <para>🔴 局内星级不进本函数：<see cref="RunMercEntry.star"/> 的初值就是局外星
-    /// （<see cref="MercStarSystem.InRunStarOf"/>），星级增益已通过上面的属性乘区体现；
-    /// 局内升星只加 MP 池/回复（MpProfile），不加血攻防，因此不重复计战力。</para>
+    /// 【2026-11-25 主人拍板「升星对战斗内有等级的属性不要算错或漏算」】佣兵<b>最终战斗属性</b>唯一出口：
+    /// 花名册等级基底 → 局外星乘区 → 养成资质乘区，与 <see cref="Mercenary.SetupAttributes"/> 的战斗链逐段对齐
+    /// （只差局内 tempBuffs —— 那层只有战斗中才有，面板口径不含）。
+    /// <para>🔴 所有 UI 显示佣兵属性必须走这里。不要直接拿
+    /// <see cref="MercRosterDefs.ApplyCombatStats"/> 的裸基底当最终值：那是「只随等级」的口径，
+    /// 升星 / 养成看起来会像没生效，与战斗实际、与战力三处对不上（2026-11-25 主人点名）。
+    /// <see cref="MercPowerOf"/> 内部也调本方法 → 「面板属性」「战斗力」「战斗实际」同一个数。</para>
+    /// 取不到花名册行（表里没这佣兵）返回 false，各 out 全 0，调用方自己处理（不静默当 0 星）。
     /// </summary>
-    /// <param name="hireId">花名册 hireId（H001…；为空或查不到时按 assetId 取首行）</param>
-    /// <param name="assetId">贴图/职业 assetId（如 dunbing101）</param>
-    /// <param name="level">佣兵等级（局外面板 = 卡面 MercLevel；局内 = RunMercEntry.level，与实际战斗属性同源）</param>
-    public static int MercPowerOf(string hireId, string assetId, int level)
+    public static bool TryMercFinalStats(string hireId, string assetId, int level,
+        out float hp, out float atk, out float defense, out float magicDefense,
+        out float atkSpd, out float move, out float range)
     {
+        hp = atk = defense = magicDefense = atkSpd = move = range = 0f;
         int lv = Mathf.Max(1, level);
-        float hp = 0f, atk = 0f, def = 0f, atkSpd = 0f, move = 0f, range = 0f;
-        // 与佣兵信息弹窗的属性行同一取法：hireId 优先（共用 asset 的佣兵各吃各的行），取不到退回 asset 首行
+        float rawHp = 0f, rawAtk = 0f, rawDef = 0f;
         bool byHire = !string.IsNullOrEmpty(hireId)
             && MercRosterDefs.TryApplyCombatStatsByHire(hireId, lv,
-                out hp, out atk, out def, out atkSpd, out move, out range);
+                out rawHp, out rawAtk, out rawDef, out atkSpd, out move, out range);
         if (!byHire)
-            MercRosterDefs.ApplyCombatStats(assetId, lv,
-                out hp, out atk, out def, out atkSpd, out move, out range);
-
-        // 两条取行路径都空（表里没这个佣兵）→ 报错并计 0，不拿底盘 130 当战力虚加
-        if (hp <= 0f || atk <= 0f || atkSpd <= 0f)
         {
-            Debug.LogError("[PowerCalc] 佣兵战力取不到属性：hireId=" + hireId
-                + " assetId=" + assetId + " Lv" + lv + "（该佣兵战力按 0 计）");
-            return 0;
+            if (string.IsNullOrEmpty(assetId) || !MercRosterDefs.TryGetByAssetId(assetId, out _))
+                return false;
+            MercRosterDefs.ApplyCombatStats(assetId, lv,
+                out rawHp, out rawAtk, out rawDef, out atkSpd, out move, out range);
         }
+        if (rawHp <= 0f) return false;
 
         string id = string.IsNullOrEmpty(hireId) ? assetId : hireId;
 
@@ -327,7 +321,7 @@ public static class PowerCalc
         int star = MercStarSystem.OutStarOf(id);
         if (star < 0)
         {
-            Debug.LogError("[PowerCalc] 查不到局外星：" + id + "（非花名册佣兵，战力按 0 星算）");
+            Debug.LogError("[PowerCalc] 查不到局外星：" + id + "（非花名册佣兵，属性按 0 星算）");
             star = 0;
         }
         star = Mathf.Clamp(star, 0, MercStarDefs.MaxOutStar);
@@ -340,13 +334,45 @@ public static class PowerCalc
         float aptDef = MercGrowSystem.AptitudePct(id, 1);
         float aptHp = MercGrowSystem.AptitudePct(id, 2);
 
-        float finalAtk = atk * atkMul * (1f + aptAtk);
-        float finalHp = hp * hpMul * (1f + aptHp);
+        atk = rawAtk * atkMul * (1f + aptAtk);
+        hp = rawHp * hpMul * (1f + aptHp);
         // 佣兵魔防与物防同值（MercRosterDefs.ApplyCombatStatsCore 同源赋 def），各吃自己的星级乘区
-        float finalDef = def * atkMul * (1f + aptDef);
-        float finalMdef = def * magMul * (1f + aptDef);
+        defense = rawDef * atkMul * (1f + aptDef);
+        magicDefense = rawDef * magMul * (1f + aptDef);
+        return true;
+    }
 
-        return MercPowerSegment(finalAtk, atkSpd, finalHp, finalDef, finalMdef);
+
+    /// <summary>
+    /// 单个佣兵的战力（<b>唯一出口</b>）：佣兵信息面板显示、本局总战力入账、抽卡卡面「+N 战力」
+    /// 三处全部调这里，数字必须一致，禁止另写一份。
+    /// <para>取数链条与战斗侧逐段对齐：花名册等级属性（<see cref="MercRosterDefs.TryApplyCombatStatsByHire"/>，
+    /// 含稀有度成长/羁绊）→ 局外星乘区（<see cref="MercStarDefs"/>，与 Mercenary.ApplyOutStarBonus 同源）
+    /// → 养成资质乘区（<see cref="MercGrowSystem.AptitudePct"/>，与 Mercenary.ApplyGrowBonus 同源）。
+    /// 【2026-11-25】这三段已抽到 <see cref="TryMercFinalStats"/>，本方法只做战力换算，不再自己算一遍。</para>
+    /// <para>不叠局内 tempBuffs（石像赐福）：这是「这个佣兵本身多强」的比较口径，不是战斗实时面板 ——
+    /// 否则同一佣兵在不同局里数字会变，没法横向比。</para>
+    /// <para>🔴 局内星级不进本函数：<see cref="RunMercEntry.star"/> 的初值就是局外星
+    /// （<see cref="MercStarSystem.InRunStarOf"/>），星级增益已通过上面的属性乘区体现；
+    /// 局内升星只加 MP 池/回复（MpProfile），不加血攻防，因此不重复计战力。</para>
+    /// </summary>
+    /// <param name="hireId">花名册 hireId（H001…；为空或查不到时按 assetId 取首行）</param>
+    /// <param name="assetId">贴图/职业 assetId（如 dunbing101）</param>
+    /// <param name="level">佣兵等级（局外面板 = 卡面 MercLevel；局内 = RunMercEntry.level，与实际战斗属性同源）</param>
+    public static int MercPowerOf(string hireId, string assetId, int level)
+    {
+        // 【2026-11-25】三段取数（等级基底 / 星级 / 养成）统一走 TryMercFinalStats，
+        // 本方法只做战力换算 —— 避免属性行与战力各算一遍、口径漂移。
+        if (!TryMercFinalStats(hireId, assetId, level,
+                out float hp, out float atk, out float def, out float mdef,
+                out float atkSpd, out _, out _)
+            || hp <= 0f || atk <= 0f || atkSpd <= 0f)
+        {
+            Debug.LogError("[PowerCalc] 佣兵战力取不到属性：hireId=" + hireId
+                + " assetId=" + assetId + " Lv" + Mathf.Max(1, level) + "（该佣兵战力按 0 计）");
+            return 0;
+        }
+        return MercPowerSegment(atk, atkSpd, hp, def, mdef);
     }
 
     /// <summary>复刻 Hero.RecalcAttr 的武器类型攻速乘区（SetAttr 覆盖，Hero.cs L259-265），模拟侧必须同样打上。</summary>

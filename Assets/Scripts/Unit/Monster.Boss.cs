@@ -131,18 +131,32 @@ public partial class Monster
     }
 
     /// <summary>
-    /// 【2026-11-18 主人拍板】替换原「血线起线性加速」曲线：所有 Boss 二阶段固定 ×1.3（BOSS_ENRAGE_ATK_SPEED_MUL）。
+    /// 【2026-11-18 主人拍板】所有 Boss 狂暴后固定 ×BOSS_ENRAGE_ATK_SPEED_MUL。
     /// 只改这一个攻速乘数出口，不动伤害/血量/攻击范围；BOSS_ENRAGE_ENABLED 保留作总安全阀。
+    /// 【2026-11-25 主人拍板「狂暴 = 暴击 + 攻速，攻击不加」】判据由 GetBossPhase()&gt;=2（75%）
+    /// 改为 <see cref="_enraged"/>（BOSS_ENRAGE_HP_RATIO，40%）：与「狂暴」的喊话/体型放大同一时刻生效，
+    /// 75% 的二阶段只负责技能范围升级，不再偷偷加攻速。
     /// </summary>
     float HpScaledAttackSpeedMul()
     {
         if (!_isBossUnit) return 1f;
         if (!GameConfig.BOSS_ENRAGE_ENABLED) return 1f;
-        if (GetBossPhase() >= 2) return GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL;
-        return 1f;
+        return _enraged ? GameConfig.BOSS_ENRAGE_ATK_SPEED_MUL : 1f;
     }
 
-    /// <summary>【2026-11-18】狂暴：Boss 二阶段攻速固定 ×1.3（见 HpScaledAttackSpeedMul）。</summary>
+    /// <summary>
+    /// 【2026-11-25 主人拍板「狂暴 = 暴击 + 攻速，攻击不加」】狂暴后把暴击率补到
+    /// <see cref="GameConfig.BOSS_ENRAGE_CRIT_RATE"/>，返回的是「差值」——接现有
+    /// <c>GetLowHpCritRateBonus</c> 出口（普攻 UnitBase.Attack:200 与 Boss 技能 Monster.Skills:904 都吃）。
+    /// 不写 attr：RecalcAllAttr（buff / 词缀刷新 / 阶段切换）会把绝对值冲回基础 0.05，写进差值才稳。
+    /// </summary>
+    protected override float GetLowHpCritRateBonus()
+    {
+        if (!_isBossUnit || !_enraged || attr == null) return 0f;
+        return Mathf.Max(0f, GameConfig.BOSS_ENRAGE_CRIT_RATE - attr.GetAttr(AttrType.CritRate));
+    }
+
+    /// <summary>【2026-11-18】狂暴：Boss 攻速 ×BOSS_ENRAGE_ATK_SPEED_MUL（见 HpScaledAttackSpeedMul）。</summary>
     protected override float GetAttackCooldown()
     {
         float cd = base.GetAttackCooldown();

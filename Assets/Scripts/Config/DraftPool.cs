@@ -112,8 +112,9 @@ public static class DraftPool
         if ((allowWhenFull || !RunLoadout.IsMercFull) && CollectRecruitMercs(allowWhenFull).Count > 0) return true;
         // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子没有升级卡」的口径不一致（与 2026-10-20 升星下架同款）。
-        // 恢复时把这行注释放开即可。
-        //if (CollectMercLevelCards().Count > 0) return true;
+        // 【2026-11-25 主人拍板恢复】局内佣兵升级重新进池（10-23「改走局外养成线」作废）：
+        // 后期怪物随章节涨到 12 倍而佣兵局内恒 Lv1，被秒；恢复升级线补上这条成长通道。
+        if (CollectMercLevelCards().Count > 0) return true;
         // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：升星卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子为空」的空转。恢复时把这行注释放开、删掉 return false。
         //return CollectMercStarCards().Count > 0;
@@ -193,8 +194,9 @@ public static class DraftPool
             case DraftCategory.Merc:
                 pool.AddRange(CollectRecruitMercs(allowMercWhenFull));
                 // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡不再进池（佣兵升级改走局外养成线）。
-                // 恢复时把下面这行注释放开即可；CollectMercLevelCards 方法本体保留未动。
-                //pool.AddRange(CollectMercLevelCards());
+                // 【2026-11-25 主人拍板恢复】升级卡重新进池（10-23 口径作废）：佣兵局内等级 =
+                // RunMercEntry.level，抽到 Lv+1 一直累积、跨关不重置、换下/离队再抽到也继承（RunLoadout 记忆）。
+                pool.AddRange(CollectMercLevelCards());
                 // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：不会抽取一样的佣兵（已在本局的招募卡直接跳过），
                 // 升星卡没有来源口径，先下架不再进池。恢复时把下面这行注释放开即可。
                 //pool.AddRange(CollectMercStarCards());
@@ -1059,6 +1061,9 @@ public static class DraftPool
             if (m == null || string.IsNullOrEmpty(m.mercId)) continue;
             string key = m.hireId ?? m.mercId;
             int next = Mathf.Max(1, m.level) + 1;
+            // 【2026-11-25 主人拍板】卡面不带升级信息（原「等级 Lv5 → Lv6　生命/攻击成长」整行去掉），
+            // 只留稀有度、与招募卡同款；等级统一在佣兵信息框 / 头像栏看。
+            var rar = SkillRarityUtil.FromMercStar(m.star);
 
             list.Add(new WeightedCard
             {
@@ -1068,8 +1073,8 @@ public static class DraftPool
                     Id = key,
                     HireId = m.hireId,
                     Title = m.displayName,
-                    Desc = $"等级 Lv{m.level} → Lv{next}　生命/攻击成长",
-                    Rarity = SkillRarityUtil.FromMercStar(m.star),
+                    Desc = $"[{SkillRarityUtil.DisplayName(rar)}]",
+                    Rarity = rar,
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
                     MercLevel = next,

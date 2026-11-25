@@ -65,6 +65,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
     Text _activeProg;
     // 2026-10-22 主人拍板：Paper 顶部的「进行中」小标头改为显示当前页签名（主线/支线/成就…）
     Text _ongoingHeader;
+    // 【2026-11-25 主人手加 biaotou/dianshu 节点】首页顶部常驻的当前收集里程；节点样式全由预制体定，代码只写文案。
+    Text _mileageText;
     Transform _listContent;
     GameObject _claim;
     // 【2026-11-12 主人拍板】主线/支线行内「可领取」按钮不再代码画色块，
@@ -229,6 +231,10 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             ? (_paper.transform.Find("bg/OngoingHeader")?.GetComponent<Text>()
                ?? _paper.transform.Find("OngoingHeader")?.GetComponent<Text>())
             : null;
+        // 【2026-11-25】主人手加的 dianshu 节点：常驻显示当前收集里程。路径写死，找不到就报错，不静默。
+        _mileageText = transform.Find("Root/Frame/biaotou/dianshu")?.GetComponent<Text>();
+        if (_mileageText == null)
+            Debug.LogError("[AdventureLogUI] 找不到 Root/Frame/biaotou/dianshu，顶部里程不显示");
         BindAchievementClaimButton();
         _activeCard = FindTransform("ActiveCard")?.gameObject;
         var frame = transform.Find("Root/Frame");
@@ -835,6 +841,11 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
         // 图鉴页(怪物/佣兵)此节点已被 ApplyModeVisibility 隐藏，不受影响。
         if (_ongoingHeader != null) _ongoingHeader.text = CurrentTabName;
 
+        // 【2026-11-25】顶部 dianshu 节点：主人指定文案格式「里程点数XXX」。数值取里程钱包 Points
+        //（与里程商店扣点、进账 toast 同一口径）；字号/颜色/几何全用预制体主人手摆值，代码不覆盖。
+        if (_mileageText != null)
+            _mileageText.text = "里程点数" + AdventureLogMileage.Points;
+
         RebuildRows(rows);
 
         var sb = new StringBuilder();
@@ -1387,7 +1398,8 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 hint = "在剧情回顾中重看一遍即可完成";
                 break;
             case MainQuestType.RecruitMerc:
-                hint = "任意品质的佣兵都计入";
+                // 【2026-11-25 主人「把任意品质的佣兵都计入放到括号里」】只改这一句的文案。
+                hint = "（任意品质的佣兵都计入）";
                 break;
             case MainQuestType.UpgradeTalent:
                 hint = "任意一次加点都计入";
@@ -1396,7 +1408,12 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
                 hint = "完成后在冒险日志领取奖励";
                 break;
         }
-        return string.IsNullOrEmpty(objective) ? hint : objective + "\n\n" + hint;
+        // 【2026-11-25 主人「招募1人大一些、说明放括号、排版再优化」】目标句放大到 30 做主标题层级
+        //（任务名 32 > 目标句 30 > 说明 26，不与标题齐平），说明句（上方已带括号）保持正文字号，主次分明。
+        // Desc 节点 m_RichText=1，套 <size> 标签只改字号，不造节点、不动预制体/尺寸/位置；
+        // 任务详情各类目标句都短，不会触发 LayoutContent 的降档。
+        string goal = string.IsNullOrEmpty(objective) ? "" : "<size=30>" + objective + "</size>";
+        return string.IsNullOrEmpty(goal) ? hint : goal + "\n\n" + hint;
     }
 
     /// <summary>

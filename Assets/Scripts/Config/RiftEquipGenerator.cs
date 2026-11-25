@@ -172,11 +172,17 @@ public static class RiftEquipGenerator
         }
         // 2026-11-23：保底升档件取档位下限 tierLo（区间随机留给自然掉落的稀有）。
         float anchorRoll = fixedForTutorial ? 1.0f : Random.Range(1.0f, 1.1f);
+        // 【2026-11-25 修复「一件装备 +40% 暴击、两件 100% 暴击」】
+        // 百分比类词条（暴击率 / 暴击伤害 / 攻速 / 减伤 / 移速 / 吸血 …）不随章节放大：
+        // 表里传奇暴击 12%，ch7 的 chapterGrowth ≈ 3.124×1.46 ≈ 4.56，会被放大成 55% ——
+        // 百分比本身是「绝对比例」，乘章节成长没有物理意义。平属性（攻/防/血）继续乘。
+        // 判定真源仍是 IsRateAttr 一处，别在调用点各写一份名单。
+        float GrowthOf(string attrId) => IsRateAttr(attrId) ? 1f : chapterGrowth;
         float mainVal = enemyAnchored
             ? enemyAvg * (pityUpgraded ? tierLo : Random.Range(tierLo, tierHi)) * chapterGrowth
             : anchorToTemplate
                 ? tplAtk * anchorRoll * chapterGrowth
-                : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial, pityUpgraded) * chapterGrowth;
+                : RollAttrValue(main, rarity.Id, rarity.BaseMul, false, fixedForTutorial, pityUpgraded) * GrowthOf(main);
         // 【2026-11-13】主属性下限：整条随机分布平移到「不低于初级装备」，不做硬钳。
         // 硬钳会让 Ch1 普通装低半段全部落在同一个数（卡面 RoundToInt 后一模一样，
         // 2026-10-20 主人报过「两次抽出同一个武器 数值都一样」），平移保住随机区间宽度。
@@ -185,7 +191,7 @@ public static class RiftEquipGenerator
             ? enemyAvg * tierLo * chapterGrowth
             : anchorToTemplate
             ? tplAtk * chapterGrowth                                      // anchorRoll 下限恒 1.0
-            : RolledMin(main, rarity.Id, rarity.BaseMul, chapterGrowth);
+            : RolledMin(main, rarity.Id, rarity.BaseMul, GrowthOf(main));
         mainVal = LiftToStarterFloor(mainVal, mainRolledMin, mainFloor);
         mainVal *= difficultyMul;   // 【2026-11-19 R2】难度系数乘在保底平移之后（先 floor 再乘）
         if (enemyAnchored)
@@ -209,10 +215,10 @@ public static class RiftEquipGenerator
             string id = PickWeightedLanded(slot.RandPool, job, used, fixedForTutorial);
             if (string.IsNullOrEmpty(id)) break;
             used.Add(id);
-            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial, pityUpgraded) * chapterGrowth, attrBonus);
+            float v = ApplyDropBonus(id, RollAttrValue(id, rarity.Id, rarity.AffixMul, true, fixedForTutorial, pityUpgraded) * GrowthOf(id), attrBonus);
             // 【2026-11-13】随机词条同口径平移保底（稀有 / 传奇区间本就远高于下限，实际不会触发）
             float affixFloor = StarterFloor(id, starter);
-            float affixMin = RolledMin(id, rarity.Id, rarity.AffixMul, chapterGrowth);
+            float affixMin = RolledMin(id, rarity.Id, rarity.AffixMul, GrowthOf(id));
             // ApplyDropBonus 对非速率 / 非射程词条 +attrBonus；理论最小值同步加，避免多抬一次
             if (attrBonus != 0f && !IsRateAttr(id) && id != "RANGE") affixMin += attrBonus;
             v = LiftToStarterFloor(v, affixMin, affixFloor);
@@ -377,6 +383,8 @@ public static class RiftEquipGenerator
         float stage = chapterStage0 < 0 ? lastStage : Mathf.Clamp(chapterStage0, 0, (int)lastStage);
         float pRare = 0.05f * (ch - 1) + 0.05f * stage / lastStage;
         // 传奇：第 1 章恒 0，第 2 章起固定 2%（RollRarity 内 Ch1 另有一道强制 0 双保险）。
+        // 【2026-11-25 回滚】上一轮我把「橙装属性有问题」误读成「橙装太多」，擅自把 2% 砍到 0.6% ——
+        // 主人没有要求改产率，已原样恢复（0.02 / 封顶 0.04）。
         float pLegend = ch <= 1 ? 0f : 0.02f;
         // 【2026-11-24 主人拍板·关型倾斜】峰关提高品质、谷关回落，整体仍按原几率略提。
         // chapterStage0>=0 = 主线正式关（局内抽奖与战后结算均满足）；副本/裂隙/竞技场/支线岛不进。

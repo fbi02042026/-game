@@ -89,9 +89,11 @@ public partial class BattleManager
         // 表现复用 DamageTextSystem.SpawnGoldText 现成入口，怪头顶飘「+N金」。
         if (!IsGoldDungeon && !IsBadgeDungeon && !IsScrollDungeon && !IsGiftDungeon && !IsEndlessRift)
         {
-            int killGold = m.IsBossUnit ? GameConfig.KILL_GOLD_BOSS
-                         : m.IsEliteWave ? GameConfig.KILL_GOLD_ELITE
-                         : GameConfig.KILL_GOLD_NORMAL;
+            // 【2026-11-25 主人拍板「后期一关掉一堆抽奖币抽不完」】改按章取值：
+            // ch1/ch2 维持 10/25/50，ch3 起 5/12/25（真源 = GameConfig.KillGoldNormal/Elite/Boss）。
+            int killGold = m.IsBossUnit ? GameConfig.KillGoldBoss(CurrentChapter)
+                         : m.IsEliteWave ? GameConfig.KillGoldElite(CurrentChapter)
+                         : GameConfig.KillGoldNormal(CurrentChapter);
             // 【2026-11-14 主人拍板】右列天赋「敛财」：击杀掉币 +10%/级（满 5 级 +50%），
             // 普通/精英/Boss 三档一起放大。加成值唯一真源 = TalentDefs R_GOLD 的 optValues，
             // 这里只乘一次，别在别处再写第二份。

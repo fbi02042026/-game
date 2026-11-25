@@ -129,7 +129,7 @@ public class CharacterSlotUI
         {
             levelLabel.gameObject.SetActive(showLevel);
             if (showLevel)
-                levelLabel.text = $"Lv.{level}";
+                levelLabel.text = $"Lv{level}";
         }
         if (hpText != null)
         {
@@ -790,17 +790,24 @@ public class CharacterSlotUI
     }
 
     /// <summary>
-    /// 等级文字（Lv.N）。放在卡片左上角（y≈34），避开中间的脸。
-    /// 2026-11-23 主人拍板：战斗头像一律不显示等级 → UpdateSlot 默认 showLevel:false，玩家/佣兵槽都不显示。
+    /// 等级文字（LvX）。【2026-11-25 主人拍板】改为佣兵头像<b>右侧中部</b>、黄色加粗、字号 22（要明显）：
+    /// 只给佣兵槽显示（UpdateSlot 传 showLevel:true），玩家槽恒 false。
+    /// 位置取值理由：卡片 170×100、头像居中；右侧 y=+14 与星级横排（star 容器 y=-10、三颗星占 y≤0）不重叠，
+    /// 同时仍在卡片右边缘内（x+半宽 = 86 ≈ 卡边 85）。要调只改下面两个常量。
     /// </summary>
+    static readonly Vector2 LevelLabelAnchoredPos = new Vector2(56f, 14f);
+    static readonly Vector2 LevelLabelSize = new Vector2(60f, 26f);
+    static readonly Color LevelLabelColor = new Color(1f, 0.90f, 0.20f);   // 亮黄
+    const int LevelLabelFontSize = 22;
+
     void EnsureLevelLabel()
     {
         if (levelLabel != null || root == null) return;
-        var t = EnsureRuntimeText("LevelLabel", 18, TextAnchor.MiddleCenter,
-                                  new Color(1f, 0.84f, 0.42f));
+        var t = EnsureRuntimeText("LevelLabel", LevelLabelFontSize, TextAnchor.MiddleCenter, LevelLabelColor);
+        t.fontStyle = FontStyle.Bold;
         var rt = t.rectTransform;
-        rt.anchoredPosition = new Vector2(-52f, 34f);
-        rt.sizeDelta = new Vector2(64f, 22f);
+        rt.anchoredPosition = LevelLabelAnchoredPos;
+        rt.sizeDelta = LevelLabelSize;
         t.text = "";
         levelLabel = t;
     }

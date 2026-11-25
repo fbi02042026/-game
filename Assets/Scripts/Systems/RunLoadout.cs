@@ -75,6 +75,13 @@ public class RunLoadoutData
     public string savedUtc = "";
     public List<RunSkillEntry> skills = new List<RunSkillEntry>();
     public List<RunMercEntry> mercs = new List<RunMercEntry>();
+    /// <summary>
+    /// 【2026-11-25 主人拍板】本局佣兵等级记忆（id = hireId，没有 hireId 时存 mercId；value = 已练到的等级）。
+    /// 换下 / 主动离队时把级数记在这里，之后本局再抽到同一人从原级数继续 —— 主人原话
+    /// 「每次抽到就能继承上回自己的级数，一直能保持自己的局内级数」。
+    /// 只在本局（RunLoadout）有效：撤离 / 死亡 / 通关时 _data 置空，记忆随档作废，与局外养成无关。
+    /// </summary>
+    public List<StringIntEntry> mercLevelMemory = new List<StringIntEntry>();
     /// <summary>流派势能（Phase 2）：累积点，不换不退。</summary>
     public List<StringIntEntry> themeEntries = new List<StringIntEntry>();
     /// <summary>
@@ -567,11 +574,53 @@ public static class RunLoadout
 
     public static bool IsMercFull => _data?.mercs != null && _data.mercs.Count >= MaxRunMercs;
 
+    /// <summary>
+    /// 【2026-11-25 主人拍板】记下某位佣兵本局已练到的等级（换下 / 主动离队时调用，唯一写入点 = 本方法）。
+    /// 只写本局记忆，不碰存档；同一 key 覆盖不重复追加。再招募时由 <see cref="TryGetMercLevelMemory"/> 取回。
+    /// </summary>
+    public static void RememberMercLevel(RunMercEntry e)
+    {
+        if (_data == null || e == null) return;
+        string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+        if (string.IsNullOrEmpty(key)) return;
+        int lv = Mathf.Max(1, e.level);
+        _data.mercLevelMemory ??= new List<StringIntEntry>();
+        for (int i = 0; i < _data.mercLevelMemory.Count; i++)
+        {
+            if (_data.mercLevelMemory[i] == null) continue;
+            if (_data.mercLevelMemory[i].id != key) continue;
+            _data.mercLevelMemory[i].value = lv;
+            return;
+        }
+        _data.mercLevelMemory.Add(new StringIntEntry { id = key, value = lv });
+    }
+
+    /// <summary>
+    /// 【2026-11-25 主人拍板】取回本局记忆的等级；没有记录（本局没带过 / 没换下过）返回 false，
+    /// 调用方保留原等级（新招募 = Lv1），不拿 1 顶替「无记录」。
+    /// </summary>
+    public static bool TryGetMercLevelMemory(string key, out int level)
+    {
+        level = 0;
+        if (_data?.mercLevelMemory == null || string.IsNullOrEmpty(key)) return false;
+        for (int i = 0; i < _data.mercLevelMemory.Count; i++)
+        {
+            var row = _data.mercLevelMemory[i];
+            if (row == null || row.id != key) continue;
+            if (row.value <= 0) return false;
+            level = row.value;
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>把指定下标的佣兵替换为新条目（羁绊副本满员时保证该佣兵进队用；下标越界 = 无操作）。</summary>
     public static void ReplaceMercAt(int index, RunMercEntry entry)
     {
         if (_data?.mercs == null || entry == null) return;
         if (index < 0 || index >= _data.mercs.Count) return;
+        // 【2026-11-25 主人拍板】顶掉的旧人要记住级数，本局再抽到他从原级数继续
+        RememberMercLevel(_data.mercs[index]);
         _data.mercs[index] = entry;
     }
 
@@ -585,6 +634,8 @@ public static class RunLoadout
         if (_data?.mercs == null) return null;
         if (index < 0 || index >= _data.mercs.Count) return null;
         var removed = _data.mercs[index];
+        // 【2026-11-25 主人拍板】主动离队同样记住级数，本局再抽到从原级数继续
+        RememberMercLevel(removed);
         _data.mercs.RemoveAt(index);
         Save();
         return removed;

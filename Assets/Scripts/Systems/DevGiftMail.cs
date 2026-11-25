@@ -23,6 +23,9 @@ public static class DevGiftMail
     /// <summary>开发测试邮件固定 id（2026-11-25）：编辑器/开发包按它去重发放，正式包按它清理存档残留。</summary>
     const string DevTestMailId = "dev_test_mail_2026_11_25";
 
+    /// <summary>开发测试邮件标题（2026-11-25 主人：「那个字不用写那么多，只写测试邮件」）。</summary>
+    const string DevTestTitle = "测试邮件";
+
     static bool _purgedThisLaunch;
 
     /// <summary>每次进主界面调用（TownSceneBootstrap 唯一调用点）；每个进程最多清一轮。</summary>
@@ -82,18 +85,28 @@ public static class DevGiftMail
     /// <summary>
     /// 2026-11-25 主人要的开发测试邮件：5000 金币 + 2000 钻石。
     /// 🔴 仅编辑器 / Development 包编译；Release 正式包整段不存在 → 不会带进正式包。
-    /// 幂等：箱里已有同 id 就不重发（不刷存档）；领取并删掉后下次启动会再补一封，方便反复测。
+    /// 幂等：箱里已有同 id 就不重发（只把标题同步成当前文案）；领取并删掉后下次启动会再补一封，方便反复测。
     /// </summary>
     static void SendDevTestMail()
     {
         var list = SaveSystem.Instance.Data.mailInbox;
         for (int i = 0; i < list.Count; i++)
-            if (list[i] != null && list[i].id == DevTestMailId) return;
+        {
+            if (list[i] == null || list[i].id != DevTestMailId) continue;
+            // 存量那封同步成新标题（2026-11-25 主人「只写测试邮件」）：不重发，只改标题，否则旧档看不到新字。
+            if (list[i].title != DevTestTitle)
+            {
+                list[i].title = DevTestTitle;
+                SaveSystem.Instance.Save();
+                MailListUI.NotifyInboxChanged();
+            }
+            return;
+        }
 
         MailSystem.Enqueue(new MailEntry
         {
             id = DevTestMailId,
-            title = "测试邮件：5000 金币 + 2000 钻石",
+            title = DevTestTitle,
             sender = "测试组",
             body = "这是开发测试用邮件：5000 金币 + 2000 钻石。\n\n正式发包不会带这封邮件。",
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),

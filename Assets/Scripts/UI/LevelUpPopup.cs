@@ -143,6 +143,9 @@ public static class LevelUpPopup
             SetText(row1, "升级前", beforeLevel.ToString());
             SetText(row1, "升级后", afterLevel.ToString());
             BumpFontSize(row1, 2);   // 2026-11-01 主人要求：标题下面的字字号大两号
+            // 【2026-11-25 主人「排版优化」】「等级提升」标签节点宽只有 160，跟着 +2 到 42 号后
+            // 4 个字放不下被裁成「等级提」（截图实锤缺字）；标签单独回到预制体 40 号，数字仍是大两号。
+            SetNodeFontSize(row1, "等级提升", 40);
         }
         var row2 = FindDeep(_host.transform, "第二行");
         if (row2 == null)
@@ -218,6 +221,20 @@ public static class LevelUpPopup
         if (scope == null) return;
         var texts = scope.GetComponentsInChildren<Text>(true);
         for (int i = 0; i < texts.Length; i++) texts[i].fontSize += delta;
+    }
+
+    /// <summary>按行作用域把单个节点的字号设为绝对值（2026-11-25「等级提升」防裁字）。
+    /// 用预制体基准 40，避免跟随 BumpFontSize 撑到 42 后 4 字超出 160 宽被截。缺节点 LogError 不兜底。</summary>
+    static void SetNodeFontSize(Transform scope, string nodeName, int size)
+    {
+        var node = scope != null ? FindDeep(scope, nodeName) : null;
+        var text = node != null ? node.GetComponent<Text>() : null;
+        if (text == null)
+        {
+            Debug.LogError("[LevelUpPopup] 恭喜升级预制体 " + scope.name + " 下缺 " + nodeName + " 文本节点，字号不设（不兜底）");
+            return;
+        }
+        text.fontSize = size;
     }
 
     internal static Transform FindDeep(Transform root, string name)

@@ -610,6 +610,25 @@ public class FirstRunGuide : MonoBehaviour
             () => _holeTriggered || QuestRewardClaim.IsClaimedMain("C1_Q0"),
             false, 0f);
 
+        // 【2026-11-25 主人追加】领完奖顺带看一眼里程商店：点侧栏 Emblem 进店，看完自己关掉回日志页。
+        // 「里程点数够就随便挑」那句在**进店那一刻**用看板娘 toast 说：店铺 900 层盖住气泡 620 层，
+        // 店内无法再弹气泡；toast 11000 层盖得住，且走 ShowPersona 统一人设出口。
+        // 完成判据＝进过店且已关掉（shopWasOpened && !MileageShopOpen），进店边沿只报一次。
+        bool shopWasOpened = false;
+        yield return CoPoint("点这个图标就行——里程商店。哼，看完就关掉回来。",
+            MileageShopEmblemRect,
+            () =>
+            {
+                bool open = MileageShopOpen();
+                if (open && !shopWasOpened)
+                {
+                    shopWasOpened = true;
+                    GlobalToastUI.ShowPersona("只要你里程点数够，这儿随便挑，哼。");
+                }
+                return shopWasOpened && !open;
+            },
+            false, 0f);
+
         Hide();
         FinishStep(GuideStep.LogReward, "第一份委托领奖引导");
     }
@@ -858,7 +877,12 @@ public class FirstRunGuide : MonoBehaviour
     {
         var log = AdventureLogUI.Instance;
         if (log == null || !IsVisibleHierarchy(log.gameObject)) return null;
-        var t = TownSharedChrome.FindDeep(log.transform, "Root/Frame/Sidebar/Emblem") as RectTransform;
+        // 【2026-11-25 修「领完奖不引导点商店、等几秒引导自己结束」】原写法把整条路径交给
+        // TownSharedChrome.FindDeep，而它落到 UiFind.Deep 是「按节点名递归匹配」——
+        // 名字要正好等于 "Root/Frame/Sidebar/Emblem" 才命中，实际节点名只是 "Emblem"，
+        // 所以恒返回 null：CoPoint 绑定 8s 超时 → 跳过本拍 → 游标直奔 Done。
+        // 走和 AdventureLogUI 绑定商店入口（AdventureLogUI.cs:712）同一条路径查找。
+        var t = log.transform.Find("Root/Frame/Sidebar/Emblem") as RectTransform;
         return IsVisibleHierarchy(t != null ? t.gameObject : null) ? t : null;
     }
 
@@ -871,13 +895,14 @@ public class FirstRunGuide : MonoBehaviour
         return IsVisibleHierarchy(btn != null ? btn.gameObject : null) ? btn : null;
     }
 
-    /// <summary>里程商店面板是否可见：面板节点由 AdventureLogPhase3Panel 运行时 Ensure 创建。</summary>
+    /// <summary>里程商店面板是否可见：面板节点由 AdventureLogPhase3Panel 运行时 Ensure 创建。
+    /// 查真正的开关节点 Phase3Panel（开关时 SetActive），不查恒 active 的 Phase3Root 容器根。</summary>
     static bool MileageShopOpen()
     {
         var log = AdventureLogUI.Instance;
         if (log == null) return false;
-        var root = TownSharedChrome.FindDeep(log.transform, "Phase3Root");
-        return IsVisibleHierarchy(root != null ? root.gameObject : null);
+        var panel = TownSharedChrome.FindDeep(log.transform, "Phase3Panel");
+        return IsVisibleHierarchy(panel != null ? panel.gameObject : null);
     }
 
     // 【2026-10-19 修复】单帧可见判定会被进镇预热「点亮一帧再藏」骗到（TownHubController.CoWarmupPages

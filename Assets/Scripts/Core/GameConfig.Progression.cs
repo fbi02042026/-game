@@ -58,13 +58,13 @@ public static partial class GameConfig
     public const int HIDDEN_EXP_STAGE_CLEAR = 35;
     public const int HIDDEN_EXP_STAGE_CLEAR_PER_CHAPTER = 5;
 
-    // ===== 玩家等级经验（打完一个小关发一次；2026-11-23「经验减少」+ 满级 50 后总量对齐 cum(50)=59,890）=====
+    // ===== 玩家等级经验（打完一个小关发一次；满级 50；2026-11-25 抬高前期门槛后 cum(50)=64,300）=====
     /// <summary>供给总账（发放点 = BeginRewardSequence 每小关一次；每章小关数 50/80/100，三难度各 730 个）：
     /// 【2026-11-23 主人拍板「经验减少」+ 满级 50】普通 57×730+2×2,780=47,170；困难 60,170；噩梦 73,170；
     /// 任务（日常 670/天，不动）≈13,400。
-    /// 曲线 GetExpForLevel=60+30lv+lv²/2 → cum(50)=59,890：主线 47,170+日常 13,400=60,570
-    /// → 主线全通+日常正好 50，**不打困难噩梦也能满级**；打了就是提前满（溢出经验转金币）。
-    /// 前期节奏（按当前常量推演）：第 1 章末约 lv12、第 8 章末主线全通约 lv49~50。</summary>
+    /// 【2026-11-25 主人拍板「前期升得有点快」】曲线 GetExpForLevel=150+30lv+lv²/2 → cum(50)=64,300：主线 47,170+日常 13,400=60,570
+    /// → 主线全通+日常约 48 级，**不打困难噩梦满不了 50**（噩梦 73,170 可满；溢出经验转金币）。
+    /// 前期节奏（按当前常量推演）：1→2 要 180（原 90），第 1 章末约 lv10。</summary>
     /// <summary>普通难度通关一小关的基础经验（按章 +PLAYER_EXP_STAGE_CLEAR_PER_CHAPTER 递增）。支线岛同率（可重复刷，属额外加速）。</summary>
     public const int PLAYER_EXP_STAGE_CLEAR = 57;
     public const int PLAYER_EXP_STAGE_CLEAR_PER_CHAPTER = 2;

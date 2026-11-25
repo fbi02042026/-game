@@ -168,17 +168,20 @@ public partial class MercObtainPopupUI : MonoBehaviour
             }
         }
 
-        // 4) 数值：生命/攻击/防御走 ApplyCombatStats（只随等级）
-        // 【2026-10-31 T5 方案 B】优先按 hireId 取行（共用 asset 的佣兵各吃各的行，如艾拉 H015）；
-        // hireId 取不到再退回 asset 首行（旧口径）。out 变量预初始化（C# 明确赋值分析要求，
-        // 「条件 && F(out x)」后即使有互补赋值分支，编译器也判不了已赋值）。
+        // 4) 数值：生命/攻击/防御 = **最终战斗属性**（等级基底 × 局外星 × 养成资质），
+        // 【2026-11-25 主人拍板「升星对战斗内有等级的属性不要算错或漏算」】
+        // 唯一出口 = PowerCalc.TryMercFinalStats（与 Mercenary.SetupAttributes、MercPowerOf 同一套乘区）：
+        // 旧写法只拿 ApplyCombatStats 的裸基底，升星/养成在这个框里看起来完全没生效，
+        // 而旁边的战斗力却又算了星级 —— 同一个弹窗两个口径，必须是同一个数。
+        // 不含局内 tempBuffs（石像赐福）：那是战斗实时层，面板不显示。
         float hp = 0f, atk = 0f, defVal = 0f, atkSpd = 0f, move = 0f, range = 0f;
-        bool statsByHire = !string.IsNullOrEmpty(card.HireId)
-            && MercRosterDefs.TryApplyCombatStatsByHire(card.HireId, Mathf.Max(1, card.MercLevel),
-                out hp, out atk, out defVal, out atkSpd, out move, out range);
-        if (!statsByHire)
-            MercRosterDefs.ApplyCombatStats(def.AssetId, Mathf.Max(1, card.MercLevel),
-                out hp, out atk, out defVal, out atkSpd, out move, out range);
+        if (!PowerCalc.TryMercFinalStats(card.HireId, def.AssetId, Mathf.Max(1, card.MercLevel),
+                out hp, out atk, out defVal, out _, out atkSpd, out move, out range))
+        {
+            // 花名册缺行属数据错误 → 报出来（不静默显示 0 当正常），数值按 0 显示
+            Debug.LogError("[MercObtainPopup] 取不到佣兵最终属性（花名册缺行）：HireId=" + card.HireId
+                + " AssetId=" + def.AssetId + " Lv" + Mathf.Max(1, card.MercLevel));
+        }
         SetText(_attrHp, "Panel/you/AttrPanel/AttrHpRoot/AttrHp", Mathf.RoundToInt(hp).ToString());
         // 法术型佣兵：攻击/防御两行换成「法术攻击/法术防御」（数值同源，只换标签）
         bool magic = Mercenary.UsesMagicAttack(def.AssetId);
@@ -217,6 +220,10 @@ public partial class MercObtainPopupUI : MonoBehaviour
         for (int i = 0; i < _stars.Length; i++)
             if (_stars[i] != null) _stars[i].SetActive(i < star);
         if (star > 0) CenterActiveStars(star);   // 0 星全灭，无需居中
+
+        // 5.5)【2026-11-25 主人拍板】等级 LvX：抽卡卡面不再写升级信息，等级统一在本信息框看。
+        //      真源 = card.MercLevel（战斗内入口传 RunMercEntry.level，与头像栏、战斗属性同一份）。
+        FillLevel(card.MercLevel);
 
         // 6) 技能：【2026-11-25 主人拍板】没有主动技不再藏整栏，「无技能」写在下行技能信息位；有则填名字/简介/图标
         FillSkill(def.ActiveSkillId);
@@ -294,6 +301,65 @@ public partial class MercObtainPopupUI : MonoBehaviour
             return;
         }
         go.SetActive(on);
+    }
+
+    // ============================================================
+    // 【2026-11-25 主人拍板】信息框「等级 LvX」
+    // 预制体没摆这个节点（huodeyongbing.prefab 里 Panel/you 下只有 AttrPanel 与 Rating），
+    // 运行时建一次、之后只改文本；重复开弹窗不会重复建也不会累积偏移。
+    // 位置依据（都从预制体现读，不另造一套）：AttrPanel = 200×200 @ (-14, 35.1)、scale 0.88
+    //   ⇒ 实际占 y ∈ [-52.9, 123.1]；本行放 y=141（26 高 ⇒ [128, 154]），正好落在属性表上方、
+    //   you 节点（230×320，顶部 160）之内，不压属性行也不出框。
+    // 要挪位置只改这两个常量。
+    // ============================================================
+    Text _levelText;
+    static readonly Vector2 LevelTextPos = new Vector2(-14f, 141f);
+    static readonly Vector2 LevelTextSize = new Vector2(176f, 26f);
+    static readonly Color LevelTextColor = new Color(1f, 0.90f, 0.20f);   // 亮黄，与战斗头像同一档
+
+    void FillLevel(int level)
+    {
+        if (_levelText == null)
+        {
+            if (_root == null) return;
+            Transform you = _root.transform.Find("Panel/you");
+            if (you == null)
+            {
+                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/you，等级文字加不上去");
+                return;
+            }
+            Transform exist = you.Find("MercLevel");
+            GameObject go = exist != null ? exist.gameObject
+                : new GameObject("MercLevel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            if (exist == null) go.transform.SetParent(you, false);
+
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = LevelTextPos;
+            rt.sizeDelta = LevelTextSize;
+            rt.localScale = Vector3.one;
+
+            var t = go.GetComponent<Text>();
+            t.font = GameFonts.GetChinese();
+            t.fontSize = 20;
+            t.fontStyle = FontStyle.Bold;
+            t.alignment = TextAnchor.MiddleCenter;
+            t.color = LevelTextColor;
+            t.raycastTarget = false;
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            t.verticalOverflow = VerticalWrapMode.Overflow;
+            if (go.GetComponent<Shadow>() == null)
+            {
+                var sh = go.AddComponent<Shadow>();
+                sh.effectColor = new Color(0f, 0f, 0f, 0.85f);
+                sh.effectDistance = new Vector2(1f, -1f);
+            }
+            go.transform.SetAsLastSibling();
+            _levelText = t;
+        }
+        _levelText.gameObject.SetActive(true);
+        _levelText.text = $"Lv{Mathf.Max(1, level)}";
     }
 }
 

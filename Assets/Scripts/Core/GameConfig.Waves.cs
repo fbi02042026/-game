@@ -103,6 +103,33 @@ public static partial class GameConfig
     /// <summary>击杀 Boss 发的局内抽奖币（可调）。</summary>
     public const int KILL_GOLD_BOSS = 50;
 
+    // —— 后期击杀掉币收紧（2026-11-25 主人拍板「玩家反馈后期一关掉一堆抽奖币抽不完」）——
+    // 根因：击杀币按「只」固定发，而每关怪量 ch1 首关 14 只 → ch3 末关 96 只（×6.9）；
+    // 抽价只按本局已抽数 +10/抽，一关能塞下的有效坑位只有 13 个（技能 4 / 佣兵 2 / 装备 7），
+    // 于是 ch3+ 一关产币（无天赋 1060、天赋满 1780）远超「抽满构筑」所需，剩下的关末被清空。
+    // 口径：ch1/ch2 上面三个值一字不动（前期已验证的节奏），ch3 起换成下面这一档（约减半）。
+    // 唯一出口 = 下面三个函数，唯一消费方 = BattleManager.OnMonsterDead。
+    /// <summary>后期（ch3 起）击杀普通怪的局内抽奖币。</summary>
+    public const int KILL_GOLD_NORMAL_LATE = 5;
+    /// <summary>后期（ch3 起）击杀精英的局内抽奖币。</summary>
+    public const int KILL_GOLD_ELITE_LATE = 12;
+    /// <summary>后期（ch3 起）击杀 Boss 的局内抽奖币。</summary>
+    public const int KILL_GOLD_BOSS_LATE = 25;
+    /// <summary>后期档从第几章开始（含）。</summary>
+    public const int KILL_GOLD_LATE_FROM_CHAPTER = 3;
+
+    /// <summary>击杀普通怪发的局内抽奖币（按章取值，唯一出口）。ch1/ch2 = 10，ch3 起 = 5。</summary>
+    public static int KillGoldNormal(int chapter)
+        => chapter >= KILL_GOLD_LATE_FROM_CHAPTER ? KILL_GOLD_NORMAL_LATE : KILL_GOLD_NORMAL;
+
+    /// <summary>击杀精英发的局内抽奖币（按章取值，唯一出口）。ch1/ch2 = 25，ch3 起 = 12。</summary>
+    public static int KillGoldElite(int chapter)
+        => chapter >= KILL_GOLD_LATE_FROM_CHAPTER ? KILL_GOLD_ELITE_LATE : KILL_GOLD_ELITE;
+
+    /// <summary>击杀 Boss 发的局内抽奖币（按章取值，唯一出口）。ch1/ch2 = 50，ch3 起 = 25。</summary>
+    public static int KillGoldBoss(int chapter)
+        => chapter >= KILL_GOLD_LATE_FROM_CHAPTER ? KILL_GOLD_BOSS_LATE : KILL_GOLD_BOSS;
+
     // ——【2026-10-22 主人拍板】正式关 v4 回合制（只对主线正式关生效；引导/金币本/裂隙不读）——
     /// <summary>
     /// 【2026-10-22 主人拍板 v4.2】正式关回合数：普通/精英/Boss 关均 3 回合；
@@ -123,6 +150,8 @@ public static partial class GameConfig
     /// 首抽 40 / 二抽 50 / 三抽 60 → 10 只 = 100 币 = 抽 2 次；15 只 = 150 = 抽 3 次。
     /// 后期总量大，第一波自然落在 12~15（2~3 抽），本保底只兜住前期/低关。
     /// 唯一消费方 WavePlanner.BuildCombatWaves 的 formalMain 分配段。
+    /// ⚠【2026-11-25】ch3 起每只改 5（见上方 KillGoldNormal），本段「10 只 = 2 抽」的算法只对 ch1/ch2 成立；
+    /// 且本保底合波后已退役（不参与铺波），数值链仅供追溯，别再按它推后期抽数。
     /// </summary>
     public const int FORMAL_FIRST_WAVE_MIN = 10;
     /// <summary>

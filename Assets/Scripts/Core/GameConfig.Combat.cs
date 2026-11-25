@@ -196,13 +196,15 @@ public static partial class GameConfig
     /// 【2026-11-05 主人拍板 / 2026-11-23 攻改 0.8】1-5 及其后所有 Boss：攻击 -20%（0.8）、血量 x2。
     /// 真源只此一处，消费点唯一 = Monster.Init 最终写 attr 处（物理 / 魔法两条攻击线都吃）；
     /// 普通怪 / 精英不受影响，副本 / 裂隙里的 Boss 同样生效。
+    /// 【2026-11-25 主人拍板「不要总加血，血多拖长战斗让人烦」】血量回 2.0（不增），
+    /// 难度改由 <see cref="MONSTER_BOSS_ATK_INTERVAL"/> 1.0（出招快一倍）+ 攻击系数承担。
     /// </summary>
     public const float BOSS_ATTACK_MUL = 0.8f;
     public const float BOSS_HP_MUL = 2.0f;
     /// <summary>
     /// 【2026-11-23 主人拍板】章末大 Boss（stageIdx0=9）专属血量倍率，只乘血、不动攻。
     /// 消费点唯一 = Monster.Init 的 chapterFirstHpRule 与 bossStatMul 两处 baseHp 写入。
-    /// 1.3 = 章末大 Boss 再厚三成，配合 BOSS_ATTACK_MUL 0.8 让收尾扛得住四人齐射。
+    /// 【2026-11-25 回 1.3】血量不参与本次加难，收尾靠出招频率 + 攻击。
     /// </summary>
     public const float BOSS_FINAL_HP_MUL = 1.3f;
     /// <summary>
@@ -451,7 +453,14 @@ public static partial class GameConfig
     public const float MONSTER_BOSS_HP = 800f;    // 兜底/下限：表内 Boss 血量低于 50%(400) 才抬到本值；第一章 Boss 由 monster_stats 表给 400/525
     public const float MONSTER_BOSS_ATK = 55f;    // 2026-09-14：Boss 伤害上浮，保证坦克（防 35）也会掉血
     public const float MONSTER_BOSS_DEF = 12f;
-    public const float MONSTER_BOSS_ATK_INTERVAL = 2.2f;
+    /// <summary>
+    /// Boss 出招间隔（秒）。最终攻速 = 1/间隔 × <see cref="MONSTER_ATK_SPEED_MUL"/> 0.39 × 表内 baseAttackSpeed。
+    /// 【2026-11-25 主人拍板「加难度不要总加血，加攻击等其它属性；血多拖长战斗让人烦」】
+    /// 2.2 → 1.0：原值下 Boss 实际每 <b>5.64 秒</b>才出手一次，比普通小怪（1.5 → 3.85 秒）还慢 46% ——
+    /// 「重点关没压力」的真凶其实是出招太慢，不是伤害不够。改后 Boss 每 <b>2.56 秒</b>一下，
+    /// 短战斗里也能打出 2~3 次压迫，不必靠堆血拖时间。只作用于 Boss，小怪 / 精英走各自的间隔。
+    /// </summary>
+    public const float MONSTER_BOSS_ATK_INTERVAL = 1.0f;
     /// <summary>
     /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值 × MonsterConfig.baseAttackSpeed）。
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
@@ -866,22 +875,33 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 【2026-11-24 主人拍板「第一关对齐引导关、缓坡过渡，不要 1-1 就 1 刀」】
-    /// 第 1 章前 2 关的<b>血量过渡系数</b>，乘在 <see cref="MONSTER_HP_GLOBAL_MUL"/> 之上；
-    /// 只作用于主线正式关普通小怪（门禁在 Monster.Init：formalMainRun &amp;&amp; !endlessRift &amp;&amp; !isTutorialRun）。
-    /// <para>目标：引导普通怪 38~40 血，正式关 1-1 对齐同一水平 —— 玩家进战攻 21~29、
-    /// 一击 20.6~28.4，≈40 血正好稳定 2 刀，断崖变坡道；1-2 回落到 ≈28~30 血（1~2 刀）；
-    /// 1-3 起交给既有 <see cref="LATE_MOB_HP_MUL"/> 1.3 与原曲线，1-4 及以后完全恢复原值。</para>
-    /// 实测微调只改这两个数；两者设成 1f 即完全恢复改动前手感。
+    /// 【2026-11-25 主人拍板「整体难度曲线更高、普通关不能一刀一个」】
+    /// 普通小怪的<b>按章血量补偿</b>，乘在 <see cref="MONSTER_HP_GLOBAL_MUL"/> 之上。
+    /// 只作用于主线正式关的<b>普通怪</b>（Monster.Init 门禁：formalMainRun &amp;&amp; !endlessRift
+    /// &amp;&amp; !isTutorialRun &amp;&amp; !eliteWave &amp;&amp; !bossUnit）—— 精英 / Boss 血量另走
+    /// chapterFirstHpRule + Boss 专属系数，不在这里叠加。
+    /// <para>为什么需要：玩家武器攻击 = 本章怪均攻 × 档位 × 章倍率，而小怪血量只有章倍率 ×0.5，
+    /// 前 3 章小怪血量 ≈ 玩家一击（0.6~1.1 刀），波次瞬清、攻击侧完全轮不到生效。
+    /// 目标统一拉到 <b>2~3 刀一只</b>，让怪有出手机会，攻击数值才有意义。</para>
+    /// <para>实测微调只改这张表；全设 1f 即完全恢复改动前手感。
+    /// 【2026-11-25 定稿·含装备复算】上表按「中等偏上装备」（ch1 优秀 / ch2+ 稀有、区间 70% 位、
+    /// 手套带攻击主属性、头胸带生命、胸脚带防御）重算后，把各章统一压到 <b>2.4 刀</b>：
+    /// 之前的 3.3/4.2/2.7 是把玩家攻击当成「只有武器」算出来的，实际手套/头部也在给攻击，怪死得更快。
+    /// 难度爬坡改由 <see cref="LateMobAtkMulForChapter"/>（怪物攻击）承担，血量只负责「别一刀一个」。</para>
     /// </summary>
     public static float EarlyChapterHpCurveMul(int gameChapter, int stageIndex0Based)
     {
-        if (gameChapter != 1) return 1f;
-        switch (stageIndex0Based)
+        switch (gameChapter)
         {
-            case 0: return 3.0f;   // 1-1：≈39~41 血，稳定 2 刀（对齐引导）
-            case 1: return 2.0f;   // 1-2：≈28~30 血，1~2 刀
-            default: return 1f;    // 1-3 起：交回 LATE_MOB_HP_MUL / 原曲线
+            case 1: return stageIndex0Based == 0 ? 3.0f : 4.0f;   // 第1关对齐引导；其余全章 2.4 刀
+            case 2: return 5.0f;
+            case 3: return 5.3f;
+            case 4: return 3.4f;
+            case 5: return 2.65f;
+            case 6: return 1.75f;
+            case 7: return 1.6f;
+            case 8: return 1.55f;
+            default: return 1.55f;
         }
     }
 
@@ -934,36 +954,37 @@ public static partial class GameConfig
     //   → 关 9 比章末大 Boss 还厚，「大高潮收尾」直接失效（关9 成最高点）。
     //   归 1 之后：关3 精英 1.22 → 关8 精英 1.38（精英渐强）、关5 小Boss 1.30 → 关10 大Boss 1.50（Boss 渐强），
     //   每个峰后面都紧接谷（关4 1.08 / 关6 1.14 / 关9 1.26），关10 重新成为全章最高。
-    //   本数组只保留关 5（半程小 Boss）的 +10% 卡点；关 10 维持 1f ——
-    //   11-18「Boss 血薄攻高、看得到血条一路掉」口径不变，关10 的难度仍走 CH1_FINAL_BOSS_ATK_DEV（只加攻击）。
+    //   本数组只保留关 5（半程小 Boss）的卡点；关 10 维持 1f ——
+    //   关10 的难度走 CH1_FINAL_BOSS_ATK_DEV / CH1_FINAL_BOSS_HP_MUL（只作用于大 Boss 本体）。
+    //   【2026-11-25 关5 1.10 → 1.20】主人要「第5关小卡一下、死1~2次」：1.10 时四人队 9.8 秒打完、
+    //   10.6 秒才团灭 ⇒ 首次就过；1.20 后 Boss ≈1920 血 / 每下 ≈144 ⇒ 10.7 秒打完、9.7 秒团灭，
+    //   首次差一点失败、升 1 级或换 1 件装备即可过（这一战之前招不了新佣兵，不能再狠）。
     //   要恢复旧手感把 1f 按旧值填回即可。
-    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.10f, 1f, 1f, 1f, 1f, 1f };
+    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.20f, 1f, 1f, 1f, 1f, 1f };
 
     /// <summary>
-    /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
+    /// 【2026-11-18 立 / 2026-11-25 主人重定「第一章第10关要能卡住人，死 1~4 次」】
     /// 第一章关 10 大 Boss（forest_110 石灵）<b>专属攻击系数</b>，只乘攻击、不乘血量。
-    /// 为什么单独开一条：全局 <see cref="BOSS_ATTACK_MUL"/> 现为 0.8（11-23 由 0.6 上调），
-    ///   直接改它会连累 8 章所有 Boss；这里只补第一章关 10 这一个点。
-    /// 现状换算（guildScale/diffScale=1、waveMul=1；近远真源 = monster_attack_style 风格表：
-    ///   石灵 1-10 = <b>Melee 近战 ⇒ 物理型</b>，血量档走 BossPhysicalHpMul=18，不是法系的 12）：
-    ///   血 = 26.7(本章1号小怪)×18(物理Boss)×1.782(章0.88×末节1.50×TTK1.35)×0.5(全局砍半)×2.0(Boss血倍) ≈ 856
-    ///   攻 = 33.6×1.32(章0.88×末节1.50)×1.8(伤害倍)×1.35(Boss攻TTK)×0.35(章攻击减免)×0.6(Boss攻减免)×1.08(末节Boss攻偏差) ≈ 22.6
-    ///   → 再乘本系数 1.8 ⇒ 攻 ≈ 44.0；血再乘 <see cref="CH1_FINAL_BOSS_HP_MUL"/> 0.85 ⇒ 血 ≈ 728。
-    ///   相对改前（W=1.10 时血 942/攻 26.9）= 血 -23%、攻 +64%。
-    /// ⚠ 别再拿 monster_stats 的 attackRange 判远近：Boss 的 atkRange 在 Monster.Init 里恒取 Ranged 世界值，
-    ///   那列对 Boss 毫无意义；唯一真源是 monster_attack_style.csv 的 style。
+    /// 为什么单独开一条：全局 <see cref="BOSS_ATTACK_MUL"/> 会影响 8 章所有 Boss；
+    ///   这里只补第一章关 10 这一个点。
+    /// 【1.8 → 1.3 的原因】<see cref="ChapterAtkMulTable"/> 第 1 章已由 0.35 抬到 0.90（×2.57），
+    ///   再乘 1.8 会变成一击必杀（无解）；1.3 时净效果 ≈ 改前的 ×1.86：
+    ///   每下 ≈196（玩家 360 血 + 30% 防减 ⇒ 约 2.6 刀倒）—— 前半场还能扛、狂暴后才致命，
+    ///   「血量下降 → 狂暴 → 暴击/攻速飙升」才是这次的主要压力来源，攻击只做底噪。
+    /// 【2026-11-25 主人拍板「加难度不要加血、靠机制」】血量侧保持改前（<see cref="CH1_FINAL_BOSS_HP_MUL"/> 0.85、
+    ///   <see cref="BOSS_HP_MUL"/> 2.0），Boss 血仍 ≈1700（7 秒打完）；
+    ///   40% 血进入狂暴：攻速 ×<see cref="BOSS_ENRAGE_ATK_SPEED_MUL"/>、暴击率 → <see cref="BOSS_ENRAGE_CRIT_RATE"/>，攻击不加。
+    /// ⚠ 别再拿 monster_stats 的 attackRange 判远近：Boss 的 atkRange 在 Monster.Init 里恒取 Ranged 世界值；
+    ///   唯一真源是 monster_attack_style.csv 的 style。
     /// 调法：只改这一个数；实跑后按「玩家能扛几刀 / Boss 差多少血没死」回标。
     /// </summary>
-    public const float CH1_FINAL_BOSS_ATK_DEV = 1.80f;
+    public const float CH1_FINAL_BOSS_ATK_DEV = 1.3f;
 
     /// <summary>
-    /// 【2026-11-18 主人拍板「尽量血少攻高，就差一点、再多打一下就能过」】
+    /// 【2026-11-18 立 / 2026-11-25 主人重定「不要加血，血多拖长战斗让人烦躁」】
     /// 第一章关 10 大 Boss（forest_110 石灵）<b>专属血量系数</b>，只乘血量、不乘攻击。
-    /// 为什么单独开一条：<see cref="CH1_STAGE_WALL"/> 是 GetStatScale 的乘数，改它会
-    ///   血量与攻击<b>同时</b>变化，满足不了「只降血、不动攻」；这里只削 Boss 血量这一个维度。
-    /// 作用点：Monster.Init 的 MaxHp 写入式（bossHpMul 之后），判定 = 主线正式局 + 大 Boss + 第 1 章。
-    /// 0.85 的依据：约 -15% 血，让血条掉得看得见、Boss 死前能留下「就差一点」的进度感，
-    ///   同时又不至于瘦到没有 Boss 分量。想更瘦往下调，但别低于 0.7（会失去 Boss 体感）。
+    /// 【1.55 → 0.85 回退】战斗时长回到 ≈7 秒；本次加难全部走攻击 / 出招频率 / 预警，
+    ///   不再用「堆血换试错次数」的做法。
     /// 副本 / 裂隙 / 支线 / 竞技场零影响（条件含 IsFormalMainRun + BossKindOfStage==2）。
     /// </summary>
     public const float CH1_FINAL_BOSS_HP_MUL = 0.85f;
@@ -1072,12 +1093,12 @@ public static partial class GameConfig
     /// <summary>精英攻击 = 本章普通怪平均 baseAttack × 本值</summary>
     public static float ELITE_ATK_FROM_CHAPTER_AVG => CombatTuningTable.Get("ELITE_ATK_FROM_CHAPTER_AVG", 1.6f);
     /// <summary>Boss 进入阶段 2 的血量比例（≤ 则换招）</summary>
-    public static float BOSS_PHASE2_HP_RATIO => CombatTuningTable.Get("BOSS_PHASE2_HP_RATIO", 0.7f);
-    public static float BOSS_PHASE2_DAMAGE_MUL => CombatTuningTable.Get("BOSS_PHASE2_DAMAGE_MUL", 1.18f);
-    public static float BOSS_PHASE2_RADIUS_MUL => CombatTuningTable.Get("BOSS_PHASE2_RADIUS_MUL", 1.35f);
-    public static float BOSS_PHASE2_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE2_TELEGRAPH", 2.2f);
+    public static float BOSS_PHASE2_HP_RATIO => CombatTuningTable.Get("BOSS_PHASE2_HP_RATIO", 0.75f);
+    public static float BOSS_PHASE2_DAMAGE_MUL => CombatTuningTable.Get("BOSS_PHASE2_DAMAGE_MUL", 1.4f);
+    public static float BOSS_PHASE2_RADIUS_MUL => CombatTuningTable.Get("BOSS_PHASE2_RADIUS_MUL", 1.5f);
+    public static float BOSS_PHASE2_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE2_TELEGRAPH", 1.7f);
     /// <summary>Boss 一阶段技能预警时长</summary>
-    public static float BOSS_PHASE1_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE1_TELEGRAPH", 3f);
+    public static float BOSS_PHASE1_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE1_TELEGRAPH", 2.4f);
     /// <summary>Boss 阶段切换时的预警时长</summary>
     public static float BOSS_PHASE_SHIFT_TELEGRAPH => CombatTuningTable.Get("BOSS_PHASE_SHIFT_TELEGRAPH", 2.5f);
 
@@ -1098,8 +1119,10 @@ public static partial class GameConfig
     public static readonly Color TELEGRAPH_ENRAGED_COLOR = new Color(1f, 0.02f, 0.02f, 1f);
     /// <summary>精英预警时长（秒）。</summary>
     public const float TELEGRAPH_ELITE_SEC = 3f;
-    /// <summary>Boss 预警时长（秒），阶段 2 与阶段切换同用。【2026-11-24 主人拍板】从 4s 减到 2.67s（-1/3）。</summary>
-    public const float TELEGRAPH_BOSS_SEC = 2.6667f;
+    /// <summary>Boss 预警时长（秒）。【2026-11-24 主人拍板】从 4s 减到 2.67s（-1/3）。</summary>
+    /// 【2026-11-25 2.6667 → 2.4】这是<b>唯一真正生效</b>的 Boss 预警开关（`Monster.Skills:423` 两阶段共用）；
+    /// 表里 `BOSS_PHASE1/2_TELEGRAPH` 两个键没有被任何代码消费，别再按那两行调。
+    public const float TELEGRAPH_BOSS_SEC = 2.4f;
     /// <summary>Boss 主动技伤害倍率（相对精英 tier=1f 再乘一次）。【2026-11-24 主人拍板】+20% → 1.2f。</summary>
     public const float BOSS_SKILL_DAMAGE_MUL = 1.2f;
     /// <summary>精英/Boss 红圈/扇形预警结束、技能真正释放时的震屏：Boss 震屏幅度</summary>
@@ -1114,8 +1137,16 @@ public static partial class GameConfig
     public static int BOSS_ENRAGE_MIN_CHAPTER => CombatTuningTable.GetInt("BOSS_ENRAGE_MIN_CHAPTER", 5);
     /// <summary>触发狂暴的血量阈值（当前/最大 ≤ 此值触发）。0.40=低于 40%。</summary>
     public static float BOSS_ENRAGE_HP_RATIO => CombatTuningTable.Get("BOSS_ENRAGE_HP_RATIO", 0.40f);
-    /// <summary>【2026-11-18 主人拍板】Boss 二阶段攻速倍率固定 1.3（原 1.5 线性曲线已废弃，见 HpScaledAttackSpeedMul）。攻击间隔 ÷1.3。</summary>
-    public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.3f);
+    /// <summary>【2026-11-18 主人拍板】Boss 狂暴攻速倍率（原 1.5 线性曲线已废弃，见 HpScaledAttackSpeedMul）。攻击间隔 ÷本值。</summary>
+    /// 【2026-11-25 主人拍板「靠机制加难度：狂暴 = 暴击 + 攻速，攻击不加」】判据改为「狂暴」（40% 血）时刻；默认回退值同步到表值 1.8。
+    public static float BOSS_ENRAGE_ATK_SPEED_MUL => CombatTuningTable.Get("BOSS_ENRAGE_ATK_SPEED_MUL", 1.8f);
+    /// <summary>
+    /// 【2026-11-25 主人拍板】狂暴时 Boss 的暴击率<b>目标绝对值</b>（基础 0.05 → 0.30）。
+    /// 消费点唯一 = <c>Monster.Boss.GetLowHpCritRateBonus</c>（返回差值，接普攻 / 技能两条伤害链），
+    /// 不直接写 attr，避免 RecalcAllAttr 把绝对值冲回基础值。
+    /// 攻击力不动 —— 压力来自「更快的暴击连击」，玩家靠走位/护盾规避，而不是被数值碾。
+    /// </summary>
+    public static float BOSS_ENRAGE_CRIT_RATE => CombatTuningTable.Get("BOSS_ENRAGE_CRIT_RATE", 0.30f);
 
     // =====================================================================
     // ⚠【2026-10-12 整段删除·主人「把关卡的怪物数量回复正常」】
@@ -1242,8 +1273,13 @@ public static partial class GameConfig
     /// 无尽裂隙不参与（强度只随层数走，Monster.Init 已排除）、引导局不参与。
     /// ⚠ 外溢提示：活动副本场景章跟随本表（金币=1 不变 / 徽记=2 +3% 无感 / 卷轴=6 怪 ATK ×0.65 变弱，
     /// 2026-10-25 已报主人，若嫌简单后续给副本难度分层补独立乘区，未动）。
+    /// 【2026-11-25 主人拍板「整体难度曲线更高、第一章按当天手感、第二章起往上抬」】
+    /// 第 1 章维持 0.90（当天手感），第 2~8 章按「可挨刀」逐章收紧：
+    ///   ch1 21 / ch2 15 / ch3 11 / ch4 11 / ch5 9 / ch6 9 / ch7 8 / ch8 5 刀。
+    /// 前几版把 2~3 章压到 0.8 以下，绝对伤害几乎和第一章一样平，第二章起没有「变难」的体感。
+    /// 改手感只动这张表。
     /// </summary>
-    static readonly float[] ChapterAtkMulTable = { 0.35f, 0.36f, 0.40f, 0.42f, 0.45f, 0.52f, 0.62f, 0.75f };
+    static readonly float[] ChapterAtkMulTable = { 0.90f, 0.86f, 0.80f, 0.78f, 0.76f, 0.78f, 0.82f, 0.85f };
 
     public static float ChapterAtkMul(int chapter)
     {
@@ -1261,6 +1297,16 @@ public static partial class GameConfig
     public const float LATE_ELITE_BOSS_ATK_MUL = 1.5f;
     public const float LATE_MOB_HP_MUL = 1.3f;
     public const float LATE_MOB_ATK_MUL = 1.3f;
+
+    // 【2026-11-25 主人拍板「从第二章开始难度曲线高点」】主线普通怪的攻击按章递增（唯一出口）。
+    // 为什么必须单开一条、不能靠 ChapterAtkMulTable：那张表同时喂 Boss，抬它会先把 Boss 抬成一击必杀；
+    // 而玩家的手套/头部攻击、胸/头生命都按 chapterGrowth 同步长，怪物只吃 LATE_MOB_ATK_MUL 恒 1.3 的话，
+    // 「可挨刀」会从头到尾压在 14~20 之间、完全没有爬坡（实测：18/20/17/20/18/18/17/14）。
+    // 本表只作用于「主线正式关的非精英、非 Boss 怪」，副本 / 裂隙 / 支线 / 竞技场仍走常量 1.30，零影响。
+    // 目标「可挨刀」：ch1 20 → ch8 7。实跑要改只动这张表。
+    static readonly float[] LateMobAtkRamp = { 1.25f, 1.50f, 1.60f, 2.10f, 2.30f, 2.60f, 2.75f, 2.70f };
+    public static float LateMobAtkMulForChapter(int chapter)
+        => LateMobAtkRamp[Mathf.Clamp(chapter, 1, LateMobAtkRamp.Length) - 1];
 
     public static bool LateGameBuffActive(int chapter, int stageIdx0, bool isTutorialRun, bool endlessRift, bool formalMainRun)
     {

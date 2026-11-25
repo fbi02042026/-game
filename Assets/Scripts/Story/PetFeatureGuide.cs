@@ -240,14 +240,17 @@ public class PetFeatureGuideDriver : MonoBehaviour
 
         // 第一拍：回城指路（功能开启的 toast 已在胜利界面说过了，这里不再重复报喜）
         GlobalToastUI.ShowPersona("宠物在角色页等你，快去看看嘛～");
-        yield return new WaitForSecondsRealtime(2.2f);
+        yield return new WaitForSecondsRealtime(0.8f);   // 【2026-11-25 主人「出来的有点慢」】2.2→0.8s
 
         // 第二拍【2026-11-23 酒馆气泡模式】：不自动切页，底栏「角色」按钮贴气泡指路，等玩家自己点进去。
         var nav = MainBottomNav.Instance;
         var navRect = nav != null && nav.characterButton != null
             ? nav.characterButton.transform as RectTransform : null;
         if (navRect != null)
-            ShowBubble("点底栏「角色」页找我～", navRect, false, PetFeatureGuide.GuideBubbleLayout);
+            // 【2026-11-25 主人「玩家要是点击图标就消失」】这条不自动收、不点任意处收，点角色图标才收
+            // （OnCharacterPageOpened / 点 UI 按钮收口）；出来快一点由下方 toast 等待缩短实现。
+            ShowBubble("点底栏「角色」页找我～", navRect, false, PetFeatureGuide.GuideBubbleLayout,
+                      untilTargetClick: true);
         else
             Debug.LogError("[PetFeatureGuide] 底栏角色按钮取不到，角色页指路气泡跳过（不静默兜底）");
         yield return WaitStage(2);   // 等玩家自己点进角色页（TownHubController 通知）
@@ -256,7 +259,9 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var charUi = CharacterUI.Instance;
         var entryRect = charUi != null ? CharacterUI.PetEntryRect : null;
         if (entryRect != null)
-            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.PetEntryBubbleLayout);
+            // 【2026-11-25 主人「角色界面那个宠物图标也是」】同第二拍：点宠物图标才收
+            ShowBubble("点「宠物」图标看看嘛～", entryRect, false, PetFeatureGuide.PetEntryBubbleLayout,
+                      untilTargetClick: true);
         else
             Debug.LogError("[PetFeatureGuide] 角色页宠物入口取不到，指路气泡跳过");
         yield return WaitStage(3);   // 等玩家点开宠物界面
@@ -266,7 +271,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         yield return WaitStage(4);   // 等玩家上阵
 
         // 第五拍：指喂养按钮（同一个按钮，上阵后文案变「喂养」）
-        ShowBubble("再点「喂养」涨属性～", PetUI.DeployBtnRect, true, PetFeatureGuide.GuideBubbleLayout);
+        ShowBubble("喂一次可获得属性哦", PetUI.DeployBtnRect, true, PetFeatureGuide.GuideBubbleLayout);
         yield return WaitStage(5);   // 等玩家喂养
 
         // 第六拍：宠物用战斗对话框叫两声（固定锚点浮在宠物模型上方）
@@ -294,7 +299,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
     /// <summary>酒馆气泡模式统一出口：贴目标底框 + 尖角 + 点击即收 + 无手指滑动（不去下滑）；
     /// overPopup=气泡要盖到 TownPopup(900) 弹窗里控件时抬层（照 MercSwapHint.TryShow 口径）。</summary>
     static void ShowBubble(string text, RectTransform target, bool overPopup,
-        TutorialHintUI.HintLayout? layout = null)
+        TutorialHintUI.HintLayout? layout = null, bool untilTargetClick = false)
     {
         var bubble = BattleManager.DraftHintBubble;
         if (bubble == null)
@@ -305,8 +310,11 @@ public class PetFeatureGuideDriver : MonoBehaviour
         var hint = TutorialHintUI.Ensure();
         hint.SetBannerSpriteOnce(bubble);
         if (overPopup) hint.SetSortOrderOnce(GameConfig.UiSort.TownPopup + 40);
-        hint.SetTapToHideOnce(true);   // 点一下即收，不留屏
-        hint.Show(text, target, PetFeatureGuide.HintSeconds, false, layout);
+        // 【2026-11-25 主人「玩家要是点击图标就消失」】指路拍：不自动收、不点任意处收，
+        // 只有玩家点了目标图标（OnCharacterPageOpened / OnPetUIOpened）才收；其余三拍保持原口径。
+        // 显式传 false 顺带重置武装门限，防上一条 SetTapToHideOnce(true) 残留导致点空处秒收。
+        hint.SetTapToHideOnce(!untilTargetClick);
+        hint.Show(text, target, untilTargetClick ? -1f : PetFeatureGuide.HintSeconds, false, layout);
         if (!hint.IsVisible || hint.CurrentHint != text)
         {
             // Show 被战斗头顶台词占用没真弹出：退掉一次性设置，防污染下一条

@@ -1,10 +1,10 @@
 ﻿# 战斗调参表（combat_tuning）。把 GameConfig 中散落的战斗硬编码常量收编进表，改数值不用改代码。
 # 缺表 / key 缺失 / 构造期读表被拒时，运行时回退 GameConfig 默认值，行为与原硬编码完全一致，可随时回退。
 key,value,comment
-BOSS_PHASE2_HP_RATIO,0.7,Boss 二阶段触发血量比例（当前/最大≤此值则换招）
-BOSS_PHASE2_DAMAGE_MUL,1.18,Boss 二阶段伤害倍率
-BOSS_PHASE2_RADIUS_MUL,1.35,Boss 二阶段红圈/扇形预警半径倍率
-BOSS_PHASE2_TELEGRAPH,2.2,Boss 二阶段预警时长
+BOSS_PHASE2_HP_RATIO,0.75,Boss 二阶段触发血量比例（当前/最大≤此值则换招）
+BOSS_PHASE2_DAMAGE_MUL,1.0,Boss 二阶段技能伤害倍率（2026-11-25 主人拍板：不加攻击，难度走暴击/攻速/范围）
+BOSS_PHASE2_RADIUS_MUL,1.5,Boss 二阶段红圈/扇形预警半径倍率（真源，Monster.Skills 已接）
+BOSS_PHASE2_TELEGRAPH,1.7,Boss 二阶段预警时长（未消费；实际真源 = GameConfig.TELEGRAPH_BOSS_SEC，两阶段共用）
 ELITE_TANK_HP_MUL,1.1,精英血厚档血量倍率
 ELITE_TANK_ATK_MUL,0.92,精英血厚档攻击倍率
 ELITE_TANK_TELEGRAPH,3.2,精英血厚档预警时长
@@ -44,7 +44,7 @@ BOSS_TTK_ATK_MUL,1.35,Boss 额外 TTK 攻击倍率（剧情 Boss 想更狠请改
 ELITE_HP_FROM_CHAPTER_AVG,2.6,精英血量 = 本章普通怪平均 baseHp × 本值
 ELITE_ATK_FROM_CHAPTER_AVG,1.6,精英攻击 = 本章普通怪平均 baseAttack × 本值
 # ---- Boss / 精英 预警与震屏 ----
-BOSS_PHASE1_TELEGRAPH,3,Boss 一阶段技能预警时长
+BOSS_PHASE1_TELEGRAPH,2.4,Boss 一阶段技能预警时长（未消费；实际真源 = GameConfig.TELEGRAPH_BOSS_SEC = 2.4）
 BOSS_PHASE_SHIFT_TELEGRAPH,2.5,Boss 阶段切换预警时长
 BOSS_SKILL_RELEASE_SHAKE_AMP,0.18,Boss 技能释放震屏幅度
 BOSS_SKILL_RELEASE_SHAKE_DUR,0.26,Boss 技能释放震屏时长
@@ -52,9 +52,10 @@ ELITE_SKILL_RELEASE_SHAKE_AMP,0.12,精英技能释放震屏幅度
 ELITE_SKILL_RELEASE_SHAKE_DUR,0.20,精英技能释放震屏时长
 # ---- Boss 狂暴 ----
 BOSS_ENRAGE_ENABLED,1,Boss 狂暴总开关（1=开 0=关）
-BOSS_ENRAGE_MIN_CHAPTER,5,狂暴起始章节（含）
+BOSS_ENRAGE_MIN_CHAPTER,5,狂暴起始章节（含；已废弃，章节门槛取消）
 BOSS_ENRAGE_HP_RATIO,0.40,触发狂暴的血量阈值（当前/最大 ≤ 此值）
-BOSS_ENRAGE_ATK_SPEED_MUL,1.5,狂暴攻速倍率（>1 更快，攻击间隔 ÷本值）
+BOSS_ENRAGE_ATK_SPEED_MUL,1.8,狂暴攻速倍率（>1 更快，攻击间隔 ÷本值）
+BOSS_ENRAGE_CRIT_RATE,0.30,狂暴后 Boss 暴击率（绝对值；基础 0.05 → 本值，攻击力不变）
 # ---- 怪物技能 ----
 MONSTER_NORMAL_SKILL_DAMAGE_MUL,0.55,普通远程小怪技能伤害折扣
 MONSTER_SKILL_PROJECTILE_SPEED_MUL,0.138,怪物技能弹道速度倍率（勿随意改快）
