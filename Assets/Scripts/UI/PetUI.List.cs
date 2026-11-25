@@ -12,13 +12,14 @@ public partial class PetUI
     ScrollRect _scroll;
     RectTransform _viewport, _content;
     float _rowStep;   // 行间距从 prefab 模板行现读（Slot1~Slot4 实测 130），不写死、不改模板行位置
+    readonly List<GameObject> _rowDeployBadges = new List<GameObject>();   // 列表头像「上阵」红条角标（11-25 主人）
 
     void SetupList()
     {
         if (_petList == null) return;
         // 采集 prefab 现成的 5 行
         _rowGos.Clear(); _rowPortraits.Clear(); _rowBgs.Clear();
-        _rowLocks.Clear(); _rowSelects.Clear(); _rowBtns.Clear();
+        _rowLocks.Clear(); _rowSelects.Clear(); _rowBtns.Clear(); _rowDeployBadges.Clear();
         for (int i = 0; i < _petList.childCount; i++)
         {
             var c = _petList.GetChild(i);
@@ -42,9 +43,43 @@ public partial class PetUI
         EnsureScroll();
     }
 
+    /// <summary>列表头像「上阵」红条角标：底图复用每日登录「限定字底」+ 金黄字，运行时建树不碰 prefab（11-25）。</summary>
+    static GameObject EnsureDeployBadge(Transform portrait)
+    {
+        if (portrait == null) return null;
+        var go = new GameObject("DeployBadge", typeof(RectTransform), typeof(Image));
+        go.transform.SetParent(portrait, false);
+        var rt = go.GetComponent<RectTransform>();
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = Vector2.zero;
+        rt.sizeDelta = new Vector2(64f, 34f);   // 对齐「建议 / 限定」角标规格（PlayerJobSelectUI）
+        var img = go.GetComponent<Image>();
+        img.sprite = Resources.Load<Sprite>("UI/Art/每日登录/每日登录_0003_限定字底");
+        img.color = Color.white;   // 底图自带红色，不叠 tint
+        img.raycastTarget = false;
+
+        var txtGo = new GameObject("Label", typeof(RectTransform), typeof(Text));
+        txtGo.transform.SetParent(go.transform, false);
+        var trt = txtGo.GetComponent<RectTransform>();
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = Vector2.zero;
+        trt.offsetMax = Vector2.zero;
+        var txt = txtGo.GetComponent<Text>();
+        txt.text = "上阵";
+        txt.font = GameFonts.GetChinese();
+        txt.fontSize = 20;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = new Color(1f, 0.9f, 0.5f, 1f);   // 金黄字（同「限定」角标）
+        txt.raycastTarget = false;
+        return go;
+    }
+
     void RegisterRow(Transform row)
     {
         var portraitT = FindDeep(row, "Slot0/Portrait");
+        var deployBadge = EnsureDeployBadge(portraitT);
         var bg = GetImage(row);
         var lockGo = FindDeep(row, "LockIcon")?.gameObject;
         var selGo = FindDeep(row, "选中")?.gameObject;
@@ -56,6 +91,7 @@ public partial class PetUI
         _rowLocks.Add(lockGo);
         _rowSelects.Add(selGo);
         _rowBtns.Add(btn);
+        _rowDeployBadges.Add(deployBadge);
 
         int idx = _rowBtns.Count - 1;
         btn.onClick.RemoveAllListeners();
@@ -150,6 +186,9 @@ public partial class PetUI
     {
         var save = SaveSystem.Instance?.Data;
         var bodies = PetDefs.Bodies;
+        // 上阵角标口径：左侧只列本体，上阵的是皮肤时归一到本体；真源 petDeployedId。
+        var deployedDef = PetDefs.Get(save != null ? save.petDeployedId : null);
+        string deployedBodyId = deployedDef == null ? null : (PetDefs.IsSkin(deployedDef) ? deployedDef.skinOf : deployedDef.id);
         for (int i = 0; i < _rowGos.Count && i < bodies.Count; i++)
         {
             var def = bodies[i];
@@ -163,6 +202,8 @@ public partial class PetUI
             // 主人 11-21：未获得/未解锁的头像显示暗色（置灰），已解锁恢复原色
             if (_rowPortraits[i] != null)
                 _rowPortraits[i].color = unlocked ? Color.white : new Color(0.35f, 0.35f, 0.4f, 1f);
+            if (_rowDeployBadges[i] != null)
+                _rowDeployBadges[i].SetActive(!string.IsNullOrEmpty(deployedBodyId) && def.id == deployedBodyId);
         }
     }
 }

@@ -24,7 +24,6 @@ public partial class BattleManager
     Coroutine _cutsceneCo;               // 唯一协程句柄
     Pet _cutsceneDog;                    // 本场狗战斗单位（真参战，进 allyUnits）
     bool _dogRescueForceHero;            // 【2026-11-24】第2波战斗期间怪强制锁玩家（气泡解冻→首领来袭前）
-    float _rescueDiagTimer;              // 【临时诊断 2026-11-24，验证后删】触发前几何日志计时器
     /// <summary>狗跑入时长倍率（2026-11-23 23:2x 主人「狗的移动速度也快 减一半」：3.5 → 1.75）。</summary>
     const float DOG_RUN_SPEED_MUL = 1.75f;
     /// <summary>等「狗被打跑」的看门狗（秒）：超时强制撤场，绝不把演出卡死（2026-11-23 分镜）。</summary>
@@ -43,8 +42,10 @@ public partial class BattleManager
     /// <summary>
     /// 玩家走到狗附近时由 Update 调用：启动狗营救演出（幂等，重复调用不叠加）。
     /// 【2026-11-24 主人拍板】狗已在第一波清完时提前入场开打（TryPetRescueActivate 生成），
-    /// 这里等玩家走到狗附近（CUTSCENE_TRIGGER_DIST）才触发冻场气泡——玩家先走过去看狗打一会，
+    /// 这里等玩家走到狗入镜（dog.x ≤ visMax）才触发冻场气泡——玩家先走过去看狗打一会，
     /// 靠近了才出剧情，不是第二波一刷出来就打断。解锁存档与生成已前移，本方法只负责启动协程。
+    /// 【2026-11-25 还原】撤销「入镜后再走 0.8 / 等 3 秒」门槛：高战力下第二波瞬清、
+    /// 波次推进后 _activeWaveIndex != 1 门禁封死，剧情永久丢失。恢复狗入镜即弹。
     /// </summary>
     void TryPlayDogRescueCutscene()
     {
@@ -62,14 +63,6 @@ public partial class BattleManager
         {
             GetBattleVisibleX(out _, out float visMax, 0.35f);
             float dogX = _cutsceneDog.transform.position.x;
-            // 【临时诊断 2026-11-24，验证后删】打印几何，确认狗入镜时才触发
-            _rescueDiagTimer += Time.deltaTime;
-            if (_rescueDiagTimer >= 0.5f)
-            {
-                _rescueDiagTimer = 0f;
-                float hx = hero != null ? hero.transform.position.x : -9999f;
-                Debug.Log($"[DIAG-Rescue] wave={_activeWaveIndex} alive={CountAliveMonsters()} heroX={hx:0.0} dogX={dogX:0.0} visMax={visMax:0.0} dogOnScreen={dogX <= visMax}");
-            }
             if (dogX > visMax) return;   // 狗还在屏外，等玩家走近入镜
         }
 
@@ -92,7 +85,6 @@ public partial class BattleManager
         if (_cutsceneFrozeUnits) { UnitsCanAct = true; _cutsceneFrozeUnits = false; }
         _cutsceneTalkCanActBefore = true;
         _cutsceneDog = null;
-        _rescueDiagTimer = 0f;
         // 【2026-11-24】换关清掉怪锁玩家标志 + 强制目标，绝不让下一关的怪还锁着玩家
         _dogRescueForceHero = false;
         ClearMonsterForcedTargets();

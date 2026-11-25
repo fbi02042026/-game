@@ -315,11 +315,11 @@ public partial class TalentUI
                 if (i + 1 < n && hasHex[i + 1])
                 {
                     const float tipOverlap = 2f;
-                    // 【2026-11-24 主人拍板】所有连线整体往下 10：段长不变、只把起点下移 linkDown，
-                    // 线在两枚六边形之间相对图标整体下移。只改这一处；框/图标/行距/中轴一概不动。
-                    const float linkDown = 10f;
+                    // 【2026-11-25 主人拍板】连线整体往下 20、段长 ×1.05（11-24 原为下移 10、段长不变）：
+                    // 起点下移 linkDown + 段长按比例拉长。只改这一处；框/图标/行距/中轴一概不动。
+                    const float linkDown = 20f;
                     float startY = localTop[i] - tipOverlap - linkDown;
-                    float len = hexBottom[i + 1] - hexTop[i] + tipOverlap * 2f;
+                    float len = (hexBottom[i + 1] - hexTop[i] + tipOverlap * 2f) * 1.05f;
                     if (len > 2f) StretchRail(v.lineUp, startY, len, true);
                     else v.lineUp.gameObject.SetActive(false);   // 两行贴到一起时不留线头
                 }

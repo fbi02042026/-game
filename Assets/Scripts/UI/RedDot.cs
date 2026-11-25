@@ -21,8 +21,9 @@ public static class RedDot
 
     /// <summary>入口红点统一尺寸：以「冒险日志」入口 30.8 为准
     /// （2026-11-09 主人「把其他地方的大小按冒险日志统一」）。
+    /// 2026-11-25 主人「所有红点放大 4%」：30.8 × 1.04 = 32.032（改本真源即全局生效）。
     /// 单一真源：RedDot.Bind 默认尺寸与 UIRedDot.size 都读它，调用处不再写死数字。</summary>
-    public const float DefaultSize = 30.8f;
+    public const float DefaultSize = 30.8f * 1.04f;
 
     static readonly Dictionary<string, bool> _flags = new Dictionary<string, bool>();
     static readonly Dictionary<string, List<UIRedDot>> _views = new Dictionary<string, List<UIRedDot>>();
@@ -160,7 +161,7 @@ public static class RedDot
         rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
         rt.pivot = new Vector2(0.5f, 0.5f);
         rt.sizeDelta = new Vector2(size, size);
-        rt.anchoredPosition = offset ?? new Vector2(-12f, -7f);
+        rt.anchoredPosition = offset ?? new Vector2(-12f, -9f);
 
         var img = go.GetComponent<Image>();
         img.sprite = Sprite;

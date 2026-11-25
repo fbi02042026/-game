@@ -3345,6 +3345,21 @@ public partial class BattleManager
     }
 
     /// <summary>
+    /// 【2026-11-25 主人报「一进战斗场景抽奖币不是 100」】发启动金前清池。
+    /// 开局发装 PlayerJobDefs.ApplyForBattle 在 OnRunStart 之前跑，持久装备顶掉起步件的折币
+    /// （ScrapEquip → GrantScrapGold → AddRunGold）先入了池，不清就叠成 100+40=140。
+    /// 唯一调用点 = RunDraftDirector.OnRunStart 的 !resumed 分支（紧接着发启动金）。
+    /// ⚠ 不复用 PersistBattleGold：那是局末写回出口，开局调会把本局金币重复入账。
+    /// ⚠ 不刷 HUD：紧随其后的 GrantRunStarterGold → AddRunGold 会 NotifyPoolGoldChanged。
+    /// 续局（resumed）不走这里——那笔由 RestoreRunGoldPool 还原，别清。
+    /// </summary>
+    public void ClearPoolGoldBeforeStageStart()
+    {
+        currentGold = 0;
+        _goldAtRunStart = 0;
+    }
+
+    /// <summary>
     /// 「本局获得金币」写回城镇的<b>唯一出口</b>（每关通关 / 死亡 / 撤离 / 通关回城都会走）。
     /// <param name="resetPool"/>：是否把抽奖币池**清零**。【2026-11-25 主人拍板「只有装备能保留，
     /// 其他的一切清空」】旧口径「重置回基线 _goldAtRunStart」作废 —— 基线只加不减，退出后 HUD

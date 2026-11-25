@@ -132,6 +132,15 @@ public class MercSkillCaster : MonoBehaviour
         // 闸必须放在扣蓝之前：放后面的话没目标时返回 false，蓝已扣、CD 不重置，会每帧空扣蓝。
         if (MercSkillNeedsTarget(_activeSkillId) && _merc.FindNearestEnemy() == null) return false;
 
+        // 【2026-11-25 主人报「路加站着不动、头顶条一截一截退涨」】两个「反正放不出去」的闸前置到读条之前：
+        // ① 治疗技没人需要奶（全队 ≥92% 且无人引导眩晕）→ 结算必被拦；
+        // ② 蓝不够 → 结算必被拦。
+        // 这两条原来都在读满 1 秒之后才判：返回 false → CD 不进 → 0.25 秒重试 → 又读 1 秒，
+        // 满血站桩就变成头顶条无限重来（每轮还白扣一次蓝）。前置后根本不启动读条。
+        // 口径不在这里另写一份：MercHealHasPatient / HasMercMp 都是结算侧同一个出口。
+        if (IsGatedHealActiveSkill() && !BattleManager.Instance.MercHealHasPatient(_merc)) return false;
+        if (_mpType != MpArchetype.None && !BattleManager.Instance.HasMercMp(_merc, _mpCost)) return false;
+
         // 【2026-11-18 主人拍板】治疗技读满 1 秒才扣蓝 / 进 CD / 出特效 / 出左侧条。
         // 读条期间施法者定身（UnitBase.Update 里 HealCastBar.IsCasting 早退）、防重入。
         // 眩晕砸地 → 读条取消 → 回调不触发 → 不扣蓝、不进 CD。非治疗技（攻击/护盾/Buff）不读条。
@@ -155,6 +164,17 @@ public class MercSkillCaster : MonoBehaviour
             _cooldownRemain = CooldownTotal;
         }
         return ok;
+    }
+
+    /// <summary>
+    /// 当前主动技是否是「会吃 0.92 满血闸」的治疗技（单奶 / 群奶）。
+    /// 团队治疗攻击技（TeamHealAtk）另算：它同时打伤害，全员满血也该放，不能被满血闸前置拦掉。
+    /// </summary>
+    bool IsGatedHealActiveSkill()
+    {
+        var kind = MercSkillExecutor.Resolve(_activeSkillId);
+        return kind == MercSkillExecutor.Kind.HealSingle
+            || kind == MercSkillExecutor.Kind.HealTeam;
     }
 
     /// <summary>当前主动技是否是治疗类（读条口径）：单奶 / 群奶 / 团队治疗攻击技。</summary>

@@ -280,6 +280,9 @@ public partial class BattleManager
     public bool TryCastMercActiveSkill(Mercenary merc, string skillId, bool manual)
         => SkillCast.TryCastMercActiveSkill(merc, skillId, manual);
 
+    /// <summary>读条前预判：这一发治疗有没有人需要（与 TryCastMercActiveSkill 的满血闸同源，唯一出口）。</summary>
+    public bool MercHealHasPatient(Mercenary merc) => SkillCast.MercHealHasPatient(merc);
+
     SkillSystem.ActiveSkill ResolveSkill(string skillId) => SkillCast.ResolveSkill(skillId);
 
     // ============================================================

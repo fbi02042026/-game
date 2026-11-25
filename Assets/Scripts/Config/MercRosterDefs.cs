@@ -500,6 +500,20 @@ public static class MercRosterDefs
     }
 
     /// <summary>
+    /// 【2026-11-25 主人「所有剑盾攻速加10%」】是否剑盾卫士：优先按 hireId 取花名册行（共用 asset 各判各的），
+    /// 没有 hireId 再按 assetId 取；供 UnitBase.GetAttackCooldown 统一乘剑盾攻速倍率。
+    /// </summary>
+    public static bool IsSwordShieldJob(string hireId, string assetId)
+    {
+        Def d;
+        if (!string.IsNullOrEmpty(hireId) && TryGetByHireId(hireId, out d))
+            return d.JobName == "剑盾卫士";
+        if (!string.IsNullOrEmpty(assetId) && TryGetByAssetId(assetId, out d))
+            return d.JobName == "剑盾卫士";
+        return false;
+    }
+
+    /// <summary>
     /// 【2026-10-31 T5 方案 B】按 <b>hireId</b> 取行套用成长系数（公式与 <see cref="ApplyCombatStats"/>
     /// 完全同源 = 同一个 Core，只换取行方式——施工红线「不改 ApplyCombatStats 内部公式」不触）。
     /// <para>动机：H015 艾拉与 H005 米娅共用 gongshou101，<see cref="TryGetByAssetId"/> 取首行（米娅）；

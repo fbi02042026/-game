@@ -86,14 +86,13 @@ public class TownHubController : MonoBehaviour
             else if (_current == MainNavTab.Tavern && _tavern != null && _tavern.questButton != null)
                 MercSwapHint.TryShowTavernQueue(_tavern.questButton.transform as RectTransform);
         }
-        // 【2026-11-25 主人需求】角色页：能解锁宠物 / 有天赋可点 → 箭头气泡指路。
-        // 两条同时满足也只弹一条（宠物优先，见 PetTalentHint）；本次登录只弹一条，不连弹；
-        // _warmupDone 闸门顺带避开进镇预热点亮（预热也会走 CharacterUI.ShowPage）。
-        if (_warmupDone && _current == MainNavTab.Character && _character != null
-            && _character.talentButton != null)
+        // 【2026-11-25 主人需求】主界面：能解锁宠物 / 有天赋可点 → 箭头气泡指底栏「角色」入口。
+        // 两条同时满足也只弹一条（宠物优先，见 PetTalentHint）；进了角色页不再提示（此处只在 Guild 页判）；
+        // 引导阶段 guideDone=false 由 PetTalentHint 自行让位；_warmupDone 闸门避开进镇预热点亮。
+        if (_warmupDone && _current == MainNavTab.Guild && _nav != null
+            && _nav.characterButton != null)
         {
-            PetTalentHint.TryShow(CharacterUI.PetEntryRect,
-                _character.talentButton.transform as RectTransform);
+            PetTalentHint.TryShow(_nav.characterButton.transform as RectTransform);
         }
     }
 
@@ -407,6 +406,8 @@ public class TownHubController : MonoBehaviour
         if (_current != tab && tab != MainNavTab.Guild && tab != MainNavTab.Tavern)
             MercSwapHint.DismissOuterOnPopup(rollback: true);
 
+        // 【2026-11-25 主人拍板】天赋/宠物白气泡只属于主界面：切到角色页等其它页立刻收掉，不留残影
+        if (tab != MainNavTab.Guild) PetTalentHint.DismissIfShowing();
         _current = tab;
         _nav?.SetSelected(tab, notify: false);
 

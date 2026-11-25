@@ -37,13 +37,21 @@ public static class MercSwapHint
     /// <summary>④ 气泡停留时长。</summary>
     const float ReplaceHoldSeconds = 6f;
     /// <summary>
-    /// ② 这条气泡单独缩到 250×120（2026-11-16 主人拍板）：
-    /// 气泡固定 400 宽时「不出屏」夹取上限只有 ±152，而队列最左列卡中心约 −257
-    /// → 尖角被挤到右边那张卡上（主人报「位置偏右」）。250 宽夹取上限 ±227，
-    /// 尖角落点仍落在卡内。其余气泡（400×192 统一口径）一个字不动。
+    /// 【2026-11-25 主人拍板「框体不能出屏所以歪了：框可出屏、字不要出屏也行」】
+    /// ②③④ 三条各自缩窄 + BubbleAllowOffscreenKeepTextIn=true：
+    /// 气泡本体允许贴边/出屏，尖角严格对齐目标中心；文字由 textShiftX 补偿留在屏内。
+    /// 旧口径（400×192 + 夹取 ±152）会把右上/右下目标夹偏 → 主人报「歪」。
+    /// ① 指底栏酒馆、常态在屏内，一个字不动；其余引导默认 400×192 也不动。
+    /// ② 250 宽沿用 2026-11-16 拍板；高度 120→138：两行字不再顶到上边框。
     /// </summary>
     const float CardBubbleWidth = 250f;
-    const float CardBubbleHeight = 120f;
+    const float CardBubbleHeight = 138f;
+    /// <summary>③ 酒馆页指「佣兵队列」入口卡（x≈+165）：340 宽夹取上限 182，目标不再被夹。</summary>
+    const float QueueBubbleWidth = 340f;
+    const float QueueBubbleHeight = 144f;
+    /// <summary>④ 详情弹窗指右下「替换」钮：单行 7 字≈182 宽 + 左右 PadX 共 80 → 280 宽够且不空。</summary>
+    const float ReplaceBubbleWidth = 280f;
+    const float ReplaceBubbleHeight = 130f;
     /// <summary>
     /// 队列界面是 TownPopup(900)、获得佣兵详情弹窗是 925：
     /// 气泡默认 600 会被这些弹窗整个盖住，必须一次性抬到它们之上（Hide 自动还原默认层级）。
@@ -190,20 +198,21 @@ public static class MercSwapHint
     {
         var saveSys = SaveSystem.Instance;
         var data = saveSys != null ? saveSys.Data : null;
-        if (data == null || data.mercSwapHintCardShown) { Debug.Log("[DIAG2] stop@1 data=" + (data != null) + " cardShown=" + (data != null && data.mercSwapHintCardShown)); return false; }
-        if (pool == null || !pool.IsOpen) { Debug.Log("[DIAG2] stop@2 pool=" + (pool != null) + " isOpen=" + (pool != null && pool.IsOpen)); return false; }
-        if (!PickSwapTarget(data, out string inHireId, out _)) { DumpSwapState("stop@3 PickSwapTarget=false", data); return false; }
+        if (data == null || data.mercSwapHintCardShown) return false;
+        if (pool == null || !pool.IsOpen) return false;
+        if (!PickSwapTarget(data, out string inHireId, out _)) return false;
 
         var cardRect = pool.GetOwnedCardRect(inHireId);
-        if (cardRect == null) { Debug.Log("[DIAG2] stop@4 cardRect=null inHireId=" + inHireId); return false; }
+        if (cardRect == null) return false;
 
         string text = CardText;
         var layout = new TutorialHintUI.HintLayout
         {
             BubbleWidth = CardBubbleWidth,
             BubbleHeight = CardBubbleHeight,
+            BubbleAllowOffscreenKeepTextIn = true,
         };
-        if (!TryShow(text, cardRect, CardHoldSeconds, overPopup: true, layout)) { Debug.Log("[DIAG2] stop@5 TryShow=false"); return false; }
+        if (!TryShow(text, cardRect, CardHoldSeconds, overPopup: true, layout)) return false;
 
         data.mercSwapHintCardShown = true;
         saveSys.Save();
@@ -233,24 +242,18 @@ public static class MercSwapHint
         var recruit = MercenaryRecruitPopupUI.Instance;
         if (recruit != null && recruit.IsOpen) return false;
         if (!PickSwapTarget(data, out _, out _)) return false;
-        if (!TryShow(QueueText, queueCard, QueueHoldSeconds, overPopup: false)) return false;
+        var layout = new TutorialHintUI.HintLayout
+        {
+            BubbleWidth = QueueBubbleWidth,
+            BubbleHeight = QueueBubbleHeight,
+            BubbleAllowOffscreenKeepTextIn = true,
+        };
+        if (!TryShow(QueueText, queueCard, QueueHoldSeconds, overPopup: false, layout)) return false;
 
         data.mercSwapHintQueueShown = true;
         saveSys.Save();
         Debug.Log("[MercSwapHint] ③ 酒馆页提示「" + QueueText + "」已弹出（佣兵队列入口卡上方箭头气泡）");
         return true;
-    }
-
-    // [DIAG2] temp helper, remove after diagnosis
-    static void DumpSwapState(string tag, SaveData data)
-    {
-        var q = data.mercDrawPool;
-        var u = data.unlockedMercIds;
-        string qs = q == null ? "null" : string.Join(",", q);
-        string us = u == null ? "null" : string.Join(",", u);
-        Debug.Log("[DIAG2] " + tag + " slots=" + data.DrawPoolSlots
-            + " queue(" + (q == null ? -1 : q.Count) + ")=" + qs
-            + " unlocked(" + (u == null ? -1 : u.Count) + ")=" + us);
     }
 
     // ============================================================
@@ -267,7 +270,13 @@ public static class MercSwapHint
         if (ui == null || !ui.IsOpen) return false;
         var btnRect = ui.ReplaceButtonRect;
         if (btnRect == null) return false;   // 不带替换钮的详情（已入队/未获得）：不弹
-        if (!TryShow(ReplaceText, btnRect, ReplaceHoldSeconds, overPopup: true)) return false;
+        var layout = new TutorialHintUI.HintLayout
+        {
+            BubbleWidth = ReplaceBubbleWidth,
+            BubbleHeight = ReplaceBubbleHeight,
+            BubbleAllowOffscreenKeepTextIn = true,
+        };
+        if (!TryShow(ReplaceText, btnRect, ReplaceHoldSeconds, overPopup: true, layout)) return false;
         data.mercSwapHintReplaceShown = true;
         saveSys.Save();
         Debug.Log("[MercSwapHint] ④ 详情提示「" + ReplaceText + "」已弹出（指替换钮）");
@@ -337,7 +346,7 @@ public static class MercSwapHint
     {
         // 别的引导正占着这条横幅：这次不弹、不记标记，等下次轮询
         var existing = TutorialHintUI.Instance;
-        if (existing != null && existing.IsVisible) { Debug.Log("[DIAG2] TryShow stop@A hintBusy cur=" + existing.CurrentHint); return false; }
+        if (existing != null && existing.IsVisible) return false;
 
         var bubble = BattleManager.DraftHintBubble;
         if (bubble == null)
@@ -347,7 +356,7 @@ public static class MercSwapHint
         }
 
         var hint = TutorialHintUI.Ensure();
-        if (hint == null) { Debug.Log("[DIAG2] TryShow stop@B hintEnsure=null"); return false; }
+        if (hint == null) return false;
         hint.SetBannerSpriteOnce(bubble);
         if (overPopup) hint.SetSortOrderOnce(SortOverPopup);
         hint.Show(text, target, holdSeconds, false, layout);
@@ -355,7 +364,6 @@ public static class MercSwapHint
         // Show 内部遇到战斗头顶台词会直接 return：只有真显示出来才算数
         if (!hint.IsVisible || hint.CurrentHint != text)
         {
-            Debug.Log("[DIAG2] TryShow stop@C notVisible cur=" + hint.CurrentHint + " want=" + text);
             hint.SetBannerSpriteOnce(null);   // 没弹出就退掉一次性设置，防污染下一次引导
             hint.SetSortOrderOnce(0);
             return false;

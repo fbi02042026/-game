@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 /// <summary>
@@ -176,6 +178,10 @@ public class TutorialHintUI : MonoBehaviour
         /// 目标在屏幕左半 → 气泡落其右侧、尖角朝左，右半反之。贴边目标不再因出屏夹取把尖角推偏。
         /// 只作用于带此标志的一条 Show，Hide 随 layout 清空，其余引导零影响。</summary>
         public bool SideTipToTarget;
+        /// <summary>【2026-11-25】一次性「气泡本体允许出屏、文字留在屏内」：
+        /// 目标贴屏幕边时不再把气泡中心夹进屏内（尖角才能正对目标），文字用独立 x 偏移补偿回屏内。
+        /// 只作用于带此标志的一条 Show，Hide 随 layout 清空，其余引导零影响。</summary>
+        public bool BubbleAllowOffscreenKeepTextIn;
     }
 
     HintLayout? _activeLayout;
@@ -215,7 +221,10 @@ public class TutorialHintUI : MonoBehaviour
             // 【2026-11-24 主人「旋转对了但要拉伸，高窄点宽度拉长」】侧放时气泡局部 rect 是竖的
             //（宽 130 × 高 270），旋转 90° 后在屏幕上横过来变 270 宽 × 130 高 —— 图片必须非等比
             // 铺满 rect，否则 preserveAspect 会把横图缩成竖 rect 中一条细横带。普通气泡照旧等比。
-            _bannerImage.preserveAspect = !SideTip;
+            // 【2026-11-25】气泡出屏 / 文字留屏：180×160 rect 必须非等比铺满，
+            // 否则 200×96 底图等比塞进去只有 180×86 —— 文字溢出、尖角上移指不准开关。
+            bool keepTextIn = _activeLayout.HasValue && _activeLayout.Value.BubbleAllowOffscreenKeepTextIn;
+            _bannerImage.preserveAspect = !SideTip && !keepTextIn;
             _bannerImage.color = Color.white;
             // 【2026-11-16】尖角朝上：整条 banner localScale.y=-1 镜像（底图尖角从底挪到顶）；
             // 文字是 banner 子节点会被一起镜像，故文字自己再 localScale.y=-1 反向补翻，保持正立。
@@ -563,9 +572,11 @@ public class TutorialHintUI : MonoBehaviour
     }
 
     public void Show(string text, RectTransform highlight, float autoHideSeconds, bool hard,
-        HintLayout? layout = null)
+        HintLayout? layout = null, bool ignoreHeadTalkGuard = false)
     {
-        if (BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
+        // 【2026-11-25】结算指路气泡专用单次放行：结算界面已出完，头顶台词残留不该再吞框；
+        // 默认 false，既有调用一律保持原守卫，台词演出零影响。
+        if (!ignoreHeadTalkGuard && BattleHeadTalkUI.Instance != null && BattleHeadTalkUI.Instance.IsShowing)
             return;
 
         _activeLayout = layout;   // 【2026-11-11】本次 Show 的排版；null = 走全局常量，其余引导零影响
@@ -763,6 +774,28 @@ public class TutorialHintUI : MonoBehaviour
             btn.onClick.Invoke();
     }
 
+    /// <summary>
+    /// 【2026-11-25】本次点击是否落在界面按钮上（含按钮子节点）。
+    /// 用 EventSystem 现有射线结果，不新开射线、不改射线层；命中任何 Button/可点控件即算「点出了别的界面」。
+    /// </summary>
+    static bool TapHitUiButton()
+    {
+        var es = EventSystem.current;
+        if (es == null) return false;
+        var data = new PointerEventData(es);
+        data.position = Input.mousePosition;
+        if (Input.touchCount > 0) data.position = Input.GetTouch(0).position;
+        var hits = new List<RaycastResult>();
+        es.RaycastAll(data, hits);
+        for (int i = 0; i < hits.Count; i++)
+        {
+            var go = hits[i].gameObject;
+            if (go == null) continue;
+            if (go.GetComponentInParent<Button>() != null) return true;
+        }
+        return false;
+    }
+
     /// <summary>点任意处（鼠标左键 / 首指触摸按下），与 FirstRunGuide.ScreenTapped 同款裸输入。</summary>
     static bool ScreenTapped()
     {
@@ -783,6 +816,15 @@ public class TutorialHintUI : MonoBehaviour
         }
         // 【2026-11-16】一次性点击收掉：收尾对话提示 / 技能排序软引导；武装门限内不响应，防残余误触
         if (_tapToHideOnce && Time.unscaledTime >= _tapHideArmAt && ScreenTapped())
+        {
+            Hide();
+            return;
+        }
+
+        // 【2026-11-25 主人拍板】软引导：玩家点出别的界面按钮就立刻收掉，别压在新界面上。
+        // 硬引导（引导关流程）与故意抬到弹窗之上的引导（SetSortOrderOnce）照旧不动。
+        if (!_hard && _sortBoostOnce <= 0 && Time.unscaledTime >= _tapHideArmAt
+            && ScreenTapped() && TapHitUiButton())
         {
             Hide();
             return;
@@ -944,6 +986,10 @@ public class TutorialHintUI : MonoBehaviour
         var root = transform as RectTransform;
         if (root == null) return;
 
+        // 【2026-11-25】一次性「气泡出屏 / 文字留屏」：只对本条 Show 生效，Hide 随 layout 清空。
+        bool keepTextIn = _bannerSpriteOverride != null && !SideTip
+            && _activeLayout.HasValue && _activeLayout.Value.BubbleAllowOffscreenKeepTextIn;
+
         // 左右各留 8px（2026-10-10 主人要横幅尽量大：原各 12px）
         // 2026-11-07 主人当场「边框缩小点」：左右各留 24px，720 逻辑宽下框宽 704→672；
         // BannerPadX 同步 56→40，文字可用宽度仍是 592，行数不会被挤多。
@@ -969,6 +1015,12 @@ public class TutorialHintUI : MonoBehaviour
                         * (displayW * 0.5f + SideTipGap);
                     x = Mathf.Clamp(x, root.rect.xMin + displayW * 0.5f + 4f,
                                        root.rect.xMax - displayW * 0.5f - 4f);
+                }
+                else if (keepTextIn)
+                {
+                    // 【2026-11-25】气泡本体允许出屏：中心直接对齐目标，尖角严丝合缝；
+                    // 文字靠下面的 offset 补偿留在屏内，不跟着气泡出屏。
+                    x = target.Value.x;
                 }
                 else
                     x = Mathf.Clamp(target.Value.x,
@@ -1010,8 +1062,19 @@ public class TutorialHintUI : MonoBehaviour
                 lrt.anchorMin = Vector2.zero;
                 lrt.anchorMax = Vector2.one;
                 lrt.pivot = new Vector2(0.5f, 0.5f);
-                lrt.offsetMin = new Vector2(CurPadX, CurPadY + lift);
-                lrt.offsetMax = new Vector2(-CurPadX, -CurPadY + lift);
+                // 【2026-11-25】气泡出屏时文字单独补偿回屏内：气泡中心 x 可能贴边或出屏，
+                // 文字中心夹到 [屏左+半宽+8, 屏右-半宽-8]，差值就是文字区整体平移量。
+                float textShiftX = 0f;
+                if (keepTextIn && target.HasValue)
+                {
+                    float textHalf = (width - CurPadX * 2f) * 0.5f;
+                    float safeCenter = Mathf.Clamp(x,
+                        root.rect.xMin + textHalf + 8f,
+                        root.rect.xMax - textHalf - 8f);
+                    textShiftX = safeCenter - x;
+                }
+                lrt.offsetMin = new Vector2(CurPadX + textShiftX, CurPadY + lift);
+                lrt.offsetMax = new Vector2(-CurPadX + textShiftX, -CurPadY + lift);
             }
         }
 

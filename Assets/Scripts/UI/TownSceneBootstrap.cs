@@ -205,6 +205,10 @@ public class TownSceneBootstrap : MonoBehaviour
             SaveSystem.Instance.Save();
             DailyLoginUI.RequestShowOnMainUi();
         }
+
+        // 【2026-11-25 主人拍板】登录期天赋入口软引导：前3天/每天一次/有可升天赋才弹，
+        // 只指底栏「角色」入口，不进角色页（页内靠既有红点）。引导关照旧不插手。
+        TalentEntryLoginHint.TryShow();
     }
 
     static bool _resumeChecked;

@@ -203,6 +203,27 @@ public sealed class SkillCastService
     }
 
 
+    /// <summary>
+    /// 治疗类主动技「有人需要奶吗」——结算闸与读条前预判共用的<b>唯一出口</b>。
+    /// 【2026-11-25 主人报「路加站着不动、头顶条一截一截退涨」】原来这道闸只在读满 1 秒后的结算里判：
+    /// 满血 → 返回 false → CD 不进 → 0.25 秒重试 → 又读 1 秒，头顶条无限重来，每轮还白扣一次蓝。
+    /// 现在读条前先问一句，没人需要奶就根本不启动读条。
+    /// </summary>
+    public bool MercHealHasPatient(Mercenary merc)
+    {
+        if (merc == null || merc.isDead) return false;
+        var healTarget = merc.isAlly ? FindPreferredHealTarget() : FindLowestHpEnemyTeammate(merc);
+        return MercHealWorth(merc, healTarget);
+    }
+
+    /// <summary>治疗结算口径：目标正在引导眩晕待救，或施法方队伍有人 &lt; 92% 血。</summary>
+    bool MercHealWorth(Mercenary merc, UnitBase healTarget)
+    {
+        var stunMerc = healTarget as Mercenary;
+        if (stunMerc != null && stunMerc.TutorialStunned) return true;
+        return merc.isAlly ? AllyBelowHpRatio(0.92f) : EnemyTeammateBelowHpRatio(merc, 0.92f);
+    }
+
     /// <summary>佣兵主动技施放入口（自动/手动共用）</summary>
     /// <remarks>
     /// 分派只看 merc_skills 的 Category / TargetType / Formula（<see cref="MercSkillExecutor"/>）。
@@ -234,11 +255,9 @@ public sealed class SkillCastService
             // 满血空放闸同理只看敌方队伍。己方路径一行不动（isAlly 分支新增）。
             bool enemyCaster = !merc.isAlly;
             healTarget = enemyCaster ? FindLowestHpEnemyTeammate(merc) : FindPreferredHealTarget();
-            // 全员接近满血且无人眩晕待救时，不空放治疗
-            var stunMerc = healTarget as Mercenary;
-            bool teamHurt = enemyCaster ? EnemyTeammateBelowHpRatio(merc, 0.92f) : AllyBelowHpRatio(0.92f);
-            if ((stunMerc == null || !stunMerc.TutorialStunned) && !teamHurt)
-                return false;
+            // 全员接近满血且无人眩晕待救时，不空放治疗。
+            // 【2026-11-25】判定抽成 MercHealWorth：读条前的预判（MercSkillCaster）吃同一口径，不各写一份 0.92。
+            if (!MercHealWorth(merc, healTarget)) return false;
             float atk = merc.attr != null ? merc.attr.GetAttr(AttrType.Attack) : 0f;
             var cfg = SkillRegistry.Instance?.Get(skillId);
             float mul = MercSkillExecutor.HealAtkMul(cfg);

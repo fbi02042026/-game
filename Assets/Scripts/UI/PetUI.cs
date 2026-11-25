@@ -46,6 +46,7 @@ public partial class PetUI : MonoBehaviour
         if (_instance != null)
         {
             _instance.gameObject.SetActive(true);
+            IsOpen = true;   // 【2026-11-25】与 Close 对称：复用实例重开必须恢复开合状态
             return;
         }
         var prefab = Resources.Load<GameObject>(PrefabPath);
@@ -64,6 +65,9 @@ public partial class PetUI : MonoBehaviour
     {
         if (_instance == null) return;
         _instance.gameObject.SetActive(false);
+        // 【2026-11-25 主人报「喂养后退出，狗的气泡跑到角色页主角头上」】关闭必须同步开合状态，
+        // 否则 IsOpen 恒 true，PetFeatureGuide.PlayTwoCries 的「玩家已退出就收尾」永远不生效。
+        IsOpen = false;
     }
 
     void Bootstrap()

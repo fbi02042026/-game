@@ -819,6 +819,11 @@ public class BattleResultScreenUI : MonoBehaviour
         // 升级窗一定在本界面上弹出并看完，不会再退化成「跳过→回城后弹到冒险界面」。
         if (!_skipped)
             _onRewardsShown?.Invoke();
+        // 【2026-11-25 主人拍板】第一章第三关首通：结算界面下方贴一条「回角色界面开启宠物上阵」气泡。
+        // 判定与文案真源在 PetFeatureGuide；本类只负责在奖励展示完这个时点把确定按钮当锚点交出去。
+        // 【2026-11-25 主人拍板】结算界面出完就弹：不等战斗头顶台词（原 8s 等待太慢）。
+        // 台词残留不强制收：结算引导走 TutorialHintUI.Show 的单次放行，剧情演出零影响。
+        PetFeatureGuide.TryShowSettlementGuide(_confirmRt);
         // 奖励演完 → 放开「点任意处跳过」（之后照旧可跳过收窗）；升级窗显示期间仍由 Skip() 挡住。
         _blockEarlySkip = false;
 
@@ -1091,6 +1096,8 @@ public class BattleResultScreenUI : MonoBehaviour
 
     void OnDestroy()
     {
+        // 【2026-11-25】结算指路气泡随结果界面一起收：TutorialHintUI 是 DDOL，不收会残留到城镇。
+        PetFeatureGuide.DismissSettlementGuide();
         ShareService.ShareRewardGranted -= OnShareRewardGranted;   // 实例销毁必退订（防悬空事件）
         // 【2026-10-31 主人报修「失败音乐 2 秒后就没了」】失败曲循环开着，界面一关就停
         //（胜利曲一次性，StopDefeat 不动它；场景切换的既有 Stop 依旧兜底）

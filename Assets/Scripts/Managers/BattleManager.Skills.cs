@@ -236,19 +236,30 @@ public partial class BattleManager
     /// </summary>
     public bool TrySpendMercMp(Mercenary merc, float cost)
     {
-        if (merc == null || MercenaryManager.Instance == null) return false;
-        // 【2026-10-30 竞技场】敌方佣兵不在 _activeMercs 槽位表里（不进友军编队），无蓝条 UI——
-        // 耗蓝按免费放行，否则敌方牧师的治疗技会被蓝闸永远拦下（找不到槽 → slot<0 → false）。
-        if (!merc.isAlly)
-            return true;
+        if (!HasMercMp(merc, cost)) return false;
+        if (!merc.isAlly || cost <= 0f) return true;
         // 【2026-11-11】槽位与蓝条显示同源：阵亡压缩后不再把蓝扣到别的槽。
         int slot = MercSlotOf(merc);
-        if (slot < 0 || slot >= mercMp.Length) return false;
-        if (cost <= 0f) return true;
-        if (mercMp[slot] + 0.001f < cost) return false;
         mercMp[slot] = Mathf.Max(0f, mercMp[slot] - cost);
         BattleUI.Instance?.UpdateSkillEnergy(slot + 1, GetMercMp(slot));
         return true;
+    }
+
+    /// <summary>
+    /// 蓝够不够（<b>只查不扣</b>）。口径与 <see cref="TrySpendMercMp"/> 完全同源：
+    /// 敌方佣兵免费、槽位非法视为不够、cost &lt;= 0 视为无蓝技能直接够。
+    /// 【2026-11-25】读条类治疗技要在启动读条前先问一句，否则蓝不足时「读满 1 秒 → 扣不到蓝 → 不进 CD → 0.25 秒再读」会无限读条。
+    /// </summary>
+    public bool HasMercMp(Mercenary merc, float cost)
+    {
+        if (merc == null || MercenaryManager.Instance == null) return false;
+        // 【2026-10-30 竞技场】敌方佣兵不在 _activeMercs 槽位表里（不进友军编队），无蓝条 UI——
+        // 耗蓝按免费放行，否则敌方牧师的治疗技会被蓝闸永远拦下（找不到槽 → slot<0 → false）。
+        if (!merc.isAlly) return true;
+        int slot = MercSlotOf(merc);
+        if (slot < 0 || slot >= mercMp.Length) return false;
+        if (cost <= 0f) return true;
+        return mercMp[slot] + 0.001f >= cost;
     }
 
     // ============================================================

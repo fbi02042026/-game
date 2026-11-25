@@ -54,7 +54,21 @@ public partial class UnitBase
         // 游侠攻速减速（仅 Hero 且职业为游侠 P004）：额外乘 0.85，让游侠出手更慢、与前摇统一手感
         if (this is Hero && PlayerJobDefs.GetSelected() == PlayerJobId.Ranger)
             atkSpd *= 0.85f;
+        // 【2026-11-25 主人「所有剑盾攻速加10%」】剑盾系（玩家剑盾职业 + 剑盾卫士佣兵）统一 ×1.1
+        if (IsSwordShieldUnit())
+            atkSpd *= GameConfig.SWORD_SHIELD_ATTACK_SPEED_MUL;
         return 1f / Mathf.Max(0.05f, atkSpd);
+    }
+
+    /// <summary>
+    /// 【2026-11-25 主人「所有剑盾攻速加10%」】剑盾系判定：玩家看当前职业，佣兵看花名册行的职业名
+    /// （优先 hireId，共用 asset 时各判各的）；其他单位一律 false。
+    /// </summary>
+    bool IsSwordShieldUnit()
+    {
+        if (this is Hero) return PlayerJobDefs.GetSelected() == PlayerJobId.SwordShield;
+        if (this is Mercenary m) return MercRosterDefs.IsSwordShieldJob(m.hireId, m.mercId);
+        return false;
     }
 
     /// <summary>残血加成（R1）攻速倍率：默认 1（无加成）。仅 Hero 覆写。</summary>

@@ -162,6 +162,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
             _replacingInId = null;
             StopSwapSway();   // 先还原格子角度再刷新
             Commit();   // 刷新时点选态已退，SwapSel 标记由 RefreshPrefabPoolSlot 清掉
+            // 【2026-11-25 定稿】气泡锚点按存档真源里新人的实际位置取并校验格上名字；
+            // 不再用玩家点选格位（那是被换下的人，气泡会贴错人）。
             PlayDeployBubble(inId, line);
         }
         else
@@ -173,7 +175,7 @@ public partial class MercDrawPoolUI : MonoBehaviour
     /// <summary>
     /// 【2026-11-24 主人拍板】上阵台词从 toast 改用战斗剧情气泡（打字机），贴在刚上阵的队列格上方。
     /// 队列弹窗是 TownPopup(900)，气泡默认 Default/899 会被盖住 → 一次性抬到 TownPopup+40，HideNow 播完还原。
-    /// 锚点必须在 Commit() 之后取：Refresh 会重排 _picked 并刷新队列格。
+    /// 锚点必须在 Commit() 之后取：按存档真源定位新人所在的队列格。
     /// </summary>
     void PlayDeployBubble(string hireId, string line)
     {
@@ -182,19 +184,44 @@ public partial class MercDrawPoolUI : MonoBehaviour
             Debug.LogError("[MercDrawPoolUI] 上阵气泡台词为空，hireId=" + hireId);
             return;
         }
-        int idx = _picked.IndexOf(hireId);
-        if (idx < 0 || idx >= _poolSlots.Count || _poolSlots[idx] == null)
-        {
-            Debug.LogError("[MercDrawPoolUI] 上阵气泡锚点取不到队列格：hireId=" + hireId
-                + " idx=" + idx + " slots=" + _poolSlots.Count);
-            return;
-        }
         // 【2026-11-24 主人报「上阵气泡跑到底部」】锚点从整个 Slot（含名字条的大格子容器）
-        // 精确到 Iconmask/Icon（立绘 Image）顶边——Slot 比 Icon 高出一大截（边框+内边距+名字牌），
-        // 用 Slot 顶边当锚点 → 抬升 96px 后气泡还在立绘胸口以下；用 Icon 顶边才是角色头顶。
-        var slot = _poolSlots[idx];
-        Transform anchor = slot.transform.Find("Iconmask/Icon");
-        if (anchor == null) anchor = slot.transform.Find("Iconmask");
+        // 精确到 Iconmask（可见头像框）顶边——Slot 含边框/内边距/名字牌，用 Slot 顶边气泡会飘太高。
+        // 【2026-11-25 复核修正】原取 Iconmask/Icon：那是被 mask 裁掉的整张大图（1171×1345），
+        // 其 corners 上沿在可见头顶上方约 54 设计像素＝假头顶，气泡顶屏；改用可见框顶边。
+        // 【2026-11-25】Commit() 的 Refresh 与气泡同帧：UGUI 矩形可能还停在上一帧（那格站着旧人），
+        // 立刻 GetWorldCorners 会把气泡贴到旧人立绘上。延一帧等布局落定再取锚点。
+        StartCoroutine(CoDeployBubble(hireId, line));
+    }
+
+    /// <summary>延一帧取锚点；只认上阵队列里显示新人的那一格，找不到报错放弃。</summary>
+    System.Collections.IEnumerator CoDeployBubble(string hireId, string line)
+    {
+        yield return null;
+        if (!IsOpen) yield break;
+        // 【2026-11-25 主人定稿】气泡只贴上阵队列里「新上阵那一格」的头像：
+        // 按新人真名在 _poolSlots 里找（不认玩家点选的格位，也不依赖 _picked 与存档索引同步）。
+        string expectName = null;
+        if (MercRosterDefs.TryGetByHireId(hireId, out var def)) expectName = def.Name;
+        if (string.IsNullOrEmpty(expectName))
+        {
+            Debug.LogError("[MercDrawPoolUI] 上阵气泡取不到新人真名：hireId=" + hireId);
+            yield break;
+        }
+        GameObject slot = null;
+        for (int i = 0; i < _poolSlots.Count; i++)
+        {
+            var s = _poolSlots[i];
+            if (s == null) continue;
+            var t = s.transform.Find("namebg/Name")?.GetComponent<Text>();
+            if (t != null && t.text == expectName) { slot = s; break; }
+        }
+        if (slot == null)
+        {
+            Debug.LogError("[MercDrawPoolUI] 上阵气泡找不到新人所在队列格：hireId=" + hireId
+                + " 真名=" + expectName + " slots=" + _poolSlots.Count);
+            yield break;
+        }
+        Transform anchor = slot.transform.Find("Iconmask");
         if (anchor == null) anchor = slot.transform;
         var talk = BattleHeadTalkUI.Ensure();
         talk.SetSortOrderBoostOnce(GameConfig.UiSort.TownPopup + 40);

@@ -410,8 +410,8 @@ public partial class BattleUI : MonoBehaviour
 
         RefreshAutoCastCheckmark(check);
 
-        // 【2026-11-25 主人拍板】「自动」第一次变亮（第 3 关）→ 手指箭头指着它，
-        // 教「取消勾选就能手动放技能」；全局只弹一次。
+        // 【2026-11-25 主人拍板】「自动」第一次变亮（第 3 关）且本局已有技能 → 弹一条软引导气泡，
+        // 教「取消勾选就能手动放技能」；4.5s 自动收 / 点击即收，全局只弹一次。
         if (unlocked) TryShowManualCastGuide(autoNode);
     }
 
@@ -516,82 +516,65 @@ public partial class BattleUI : MonoBehaviour
     }
 
     // ============================================================
-    // 第 3 关「自动」开关的箭头引导（2026-11-25 主人拍板）
-    // 「自动」第一次变亮时，用 TutorialHintUI 的手指箭头指着它：
-    // 取消勾选后技能就不再自动放，改成点技能槽才放。
+    // 第 3 关抽到技能后的「自动」开关软引导（2026-11-25 主人拍板）
+    // 只用一条软引导气泡（TutorialHintUI + DraftHintBubble）：不挖空、不挡点击、不显示手指箭头；
+    // 尖角指着开关，教「取消勾选就能手动放技能」。3 秒自动收，点一下立刻收。
     // 全局只弹一次；只在主线正式关弹（裂隙 / 竞技场 / 副本 / 引导局一律不弹）。
     // ============================================================
 
     /// <summary>全局只弹一次的标记（与 SkillOrderGuide 同款 PlayerPrefs 口径）。</summary>
-    const string ManualCastGuidePrefsKey = "RiftGuide_ManualCastHint_v1";
+    // v3：v2 标记在本机已写入（实测 =1），旧标记会永久挡住提示；换 key 保证这次还能再弹一次。
+    const string ManualCastGuidePrefsKey = "RiftGuide_ManualCastHint_v3";
 
     /// <summary>这条引导的文案：唯一来源，改文案只改这里。</summary>
-    const string ManualCastGuideText = "点掉「自动」的勾，技能就交给你自己点着放，想放哪个点哪个。";
+    const string ManualCastGuideText = "取消可手动释放技能";
 
-    /// <summary>本条引导已排队（协程在等时机）：防每次刷技槽重复开协程。</summary>
-    bool _manualCastGuideQueued;
+    /// <summary>本条气泡专用版式：气泡本体允许出屏（尖角正对「自动」开关），文字单独补偿留屏内。</summary>
+    static readonly TutorialHintUI.HintLayout ManualCastBubbleLayout = new TutorialHintUI.HintLayout
+    {
+        BubbleWidth = 240f,   // 【2026-11-25 主人「引导框再宽一点」】只加宽，高度/出屏补偿/文案全不变
+        BubbleHeight = 160f,
+        BubbleAllowOffscreenKeepTextIn = true,
+    };
 
     /// <summary>
-    /// 条件齐了才排队弹一次：开关已解锁（第 3 关起）、没弹过、当前还是自动、且是主线正式关。
-    /// 不做兜底 —— 目标节点缺失 / UI 没建好都直接返回，下次刷新再试。
+    /// 【2026-11-25 主人拍板「就一个框：出 3 秒、点击消失、有别的弹窗就让位，别影响流程」】
+    /// 条件齐了就直弹，不排队、不等台词空档、不重试：
+    /// 3 秒自动收（TutorialHintUI 计时）/ 点击即收（SetTapToHideOnce）/
+    /// 设置等弹窗打开时 HideSoft 收掉 / 被别的提示顶掉就自然让位。
+    /// 全局只弹一次；只在主线正式关弹（裂隙 / 竞技场 / 副本 / 引导局一律不弹）。
     /// </summary>
     void TryShowManualCastGuide(Transform autoNode)
     {
-        if (!isActiveAndEnabled) return;   // 组件还没跑起来：协程起不来，下次刷新再试
-        if (_manualCastGuideQueued) return;
+        if (!isActiveAndEnabled) return;
         if (PlayerPrefs.GetInt(ManualCastGuidePrefsKey, 0) != 0) return;
         if (PlayerSkillCastMode.IsManual) return;       // 已经是手动：没什么可教
+        // 先抽中技能再弹：没技能时教「手动释放」没有意义（抽中技能会刷技槽走这里）。
+        var skills = RunLoadout.SkillIds();
+        if (skills == null || skills.Count == 0) return;
         var target = autoNode as RectTransform;
         if (target == null) return;
         var bm = BattleManager.Instance;
-        // Mode 尚未定（战斗刚起）时先拦不住，交给协程里 2s 后的正式判定
-        if (bm != null && bm.Mode != null && !bm.IsFormalMainRun) return;  // 裂隙 / 竞技场 / 副本不弹
-
-        _manualCastGuideQueued = true;
-        StartCoroutine(CoManualCastGuide(target));
-    }
-
-    /// <summary>
-    /// 等两个时机：① 进战斗后 2s，别跟切场景 / 开场演出抢；
-    /// ② 战斗台词播完（TutorialHintUI.Show 遇到台词占屏会直接丢弃，不自己等就白弹）。
-    /// 与 SkillOrderGuide.CoWaitTalkThenShow 同口径。
-    /// </summary>
-    System.Collections.IEnumerator CoManualCastGuide(RectTransform target)
-    {
-        yield return new WaitForSecondsRealtime(2f);
-        if (!GameSceneGate.IsBattle) { _manualCastGuideQueued = false; yield break; }
-        var bm = BattleManager.Instance;
-        if (bm == null || !bm.IsFormalMainRun) { _manualCastGuideQueued = false; yield break; }
-
-        float t = 0f;
-        while (t < 20f)
-        {
-            if (!GameSceneGate.IsBattle) { _manualCastGuideQueued = false; yield break; }
-            var talk = BattleHeadTalkUI.Instance;
-            if (talk == null || !talk.IsShowing) break;
-            t += Time.unscaledDeltaTime;
-            yield return null;
-        }
+        if (bm == null || !bm.IsFormalMainRun) return;  // 裂隙 / 竞技场 / 副本 / 引导局不弹
 
         var hint = TutorialHintUI.Instance;
-        if (hint == null || target == null || !target.gameObject.activeInHierarchy)
-        {
-            _manualCastGuideQueued = false;   // UI 没建好 / 目标被藏：不算弹过，下次刷新再试
-            yield break;
-        }
+        if (hint == null) return;
 
-        hint.Show(ManualCastGuideText, target, 4.5f);
-        if (hint.IsVisible && hint.CurrentHint == ManualCastGuideText)
+        hint.SetBannerSpriteOnce(BattleManager.DraftHintBubble);   // 气泡底框 + 尖角指「自动」
+        hint.Show(ManualCastGuideText, target, 3f, false, ManualCastBubbleLayout,
+                  ignoreHeadTalkGuard: true);   // 台词在播也照弹：只有 3 秒，不让剧情把教学吞掉
+        // 被台词 / 别的提示占屏挡掉时 Show 不会生效：这次不记标记，下次刷技槽再试。
+        if (!hint.IsVisible)
         {
-            hint.SetTapToHideOnce(true);
-            PlayerPrefs.SetInt(ManualCastGuidePrefsKey, 1);
-            PlayerPrefs.Save();
-            Debug.Log("[BattleUI] 第 3 关手动技能引导已弹出（全局只弹一次）");
+            hint.Hide();   // 清掉一次性底框，别串给下一条引导
+            return;
         }
-        else
-        {
-            _manualCastGuideQueued = false;   // 被别的引导 / 台词吞了：下次刷新再试
-        }
+        if (hint.CurrentHint != ManualCastGuideText) return;   // 被别的提示占用：不抢、不记标记
+
+        hint.SetTapToHideOnce(true);
+        PlayerPrefs.SetInt(ManualCastGuidePrefsKey, 1);
+        PlayerPrefs.Save();
+        Debug.Log("[BattleUI] 第 3 关手动技能软引导已弹出（气泡 3s，点击即收，全局一次）");
     }
 
     /// <summary>上次诊断输出的特征串，避免每次刷新都刷屏。</summary>

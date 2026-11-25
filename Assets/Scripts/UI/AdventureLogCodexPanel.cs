@@ -786,7 +786,7 @@ public class AdventureLogCodexPanel
             rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             // 2026-11-09 主人「所有红点视觉上要统一」：尺寸统一走 RedDot.DefaultSize，贴角偏移保持本页原值
-            rt.anchoredPosition = new Vector2(-8f, -8f);
+            rt.anchoredPosition = new Vector2(-8f, -10f);
             rt.sizeDelta = new Vector2(RedDot.DefaultSize, RedDot.DefaultSize);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;

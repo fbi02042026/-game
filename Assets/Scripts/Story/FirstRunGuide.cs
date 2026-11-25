@@ -455,7 +455,7 @@ public class FirstRunGuide : MonoBehaviour
     IEnumerator CoAdventure()
     {
         TryFallbackNav(MainNavTab.Adventure);
-        yield return CoPoint("点下面的「冒险」。先去新人关卡试试身手，有我在，放心走。",
+        yield return CoPoint("点「冒险」去新人关试试～有我在，放心。",
             () => NavRect(MainNavTab.Adventure),
             AdventurePageOpen,
             false, 0f);   // 【2026-11-04】不自动走
@@ -471,15 +471,17 @@ public class FirstRunGuide : MonoBehaviour
         // 【2026-11-24 主人拍板】页没开 / 已开两种状态各说各的话，别再一句文案盖两个画面。
         // 【2026-11-24 修回归】判定用 AdventurePageStable(0.5s 防抖)，不用单帧 AdventurePageOpen：
         // 进镇预热会把冒险页点亮一帧再藏回，单帧判定会误判「页已开」跳过本段 → 主界面没引导。
-        if (!AdventurePageStable())
+        // 【2026-11-25 修「点了冒险又弹一次」】上一拍点洞后本拍立刻进入，页开不足 0.5s 会被
+        // AdventurePageStable 误判「没开」→ 又指一次底栏冒险；玩家亲手点中洞即认账，不等防抖。
+        if (!(AdventurePageStable() || (_holeTriggered && AdventurePageOpen())))
         {
             // done 带 _holeTriggered：点中底栏「冒险」立刻判成，不等 0.5s 防抖
-            yield return CoPoint("职业报备好了，先点底栏「冒险」把地图翻开。",
+            yield return CoPoint("点底栏「冒险」开地图～",
                 () => NavRect(MainNavTab.Adventure),
                 () => _holeTriggered || AdventurePageStable(),
                 false, 0f);   // 【2026-11-04】不自动走
         }
-        yield return CoPoint("地图铺开了，点「开始冒险」下裂隙。进了裂隙，这步就算你过关了。",
+        yield return CoPoint("点「开始冒险」，出发吧～",
             () => ButtonRect(AdventureStartBtn()),
             InBattleOrLeaving,
             false, 0f,   // 【2026-11-04】不自动走
@@ -502,14 +504,14 @@ public class FirstRunGuide : MonoBehaviour
             // 【2026-10-22 修复】点完引导洞立刻判成，不等 CharacterPageOpen 的 0.5s 防抖：
             // 防抖只防「进镇预热闪现一帧」的假阳性，玩家亲手点中洞时不存在该场景，
             // 原样等防抖会让「点天赋」的下一条引导框晚半秒才弹（主人报「有延迟」）。
-            yield return CoPoint("这么快就结束了？哼，还算凑合。来变强：点「角色」，用金币点亮一个天赋节点。",
+            yield return CoPoint("哼，这就结束了？点「角色」用金币点天赋～",
                 () => NavRect(MainNavTab.Character), () => _holeTriggered || CharacterPageOpen(), false, 0f);   // 【2026-11-04】不自动走
         }
 
         if (TalentUI.Instance == null || !TalentUI.Instance.IsOpen)
         {
             // ② 角色页里的「天赋」按钮
-            yield return CoPoint("点「天赋」。属性点上去马上生效——想变强就别磨蹭。",
+            yield return CoPoint("点「天赋」，属性马上生效～",
                 TalentButtonRect, TalentPageOpen, false, 0f);   // 【2026-11-04】不自动走
         }
 
@@ -518,7 +520,7 @@ public class FirstRunGuide : MonoBehaviour
             // ③ 具体的天赋节点
             // 【2026-10-27 主人拍板】①话术改「激活这个天赋」口径；②本步不设超时（timeout=0=一直等玩家亲手点）：
             // 原先 45s 超时放行会让引导整体跳完，「教完了」气泡盖在还开着的天赋界面上（主人截图实锤）。
-            yield return CoPoint("点这个节点，激活这个天赋，属性立刻生效。",
+            yield return CoPoint("点节点，激活天赋～",
                 () => TalentNodeRect(before),
                 () => TalentUI.LeftUnlockedCount() > before,
                 false, 0f, bubbleAbove: true);   // 【2026-11-24 主人拍板】气泡在节点上方，别压住天赋面板
@@ -549,7 +551,7 @@ public class FirstRunGuide : MonoBehaviour
         // 方案 B：此时任务条（QuestHudBar）因显示条件 TutorialDone 还未挂出，不做实物高亮，
         // 也不去查找它的 Rect（找不到会 null）。只弹一行纯文字气泡讲清「顶部任务条」的用途。
         // target 传 null → CoPoint 走「无目标」分支：全屏半透遮罩 + 居中气泡，代码可容忍 null，不会空引用崩。
-        yield return CoPoint("屏幕顶部会出现一条「任务条」，写着你现在该做什么——点一下就能直接跳过去。记住了？",
+        yield return CoPoint("顶部「任务条」点一下就能直接跳转～记住啦？",
             null, null, true, 0f);   // 【2026-11-04】不自动走
         FinishStep(GuideStep.QuestBar, "任务条说明");
     }
@@ -560,7 +562,7 @@ public class FirstRunGuide : MonoBehaviour
     {
         if (TavernUI.Instance == null || !IsVisibleHierarchy(TavernUI.Instance.gameObject))
         {
-            yield return CoPoint("最后一站，酒馆。去见见老板娘——招募佣兵也在那儿。",
+            yield return CoPoint("最后一站「酒馆」，去见老板娘招佣兵～",
                 () => NavRect(MainNavTab.Tavern), TavernPageOpen, false, 0f);   // 【2026-11-04】不自动走
         }
 
@@ -592,7 +594,7 @@ public class FirstRunGuide : MonoBehaviour
     {
         // 【2026-11-23 主人反馈】天赋后直接指底栏「日志」；预热可能已建过日志页，
         // 仍让玩家亲手点一次底栏，_holeTriggered 只作本次步骤的点击信号。
-        yield return CoPoint("点底栏「日志」——本小姐在那儿留了份委托，去把它领了！",
+        yield return CoPoint("点「日志」领本小姐留的委托～",
             () => NavRect(MainNavTab.Log),
             () => _holeTriggered || LogPageOpen(),
             false, 0f);
@@ -603,7 +605,7 @@ public class FirstRunGuide : MonoBehaviour
         AdventureLogUI.Instance?.RefreshMainForGuide();   // 轻量：只重建主线行表，不跑 ShowPage 整套
         yield return null;                      // 等一帧：行重建 + 领奖按钮激活
 
-        yield return CoPoint("看见主线页顶上那份「第一份委托」没？右边「可领取」的按钮，点它把奖励拿了——哼，才不是特意给你留的呢！",
+        yield return CoPoint("点「可领取」拿第一份委托奖励～哼，才不是特意留的。",
             ClaimButtonRect,
             () => _holeTriggered || QuestRewardClaim.IsClaimedMain("C1_Q0"),
             false, 0f);
@@ -833,7 +835,8 @@ public class FirstRunGuide : MonoBehaviour
 
     static bool InBattleOrLeaving() => GameSceneGate.IsBattle || !GameSceneGate.IsTown;
 
-    // 【2026-11-24 退役说明】单帧判定，调用点已全改走下方 AdventurePageStable；保留备查不删。
+    // 单帧判定：2026-11-24 起「页是否已开」的正判定走下方 AdventurePageStable(防预热闪一帧)；
+    // 2026-11-25 起 CoFirstBattle 入场另用它做「玩家点中洞即认账」的辅助条件。
     static bool AdventurePageOpen() => IsVisibleHierarchy(AdventureUI.Instance?.gameObject);
 
     // 【2026-11-24 修回归】进镇预热 CoWarmupPages 把冒险页点亮一帧再藏回，
@@ -1034,7 +1037,7 @@ public class FirstRunGuide : MonoBehaviour
         _bubbleRt.sizeDelta = new Vector2(0f, BubbleHeight);
         bg.gameObject.SetActive(false);
 
-        _bubbleText = NewText(_bubbleRt, "Text", string.Empty, BubbleFontSize, TextAnchor.MiddleLeft);
+        _bubbleText = NewText(_bubbleRt, "Text", string.Empty, BubbleFontSize, TextAnchor.MiddleCenter);
         _bubbleText.color = TextColor;
         _bubbleText.horizontalOverflow = HorizontalWrapMode.Wrap;
 
@@ -1103,7 +1106,10 @@ public class FirstRunGuide : MonoBehaviour
             _group.blocksRaycasts = true;
             _group.interactable = true;
         }
-        if (_bubbleRt != null) _bubbleRt.gameObject.SetActive(true);
+        // 【2026-11-25 修「气泡位置跳一下」】本步有目标时首帧往往量不到目标矩形，
+        // 原样 Display 会先落进无目标分支居中显示、下一帧量到再跳到目标旁＝肉眼可见跳一下。
+        // 这里先收起气泡，等 RefreshLayout 量到目标再显形（只改显示时机，不碰位置/尺寸算法）。
+        if (_bubbleRt != null) _bubbleRt.gameObject.SetActive(target == null);
 
         RefreshLayout();
     }
@@ -1640,6 +1646,9 @@ public class FirstRunGuide : MonoBehaviour
         if (!measured) SetAllActive(_ringRt, false);
 
         PlaceBubbleNearTarget(root, y0, y1);
+        // 【2026-11-25】目标矩形已量到，补显形（与 Show 的首帧收起配对）。
+        if (_bubbleRt != null && !_bubbleRt.gameObject.activeSelf)
+            _bubbleRt.gameObject.SetActive(true);
     }
 
     bool TryMeasure(out float minX, out float maxX, out float minY, out float maxY)

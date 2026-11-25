@@ -55,10 +55,12 @@ public partial class TalentUI
             var def = TalentDefs.Left[i];
             bool on = i < unlocked;
             bool can = TalentSystem.IsLeftUpgradeable(i, talents);
-            // 【2026-11-24 主人拍板】三态分开：已解锁=亮；当前可解锁（下一节点）=暗；
-            // 排在后面的未解锁节点=灰。两者旧版合并成同一态，玩家分不清。
-            bool locked = i > unlocked;                    // 后续未解锁 → 灰
-            bool dormant = !on && i == unlocked;           // 当前待解锁 → 暗
+            // 【2026-11-25 主人拍板】三态统一到「能不能升级」，与右列同源：
+            // 已解锁=亮；未解锁且当前真能解锁（等级够 + 金币够）=暗；
+            // 其余（等级不够 / 金币不够 / 排在后面的节点）=灰。
+            // 旧版按位置 i==unlocked 判暗 → 条件不够的当前节点也亮着暗态，主人看到「不能升级没变灰」。
+            bool dormant = !on && can;                     // 可解锁 → 暗
+            bool locked = !on && !can;                     // 不能升级 → 灰
 
             if (v.nameText != null) v.nameText.text = def.name;
             // 【2026-11-19】数值角标：只显示数值（+15 / +4%），不再整句「生命 +15」
@@ -94,7 +96,8 @@ public partial class TalentUI
             // 右缘 299 距裁切线留 3px。右列行居中不越界，仍走默认贴角。
             // 【2026-11-19 正方形格子】红点贴图标右上角（图标居中半径48、格子半宽58 → 右上角内缩约10）。
             // 【2026-11-19 主人拍板】红点离图标再近 2px：偏移 -12→-14（anchor 右上、负得越多越往图标靠）。
-            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-14f, -14f));
+            // 【2026-11-25 主人「所有红点往下 2」】y -14→-16（x 保持 -14）。
+            SetRowRedDot(v.root, ref v.redDot, can, new Vector2(-14f, -16f));
             // 【2026-11-20 主人拍板】连线跟随蛇形点亮：横线连视觉左邻居、竖线只画在每行末端，
             // 拼成一条「左→右、右→左……」的连贯路径；顶行上方无节点才藏。详见下方两处判断。
             int row = i / TalentDefs.LeftPerRow;
@@ -201,15 +204,24 @@ public partial class TalentUI
         if (v.costText != null)
             v.costText.text = status;
 
-        bool locked = !unlocked && (thresholdLocked || mutexLocked);
+        // 【2026-11-25 主人拍板】三态统一：已解锁且能升=亮；未解锁但可解锁=暗；
+        // MAX / 升到N级可升级 / 天赋石不足 / 等级门槛 / 互斥 = 灰。
+        // 锁图标仍只在门槛/互斥时挂（石不够只是灰，不挂锁）。
+        bool lockMarked = !unlocked && (thresholdLocked || mutexLocked);
+        float rowAlpha = canAct ? (unlocked ? 1f : 0.5f) : 0.72f;
         EnsureRightLock(v);
         if (v.lockIcon != null)
         {
-            v.lockIcon.gameObject.SetActive(locked);
-            if (locked) ApplyLockSprite(v.lockIcon);
+            v.lockIcon.gameObject.SetActive(lockMarked);
+            if (lockMarked) ApplyLockSprite(v.lockIcon);
         }
         if (v.diamond != null)
+        {
             ApplySprite(v.diamond, unlocked ? sprDiamondOn : sprDiamondOff, true);
+            // 菱形跟随三态压暗（暗 0.32 / 灰 0.55，与左列图标同口径）
+            if (!unlocked && canAct) v.diamond.color = new Color(0.32f, 0.32f, 0.32f, 1f);
+            else if (!canAct) v.diamond.color = new Color(0.55f, 0.55f, 0.55f, 1f);
+        }
         // 连线「连满」口径不变（主人原话「最下面的第一个不用有冲下的线」）；
         // 但每段连接只由「下方行的上段 Line」一条画（同口径见 TalentUI.Bind.cs）。
         // ⚠ 行序真源 = VerticalLayoutGroup.reverseArrangement（index 0 在**视觉最底**），别按「0 在最上」猜。
@@ -226,7 +238,7 @@ public partial class TalentUI
             v.lineDown.gameObject.SetActive(false);
 
         if (v.root != null) v.root.SetActive(true);
-        SetRowGray(v.root, locked ? 0.72f : 1f);
+        SetRowGray(v.root, rowAlpha);
         // 【2026-11-21 主人拍板】右列「可升级且天赋石够」显示行内红点（canAct 已含可解锁/可升级+货币够判定）。
         // 推翻 11-19「右列不要红点」口径；走 RedDot 统一出口（见 SetRowRedDot）。
         SetRowRedDot(v.root, ref v.redDot, canAct);
@@ -440,7 +452,7 @@ public partial class TalentUI
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = new Vector2(RedDot.DefaultSize, RedDot.DefaultSize);
-            rt.anchoredPosition = offset ?? new Vector2(-12f, -12f);
+            rt.anchoredPosition = offset ?? new Vector2(-12f, -14f);
             var img = dot.GetComponent<Image>();
             img.sprite = RedDot.Sprite;
             img.raycastTarget = false;

@@ -20,7 +20,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// </summary>
     Transform _uiAnchor;
     /// <summary>固定 UI 锚点模式下气泡底部相对锚点的抬高（屏幕像素）。纵向偏移可留（铁律20）。</summary>
-    const float UiAnchorLiftPx = 96f;   // 【2026-11-24】诊断后恢复：相机统一后锚点回到顶部，176 会顶到 clamp 上限
+    const float UiAnchorLiftPx = 0f;    // 【2026-11-24】相机统一后锚点回到顶部；【2026-11-25】主人验证太高，96→76→56→36→16→0（16 那步画面无变化，归零验证是否到下限）
     Coroutine _co;
     bool _skipTyping;
     bool _advance;
@@ -389,12 +389,10 @@ public class BattleHeadTalkUI : MonoBehaviour
             else worldTop = _uiAnchor.position;
             screen = RectTransformUtility.WorldToScreenPoint(followCam, worldTop);
             screen.y += UiAnchorLiftPx;
-            if (screen.z <= 0f)
-            {
-                screen.z = 1f;
-                screen.x = Screen.width * 0.5f;
-                screen.y = Screen.height * 0.62f;
-            }
+            // 【2026-11-25 根因修复】UI 相机就架在 UI 平面上，锚点投影的 z 恒为 ≈0，
+            // 但 screen.x/y 是有效坐标。旧代码把 z<=0 当「落相机后方」→ 每次覆盖成屏幕中心固定值，
+            // 气泡位置永远不跟随锚点。这里只把 z 归一为 1 供反投影用，x/y 一律保留。
+            screen.z = 1f;
         }
         else
         {

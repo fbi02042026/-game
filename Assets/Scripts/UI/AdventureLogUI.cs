@@ -1601,7 +1601,7 @@ public class AdventureLogUI : MonoBehaviour, ITownPage
             var rt = (RectTransform)go.transform;
             rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
             rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(-16f, -16f);
+            rt.anchoredPosition = new Vector2(-16f, -18f);
             rt.sizeDelta = new Vector2(RedDot.DefaultSize, RedDot.DefaultSize);
             var img = go.GetComponent<Image>();
             img.sprite = RedDot.Sprite;

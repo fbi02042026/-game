@@ -501,6 +501,12 @@ public static partial class GameConfig
     /// </summary>
     public const float PET_ATTACK_SPEED_MUL = 0.7f;
 
+    /// <summary>
+    /// 【2026-11-25 主人「所有剑盾攻速加10%」】剑盾系攻速倍率：玩家剑盾卫士职业 + 花名册剑盾卫士佣兵统一 ×1.1。
+    /// 只作用于 UnitBase.GetAttackCooldown，其他职业 / 怪物 / 宠物不受本值牵连。
+    /// </summary>
+    public const float SWORD_SHIELD_ATTACK_SPEED_MUL = 1.1f;
+
 
     /// <summary>
     /// 玩家（Hero）行走/移动速度倍率。2026-09-28 主人要求「玩家行走速度再加快 10%」→ 1.1。

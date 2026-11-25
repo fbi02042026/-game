@@ -136,7 +136,7 @@ public partial class TutorialDirector
         // 那一步已经走过/跳过时才退回原来的硬提示，避免两层指引同时出现打架。
         if (!GuideCovers(FirstRunGuide.GuideStep.FirstBattle))
             // 【2026-11-21 主人拍板】进本不再弹职业窗（11-20 下线），"选好职业"是残留，去掉。
-            TutorialHintUI.Ensure().ShowHard("点下面的「开始冒险」，出发去裂隙啦～", highlight);
+            TutorialHintUI.Ensure().ShowHard("点「开始冒险」，出发吧～", highlight);
     }
 
     /// <summary>
@@ -155,7 +155,7 @@ public partial class TutorialDirector
         if (AdventureLogUI.Instance != null && AdventureLogUI.Instance.IsPageVisible) return;
 
         if (!GuideCovers(FirstRunGuide.GuideStep.Adventure))
-            TutorialHintUI.Ensure().ShowHard("点下面的「冒险」，出发去裂隙啦～",
+            TutorialHintUI.Ensure().ShowHard("点「冒险」，出发吧～",
                 advNav != null ? advNav.GetComponent<RectTransform>() : null);
     }
 

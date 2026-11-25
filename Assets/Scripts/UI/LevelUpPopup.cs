@@ -8,12 +8,13 @@ using UnityEngine.UI;
 ///
 /// 预制体 = Resources/Prefabs/Town/恭喜升级（主人摆好：根自带 Canvas，Dim 黑幕带 Button，
 /// 升级特效粒子 quan/MagicDust 挂在 effect 节点下、playOnAwake）。代码只写文本
-/// （第一行 等级前后；第二行 轮换职业 + 其倾向属性 + 每级实际收益，2026-10-25 主人拍板「轮流来」）
+/// （第一行 等级前后；第二行 只写属性名 + 实际收益，如「生命 +10」；2026-11-25 主人拍板「不加职业名/称呼前缀」）
 /// + 播弹出动效，其余全用预制体本身——不改预制体、不造节点、不动布局尺寸（铁律 20）。
-/// 【2026-11-13 主人拍板「每级只涨一个职业一个属性 / 就跟以前一样，只不过加了法师和弓手的血量」】
-/// 第二行仍是老格式「一个职业 + 一个属性 + 一个数值」（剑盾 +10 / 法师 +2 / 游侠 +1%），
+/// 【2026-11-25 主人拍板「升级给的属性提升排除职业名字，只写生命+10这种」】
+/// 第二行只显「属性名 + 实际收益」（剑盾 +10 / 法师 +2 / 游侠 +1%），取当前职业的真实成长；
+/// 职业名与「冒险者/玩家」等称呼前缀一律不写，「职业」文本节点清空（预制体一字不动）。
 /// 法师/游侠每级额外加的血是等级成长里的隐性项，不写进弹窗；全是短文案 → 字号一律沿用预制体
-/// 那一档（36 号，与剑盾一致）、不折行不溢出，不需要任何字号/换行适配，预制体一字不动。
+/// 那一档（36 号，与剑盾一致）、不折行不溢出，不需要任何字号/换行适配。
 ///
 /// 弹出动效（2026-10-25 主人口述时序，各段时长为动效常量可调）：
 ///   ① 「升级」标题从 pos.y=0 猛弹出（scale 0→预制体基准，OutBack 回弹）；
@@ -56,11 +57,6 @@ public static class LevelUpPopup
     // 这里先单独攒着，等玩家真打完一关（AddStageClearExp）才搬进 _pending，
     // 跟着那一关的结算一起弹 —— 经验照发、等级照涨，只是演出等到打完关。
     static readonly Queue<KeyValuePair<int, int>> _deferred = new Queue<KeyValuePair<int, int>>();
-
-    // —— 第二行职业轮换（2026-10-25 主人拍板「不要按所选 轮流来 每个职业都要有」）——
-    // 不绑 GetSelected：每弹一次按开放职业顺序（PlayerJobDefs.Playable，当前 剑盾卫士→法师→游侠）
-    // 轮换一个，轮一圈每个职业都会被展示到。游标只在内存里转，退游戏归零无影响（纯演出）。
-    static int _jobCursor;
 
     /// <summary>
     /// 【2026-11-22 主人拍板「对 合并」】整段升级入一条挂起（before→after 一窗弹完，如 1→3）；
@@ -138,7 +134,7 @@ public static class LevelUpPopup
         UICanvasSetup.ApplyPopup(canvas, GameConfig.UiSort.LevelUpPopup, UICanvasSetup.ResolveUiCamera());
 
         // 文本绑定（按行作用域取，两行各有一个「升级后」，不能全局按名找）：
-        // 第一行 = 等级 1 → 2；第二行 = 轮换职业名 + 其倾向属性名 + 每级实际收益（2026-11-11 文案对齐）
+        // 第一行 = 等级 1 → 2；第二行 = 属性名 + 每级实际收益（2026-11-25：不显职业名/称呼前缀）
         var row1 = FindDeep(_host.transform, "第一行");
         if (row1 == null)
             Debug.LogError("[LevelUpPopup] 恭喜升级预制体缺「第一行」节点，等级数字不显示（不兜底）");
@@ -153,16 +149,14 @@ public static class LevelUpPopup
             Debug.LogError("[LevelUpPopup] 恭喜升级预制体缺「第二行」节点，属性成长不显示（不兜底）");
         else
         {
-            // 【2026-10-25 主人拍板「不要按所选 轮流来 每个职业都要有」】
-            // 每弹一次按开放职业顺序轮换一个（剑盾卫士→法师→游侠→循环），不按当前所选职业。
-            var playable = PlayerJobDefs.Playable;
-            var job = playable[_jobCursor % playable.Length];
-            _jobCursor = (_jobCursor + 1) % playable.Length;
-            SetText(row2, "职业", PlayerJobDefs.Get(job).DisplayName);
-            SetText(row2, "属性", LevelSystem.JobTendencyLabel(job));   // 玩家口径：生命/攻速/魔攻（10-25 拍板）
+            // 【2026-11-25 主人拍板「属性提升排除职业名字，只写生命+10这种」】
+            // 不再轮换职业、不写职业名/称呼前缀：「职业」节点清空，只留属性名 + 实际收益。
+            // 属性取当前所选职业的真实成长（剑盾/重装 +10 血、法师/牧师 +2 魔攻、游侠 +1% 攻速、狂战 +1 力量）。
+            SetText(row2, "职业", "");
+            var job = PlayerJobDefs.GetSelected();
+            SetText(row2, "属性", LevelSystem.JobTendencyLabel(job));   // 生命/攻速/魔攻/力量（10-25 玩家口径）
             // 2026-11-11 主人「文案对齐」：这里原来显倾向点数（+1），改显每级实际收益（剑盾 +10 血、法师 +2 魔攻、游侠 +1% 攻速）
-            // 2026-11-13 主人拍板：就跟以前一样，每级/每窗只显示一个职业的一个属性；
-            // 法师/游侠每级额外加的血是等级成长里的隐性项，不并进这一行（故不需要字号/换行适配）。
+            // 2026-11-13 主人拍板：每级/每窗只显示一个属性；法师/游侠每级额外加的血是隐性项，不并进这一行。
             SetText(row2, "升级后", LevelSystem.JobTendencyGainText(job, afterLevel - beforeLevel));
         }
 

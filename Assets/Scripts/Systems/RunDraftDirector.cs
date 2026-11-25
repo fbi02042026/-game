@@ -121,6 +121,13 @@ public class RunDraftDirector : MonoBehaviour
             RiftEquipGenerator.ResetLastSlotMemory();
             // 【2026-10-24 主人拍板】保底稀有计数每局清零（续关不清，同抽奖币计数口径）。
             SlotMachineSystem.ResetRunEquipWhiteStreak();
+            // 【2026-11-25 主人报「一进战斗场景抽奖币不是 100」】开局发装的折币先入了池，
+            // 发启动金前先清 0，保证进场余额 = 启动金（正式关 100 + 天赋）。
+            // 【2026-11-25 主人拍板】只主线正式关 + 支线岛这样；引导局/裂隙/竞技场/各资源副本/
+            //   羁绊本/终章追查关按各自设定，不清（各自模式判定出口见 BattleManager.State.cs）。
+            var entryBm = BattleManager.Instance;
+            if (entryBm != null && (entryBm.IsFormalMainRun || entryBm.IsSideIsland))
+                entryBm.ClearPoolGoldBeforeStageStart();
             SlotMachineSystem.GrantRunStarterGold(tutorial);
         }
 
