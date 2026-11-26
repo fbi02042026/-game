@@ -31,7 +31,7 @@ public partial class Pet : Mercenary
     /// 再按外貌微调——狗/狼灵活稍快，羊迟缓稍慢。
     /// 皮肤 id 带本体前缀，走同一系数（dog_fox/wolf_demon/goat_mushroom 跟随本体）。
     /// </summary>
-    const float PET_MOVE_BASE_RATIO = 0.693f;  // 11-25 主人「全体宠物移速+10%」：0.63 × 1.1
+    const float PET_MOVE_BASE_RATIO = 0.8316f; // 11-25「移速+10%」0.63×1.1=0.693；11-26 主人「再+20%」：0.693 × 1.2
     const float MOVE_RATE_DOG = 1.05f;        // 狗：灵活，比其它宠物快但仍比原速慢
     const float MOVE_RATE_WOLF = 1.05f;       // 狼：灵活，同上
     const float MOVE_RATE_GOAT = 0.85f;       // 羊：迟缓

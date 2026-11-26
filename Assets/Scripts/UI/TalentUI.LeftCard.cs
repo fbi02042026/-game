@@ -63,8 +63,15 @@ public partial class TalentUI
     void EnsureLeftCard()
     {
         EnsureBubbleSprites();
-        _leftBubbleRefs = EnsureCostBubble("LeftNodeCompareCard", _leftBubbleRefs, CloseLeftCard, OnLeftCardOk,
+        _leftBubbleRefs = EnsureCostBubble("LeftNodeCompareCard", _leftBubbleRefs, OnLeftDimClicked, OnLeftCardOk,
             _bubbleGoldBtnSpr, _bubbleGoldIconSpr);
+    }
+
+    /// <summary>【2026-11-26】点卡外空白：引导天赋步强制期间不许关卡（逼玩家点解锁），其余照常关。</summary>
+    void OnLeftDimClicked()
+    {
+        if (FirstRunGuide.IsTalentOverlayHolding) return;
+        CloseLeftCard();
     }
 
     void OnLeftCardOk()

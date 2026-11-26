@@ -622,11 +622,11 @@ public partial class TutorialDirector
             yield return null;
         }
 
-        // 【2026-10-20 主人拍板】「教完了」夸奖气泡：点任意处关闭。
-        // 只对本会话刚出师的新玩家弹（PlayOutro 内部以 FinishedThisSession 判定），老玩家 no-op。
-        FirstRunGuide.Instance?.PlayOutro("教完了，表现……勉强合格。有事来咨询台找我，本小姐一般都在。");
+        // 【2026-11-26 主人拍板】原「教完了，表现……勉强合格」收尾气泡整段撤掉：
+        // 结束引导的话已挪进 CoLogReward（里程商店关店后弹），这里再弹＝同一件事说两遍。
+        // 下方等待循环留着兜底（正常到此气泡已收，秒过），每日登录时序不变。
 
-        // 等夸奖气泡被点掉（120s 宽限）——引导气泡到此全部收完，屏幕上才轮到每日登录。
+        // 等气泡被点掉（120s 宽限）——引导气泡到此全部收完，屏幕上才轮到每日登录。
         // 老玩家 / 没弹气泡时这里直接过。
         float outroGuard = 0f;
         while (FirstRunGuide.Instance != null && FirstRunGuide.Instance.IsOverlayVisible && outroGuard < 120f)
@@ -657,7 +657,7 @@ public partial class TutorialDirector
         }
 
         // 【2026-11-26 主人拍板】原「引导完成！祝你好运，接下来的冒险就交给你啦～」这句整段撤掉：
-        // 上面 PlayOutro「教完了，表现……勉强合格」已经是收尾话，每日登录关掉后再补一句
+        // 结束引导的话已在 CoLogReward（里程商店关店后）弹过，每日登录关掉后再补一句
         // 「引导完成」等于同一件事说两遍（主人原话「本来说是引导完成了 但是每日登录关闭后 又说了一句引导结束了」）。
         // 原先为这句服务的「收掉别的箭头气泡 + 回滚已读标记」逻辑一并撤掉——留着会白收一次气泡。
         _townFlowBusy = false;

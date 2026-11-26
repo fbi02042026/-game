@@ -8,62 +8,13 @@ using UnityEngine.UI;
 /// 战斗出场（BattleManager.PetDeploy 也读 IsPetUnlocked）全部自动生效，不往 petUnlocked 写脏数据，
 /// 关掉即回到真实解锁状态。
 ///
-/// 按钮运行时建在 PetUI Canvas 根节点右上角（不进 Panel，不动任何现有节点位置/尺寸）。
+/// 【2026-11-26 主人「把这个开关去掉」】界面上的「全解锁 开/关」按钮及其建树代码已删净；
+/// 测试入口保留 F8 热键与 Tools ▸ 宠物全解锁勾选（均仅编辑器/开发包，正式包不编译）。
 /// 仅在编辑器与开发包编译；正式包不含此代码（避免玩家白嫖）。
 /// </summary>
 public partial class PetUI
 {
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-    Transform _debugToggle;
-    Text _debugToggleLabel;
-
-    void EnsureDebugToggle()
-    {
-        if (_debugToggle != null) return;
-
-        var go = new GameObject("PetDebugToggle",
-            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
-        var rt = (RectTransform)go.transform;
-        rt.SetParent(transform, false);   // 挂 Canvas 根：不挤占 Panel 内任何现有节点
-        rt.anchorMin = rt.anchorMax = new Vector2(1f, 1f);
-        rt.pivot = new Vector2(1f, 1f);
-        rt.anchoredPosition = new Vector2(-16f, -16f);
-        rt.sizeDelta = new Vector2(200f, 60f);
-
-        var bg = go.GetComponent<Image>();
-        bg.color = new Color(0f, 0f, 0f, 0.72f);
-        var btn = go.GetComponent<Button>();
-        btn.targetGraphic = bg;
-        btn.onClick.AddListener(OnToggleDebugAllUnlock);
-
-        var txtGo = new GameObject("Label",
-            typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-        var trt = (RectTransform)txtGo.transform;
-        trt.SetParent(rt, false);
-        trt.anchorMin = Vector2.zero;
-        trt.anchorMax = Vector2.one;
-        trt.offsetMin = Vector2.zero;
-        trt.offsetMax = Vector2.zero;
-
-        _debugToggleLabel = txtGo.GetComponent<Text>();
-        _debugToggleLabel.font = GameFonts.GetChinese();
-        _debugToggleLabel.fontSize = 24;
-        _debugToggleLabel.alignment = TextAnchor.MiddleCenter;
-        _debugToggleLabel.raycastTarget = false;
-
-        _debugToggle = rt;
-        RefreshDebugToggleLabel();
-    }
-
-    void RefreshDebugToggleLabel()
-    {
-        if (_debugToggleLabel == null) return;
-        var save = SaveSystem.Instance?.Data;
-        bool on = save != null && save.petDebugAllUnlocked;
-        _debugToggleLabel.text = on ? "全解锁 开" : "全解锁 关";
-        _debugToggleLabel.color = on ? new Color(1f, 0.86f, 0.32f, 1f) : new Color(1f, 1f, 1f, 0.85f);
-    }
-
     /// <summary>切换测试全解锁：开 → 10 只全部可用；关 → 回到真实存档解锁状态。</summary>
     void OnToggleDebugAllUnlock()
     {
@@ -85,7 +36,6 @@ public partial class PetUI
         }
 
         SaveSystem.Instance.Save();
-        RefreshDebugToggleLabel();
         RefreshAll();
         GlobalToastUI.Show(save.petDebugAllUnlocked
             ? "测试模式：全部宠物/皮肤已解锁"

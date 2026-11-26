@@ -102,6 +102,7 @@ public class FirstRunGuide : MonoBehaviour
     readonly Image[] _ring = new Image[4];
     readonly RectTransform[] _ringRt = new RectTransform[4];
     RectTransform _holeRt;
+    Image _holeImg;
     Button _holeBtn;
     RectTransform _bubbleRt;
     Text _bubbleText;
@@ -113,6 +114,11 @@ public class FirstRunGuide : MonoBehaviour
     bool _bubbleTypeDone;
     /// <summary>【2026-11-24】本次气泡优先摆在目标上方（天赋节点步）；Show 从参数取，Hide 复位。</summary>
     bool _bubbleAboveOnce;
+    /// <summary>
+    /// 【2026-11-26 主人拍板】天赋步点中节点后遮罩必须一直留着，直到真正点亮天赋才收；
+    /// 期间只关射线（让气泡卡按钮点得到）、藏气泡框（别挡卡），遮罩视觉保留。
+    /// </summary>
+    bool _holdOverlay;
 
     /// <summary>游标：下一个要跑的步骤下标（= 已完成步骤数）。</summary>
     int _stepIndex;
@@ -352,6 +358,12 @@ public class FirstRunGuide : MonoBehaviour
     /// <summary>遮罩/气泡此刻是否占着屏幕（别的提示层可以据此让位）。</summary>
     public bool IsOverlayVisible => _visible;
 
+    /// <summary>
+    /// 【2026-11-26】天赋步强制中（已点中节点、等玩家在气泡卡里解锁）：
+    /// 期间点气泡卡外空白不许关卡，只有引导强制收场（点亮天赋）才让卡消失。
+    /// </summary>
+    public static bool IsTalentOverlayHolding => Instance != null && Instance._holdOverlay;
+
     // ============================================================
     // 步骤驱动
     // ============================================================
@@ -523,7 +535,7 @@ public class FirstRunGuide : MonoBehaviour
             yield return CoPoint("点节点，激活天赋～",
                 () => TalentNodeRect(before),
                 () => TalentUI.LeftUnlockedCount() > before,
-                false, 0f, bubbleAbove: true);   // 【2026-11-24 主人拍板】气泡在节点上方，别压住天赋面板
+                false, 0f, bubbleAbove: true, hideOnHoleClick: false);   // 【2026-11-24 主人拍板】气泡在节点上方，别压住天赋面板
         }
 
         Hide();
@@ -629,6 +641,11 @@ public class FirstRunGuide : MonoBehaviour
             },
             false, 0f);
 
+        // 【2026-11-26 主人拍板】关店后收尾一句＝结束引导的话，替换原 Town 链「教完了」那句。
+        // 无目标单发气泡（点任意处关闭），走 CoPoint 既有出口、不动游标；Town 链不再弹第二句。
+        yield return CoPoint("本小姐就教到这里了。以后有事别来找我——才不是等着你来问呢。",
+            null, null, true, 0f);
+
         Hide();
         FinishStep(GuideStep.LogReward, "第一份委托领奖引导");
     }
@@ -662,7 +679,8 @@ public class FirstRunGuide : MonoBehaviour
     /// 【2026-10-27 主人拍板】timeout &lt;= 0 = 不设超时，一直等完成条件/玩家亲手点（配合挂屏看门狗喂狗）。
     /// </summary>
     IEnumerator CoPoint(string text, Func<RectTransform> target, Func<bool> isDone,
-        bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout, bool bubbleAbove = false)
+        bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout, bool bubbleAbove = false,
+        bool hideOnHoleClick = true)
     {
         _pointOk = false;
         _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
@@ -743,7 +761,20 @@ public class FirstRunGuide : MonoBehaviour
 
             // 【2026-10-20 修复】玩家已通过洞点中目标按钮：立刻收掉遮罩气泡让玩家看打开的界面，
             // 只等完成条件确认（如角色页 CharacterPageOpen 的 0.5s 防抖）；done/超时仍走下方统一判定。
-            if (_holeTriggered && _visible) Hide();
+            // 【2026-11-26 主人拍板】天赋步（hideOnHoleClick=false）点中节点后不许收遮罩：
+            // 玩家点别处也不能让遮罩消失，必须真正点亮天赋才收。只关射线让卡按钮可点、藏气泡框别挡卡。
+            if (_holeTriggered && _visible)
+            {
+                if (hideOnHoleClick) Hide();
+                else
+                {
+                    _holdOverlay = true;
+                    // 【2026-11-26 更正】只关洞自身射线让点击穿到气泡卡；遮罩四条射线必须留着，
+                    // 否则整页天赋节点都没遮拦、能随便点解锁（主人报「引导只能解锁第一个」）。
+                    if (_holeImg != null) _holeImg.raycastTarget = false;
+                    if (_bubbleRt != null) _bubbleRt.gameObject.SetActive(false);
+                }
+            }
 
             // 切页会把整页内容重建，旧引用会失效：每帧重新定位，丢的那几帧沿用上一次量到的矩形
             RectTransform liveTarget = needTarget ? Safe(target) : null;
@@ -769,7 +800,13 @@ public class FirstRunGuide : MonoBehaviour
             if (needTarget && liveTarget == null)
             {
                 lostAccum += Mathf.Min(Time.unscaledDeltaTime, 0.1f);
-                if (lostAccum > 2f && _visible) Hide();
+                if (lostAccum > 2f && _visible)
+                {
+                    Hide();
+                    // 【2026-11-26】天赋步玩家中途关页 → 目标丢失收引导；清点击标记，
+                    // 再打开天赋页时重弹引导重新指节点（否则标记压着重弹条件，步骤永久无指引）。
+                    if (!hideOnHoleClick) _holeTriggered = false;
+                }
             }
             else
             {
@@ -1032,6 +1069,7 @@ public class FirstRunGuide : MonoBehaviour
         hole.raycastTarget = true;
         hole.gameObject.SetActive(false);
         _holeRt = hole.rectTransform;
+        _holeImg = hole;
         _holeBtn = hole.gameObject.AddComponent<Button>();
         _holeBtn.transition = Selectable.Transition.None;
         _holeBtn.onClick.AddListener(OnHoleClicked);
@@ -1125,6 +1163,7 @@ public class FirstRunGuide : MonoBehaviour
             EnsureBubbleTextClip();
         }
 
+        _holdOverlay = false;
         if (_group != null)
         {
             _group.alpha = 1f;
@@ -1146,6 +1185,7 @@ public class FirstRunGuide : MonoBehaviour
         _target = null;
         _hasLastRect = false;
         _tapDone = false;
+        _holdOverlay = false;
         StopTyping();
 
         if (_group != null)
@@ -1634,19 +1674,39 @@ public class FirstRunGuide : MonoBehaviour
             // 原先「全屏遮罩+无洞+blocksRaycasts」= 全屏锁点，玩家连底栏都点不了 → 卡死态。
             // tapToAdvance 步骤（欢迎/收尾）保持原样，靠全屏点击推进。
             // 【2026-10-22 修】隐藏态不允许借 RefreshLayout 复活吃点击（保险 1/2）
+            // 【2026-11-26 更正】天赋步让位期间遮罩射线不再关（要挡整页节点），只压洞射线防复活。
             if (_group != null) _group.blocksRaycasts = _visible && _tapAdv;
+            if (_holeImg != null) _holeImg.raycastTarget = !_holdOverlay;
             PlaceBubbleCenter(root);
             return;
         }
         // 有目标（或沿用上次量到的矩形）：恢复遮罩挡点击（Show 里设过 true，这里兜底还原）
         // 【2026-10-22 修】隐藏态不允许借 RefreshLayout 复活吃点击（保险 2/2）
+        // 【2026-11-26 更正】天赋步让位期间遮罩四条射线保持 true（挡住洞外所有天赋节点）；
+        // 只压洞射线（raycastTarget=false），点洞区域穿透到卡；Show/Hide 复位防泄漏。
         if (_group != null) _group.blocksRaycasts = _visible;
+        if (_holeImg != null) _holeImg.raycastTarget = !_holdOverlay && _visible;
 
         float pad = TargetPad;
         float x0 = minX - pad;
         float x1 = maxX + pad;
         float y0 = minY - pad;
         float y1 = maxY + pad;
+        // 【2026-11-26 主人拍板】天赋步点中节点后气泡卡弹在节点正上方。洞**只贴合卡本身**（不是节点+卡的竖长条）：
+        // 洞外（含所有天赋节点）全被遮罩四条挡住 → 只能解锁第一个；洞内只有卡、洞射线关 → 点解锁按钮穿到卡。
+        // 口径与 TalentUI.BubbleCard 同源：卡 340×400 ×0.75、卡底距节点顶 8px、卡心=节点顶+8+半高。
+        if (_holdOverlay)
+        {
+            const float cardHalfW = 340f * 0.75f * 0.5f;   // ≈127.5
+            const float cardHalfH = 400f * 0.75f * 0.5f;   // =150
+            const float cardGap = 8f;
+            float cx = (minX + maxX) * 0.5f;
+            float cardCy = maxY + cardGap + cardHalfH;
+            x0 = cx - cardHalfW - pad;
+            x1 = cx + cardHalfW + pad;
+            y0 = cardCy - cardHalfH - pad;
+            y1 = cardCy + cardHalfH + pad;
+        }
         float left = root.rect.xMin;
         float right = root.rect.xMax;
         float bot = root.rect.yMin;
@@ -1672,7 +1732,8 @@ public class FirstRunGuide : MonoBehaviour
 
         PlaceBubbleNearTarget(root, y0, y1);
         // 【2026-11-25】目标矩形已量到，补显形（与 Show 的首帧收起配对）。
-        if (_bubbleRt != null && !_bubbleRt.gameObject.activeSelf)
+        // 【2026-11-26】天赋步点中节点后 _holdOverlay 期间不再显形：气泡框会挡住弹出的气泡卡。
+        if (_bubbleRt != null && !_bubbleRt.gameObject.activeSelf && !_holdOverlay)
             _bubbleRt.gameObject.SetActive(true);
     }
 

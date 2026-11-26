@@ -159,11 +159,12 @@ public partial class PetUI
         save.SetPetFeedCount(bodyId, fed + 1);
         save.CountPetFeed();   // 【2026-11-25】日常「喂养宠物」计数（每日清零；日常未开启时方法内部早退）
 
-        // 2026-11-22：喂养随机给攻/血/防其中一项 +1~3，落盘（皮肤与本体共享 bodyId）。
+        // 2026-11-22：喂养随机给攻/血/防其中一项，落盘（皮肤与本体共享 bodyId）。
+        // 2026-11-26 主人「喂养涨的属性再+50%」：原 1~3 → 2/3/5（向上取整）。
         string attrName;
         int hpAdd = 0, atkAdd = 0, defAdd = 0;
         int roll = UnityEngine.Random.Range(0, 3);
-        int amount = UnityEngine.Random.Range(1, 4);
+        int amount = Mathf.CeilToInt(UnityEngine.Random.Range(1, 4) * 1.5f);
         if (roll == 0) { hpAdd = amount; attrName = "血量"; }
         else if (roll == 1) { atkAdd = amount; attrName = "攻击"; }
         else { defAdd = amount; attrName = "防御"; }

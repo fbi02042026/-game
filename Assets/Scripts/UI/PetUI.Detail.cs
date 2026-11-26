@@ -174,12 +174,21 @@ public partial class PetUI
             {
                 int fed = save.GetPetFeedCount(PetDefs.IsSkin(def) ? def.skinOf : def.id);
                 int cost = FeedCost(fed);
-                if (_feedCostText != null) _feedCostText.text = cost.ToString();
+                if (_feedCostText != null)
+                {
+                    _feedCostText.text = cost.ToString();
+                    // 2026-11-26 主人「金币不足应该金币变红」：余额读真源 ResourceWallet，只改颜色
+                    _feedCostText.color = ResourceWallet.Get(save, ResourceWallet.ResourceType.Gold) < cost
+                        ? FEED_COST_SHORT_COLOR
+                        : FEED_COST_NORMAL_COLOR;
+                }
             }
         }
     }
 
     GameObject _feedCostBadge;
+    static readonly Color FEED_COST_NORMAL_COLOR = new Color(1f, 0.92f, 0.5f, 1f);   // 原 badge 基准色
+    static readonly Color FEED_COST_SHORT_COLOR = new Color(1f, 0.35f, 0.3f, 1f);    // 金币不足：红
 
     /// <summary>在 DeployBtn 上方建金币图标+数字（prefab 无此节点，运行时新建；不动任何现有节点位置）。</summary>
     void EnsureFeedCostBadge()
@@ -215,7 +224,7 @@ public partial class PetUI
         _feedCostText = txtGo.GetComponent<Text>();
         _feedCostText.font = GameFonts.GetNumber();
         _feedCostText.fontSize = 26;
-        _feedCostText.color = new Color(1f, 0.92f, 0.5f, 1f);
+        _feedCostText.color = FEED_COST_NORMAL_COLOR;
         _feedCostText.alignment = TextAnchor.MiddleLeft;
         _feedCostText.raycastTarget = false;
 

@@ -85,9 +85,6 @@ public partial class PetUI : MonoBehaviour
         FitPanel();      // Fit.cs —— 只设 Panel.localScale
         SetupList();     // List.cs —— 运行时补 ScrollRect + 克隆行
         BindClicks();    // Bind.cs —— 关闭/皮肤/上阵等按钮
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        EnsureDebugToggle();   // Debug.cs —— 测试全解锁开关（正式包不含）
-#endif
         SelectDefault(); // List.cs
 
         RefreshAll();    // Detail.cs
