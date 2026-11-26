@@ -598,15 +598,47 @@ public partial class WavePlanner
         int level = Mathf.Clamp(CurrentChapter * 5 + stageIdx, 1, 60);
         int star = Mathf.Clamp(1 + CurrentChapter / 2, 1, 5);
 
-        Mercenary merc = mm.SpawnEnemyMercenary(hireId, pos, level, star);
+        // 🔴 生成必须传数据 assetId：技能/属性/专属行为全按它查表，不可改成 bandit_*。
+        // 旧代码误传 hireId（H022/H013/H009）→ GetPrefabName 原样返回 → Units/H022 三层兜底全失败 → 强盗根本刷不出。
+        // 【2026-11-26 主人拍板】强盗用专属战斗模型（bandit_boss/witch/blade），不复刻玩家佣兵的脸；
+        // 只覆盖加载名，数据 id 仍是 zhongzhan201/fashi202/kuangzhan201，技能/行为/属性零外溢。
+        string banditPrefab = IntruderPicker.BanditPrefabOfAssetId(assetId);
+        Mercenary merc = mm.SpawnEnemyMercenary(assetId, pos, level, star, banditPrefab);
         if (merc == null)
         {
-            Debug.LogError($"[Intruder] SpawnEnemyMercenary 失败 hireId={hireId}（见上方日志）");
+            Debug.LogError($"[Intruder] SpawnEnemyMercenary 失败 assetId={assetId} hireId={hireId}（见上方日志）");
             return false;
         }
         merc.isAlly = false;          // 显式再置一次（SpawnEnemyMercenary 内部 L409 已设）
         merc.Face(-1);                // 面向玩家半场（左），照 ArenaEnemySpawner L258
         merc.SetPartyIndex(slot);     // 车道偏移按队内序错开（同 L257）
+
+        // 🔴 花名册默认技能（主动+被动）—— 敌方强盗照常放技能，口径对齐 ArenaEnemySpawner L262-275。
+        // 按 hireId 精确取行，不用按 asset 首行：kuangzhan201 被 H009/H016 共用，
+        // ResolveHireId 取首条 H009 → 阿刃拿 SK001 疾风斩，不会被 H016 的 SK003 串味。
+        if (MercRosterDefs.TryGetByHireId(hireId, out var banditDef)
+            && (!string.IsNullOrEmpty(banditDef.ActiveSkillId) || !string.IsNullOrEmpty(banditDef.PassiveSkillId)))
+        {
+            merc.SetupBattleSkills(banditDef.ActiveSkillId, banditDef.PassiveSkillId);
+            Debug.Log($"[Intruder] 强盗技能挂载 assetId={assetId} hireId={hireId} 主动={banditDef.ActiveSkillId} 被动={banditDef.PassiveSkillId}");
+        }
+        else
+        {
+            Debug.LogError($"[Intruder] hireId={hireId}（assetId={assetId}）花名册无技能，强盗只会普攻（不静默吞）");
+        }
+
+        // 🔴 【2026-11-26 主人拍板】强盗三人专属行为打标（老雷眩晕 / 阿刃脆皮换目标 / 夜薇星落+闪现）。
+        // 按 assetId 判（IntruderPicker 真源），None 的强盗组合不会出现；未匹配一律 None → 普通敌方佣兵行为。
+        var banditRole = BanditRoleOfAssetId(assetId);
+        if (banditRole != Mercenary.BanditRole.None)
+            merc.ConfigureBandit(banditRole);
+
+        // 【2026-11-26 主人拍板】强盗按 Boss 出场：第一只播 1.2 秒血条入场，
+        // 后续每只刷新绑定 → 三只合成一条求和血条（与 Boss/精英多目标口径同款）。
+        if (slot == 0)
+            BattleBossHpBar.PlayBossIntro(merc);
+        else
+            BattleBossHpBar.RefreshFromField();
 
         // 【2026-11-22 主人拍板】强盗强度按 boss 档，不打死倍率：玩家装备继承会随关卡成长，
         // 固定「血3攻2」到后期会被反超。改吃 boss 同款章内成长曲线（GetStatScale 唯一出口）
@@ -637,5 +669,20 @@ public partial class WavePlanner
         bm.InvalidateAliveMonsterCache();  // 普通怪 Execute L519 / 竞技场 L278
         wave.aliveCount++;                 // 普通怪 Execute L287
         return true;
+    }
+
+    /// <summary>
+    /// 【2026-11-26】强盗 assetId → 专属角色真源（与 IntruderPicker.cs 三人 assetId 一字不差）。
+    /// 三人之外（含将来加强盗）返回 None = 不启用专属行为，仍照普通敌方佣兵链路，避免误伤。
+    /// </summary>
+    static Mercenary.BanditRole BanditRoleOfAssetId(string assetId)
+    {
+        switch (assetId)
+        {
+            case "zhongzhan201": return Mercenary.BanditRole.OldLei;    // 独眼老雷 · 眩晕
+            case "kuangzhan201": return Mercenary.BanditRole.Arens;     // 阿刃 · 脆皮换目标
+            case "fashi202": return Mercenary.BanditRole.NightWei;      // 夜薇 · 星落 + 闪现
+            default: return Mercenary.BanditRole.None;
+        }
     }
 }

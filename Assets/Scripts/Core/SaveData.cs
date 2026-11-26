@@ -1003,6 +1003,32 @@ public class SaveData
         mercOutStars[hireId] = Math.Max(0, star);
     }
 
+    // === 佣兵等级（2026-11-26 主人拍板：<b>只在战斗内</b>，抽到同一个佣兵 +1 级）===
+    // 涨级方式：局内三选一/抽奖再抽到「已在本局队伍」的佣兵 → 该佣兵等级 +1（MercLevelSystem）。
+    // 为什么不走击杀经验：主人 11-26 拍板「打怪升级玩家会刷」；为什么不走局内升星：会与局外
+    // MercStarSystem（★0~3）撞车。
+    // 【彻底隔离】战斗外界面读 permanentMercs.level（招募随机 1~10 那套），两边互不读写：
+    // 本字典<b>不镜像</b> permanentMercs，无记录也不回落它（无记录 = Lv1）。
+    // key = 花名册 HireId（H001…），与 mercOutStars 同口径（已拥有真源 unlockedMercIds，多数佣兵没有实例）。
+    // 旧存档无此列表 → 空字典 = 全员 Lv1，不需要迁移。
+    public List<StringIntEntry> mercLevelEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mercLevels = new Dictionary<string, int>();
+
+    /// <summary>查佣兵等级原值（hireId；无记录返回 0 = 从没写过，调用方按 Lv1 处理）。</summary>
+    public int GetMercLevelRaw(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        return mercLevels != null && mercLevels.TryGetValue(hireId, out int v) ? v : 0;
+    }
+
+    /// <summary>写佣兵等级（只落运行时字典；entries 由 SyncListsFromRuntime 在存档时镜像）。</summary>
+    public void SetMercLevel(string hireId, int level)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        mercLevels ??= new Dictionary<string, int>();
+        mercLevels[hireId] = Math.Max(1, level);
+    }
+
     // === 佣兵升阶 / 局外养成等级（2026-10-23 施工单 T3，与升星 mercOutStars 两套并行系统互不干扰）===
     // key = 花名册 HireId（H001…）。没有记录 = Lv1 无加成（旧存档兼容）。
     // 养成消耗只有金币 + 职业徽记【2026-10-23 主人拍板 C1=A】，本条目不含任何碎片字段。
@@ -1321,6 +1347,17 @@ public class SaveData
             }
         }
 
+        // 【2026-11-26】佣兵等级重建：旧存档没有这个列表 → 空字典 = 等回落历史等级，兼容
+        mercLevels = new Dictionary<string, int>();
+        if (mercLevelEntries != null)
+        {
+            for (int i = 0; i < mercLevelEntries.Count; i++)
+            {
+                var e = mercLevelEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                mercLevels[e.id] = Math.Max(1, e.value);
+            }
+        }
         // 【2026-10-26 信任交流】信任重建：从 entries 灌回字典（旧存档无列表 → 空字典 = 全员 0，兼容）
         mercTrust = new Dictionary<string, int>();
         if (mercTrustEntries != null)
@@ -2709,6 +2746,11 @@ public class SaveData
         foreach (var kv in mercOutStars)
             mercOutStarEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
 
+        // 【2026-11-26】佣兵等级镜像落盘（字典 → entries）
+        mercLevels ??= new Dictionary<string, int>();
+        mercLevelEntries = new List<StringIntEntry>(mercLevels.Count);
+        foreach (var kv in mercLevels)
+            mercLevelEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
         // 【2026-10-26 信任交流】信任镜像落盘（字典 → entries）
         mercTrust ??= new Dictionary<string, int>();
         mercTrustEntries = new List<StringIntEntry>(mercTrust.Count);

@@ -563,4 +563,82 @@ public partial class BattleUI : MonoBehaviour
         le.flexibleHeight = 0f;
         le.ignoreLayout = false;
     }
+
+    // ============================================================
+    // 【2026-11-26 主人拍板】佣兵升级特效（替代原「升级详情弹窗」）
+    // 美术在两个 MercSlot 下各摆了一个 effect 节点（内含 MagicDust 粒子，2 秒非循环）。
+    // 等级数字照旧走 CharacterSlotUI.UpdateSlot → LV 节点；这里只负责「播一次」。
+    // 节点缺失只报错，不补建、不造特效。
+    // ============================================================
+    Coroutine _levelUpFxCo1;
+    Coroutine _levelUpFxCo2;
+
+    /// <summary>按 hireId / mercId 找到对应头像槽，把该槽的 effect 粒子重播一次。</summary>
+    public void PlayMercLevelUpEffect(string hireIdOrMercId)
+    {
+        int index = -1;
+        if (RunLoadout.IsActive)
+        {
+            var mercs = RunLoadout.Mercs();
+            for (int i = 0; i < (mercs != null ? mercs.Count : 0); i++)
+            {
+                var e = mercs[i];
+                if (e == null) continue;
+                if ((!string.IsNullOrEmpty(hireIdOrMercId) &&
+                     (string.Equals(e.hireId, hireIdOrMercId, System.StringComparison.Ordinal)
+                      || string.Equals(e.mercId, hireIdOrMercId, System.StringComparison.Ordinal))))
+                { index = i; break; }
+            }
+        }
+        if (index < 0 || index > 1)
+        {
+            Debug.LogError("[BattleUI] 佣兵升级特效找不到对应槽位：" + hireIdOrMercId + "（未在局内出战名单）");
+            return;
+        }
+        var slot = index == 0 ? mercSlot1 : mercSlot2;
+        // 【2026-11-26 主人追加】effect 节点若因绑定时机没挂上，这里按 root 现找一次（只找不造）；
+        // 仍取不到才报错，避免「节点明明在 prefab 里却因初始化顺序跳过特效」。
+        if (slot != null && slot.levelUpEffect == null && slot.root != null)
+        {
+            var fxRoot = FindDeepChildIgnoreCase(slot.root.transform, "effect");
+            if (fxRoot != null) { slot.levelUpEffect = fxRoot.gameObject; slot.levelUpEffect.SetActive(false); }
+        }
+        if (slot == null || slot.levelUpEffect == null)
+        {
+            Debug.LogError("[BattleUI] 佣兵槽 " + (index + 1) + " 找不到美术摆的 effect 节点，升级特效跳过（id=" + hireIdOrMercId + "）");
+            return;
+        }
+
+        // 连抽连中同一个佣兵时，先把上一次的收尾协程停掉，避免它提前关掉本次特效。
+        if (index == 0 && _levelUpFxCo1 != null) { StopCoroutine(_levelUpFxCo1); _levelUpFxCo1 = null; }
+        if (index == 1 && _levelUpFxCo2 != null) { StopCoroutine(_levelUpFxCo2); _levelUpFxCo2 = null; }
+        var co = StartCoroutine(CoPlayLevelUpEffectOnce(slot.levelUpEffect));
+        if (index == 0) _levelUpFxCo1 = co; else _levelUpFxCo2 = co;
+
+        // 【2026-11-26 主人追加】同一时刻让这个佣兵在头像上冒一句升级台词（通用短句换着说）。
+        // 走现成的 BattleHeadTalkUI 固定锚点气泡，不造第二套 UI；正在有别的气泡时不抢。
+        if (slot.root != null)
+            MercBattleBanter.SayLevelUpAt(slot.root.transform);
+    }
+
+    static System.Collections.IEnumerator CoPlayLevelUpEffectOnce(GameObject fx)
+    {
+        if (fx == null) yield break;
+        var pss = fx.GetComponentsInChildren<ParticleSystem>(true);
+        fx.SetActive(false);
+        for (int i = 0; i < pss.Length; i++)
+            if (pss[i] != null) pss[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        // 通过重新激活触发 playOnAwake；再显式 Play 一次，保证停到一半被打断也能从头播。
+        fx.SetActive(true);
+        for (int i = 0; i < pss.Length; i++)
+            if (pss[i] != null) pss[i].Play(true);
+
+        float duration = 0.5f;
+        for (int i = 0; i < pss.Length; i++)
+            if (pss[i] != null)
+                duration = Mathf.Max(duration, pss[i].main.duration + pss[i].main.startDelay.constantMax);
+        yield return new WaitForSecondsRealtime(duration + 0.2f);
+        if (fx != null) fx.SetActive(false);
+    }
 }

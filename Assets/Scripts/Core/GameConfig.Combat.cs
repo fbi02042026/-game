@@ -462,6 +462,14 @@ public static partial class GameConfig
     /// </summary>
     public const float MONSTER_BOSS_ATK_INTERVAL = 1.0f;
     /// <summary>
+    /// 【2026-11-26 主人拍板「第一章难度还原、精英和 Boss 只稍微提高」】第一章 Boss 专属出招间隔。
+    /// 全局 1.0（11-25）让 Boss 约每 2.56 秒出手一次，旧值 2.2 是约 5.64 秒 —— 频率翻 2.2 倍，
+    /// 对已还原的第一章来说远超「稍微」。本值 1.6 ⇒ 约 4.1 秒一次，比 11-24 快 37%，有压迫但不碾压。
+    /// 只作用于第一章主线正式关的 Boss（含 10 号小 Boss）；第二章起继续吃全局 1.0。
+    /// 唯一消费点 = <c>Monster.Init</c> Boss 分支的 atkInterval。
+    /// </summary>
+    public const float CH1_BOSS_ATK_INTERVAL = 1.6f;
+    /// <summary>
     /// 怪物攻速总倍率（最终攻速 = 1/间隔 × 本值 × MonsterConfig.baseAttackSpeed）。
     /// 前期先压低；以后难度高了往 1 调（甚至 &gt;1）。
     /// </summary>
@@ -875,25 +883,43 @@ public static partial class GameConfig
     }
 
     /// <summary>
-    /// 【2026-11-25 主人拍板「整体难度曲线更高、普通关不能一刀一个」】
+    /// 【2026-11-26 主人拍板「第一章难度还原、只稍微提高精英和 Boss，第二章再整体提高」】
+    /// 第一章<b>普通怪</b>专用的 11-24 章内属性曲线（含旧关5墙 1.10）。
+    /// 11-25 把 stage_stat_scale 的峰谷放大（关3 1.22→1.30 / 关5 1.30→1.42 / 关8 1.38→1.46）
+    /// 作用到了全章全怪，是「普通怪也变肉」的一半原因。本次只让第一章普通怪走回旧曲线；
+    /// 第一章精英/Boss 与第二章起的所有怪继续吃现行表曲线（血略高 = 稍微更难）。
+    /// <para>唯一消费点 = <c>Monster.Init</c> 的 statScale（血 / 攻同时生效）；
+    /// 装备产出走 <see cref="GetStageStatScaleMonotonic"/>，不受本函数影响。</para>
+    /// </summary>
+    static readonly float[] CH1_LEGACY_STAGE_SCALE =
+    {
+        1.00f, 1.06f, 1.22f, 1.08f, 1.30f, 1.14f, 1.20f, 1.38f, 1.26f, 1.50f
+    };
+
+    public static float Chapter1LegacyStatScale(int stageIndex0Based)
+    {
+        int i = Mathf.Clamp(stageIndex0Based, 0, CH1_LEGACY_STAGE_SCALE.Length - 1);
+        // 卡点墙走全局真源（第一章整章已回 1.10），本路径不再写第二份墙数字
+        return GetChapterStatScale(1) * CH1_LEGACY_STAGE_SCALE[i] * GetGrandWallBonus(1, 1, i);
+    }
+
+    /// <summary>
     /// 普通小怪的<b>按章血量补偿</b>，乘在 <see cref="MONSTER_HP_GLOBAL_MUL"/> 之上。
     /// 只作用于主线正式关的<b>普通怪</b>（Monster.Init 门禁：formalMainRun &amp;&amp; !endlessRift
     /// &amp;&amp; !isTutorialRun &amp;&amp; !eliteWave &amp;&amp; !bossUnit）—— 精英 / Boss 血量另走
     /// chapterFirstHpRule + Boss 专属系数，不在这里叠加。
-    /// <para>为什么需要：玩家武器攻击 = 本章怪均攻 × 档位 × 章倍率，而小怪血量只有章倍率 ×0.5，
-    /// 前 3 章小怪血量 ≈ 玩家一击（0.6~1.1 刀），波次瞬清、攻击侧完全轮不到生效。
-    /// 目标统一拉到 <b>2~3 刀一只</b>，让怪有出手机会，攻击数值才有意义。</para>
-    /// <para>实测微调只改这张表；全设 1f 即完全恢复改动前手感。
-    /// 【2026-11-25 定稿·含装备复算】上表按「中等偏上装备」（ch1 优秀 / ch2+ 稀有、区间 70% 位、
-    /// 手套带攻击主属性、头胸带生命、胸脚带防御）重算后，把各章统一压到 <b>2.4 刀</b>：
-    /// 之前的 3.3/4.2/2.7 是把玩家攻击当成「只有武器」算出来的，实际手套/头部也在给攻击，怪死得更快。
-    /// 难度爬坡改由 <see cref="LateMobAtkMulForChapter"/>（怪物攻击）承担，血量只负责「别一刀一个」。</para>
+    /// <para>【2026-11-26 主人拍板「第一章难度还原、只稍微提高精英和 Boss，第二章再整体提高」】
+    /// 第一章回到 11-24 口径：1-1 ×3 / 1-2 ×2 / 1-3 起 ×1（开局木剑剑盾约 2 刀一只）；
+    /// 第二章起继续吃 11-25 提高后的曲线（整体更难），不受本次回退影响。</para>
+    /// <para>历史：11-25 曾把第一章改成「首关3 / 其余全4」，按「中等偏上装备」算目标 2.4 刀；
+    /// 但开局只有木剑（攻 5+6.6），实际拖到 8~9 刀，主人反馈「剑盾一个小怪也打不死」。</para>
     /// </summary>
     public static float EarlyChapterHpCurveMul(int gameChapter, int stageIndex0Based)
     {
         switch (gameChapter)
         {
-            case 1: return stageIndex0Based == 0 ? 3.0f : 4.0f;   // 第1关对齐引导；其余全章 2.4 刀
+            // 【2026-11-26 还原】1-1 ×3 / 1-2 ×2 / 1-3 起 ×1，恢复 11-24 手感；第二章起维持 11-25 高难度
+            case 1: return stageIndex0Based == 0 ? 3.0f : (stageIndex0Based == 1 ? 2.0f : 1.0f);
             case 2: return 5.0f;
             case 3: return 5.3f;
             case 4: return 3.4f;
@@ -956,11 +982,11 @@ public static partial class GameConfig
     //   每个峰后面都紧接谷（关4 1.08 / 关6 1.14 / 关9 1.26），关10 重新成为全章最高。
     //   本数组只保留关 5（半程小 Boss）的卡点；关 10 维持 1f ——
     //   关10 的难度走 CH1_FINAL_BOSS_ATK_DEV / CH1_FINAL_BOSS_HP_MUL（只作用于大 Boss 本体）。
-    //   【2026-11-25 关5 1.10 → 1.20】主人要「第5关小卡一下、死1~2次」：1.10 时四人队 9.8 秒打完、
-    //   10.6 秒才团灭 ⇒ 首次就过；1.20 后 Boss ≈1920 血 / 每下 ≈144 ⇒ 10.7 秒打完、9.7 秒团灭，
-    //   首次差一点失败、升 1 级或换 1 件装备即可过（这一战之前招不了新佣兵，不能再狠）。
-    //   要恢复旧手感把 1f 按旧值填回即可。
-    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.20f, 1f, 1f, 1f, 1f, 1f };
+    //   【2026-11-25 曾 1.10 → 1.20；2026-11-26 主人拍板「第一章还原、精英/Boss 只稍微提高」已回 1.10】
+    //   1.20 会让关5 小 Boss 在「新 stage 曲线 + 章攻 0.45」之上再多 9% 血攻，合计远超「稍微」；
+    //   现在第一章整章墙回到 1.10，精英/Boss 的加强只由章攻 0.45 与新 stage 曲线承担。
+    //   第二章起的卡点关走 GetGrandWallBonus 里的 GRAND_WALL_STEP，不受本数组影响。
+    static readonly float[] CH1_STAGE_WALL = { 1f, 1f, 1f, 1f, 1.10f, 1f, 1f, 1f, 1f, 1f };
 
     /// <summary>
     /// 【2026-11-18 立 / 2026-11-25 主人重定「第一章第10关要能卡住人，死 1~4 次」】
@@ -978,7 +1004,9 @@ public static partial class GameConfig
     ///   唯一真源是 monster_attack_style.csv 的 style。
     /// 调法：只改这一个数；实跑后按「玩家能扛几刀 / Boss 差多少血没死」回标。
     /// </summary>
-    public const float CH1_FINAL_BOSS_ATK_DEV = 1.3f;
+    // 【2026-11-26 主人拍板】1.3 → 1.5：第一章普通怪已还原 0.35 章攻，精英/Boss 走 0.45（+29%）；
+    // 章末大 Boss 再乘本值 1.5，净攻击 ≈ 11-24 的 1.15 倍 —— 只比原版稍强，不是 11-25 的碾压档。
+    public const float CH1_FINAL_BOSS_ATK_DEV = 1.5f;
 
     /// <summary>
     /// 【2026-11-18 立 / 2026-11-25 主人重定「不要加血，血多拖长战斗让人烦躁」】
@@ -1117,6 +1145,18 @@ public static partial class GameConfig
     public const float TELEGRAPH_BOSS_RADIUS_MUL = 2f;
     /// <summary>【2026-11-18 主人拍板】Boss 二阶段红圈深血红。仅 RGB；alpha 仍由 TELEGRAPH_PROGRESS_ALPHA / TELEGRAPH_RANGE_ALPHA 决定。</summary>
     public static readonly Color TELEGRAPH_ENRAGED_COLOR = new Color(1f, 0.02f, 0.02f, 1f);
+    /// <summary>
+    /// 【2026-11-26 主人拍板「预警要读秒，别让玩家看久了钝掉」】预警最后这段比例内切到醒目色 + 一次短震：
+    /// 进度 ≥ (1 - 本值) 时双圈染成 TERMINAL 色，跨线那一帧轻震一下。只改视觉，不动预警时长 / 判定 / 圆心。
+    /// 两条预警路径共用：近战 Boss 攒槽圈（AdvanceHpSkillCharge）与固定秒数协程（CoSkillTelegraphThenCast）。
+    /// 设 0 即关闭整个临门一脚。
+    /// </summary>
+    public const float TELEGRAPH_TERMINAL_WINDOW_RATIO = 0.16f;
+    /// <summary>临门一脚的醒目色（仅 RGB，alpha 仍走原圈 alpha，避免圈突然变实心糊住地面）。</summary>
+    public static readonly Color TELEGRAPH_TERMINAL_COLOR = new Color(1f, 0.82f, 0.12f, 1f);
+    /// <summary>跨线短震的幅度 / 时长（很轻，只是"要砸了"的一记提示，不与释放震叠加成一坨）。</summary>
+    public const float TELEGRAPH_TERMINAL_SHAKE_AMP = 0.045f;
+    public const float TELEGRAPH_TERMINAL_SHAKE_DUR = 0.09f;
     /// <summary>精英预警时长（秒）。</summary>
     public const float TELEGRAPH_ELITE_SEC = 3f;
     /// <summary>Boss 预警时长（秒）。【2026-11-24 主人拍板】从 4s 减到 2.67s（-1/3）。</summary>
@@ -1206,6 +1246,19 @@ public static partial class GameConfig
     /// <summary>复原后的收势停顿（秒）：停稳才恢复行动，主人要求节奏别太快。</summary>
     public static float MONSTER_BLINK_SETTLE_SEC => CombatTuningTable.Get("MONSTER_BLINK_SETTLE_SEC", 0.10f);
 
+    // ---- 【2026-11-26 主人拍板】强盗三人组专属战斗行为数值 ----
+    // 老雷：命中玩家眩晕，时长短、CD 长（调味剂，不把玩家锁死）。复用 ApplyStun 一处带走僵直 + 断治疗读条。
+    public static float BANDIT_OLDLEI_STUN_SEC => CombatTuningTable.Get("BANDIT_OLDLEI_STUN_SEC", 0.40f);
+    public static float BANDIT_OLDLEI_STUN_CD => CombatTuningTable.Get("BANDIT_OLDLEI_STUN_CD", 6.0f);
+    // 阿刃：脆皮索敌。Hero 只是「轻微偏好」不能压过随机扰动 —— 主人要的是「随机挑一个脆皮」，
+    // 加分给到扰动同量级即可（3000 会让阿刃永远只戳玩家，随机换人形同虚设）。
+    public static float BANDIT_ARENS_HERO_PRIORITY => CombatTuningTable.Get("BANDIT_ARENS_HERO_PRIORITY", 100f);
+    public static float BANDIT_ARENS_RANDOM_JITTER => CombatTuningTable.Get("BANDIT_ARENS_RANDOM_JITTER", 500f);
+    // 夜薇：被贴脸闪现（触发线复用怪物档，CD 稍短因是法师保命）；星落 VFX 别名走玩家 starfall 现成资源。
+    public static float BANDIT_NIGHTWEI_BLINK_TRIGGER => CombatTuningTable.Get("BANDIT_NIGHTWEI_BLINK_TRIGGER", 2.0f);
+    public static float BANDIT_NIGHTWEI_BLINK_CD => CombatTuningTable.Get("BANDIT_NIGHTWEI_BLINK_CD", 9.0f);
+    public const string BANDIT_NIGHTWEI_STARFALL_VFX_ALIAS = "ally_starfall";
+
     // ==================== 【2026-10-20 主人拍板】远程精英/Boss 双弹幕技 ====================
     /// <summary>
     /// 【2026-11-13 主人拍板「boss 可以带，但是要有 cd 稍微长点，现在感觉一直在放」】
@@ -1288,6 +1341,20 @@ public static partial class GameConfig
         return ch <= ChapterAtkMulTable.Length ? ChapterAtkMulTable[ch - 1] : ChapterAtkMulTable[ChapterAtkMulTable.Length - 1];
     }
 
+    /// <summary>
+    /// 【2026-11-26 主人拍板「第一章难度还原、只稍微提高精英和 Boss」】按怪类分流的章攻击系数。
+    /// <para>第一章：普通怪回 11-24 的 <b>0.35</b>（开局木剑剑盾恢复 2 刀一只）；
+    /// 精英 / Boss 用 <b>0.45</b>（比旧 +29%，小幅提高，不是 11-25 的 0.90 ×2.57 碾压）。</para>
+    /// <para>第二章起：完全不动，仍走 11-25 提高后的 <see cref="ChapterAtkMulTable"/>（整体更难）。</para>
+    /// 唯一消费点 = <c>Monster.Init</c> 的 earlyAtkMul；UI / 其它系统仍调单参数版本。
+    /// </summary>
+    public static float ChapterAtkMul(int chapter, bool eliteOrBoss)
+    {
+        if (chapter == 1)
+            return eliteOrBoss ? 0.45f : 0.35f;
+        return ChapterAtkMul(chapter);
+    }
+
     // 【2026-11-22 主人拍板】1章3关起（含全部玩法 + 裂隙）后期加强，判据与倍率的唯一出口。
     // 精英 / 小BOSS(10号) / 真Boss(11,12)：血×2 攻×1.5；其余小怪（含 3~6 号表定词条怪）血攻各 ×1.3。
     // 门槛：主线 chapter>1 或 (chapter==1 && stageIdx0>=2)（stageIdx0 0 起，2 = 第3关）；
@@ -1304,7 +1371,8 @@ public static partial class GameConfig
     // 「可挨刀」会从头到尾压在 14~20 之间、完全没有爬坡（实测：18/20/17/20/18/18/17/14）。
     // 本表只作用于「主线正式关的非精英、非 Boss 怪」，副本 / 裂隙 / 支线 / 竞技场仍走常量 1.30，零影响。
     // 目标「可挨刀」：ch1 20 → ch8 7。实跑要改只动这张表。
-    static readonly float[] LateMobAtkRamp = { 1.25f, 1.50f, 1.60f, 2.10f, 2.30f, 2.60f, 2.75f, 2.70f };
+    // 【2026-11-26 还原第一章】ch1 1.25 → 1.30（= 11-24 的 LATE_MOB_ATK_MUL 常量），第二章起原样不动。
+    static readonly float[] LateMobAtkRamp = { 1.30f, 1.50f, 1.60f, 2.10f, 2.30f, 2.60f, 2.75f, 2.70f };
     public static float LateMobAtkMulForChapter(int chapter)
         => LateMobAtkRamp[Mathf.Clamp(chapter, 1, LateMobAtkRamp.Length) - 1];
 

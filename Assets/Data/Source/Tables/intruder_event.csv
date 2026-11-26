@@ -1,5 +1,6 @@
 # 乱入事件配置：eventId 事件ID；type 类型(Intruder敌对乱入/Rescue友军救场/Entry入场救援)；storyNode 剧情挂点(preBattle:章/postBoss:章/island:岛id)；chapter 游戏章；islandId 支线岛id；triggerNode 触发节点(hp40/onEnter/waveN)；unitCount 参战人数(恒3)；replaceCount 敌对乱入替换怪数(其余0)；storyKey 剧情key(非台词)；rewardId 奖励ID；onceScope 一次性范围(stage/island)；squadId 固定救场小队(SQ_MAIN)；startHpRatio 入场救援起步血量(0.4)
 # 【2026-11-22 拍板】强盗贯穿8章、按章递进组合：replaceCount=该章出场的强盗人数（1小弟/1大哥/2人/女法/远近/坦法/三人组/三人组），组合真源在 IntruderPicker.BanditIdsForChapter，本列人数必须与之一致。
+# 【2026-11-26 拍板】Intruder 投放关位改真源 IntruderEventDirector.IsBanditFlavorStage = 每章关3/关7（0-based 2/6），替换该关末波（原每章第6关 wave1 口径作废）；triggerNode=wave1 列保留不删但调味关不再读它。剧情对话一次性仍按 eventId 存档旗，关3 狗剧情优先、不播强盗台词。
 eventId,type,storyNode,chapter,islandId,triggerNode,unitCount,replaceCount,storyKey,rewardId,onceScope,squadId,startHpRatio
 EV01,Rescue,preBattle:1,1,,hp40,3,0,rescue_ch1,badge_low,stage,SQ_MAIN,
 EV02,Entry,preBattle:5,5,,onEnter,3,0,entry_ch5,badge_mid,stage,SQ_MAIN,0.4

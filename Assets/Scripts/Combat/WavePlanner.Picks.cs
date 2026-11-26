@@ -384,6 +384,9 @@ public partial class WavePlanner
         {
             var w = _waves[i];
             if (w == null || w.isBossWave || w.monsterCount <= 0) continue;   // Boss 本体波不插
+            // 【2026-11-26 修正】强盗调味波整波只出强盗、不生成普通怪：既不计入配额分母，
+            // 也不当词条槽宿主 —— 否则配额被它吃掉一份、其他波白少一只词条怪。
+            if (!string.IsNullOrEmpty(w.intruderEventId)) continue;
             totalNormal += w.monsterCount;
             if (i != 0) spawnable.Add(i);   // 【2026-11-13 v5】开场波纯普通怪，特殊怪集中在 Gate 之后
         }

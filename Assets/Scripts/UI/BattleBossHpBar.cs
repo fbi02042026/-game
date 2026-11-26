@@ -6,6 +6,7 @@ using UnityEngine.UI;
 /// 战斗场景屏幕 Boss 血条：按名绑定 BossBar/血条，Sliced 左对齐按宽度比例扣血。
 /// 显示对象：IsBossUnit，或任意精英（IsEliteWave）。
 /// 2026-09-28 主人要求：精英也配上这条血条 —— 原来只在「精英关」才显示，普通关里的精英（如引导第 4 波）看不到。
+/// 【2026-11-26 主人拍板】强盗三人组（Mercenary.IsBandit）按 Boss 出场，与 Boss/精英共用这条求和血条。
 /// </summary>
 public class BattleBossHpBar : MonoBehaviour
 {
@@ -16,7 +17,7 @@ public class BattleBossHpBar : MonoBehaviour
     Image _fillImg;
     float _fullWidth;
     float _fullHeight;
-    Monster _bound;
+    UnitBase _bound;   // 【2026-11-26】Boss/精英(Monster) + 强盗(Mercenary) 共用
 
     // 双层血条：上层红条先掉血，下层偏白条停顿后匀速追上，露出「刚扣掉的那段」。
     // 延迟层是「血条」的运行时克隆，几何继承美术摆放、不写死尺寸、不改预制体；上色方式见 EnsureDelayLayer。
@@ -32,9 +33,9 @@ public class BattleBossHpBar : MonoBehaviour
     // 生成白色 sprite 给延迟层，斜角/金边轮廓与红条逐像素一致。做法见 MakeWhiteSprite。
     static readonly Color BossHpDelayColor = new Color(0.95f, 0.96f, 0.98f, 1f);
     // 【2026-10-18 主人拍板】绑定目标集：Boss + 场上全部存活精英，血条显示 ∑当前血/∑最大血；
-    // _bound 只当名牌目标用（取血量上限最高的一只）
-    readonly List<Monster> _boundList = new List<Monster>();
-    readonly List<Monster> _pickScratch = new List<Monster>();
+    // 【2026-11-26】强盗三人组也进本集（按 Boss 出场）；_bound 只当名牌目标用（取血量上限最高的一只）
+    readonly List<UnitBase> _boundList = new List<UnitBase>();
+    readonly List<UnitBase> _pickScratch = new List<UnitBase>();
     // 【2026-10-18 主人拍板】最后一只死亡时血条先归零展示一小段再收起（旧表现是带着血整条消失）
     float _deathZeroHold;
     const float BOSS_DEATH_ZERO_HOLD = 0.8f;
@@ -43,7 +44,7 @@ public class BattleBossHpBar : MonoBehaviour
     // 【2026-11-23 主人拍板 A】狗营救演出期间屏幕血条不弹（只压显示、不丢目标），演出结束自动补显。
     // 唯一写入点 = BattleManager.CutsceneDirector 的演出启动 / 复位 / finally 三处。
     static bool _cutsceneSuppressed;
-    Monster _lastLoggedPick;   // 【2026-10-15】排查日志去重用
+    UnitBase _lastLoggedPick;   // 【2026-10-15】排查日志去重用
     Transform _progressBar;
     Transform _questMap;       // 【2026-10-16 改】= QuestPanel（左上任务面板）；旧引用 "map" 是场景底图根节点，绝不能藏
     bool _chromeCached;
@@ -55,6 +56,16 @@ public class BattleBossHpBar : MonoBehaviour
     float _introT;
     float _introRatio;
     const float BOSS_INTRO_FILL_TIME = 1.2f;
+
+    // 【2026-11-26 主人拍板「Boss 血条标出狂暴线，玩家能预期要变招」】
+    // 运行时建一根细竖刻度，钉在血条 BOSS_ENRAGE_HP_RATIO 位置；血线跨过时闪一下。
+    // 只绑一只 Boss 时显示（多目标求和血条的百分比不等于单 Boss 狂暴点，宁可不画也不误导）。
+    RectTransform _enrageTickRt;
+    Image _enrageTickImg;
+    float _enrageTickFlash;              // >0 时高亮，逐帧衰减
+    float _lastHp01ForEnrage = -1f;      // 上一帧血比例，用于检测"跨过狂暴线"
+    static readonly Color EnrageTickColor = new Color(1f, 0.36f, 0.12f, 0.95f);
+    static readonly Color EnrageTickFlashColor = new Color(1f, 1f, 0.85f, 1f);
 
     public static BattleBossHpBar Ensure(Transform searchRoot = null)
     {
@@ -107,7 +118,7 @@ public class BattleBossHpBar : MonoBehaviour
     /// BOSS 出场血条入场演出：1.2 秒内从 0 慢慢填充到满，同时显示 BossBar 并隐藏顶部 ProgressBar/QuestMap。
     /// 已在播放中则不重启动画（重进战斗/重复调用不打断）。
     /// </summary>
-    public static void PlayBossIntro(Monster boss)
+    public static void PlayBossIntro(UnitBase boss)
     {
         // 已在播放：不打断（重进战斗/重复调用安全）。注意本方法是 static，必须经 _inst 访问实例字段
         if (_inst != null && _inst._introPlaying && _inst._bound == boss) return;
@@ -115,6 +126,9 @@ public class BattleBossHpBar : MonoBehaviour
         Ensure();                             // 内部自动 BindUi
         if (_inst._root == null || _inst._fillRt == null) return; // 战斗 UI 还没建好，静默返回（不打日志）
 
+        // 【2026-11-26】换 Boss：狂暴刻度的跨线基准从头计，别拿上一只的血比例误判"刚跨线"
+        _inst._lastHp01ForEnrage = -1f;
+        _inst._enrageTickFlash = 0f;
         _inst._bound = boss;
         _inst._deathZeroHold = 0f;
         _inst._boundList.Clear();
@@ -308,6 +322,7 @@ public class BattleBossHpBar : MonoBehaviour
 
         SyncRatioFromBound();
         TickDelayChase();
+        TickEnrageTick(_targetRatio);
     }
 
     public void Refresh()
@@ -406,8 +421,16 @@ public class BattleBossHpBar : MonoBehaviour
     {
         // 【2026-11-09 主人拍板】金币/徽记本显副本专属名（宝箱怪/金宝箱/宝箱王等），
         // 走 Monster.HudDisplayName 唯一出口；其余模式在出口内部原样回退模板怪物名。
-        string name = _bound != null ? (_bound.HudDisplayName() ?? "") : "";
-        var af = _bound != null ? MonsterAffix.Get(_bound) : null;
+        // 【2026-11-26】强盗是 Mercenary，没有 Monster.HudDisplayName / 词缀；按类型分支取名
+        string name = "";
+        var boundMonster = _bound as Monster;
+        if (boundMonster != null) name = boundMonster.HudDisplayName() ?? "";
+        else
+        {
+            var boundMerc = _bound as Mercenary;
+            if (boundMerc != null) name = boundMerc.DisplayName ?? "";
+        }
+        var af = boundMonster != null ? MonsterAffix.Get(boundMonster) : null;
         string suffix = af != null ? af.Suffix : "";
         string full = name + suffix;
 
@@ -441,6 +464,71 @@ public class BattleBossHpBar : MonoBehaviour
         }
         if (max <= 0f) return;
         SetRatio(Mathf.Clamp01(cur / max));
+    }
+
+    /// <summary>
+    /// 【2026-11-26】狂暴刻度：运行时建一根细竖条钉在血条 ratio=BOSS_ENRAGE_HP_RATIO 处。
+    /// 挂到「血条」的父节点下（与红条同坐标系），几何全部取自 _fillRt 真值，不写死尺寸。
+    /// </summary>
+    void EnsureEnrageTick()
+    {
+        if (_enrageTickRt != null || _fillRt == null) return;
+        var parent = _fillRt.parent;
+        if (parent == null) return;
+
+        var go = new GameObject("BossEnrageTick", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(parent, false);
+        var rt = go.transform as RectTransform;
+        rt.anchorMin = _fillRt.anchorMin;
+        rt.anchorMax = _fillRt.anchorMax;
+        rt.pivot = _fillRt.pivot;
+        rt.localScale = _fillRt.localScale;
+        var img = go.GetComponent<Image>();
+        img.color = EnrageTickColor;
+        img.raycastTarget = false;
+        // 细竖条：宽 3px（父坐标乘自身 scale 前的值），高比血条略上下各探 20%，十字好认
+        rt.sizeDelta = new Vector2(3f, _fullHeight * 1.4f);
+        _enrageTickRt = rt;
+        _enrageTickImg = img;
+    }
+
+    /// <summary>每帧刷新刻度的位置 / 颜色 / 显隐。跨过狂暴线时闪一下白光。</summary>
+    void TickEnrageTick(float hp01)
+    {
+        // 门禁：只绑一只 Boss、且 Boss 狂暴机制开启时才画（多目标求和口径不一致，宁可不画）
+        // 【2026-11-26】强盗不是真 Boss，不画狂暴刻度（多目标求和百分比也不等于单 Boss 狂暴点）
+        var boundMonster = _bound as Monster;
+        bool eligible = _boundList.Count == 1 && boundMonster != null && boundMonster.IsBossUnit
+                        && GameConfig.BOSS_ENRAGE_ENABLED;
+        if (!eligible || _fillRt == null)
+        {
+            if (_enrageTickRt != null && _enrageTickRt.gameObject.activeSelf)
+                _enrageTickRt.gameObject.SetActive(false);
+            _lastHp01ForEnrage = hp01;
+            return;
+        }
+
+        EnsureEnrageTick();
+        if (_enrageTickRt == null) return;
+        if (!_enrageTickRt.gameObject.activeSelf) _enrageTickRt.gameObject.SetActive(true);
+
+        float ratio = Mathf.Clamp01(GameConfig.BOSS_ENRAGE_HP_RATIO);
+        // 位置 = 血条左缘 + 满宽 × 狂暴比例；_fillRt pivot=0 左对齐，anchoredPosition.x 即左缘偏移
+        float sx = Mathf.Abs(_fillRt.localScale.x) < 0.0001f ? 1f : Mathf.Abs(_fillRt.localScale.x);
+        float tickX = _fillRt.anchoredPosition.x + _fullWidth * ratio * sx;
+        _enrageTickRt.anchoredPosition = new Vector2(tickX, _fillRt.anchoredPosition.y);
+        _enrageTickRt.sizeDelta = new Vector2(3f / sx, _fullHeight * 1.4f);
+
+        // 跨线检测：从线上方掉到线下方（含入场动画 snap 到 0 的情况）
+        if (_lastHp01ForEnrage > ratio + 0.0001f && hp01 <= ratio + 0.0001f)
+            _enrageTickFlash = 0.5f;
+        _lastHp01ForEnrage = hp01;
+
+        if (_enrageTickFlash > 0f)
+            _enrageTickFlash = Mathf.Max(0f, _enrageTickFlash - Time.unscaledDeltaTime);
+        if (_enrageTickImg != null)
+            _enrageTickImg.color = Color.Lerp(EnrageTickColor, EnrageTickFlashColor,
+                Mathf.Clamp01(_enrageTickFlash / 0.5f));
     }
 
     /// <summary>
@@ -613,6 +701,9 @@ public class BattleBossHpBar : MonoBehaviour
         else
         {
             _lastShowLogged = false;   // 收起后，下次再显示重新 dump
+            if (_enrageTickRt != null && _enrageTickRt.gameObject.activeSelf)
+                _enrageTickRt.gameObject.SetActive(false);
+            _lastHp01ForEnrage = -1f;
         }
 
         // Boss 血条出现时让出顶部：藏进度条与任务面板
@@ -639,7 +730,7 @@ public class BattleBossHpBar : MonoBehaviour
     // 掉血/死亡血条纹丝不动，真 Boss 先死就出现「还有血就显示死亡」。
     // ============================================================
 
-    static void PickTargets(List<Monster> result)
+    static void PickTargets(List<UnitBase> result)
     {
         result.Clear();
         var bm = BattleManager.Instance;
@@ -647,16 +738,20 @@ public class BattleBossHpBar : MonoBehaviour
 
         for (int i = 0; i < bm.monsters.Count; i++)
         {
-            var m = bm.monsters[i] as Monster;
-            if (m == null || m.isDead) continue;
-            if (m.IsBossUnit || m.IsEliteWave) result.Add(m);
+            var u = bm.monsters[i];
+            if (u == null || u.isDead) continue;
+            var m = u as Monster;
+            if (m != null && (m.IsBossUnit || m.IsEliteWave)) { result.Add(u); continue; }
+            // 【2026-11-26 主人拍板】强盗三人组按 Boss 出场，与 Boss/精英共用顶部求和血条
+            var merc = u as Mercenary;
+            if (merc != null && merc.IsBandit) result.Add(u);
         }
     }
 
     /// <summary>名牌目标：绑定集里血量上限最高的一只。</summary>
-    Monster PickNameTarget()
+    UnitBase PickNameTarget()
     {
-        Monster best = null;
+        UnitBase best = null;
         float bestMax = -1f;
         for (int i = 0; i < _boundList.Count; i++)
         {

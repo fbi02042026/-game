@@ -182,6 +182,9 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         {
             _comboToastShown.Add("10");
             DamageTextSystem.SetNextTextScaleMul(1.35f);
+            // 【2026-11-26 主人拍板「连杀 10 档要质变不要量变」】10 连起飘字换金色，
+            // 与 3/5 档（只是放大）拉开差距；20 档再换另一色。只改下一跳，不影响后续伤害字。
+            DamageTextSystem.SetNextTextColorOverride(new Color(1f, 0.84f, 0.25f, 1f));
             GetCameraFollow()?.AddShake(0.1f, 0.18f);
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);
@@ -191,6 +194,7 @@ public class CombatJuice : Singleton<CombatJuice>, ICombatBoundSingleton
         {
             _comboToastShown.Add("20");
             DamageTextSystem.SetNextTextScaleMul(1.5f);
+            DamageTextSystem.SetNextTextColorOverride(new Color(0.35f, 1f, 0.92f, 1f));  // 20 连：青色，再跳一档
             GetCameraFollow()?.AddShake(0.14f, 0.22f);
             if (GameConfig.COMBAT_JUICE_HIT_STOP)
                 RequestHitStop(GameConfig.HIT_STOP_COMBO_ANNOUNCE);

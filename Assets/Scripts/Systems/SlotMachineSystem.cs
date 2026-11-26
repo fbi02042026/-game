@@ -181,10 +181,11 @@ public static class SlotMachineSystem
 
     /// <summary>本关可参与老虎机的类型：池空的类型不进（判空直接复用 DraftPool）。</summary>
     /// <param name="allowMercWhenFull">
-    /// 【2026-11-24 主人拍板】true = 满员也算佣兵方向有货（波间免费三选一用，选中后弹「换下谁」）。
-    /// 默认 false 保持老虎机原口径：满员不出佣兵方向。
+    /// 【2026-11-24 主人拍板】true = 满员也算佣兵方向有货（选中后弹「换下谁」）。
+    /// 【2026-11-26 主人拍板】默认改为 true：抽奖池 = 战斗队列里任意佣兵，
+    /// 满员时佣兵方向仍有内容（换人卡 + 升级卡），老虎机付费抽不再被排除。
     /// </param>
-    public static List<DraftCategory> AvailableCategories(bool allowMercWhenFull = false)
+    public static List<DraftCategory> AvailableCategories(bool allowMercWhenFull = true)
     {
         var list = new List<DraftCategory>(3);
         if (DraftPool.HasSkillContent()) list.Add(DraftCategory.Skill);
@@ -194,7 +195,7 @@ public static class SlotMachineSystem
     }
 
     /// <summary>
-    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（装备 55 / 技能 20 / 佣兵 20）。
+    /// 按 <see cref="SlotMachineDefs.CategoryWeight"/> **加权**随机一个类型（当前 装备 45 / 技能 25 / 佣兵 25，真源见 SlotMachineDefs）。
     /// <para>【2026-10-13 主人拍板】主人反馈「佣兵和技能的机率太高了」→ 再压成 85/10/5；
     /// 【2026-10-20 主人拍板】主人要求「佣兵提到20% 技能20%」→ 改成 55/20/20（抽奖币维持 5 不联动）。
     /// 概率只认 <see cref="SlotMachineDefs"/> 那三个常量，这里不另写一份。</para>
@@ -574,9 +575,9 @@ public static class SlotMachineSystem
             return default;
         }
 
-        // 花名册里没有星级 / 等级字段 → 取初始 1 星 1 级（与 BuildMercData 的兜底一致）
+        // 花名册里没有星级字段 → 初始 1 星；等级取存档永久等级（2026-11-26 唯一真源）
         int star = 1;
-        int level = 1;
+        int level = Mathf.Max(1, MercLevelSystem.LevelOf(def.HireId));
         // 稀有度映射照 DraftPool.CollectRecruitMercs 的写法走 SkillRarityUtil，不自己发明三目
         SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);
         string rarName = SkillRarityUtil.DisplayName(rar);
@@ -591,8 +592,8 @@ public static class SlotMachineSystem
             //（主人反馈「抽奖提示米娅 / 场景小红 / 头像游侠」）。
             // 职业名（剑盾卫士 / 游侠…）是**职业**不是名字，别再拿来当名字用。
             Title = def.Name,
-            // 【2026-10-24 主人拍板】局内佣兵没有升星体系，卡面只显示等级数字，不写 ★N
-            Desc = $"[{rarName}]　Lv{level}",
+            // 【2026-11-26 主人拍板】卡面统一不写等级（与 DraftPool 招募卡一致）：等级在信息框/头像栏看
+            Desc = $"[{rarName}]",
             Rarity = rar,
             Tag = SynergyTag.Summon,
             Star = star,

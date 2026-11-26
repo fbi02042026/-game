@@ -418,12 +418,9 @@ public class Hero : UnitBase
 
     protected override void AIUpdate()
     {
-        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
-        {
-            base.AIUpdate();
-            return;
-        }
-
+        // 【2026-11-26 主人报「剑盾冲锋的时候还是站立动画」】冲锋判定必须早于冻场判定：
+        // 剧情 / 过场把 UnitsCanAct 置 false 时，基类 AIUpdate 会 SetMove(false) 把跑步盖回站立；
+        // 冲锋协程本就独占行动权，这里提前返回，冻场中只要还在冲锋就保持跑步动画。
         // 【2026-11-14 主人「不要冲锋的时候还在攻击」】破阵冲锋期间行动权归冲锋协程：
         // AI 全停 —— 不索敌、不转身、不出手、不写 rb.velocity（否则协程按帧摆位置、
         // Rigidbody 又按速度推，两边抢同一个 transform，出现「边冲边砍还抖」）。
@@ -433,6 +430,12 @@ public class Hero : UnitBase
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(true, facingDir);
+            return;
+        }
+
+        if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+        {
+            base.AIUpdate();
             return;
         }
 

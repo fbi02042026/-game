@@ -285,6 +285,15 @@ public partial class BattleManager
         if (Rules.SkipChapter1Ending) return false;
         if (!StoryProgress.TutorialDone || StoryProgress.Chapter1ChoiceDone) return false;
         if (CurrentChapter > 1) return false;
+        // 【2026-11-26 主人拍板】章节三选一只能在每 10 关剧情出现：关 5 小 Boss 不许提前选掉，
+        // 否则第 10 关因 Chapter1ChoiceDone 已为真而不播。节号真源 CurrentSubIndex0。
+        var cm = ChapterManager.Instance;
+        if (cm == null)
+        {
+            Debug.LogError("[BattleManager] 第 1 章结局判定取不到 ChapterManager，跳过");
+            return false;
+        }
+        if (ActProgressionDefs.BossKindOfStage(cm.CurrentSubIndex0) != 2) return false;
         return currentStage != null && currentStage.type == StageType.Boss;
     }
 
@@ -374,6 +383,9 @@ public partial class BattleManager
             return false;
         }
         if (cm.currentGrand != grandTotal) return false;
+        // 【2026-11-26 主人拍板】GRANDS_PER_ACT=1 时上面的大关门恒真，必须再用节号真源挡住关 5 小 Boss：
+        // 三选一只允许每 10 关剧情，尤其第 7 章不可逆选择不能在关 5 被提前消耗。
+        if (ActProgressionDefs.BossKindOfStage(cm.CurrentSubIndex0) != 2) return false;
         // 第 7 章的转折点是不可逆的：做过了就不再重播
         if (CurrentChapter == 7 && ChapterStoryBeats.EndingChoiceDone) return false;
         return true;
@@ -3236,6 +3248,7 @@ public partial class BattleManager
         Hero.Instance?.attr?.ClearTimedBuffs();
         ResetMpForNewStage();
         MercenaryManager.Instance?.ClearAllMercs();
+        ClearBattlePets();
         allyUnits.RemoveAll(u => u == null || u is Mercenary);
         HidePortal();
         EnsureRewardDirector();
@@ -3260,6 +3273,9 @@ public partial class BattleManager
         {
             Debug.LogError($"[BattleManager] 下一关直进 hero.InitNewRun 异常（继续开战）: {e}");
         }
+        // 【2026-11-26 主人报「换关进战场狗没跟着」】StartNewRun 有 DeployDeployedPet，下一关直进漏了；
+        // 清掉旧狗后按同一出口重新生成，狗跟队伍一起进场、InitPet 满血重开。
+        DeployDeployedPet();
 
         // ── ④ 职业武器（存档职业=继承）+ 倍率归位 + 全新构筑/启动金（EndRunLoadout 已清 → BeginNew）──
         if (BattleBagSystem.Instance != null)

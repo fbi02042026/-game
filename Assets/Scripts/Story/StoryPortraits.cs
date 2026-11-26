@@ -28,11 +28,11 @@ public static class StoryPortraits
     public const string Innkeeper = "innkeeper";
 
     // —— 乱入事件·敌对反派三人组（2026-11-20 主人供立绘三张并授权改名；MercStand 文件名即 id）——
-    /// <summary>独眼老雷：强盗三人组·重武大哥（战斗模板 zhongzhan201，见 IntruderPicker）。</summary>
+    /// <summary>独眼老雷：强盗三人组·重武大哥（立绘与战斗同为 bandit_boss，数据 id 见 IntruderPicker）。</summary>
     public const string BanditBoss = "bandit_boss";
-    /// <summary>夜薇：强盗三人组·女法师（战斗模板 fashi202）。</summary>
+    /// <summary>夜薇：强盗三人组·女法师（立绘与战斗同为 bandit_witch）。</summary>
     public const string BanditWitch = "bandit_witch";
-    /// <summary>阿刃：强盗三人组·狂战小弟（战斗模板 kuangzhan201）。</summary>
+    /// <summary>阿刃：强盗三人组·狂战小弟（立绘与战斗同为 bandit_blade）。</summary>
     public const string BanditBlade = "bandit_blade";
 
     /// <summary>

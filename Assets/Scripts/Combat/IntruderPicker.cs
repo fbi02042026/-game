@@ -21,6 +21,8 @@ public static class IntruderPicker
     /// 三档均为非 101 模板：玩家六职业 MercAssetId 全是 *101（PlayerJobDefs.cs:77-191），
     /// 救场小队 dunbing203/gongshou101/naima102（MercRosterDefs），零撞脸。
     /// </summary>
+    // 🔴 2026-11-26：下面是【数据 id】——花名册/技能/属性/专属行为的真源，不可改成 bandit_*；
+    // 专属战斗模型（Units/bandit_boss|witch|blade）由 BanditPrefabOfAssetId 单独映射到加载层。
     const string BanditBoss = "zhongzhan201";   // 独眼老雷 · 重武大哥（稀有档重武者）
     const string BanditWitch = "fashi202";      // 夜薇 · 女法师（雷系稀有档）
     const string BanditBlade = "kuangzhan201";  // 阿刃 · 狂战小弟（稀有档狂战士）
@@ -63,6 +65,23 @@ public static class IntruderPicker
         }
         Debug.Log($"[IntruderPicker] 第{chapter}章强盗组合 seed={seed} ids={string.Join(",", assetIds)}");
         return true;
+    }
+
+    /// <summary>
+    /// 【2026-11-26 主人拍板】强盗三人组专属战斗模型（Assets/SPUM/Resources/Units/bandit_*）。
+    /// 视觉与数据解耦：上面三个 assetId 继续做花名册/技能/属性/专属行为的真源，一字不改；
+    /// 本映射只给 SpawnEnemyMercenary 提供 prefab 名覆盖，强盗不再顶着玩家佣兵的脸。
+    /// 非三人组返回 null → 加载链回退原 id，竞技场与我方佣兵零影响。
+    /// </summary>
+    public static string BanditPrefabOfAssetId(string assetId)
+    {
+        switch (assetId)
+        {
+            case BanditBoss: return "bandit_boss";
+            case BanditWitch: return "bandit_witch";
+            case BanditBlade: return "bandit_blade";
+            default: return null;
+        }
     }
 
     /// <summary>排除集：ArenaRules 英雄位 heroAssetId + PlayerJobDefs 三职业 101 脸（Q2 建议排除）。</summary>

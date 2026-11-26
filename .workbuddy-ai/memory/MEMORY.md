@@ -18,6 +18,21 @@
 - 主人短指令常指「继续/重试」＝上次会话中断的活接着收尾：先查代码现状，改完的要核对落盘，文档/记忆补齐。
 - 每日工作日志追加到 `.workbuddy-ai/memory/YYYY-MM-DD.md`（append-only）。
 
+## 🔴 敌方佣兵生成 ID 口径（2026-11-26 强盗刷不出 bug 的血教训）
+- `MercenaryManager.SpawnEnemyMercenary/SpawnMercenary` 的第一个参数 **必须是 assetId**（如 zhongzhan201），
+  不是 hireId（H022）。`Units/` 预制体 + `CharacterRegistry.asset` 全按 assetId 命名/登记，没有任何 H 条目；
+  传 hireId → `GetPrefabName` 原样返回 → `Resources.Load("Units/H022")` 三层兜底全失败 → 单位根本不生成。
+  竞技场 `ArenaEnemySpawner.cs:245` 是正确示范。要 hireId 只在生成后按需要用 `SetHireId`/查花名册。
+- `SpawnEnemyMercenary` **不自动挂技能**（只 `Init`）。任何敌方佣兵调用方要放技能，必须自己按 hireId 精确取行
+  `MercRosterDefs.TryGetByHireId(hireId, out def)` → `def.ActiveSkillId/PassiveSkillId` → `merc.SetupBattleSkills(...)`；
+  别用 `GetSkillIds(assetId)`（共用 asset 取首行会串味，如 kuangzhan201=H009/H016 两条）。
+- 敌方 MP 不拦技能：`HasMercMp` 对 `!merc.isAlly` 恒 true、`TrySpendMercMp` 不实际扣蓝。
+- 强盗三人：`zhongzhan201`=老雷/H022/SK003，`fashi202`=夜薇/H013/SK022+SK017，`kuangzhan201`=阿刃/H009/SK001。
+- **强盗专属行为打标（2026-11-26 主人拍板）**：真源 `WavePlanner.Execute.BanditRoleOfAssetId(assetId)` →
+  `Mercenary.ConfigureBandit(role)`，逻辑全在 partial 文件 `Mercenary.Bandit.cs`（老雷命中眩晕 0.4s/CD6s、
+  阿刃脆皮索敌+打一下换目标、夜薇星落 VFX 别名 ally_starfall+贴脸闪现），数值走 `GameConfig.BANDIT_*`。
+  改这三个行为只动 Mercenary.Bandit.cs + 对应钩子，别把逻辑散进通用链路。
+
 ## 🔴 家里机「编译/shader 类灵异问题」第一反应查火绒（2026-11-02 血的教训）
 - 家里机装火绒（`C:\Program Files (x86)\Huorong\Sysdiag`，`HipsDaemon`），HIPS 会掐断
   `TuanjieShaderCompiler.exe` → 编译器 `Not connected` 秒退 → 所有 shader 从未真正编译
@@ -68,3 +83,11 @@
 - 【11-13 上午补充·toast 铺垫】Loading 收掉 ≠ 立刻弹 toast：`GlobalToastUI.FlushHeldToast`
   改为延迟冲刷——1.2s 基础缓冲 → 等主线章节卡（ChapterSplashOverlay）演完 → 再缓 0.8s。
   层级上章节卡(12000)本来就盖住 Toast(11000)，别把 Toast order 调高去「看得见」。
+
+## 强盗投放 vs 佣兵助阵解绑（2026-11-26 主人拍板）
+- **强盗常驻每章**：关位真源 `IntruderEventDirector.IsBanditFlavorStage` = 每章关3/关7（0-based 2/6），
+  替换该关末波为固定强盗组合；关3狗剧情优先（只刷怪不播乱入台词）。每章都出，不看剧情旗。
+- **佣兵助阵只按剧情分配**：SQ_MAIN 走既有 T5 濒死救场(EV01 第1章 / EV04 岛2) 与 T6 入场救援
+  (EV02 第5章 / EV05 第7章)，由 `TryGetRescueForChapter/Island` + `TryGetEntryForNode` 按章/岛取。
+  🔴 **不得把助阵绑到强盗波**（11-26 曾加、当日撤销）：两者不必同章出现，别再往 `WavePlanner.Execute`
+  强盗槽里塞 `TrySpawnBanditAssistSquad` 之类的触发。

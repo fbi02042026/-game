@@ -378,11 +378,31 @@ public sealed class SkillCastService
         }
         // 移动判定 AOE（MoveAoe）：VFX 随 MoveAoeExecutor 锚点走，不钉在命中点
         if (skill.skillType != SkillSystem.SkillType.MoveAoe && !skipTailVfx)
-            SkillRegistry.Instance?.PlaySkillVfx(
-                skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
+        {
+            // 【2026-11-26 主人拍板】夜薇专属：主动技 VFX 换成玩家星落（复用 ally_starfall 现成资源，
+            // 只换表现不改伤害/冷却/蓝耗）。其它单位 BanditSkillVfxAlias 返回 null → 走原技能特效，零影响。
+            string banditVfx = merc.BanditSkillVfxAlias(skill.skillId);
+            if (!string.IsNullOrEmpty(banditVfx))
+            {
+                // 🔴 星落是定点 AOE：落在命中点、不挂目标（与玩家 starfall 同口径 vfxAttach=null）。
+                // 🔴 kit 必须传 None —— 夜薇是法师（Orb），传 Orb 会命中 SkillRegistry 的
+                // 「远程放物攻技能跳过特效」闸 `!(rangedCaster && kit != Heal)`，星落会根本播不出来。
+                SkillRegistry.Instance?.PlaySkillVfx(
+                    banditVfx, vfxTo, vfxTo, true, face, null, AttackVfxKit.None);
+            }
+            else
+            {
+                SkillRegistry.Instance?.PlaySkillVfx(
+                    skill.skillId, vfxFrom, vfxTo, true, face, vfxAttach, merc.GetBasicAttackVfxKit());
+            }
+        }
 
-        // 左侧技能释放通知：佣兵与玩家共用一侧，图标走 merc_skills 表
-        SkillCastNotifyController.PushMercSkill(merc.mercId, merc.DisplayName, skill.skillId, skill.skillName);
+        // 【2026-11-26 主人拍板】技能条按阵营分家：我方佣兵左侧、敌方佣兵（强盗 / 竞技场）右侧敌人条。
+        // 旧版无条件 PushMercSkill → 敌方放技能也冒在我方一侧；图标走敌人自身形象，与怪物技能条同口径。
+        if (merc.isAlly)
+            SkillCastNotifyController.PushMercSkill(merc.mercId, merc.DisplayName, skill.skillId, skill.skillName);
+        else
+            SkillCastNotifyController.PushEnemySkill(skill.skillId, merc.DisplayName, merc.sr != null ? merc.sr.sprite : null);
         Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
     }

@@ -362,11 +362,12 @@ public class MercenaryManager : Singleton<MercenaryManager>
     /// 负责 Add 进 BattleManager.monsters。Init 走 (id, level, star) 三参重载——lv 与 ★ 两维都进属性
     /// （PowerCalc lv×70+★×110 口径）。🔴 不调 SetHireId：防止吃到玩家局外升星/养成/羁绊加成。
     /// </summary>
-    public Mercenary SpawnEnemyMercenary(string mercId, Vector3 position, int level, int star)
+    public Mercenary SpawnEnemyMercenary(string mercId, Vector3 position, int level, int star, string prefabNameOverride = null)
     {
         if (string.IsNullOrEmpty(mercId)) return null;
 
-        string prefabName = GetPrefabName(mercId);
+        // 【2026-11-26】视觉可覆盖：强盗三人组传 bandit_* 专属模型；数据 id 不变，技能/属性/行为照旧。
+        string prefabName = string.IsNullOrEmpty(prefabNameOverride) ? GetPrefabName(mercId) : prefabNameOverride;
         GameObject prefab = LoadUnitPrefab(prefabName, mercId);
         if (prefab == null)
         {

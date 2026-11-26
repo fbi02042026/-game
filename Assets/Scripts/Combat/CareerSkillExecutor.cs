@@ -17,6 +17,34 @@ public static class CareerSkillExecutor
     /// <summary>【2026-11-15】冲锋脚后尘土：项目现成 Resources 资源，本次不新增任何资源/预制体。</summary>
     const string ChargeDustResourcePath = "Effect/texiao/尘土";
 
+    // 【2026-11-26 主人「冲锋的时候遇到剧情要停止冲锋」】剧情只广播「我开始了」，冲锋自己订阅：
+    // 不认得 StoryDirector 实例，也不每帧轮询 IsPlaying（沿用 11-22 StoryStarted 解耦口径）。
+    // 事件在 PauseGame 之后触发：此时 timeScale=0，协程里的 deltaTime / WaitForSeconds 全冻结，
+    // 所以只能靠这个标志在下一帧的 yield 点退出，不能指望任何按时间推进的等待。
+    static bool _chargeCancelled;
+    static CareerSkillExecutor() { StoryDirector.StoryStarted += OnStoryStarted; }
+    static void OnStoryStarted()
+    {
+        _chargeCancelled = true;
+        if (IsCharging) Debug.Log("[CareerSkill] 收到对话窗剧情开播：冲锋标记取消，下一帧收招");
+    }
+
+    /// <summary>
+    /// 【2026-11-26 补】剧情/对白中断的统一判据：
+    /// ① 对话窗剧情走 StoryStarted 事件置位；
+    /// ② 战斗内对白（狗营救 / 救援乱入 / 引导 TalkBlock）压根不走 StoryDirector，
+    ///    只把 UnitsCanAct 冻成 false —— 上一版只认①，这些对白照冲过头，这里一并认。
+    /// </summary>
+    static bool ShouldCancelCharge()
+    {
+        if (_chargeCancelled) return true;
+        // 【2026-11-26 补】面板/设置/选关只把 timeScale 压 0，不改 UnitsCanAct、不发 StoryStarted：
+        // 协程里 deltaTime=0 会永远卡住并每帧续冲锋标记，Hero 被判「冲锋中」强播走路、不索敌不攻击。
+        if (Time.timeScale <= 0f) return true;
+        var bm = BattleManager.InstanceQuiet;
+        return bm != null && !bm.UnitsCanAct;
+    }
+
     public static bool HasVisibleEnemy()
     {
         var bm = BattleManager.Instance;
@@ -73,6 +101,7 @@ public static class CareerSkillExecutor
         switch (PlayerJobDefs.Get(job).CareerSkillKind)
         {
             case CareerSkillKind.Charge:
+                _chargeCancelled = false;   // 每次新冲锋重置，上一次被剧情打断不影响这一次的冷却
                 runner.StartCoroutine(CoCharge(hero, skill, target, mastered));
                 break;
             case CareerSkillKind.Scatter:
@@ -197,6 +226,7 @@ public static class CareerSkillExecutor
         var pushed = new List<UnitBase>();   // 正被顶着的精英：后续每一段滑行都带着它们同量后退
         for (int i = 0; i < victims.Count; i++)
         {
+            if (ShouldCancelCharge()) break;   // 剧情/对白开播：立刻收招，不撞下一簇
             var m = victims[i];
             if (m == null || m.isDead || alreadyHit.Contains(m)) continue;
             if (stops >= GameConfig.CAREER_CHARGE_HITSTOP_MAX) break;   // 定额用完：剩下的一路冲过去
@@ -205,6 +235,7 @@ public static class CareerSkillExecutor
             Vector3 contact = cursor + Vector3.right * dir
                 * Mathf.Max(0f, seg - GameConfig.CAREER_CHARGE_CONTACT_GAP);
             yield return CoChargeSlide(hero, cursor, contact, chargeSpeed, chargeShield, shieldY, chargeDust, dustXOffset, pushed, chargeScaleSign);
+            if (ShouldCancelCharge()) break;   // 滑行途中遇剧情/对白：不再续冲
             cursor = contact;
 
             // 顿帧 / 顶住期间也保持「冲锋中」标记（防 0.6s 心跳过期）
@@ -229,6 +260,7 @@ public static class CareerSkillExecutor
                 float held = 0f;
                 while (held < hold)
                 {
+                    if (ShouldCancelCharge()) break;   // 顶 Boss 途中遇剧情/对白：立刻收招
                     held += Time.deltaTime;
                     MarkCharging();
                     SyncFollow(chargeShield, hero, shieldY);
@@ -241,6 +273,7 @@ public static class CareerSkillExecutor
                     }
                     yield return null;
                 }
+                if (ShouldCancelCharge()) break;   // 顶住阶段被打断：不标 pinned，直接走统一收尾
                 pinnedByBoss = true;
                 break;                                                                              // 不冲过去、不补落点爆
             }
@@ -254,7 +287,17 @@ public static class CareerSkillExecutor
             }
 
             // 顿一下：只暂停自己的位移，全场时间照走（10-20 砍掉的全场慢放不再复活）
-            yield return new WaitForSeconds(GameConfig.CAREER_CHARGE_HITSTOP);
+            // 【2026-11-26】改成可取消的逐帧等待：剧情把 timeScale 置 0 时 WaitForSeconds 永不返回，
+            // 冲锋会卡死在顿帧里收不了招；每帧查一次取消标志，被打断立即退。
+            float stopped = 0f;
+            while (stopped < GameConfig.CAREER_CHARGE_HITSTOP)
+            {
+                if (ShouldCancelCharge()) break;
+                stopped += Time.deltaTime;
+                MarkCharging();
+                yield return null;
+            }
+            if (ShouldCancelCharge()) break;
 
             // 撞开这一簇：范围内每只怪各自朝背离撞击点的方向弹开 = 「往四周撞」
             // 【2026-11-14 主人拍板「冲撞的时候不要出现刀光的特效」】这里原本补一发 PlaySlash，已删；
@@ -263,7 +306,7 @@ public static class CareerSkillExecutor
             stops++;
         }
 
-        if (!pinnedByBoss)
+        if (!pinnedByBoss && !ShouldCancelCharge())
         {
             // 冲完剩余距离（顿帧用完 / 后面没怪的部分一路冲到位），顶着的精英一路跟着后退
             float rest = (end.x - cursor.x) * dir;
@@ -283,10 +326,14 @@ public static class CareerSkillExecutor
             }
 
             // 落点收尾：只结算伤害，不补刀光（主人 2026-11-14「冲撞的时候不要出现刀光的特效」）
-            BurstChargeHit(hero, skill, end, baseDamage, alreadyHit, hitHalfW, hitHalfH);
+            // 【2026-11-26】剩余滑行途中被剧情打断时 CoChargeSlide 会提前 return，这里不能再补落点伤害。
+            if (!ShouldCancelCharge())
+                BurstChargeHit(hero, skill, end, baseDamage, alreadyHit, hitHalfW, hitHalfH);
         }
 
         // 冲锋结束：半盾立刻消失（主人口径「冲锋完就消失」）；脚后尘土同批销毁；行动权交还 AI
+        if (ShouldCancelCharge())
+            Debug.Log($"[CareerSkill] 破阵冲锋被剧情/对白打断：已收招（盾/尘土已清、行动权交还） canAct={(BattleManager.InstanceQuiet == null ? -1 : (BattleManager.InstanceQuiet.UnitsCanAct ? 1 : 0))} storyFlag={_chargeCancelled}");
         ReleaseChargeShield(chargeShield);
         if (chargeDust != null) Object.Destroy(chargeDust);
         EndCharging();
@@ -421,6 +468,9 @@ public static class CareerSkillExecutor
         var root = scaleSign != 0 ? hero.GetFlipRoot() : null;
         while (t < dur)
         {
+            // 【2026-11-26】剧情中断：直接退出，不补写终点坐标（否则人瞬移到冲锋终点）；
+            // 半盾 / 尘土的销毁与 EndCharging 由 CoCharge 统一收尾，这里不重复处理。
+            if (ShouldCancelCharge()) yield break;
             t += Time.deltaTime;
             float prevX = hero.transform.position.x;
             Vector3 next = Vector3.Lerp(from, to, Mathf.Clamp01(t / dur));
@@ -480,10 +530,11 @@ public static class CareerSkillExecutor
     static float _chargeBusyUntil;
 
     /// <summary>冲锋进行中：英雄位移/朝向归冲锋协程，AI 不索敌、不出手、不写速度（Hero.AIUpdate 读它）。</summary>
-    public static bool IsCharging => Time.time < _chargeBusyUntil;
+    // 用 realtimeSinceStartup：Time.time 受 timeScale 影响，冻场时会把 0.6s 心跳钉死不过期。
+    public static bool IsCharging => Time.realtimeSinceStartup < _chargeBusyUntil;
 
     /// <summary>续期「冲锋中」标记（心跳窗口，防止任何路径漏清导致永久锁死）。</summary>
-    static void MarkCharging() => _chargeBusyUntil = Time.time + 0.6f;
+    static void MarkCharging() => _chargeBusyUntil = Time.realtimeSinceStartup + 0.6f;
 
     static void EndCharging() => _chargeBusyUntil = 0f;
 

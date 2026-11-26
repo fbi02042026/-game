@@ -111,6 +111,8 @@ public static class MercenaryOfferGenerator
         if (!MercRosterDefs.TryGetByHireId(mapRow.HireId, out var def))
             return RollFallback();
 
+        // 【2026-11-26 主人拍板·彻底隔离】酒馆招募属战斗外：等级仍按原来的随机 1~10 摇，
+        // 与战斗内等级（MercLevelSystem）完全无关，互不写入、互不读取。
         int level = Random.Range(1, 11);
 
         string name = def.Name;

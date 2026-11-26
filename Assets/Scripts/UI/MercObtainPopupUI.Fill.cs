@@ -90,6 +90,11 @@ public partial class MercObtainPopupUI : MonoBehaviour
         string hireId = string.IsNullOrEmpty(card.HireId) ? def.HireId : card.HireId;
         // 【2026-10-22 主人拍板】记下当前佣兵 hireId 并刷「进阶」钮显隐（已拥有才显示，见 ApplyAscendButton）
         _curHireId = hireId;
+        // 【2026-11-26 主人拍板·彻底隔离】等级取<b>调用方传入的 card.MercLevel</b>，本弹窗不自己查：
+        //   · 战斗内入口（BattleUI.CharacterBar 点头像）传本局等级 → 显示战斗等级；
+        //   · 战斗外入口（酒馆招募 / 佣兵池详情）传存档等级 → 显示局外等级。
+        // 这样同一个 DDOL 弹窗两套场景各显示各的，战斗等级不外溢到局外（反之亦然）。
+        int savedLevel = Mathf.Max(1, card.MercLevel);
         ApplyAscendButton();
         var sp = MercJoinBannerUI.LoadPortrait(hireId);
         if (_icon == null)
@@ -175,12 +180,12 @@ public partial class MercObtainPopupUI : MonoBehaviour
         // 而旁边的战斗力却又算了星级 —— 同一个弹窗两个口径，必须是同一个数。
         // 不含局内 tempBuffs（石像赐福）：那是战斗实时层，面板不显示。
         float hp = 0f, atk = 0f, defVal = 0f, atkSpd = 0f, move = 0f, range = 0f;
-        if (!PowerCalc.TryMercFinalStats(card.HireId, def.AssetId, Mathf.Max(1, card.MercLevel),
+        if (!PowerCalc.TryMercFinalStats(card.HireId, def.AssetId, savedLevel,
                 out hp, out atk, out defVal, out _, out atkSpd, out move, out range))
         {
             // 花名册缺行属数据错误 → 报出来（不静默显示 0 当正常），数值按 0 显示
             Debug.LogError("[MercObtainPopup] 取不到佣兵最终属性（花名册缺行）：HireId=" + card.HireId
-                + " AssetId=" + def.AssetId + " Lv" + Mathf.Max(1, card.MercLevel));
+                + " AssetId=" + def.AssetId + " Lv" + savedLevel);
         }
         SetText(_attrHp, "Panel/you/AttrPanel/AttrHpRoot/AttrHp", Mathf.RoundToInt(hp).ToString());
         // 法术型佣兵：攻击/防御两行换成「法术攻击/法术防御」（数值同源，只换标签）
@@ -208,7 +213,7 @@ public partial class MercObtainPopupUI : MonoBehaviour
         //      该值同时原样计入本局总战力（RunLoadout.TotalPower），面板与总战力是同一个数字。
         //      战斗内入口（点头像看详情）同样显示 —— 与属性行口径一致，不另设分支。
         MercPowerBadge.Paint(_powerTitle, _powerDigits,
-            PowerCalc.MercPowerOf(hireId, def.AssetId, Mathf.Max(1, card.MercLevel)));
+            PowerCalc.MercPowerOf(hireId, def.AssetId, savedLevel));
 
         // 5) 星星（预制体只摆了 3 个满星节点，正好对上局外星上限 MaxOutStar=3）。
         //    【2026-10-24 主人拍板】星级显示统一 = 已拥有的局外星级（MercStarSystem.OutStarOf，
@@ -221,9 +226,9 @@ public partial class MercObtainPopupUI : MonoBehaviour
             if (_stars[i] != null) _stars[i].SetActive(i < star);
         if (star > 0) CenterActiveStars(star);   // 0 星全灭，无需居中
 
-        // 5.5)【2026-11-25 主人拍板】等级 LvX：抽卡卡面不再写升级信息，等级统一在本信息框看。
-        //      真源 = card.MercLevel（战斗内入口传 RunMercEntry.level，与头像栏、战斗属性同一份）。
-        FillLevel(card.MercLevel);
+        // 5.5) 等级 LvX：真源 = 调用方传入的 card.MercLevel（战斗内传本局等级、战斗外传存档等级）；
+        //      美术节点 = Panel/zuo/LV，本弹窗不自己查等级表。
+        FillLevel(savedLevel);
 
         // 6) 技能：【2026-11-25 主人拍板】没有主动技不再藏整栏，「无技能」写在下行技能信息位；有则填名字/简介/图标
         FillSkill(def.ActiveSkillId);
@@ -304,59 +309,35 @@ public partial class MercObtainPopupUI : MonoBehaviour
     }
 
     // ============================================================
-    // 【2026-11-25 主人拍板】信息框「等级 LvX」
-    // 预制体没摆这个节点（huodeyongbing.prefab 里 Panel/you 下只有 AttrPanel 与 Rating），
-    // 运行时建一次、之后只改文本；重复开弹窗不会重复建也不会累积偏移。
-    // 位置依据（都从预制体现读，不另造一套）：AttrPanel = 200×200 @ (-14, 35.1)、scale 0.88
-    //   ⇒ 实际占 y ∈ [-52.9, 123.1]；本行放 y=141（26 高 ⇒ [128, 154]），正好落在属性表上方、
-    //   you 节点（230×320，顶部 160）之内，不压属性行也不出框。
-    // 要挪位置只改这两个常量。
+    // 【2026-11-26 主人拍板】信息框「等级 LvX」
+    // 节点 = 美术摆的 Panel/zuo/LV（预制体自带 Text，字号/颜色/描边都以预制体为准）。
+    // 旧实现在 Panel/you 下运行时建 MercLevel，与美术节点重复 → 已删，只留这一处。
     // ============================================================
     Text _levelText;
-    static readonly Vector2 LevelTextPos = new Vector2(-14f, 141f);
-    static readonly Vector2 LevelTextSize = new Vector2(176f, 26f);
-    static readonly Color LevelTextColor = new Color(1f, 0.90f, 0.20f);   // 亮黄，与战斗头像同一档
 
     void FillLevel(int level)
     {
         if (_levelText == null)
         {
             if (_root == null) return;
-            Transform you = _root.transform.Find("Panel/you");
-            if (you == null)
+            Transform zuo = _root.transform.Find("Panel/zuo");
+            if (zuo == null)
             {
-                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/you，等级文字加不上去");
+                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/zuo，等级文字加不上去");
                 return;
             }
-            Transform exist = you.Find("MercLevel");
-            GameObject go = exist != null ? exist.gameObject
-                : new GameObject("MercLevel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
-            if (exist == null) go.transform.SetParent(you, false);
-
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = LevelTextPos;
-            rt.sizeDelta = LevelTextSize;
-            rt.localScale = Vector3.one;
-
-            var t = go.GetComponent<Text>();
-            t.font = GameFonts.GetChinese();
-            t.fontSize = 20;
-            t.fontStyle = FontStyle.Bold;
-            t.alignment = TextAnchor.MiddleCenter;
-            t.color = LevelTextColor;
-            t.raycastTarget = false;
-            t.horizontalOverflow = HorizontalWrapMode.Overflow;
-            t.verticalOverflow = VerticalWrapMode.Overflow;
-            if (go.GetComponent<Shadow>() == null)
+            Transform node = zuo.Find("LV");
+            if (node == null)
             {
-                var sh = go.AddComponent<Shadow>();
-                sh.effectColor = new Color(0f, 0f, 0f, 0.85f);
-                sh.effectDistance = new Vector2(1f, -1f);
+                Debug.LogError("[MercObtainPopup] 缺少节点 Panel/zuo/LV（等级不显示）——在 huodeyongbing 预制体里补上，不运行时造节点");
+                return;
             }
-            go.transform.SetAsLastSibling();
-            _levelText = t;
+            _levelText = node.GetComponent<Text>();
+            if (_levelText == null)
+            {
+                Debug.LogError("[MercObtainPopup] Panel/zuo/LV 上没有 Text 组件（等级不显示）");
+                return;
+            }
         }
         _levelText.gameObject.SetActive(true);
         _levelText.text = $"Lv{Mathf.Max(1, level)}";

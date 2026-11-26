@@ -559,6 +559,18 @@ public partial class BattleUI : MonoBehaviour
 
         if (slot.levelLabel == null)
             slot.levelLabel = FindTextNamed(root, "LevelLabel", "Level", "Lv");
+        // 【2026-11-26 主人拍板】佣兵升级特效节点：美术只在 MercSlot1 / MercSlot2 下各摆了一个
+        // 「effect」（内含 MagicDust，2 秒非循环）。绑定后先收起，升级时由 PlayMercLevelUpEffect
+        // 显式播一次；取不到不补建（玩家槽本来就没有，静默跳过）。
+        if (slot.levelUpEffect == null && rootName.StartsWith("MercSlot", System.StringComparison.OrdinalIgnoreCase))
+        {
+            var fx = FindDeepChildIgnoreCase(root, "effect");
+            if (fx != null)
+            {
+                slot.levelUpEffect = fx.gameObject;
+                slot.levelUpEffect.SetActive(false);
+            }
+        }
         if (slot.nameText == null)
             slot.nameText = FindTextNamed(root, "Name", "NameText", "PlayerName");
 

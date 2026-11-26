@@ -438,32 +438,17 @@ public partial class BattleManager
     /// <summary>首波乱入剧情协程句柄：进行中 ScheduleFirstWaveSpawn 幂等让路；换关/撤离随 StopBattleSpawnCoroutines 停。</summary>
     Coroutine _intruderStoryCo;
 
-    /// <summary>命中 preBattle:章 的 Intruder 事件且门禁全过 → 起剧情协程并接管本次首波调度（返回 true）。</summary>
+    /// <summary>
+    /// 【2026-11-26 停用】首波前强盗剧情钩子。
+    /// <para>原因：强盗已从「每章固定第6关」改为「每章关3/关7 替换末波」，剧情统一由
+    /// <see cref="CoAnnounceThenSpawnNextWave"/> 的末波前分支播（关7播、关3让给狗营救剧情）。
+    /// 原实现只在调味关让路 → 第1章等<b>普通关</b>反而会凭空弹「提着大剑的家伙堵路」旁白
+    /// （画面里根本没有强盗，主人截图报障「怎么第一关就有了」）。</para>
+    /// <para>方法保留便于回退，恒返回 false；恢复时从 git 历史取原实现，别只把 return 删掉。</para>
+    /// </summary>
     bool TryStartIntruderStoryBeforeFirstWave()
     {
-        // 门禁照 CoAnnounce 分支（CoAnnounceThenSpawnNextWave 内 intruderGate）同款写法
-        if (!(IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
-              && !IsArena && !IsActivityDungeon && !IsEndlessRift)) return false;
-        if (!NormalOnlyContentAllowed(BattleDifficulty)) return false;   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
-        if (_intruderStoryShownThisStage) return false;
-        bool hasEvent = false;
-        IntruderEventTable.Row evRow = default;
-        try { hasEvent = IntruderEventDirector.TryGetIntruderForNode("preBattle:" + CurrentChapter, out evRow); }
-        catch (System.Exception e)
-        {
-            Debug.LogWarning("[BattleManager] 首波乱入事件查询异常，直接放行首波: " + e.Message);
-            return false;
-        }
-        if (!hasEvent) return false;
-        // 【2026-11-23 主人拍板】每章只在第6关触发：非投放关放行首波、不播剧情
-        int curStageIdx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
-        if (curStageIdx != IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter)) return false;
-        // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 不播（放行首波），
-        // 与 Plan 不打标口径一致；首波链独立查表、不走 wave 打标，必须在此自查存档。data 为空视为未看。
-        var intruderData = SaveSystem.Instance?.Data;
-        if (intruderData != null && intruderData.HasIntruderStorySeen(evRow.eventId)) return false;
-        _intruderStoryCo = StartCoroutine(CoPlayIntruderStoryBeforeFirstWave(evRow.eventId));
-        return true;
+        return false;
     }
 
     /// <summary>播完（或跳过/异常/超时）后才刷首波；刷怪失败沿用 FirstWaveSpawnRetry 原节奏，不改时序。</summary>
@@ -902,6 +887,42 @@ public partial class BattleManager
         _preBattleStoryPlaying = true;
         yield return CoEntryRescueBattleScene();
         _preBattleStoryPlaying = prevGate;
+    }
+
+    /// <summary>
+    /// 【2026-11-26 主人拍板】友军助阵改为 Boss 波刷出前就位（原 T5 等 Boss 波打到 40% 血才中途来，
+    /// 主人嫌乱）。挂点 = CoAnnounceThenSpawnNextWave 的 Boss 播报前，先落人再说话，播报后 Boss 立刻刷。
+    /// 门禁 / 查表 / 存档一次性全部复用 T5 现成出口；命中即置 _rescueShownThisStage，
+    /// 老受伤触发链 TryTriggerRescueOnWounded 首行早退，绝不在同一关再来一次。
+    /// 不动表：triggerNode=hp40 列保留不删（口径变更只改时机，不改事件身份）。
+    /// </summary>
+    IEnumerator CoPreBossRescueArrival()
+    {
+        if (_rescueShownThisStage) yield break;
+        if (!isInBattle || _stageCleared || _runClosed) yield break;
+        if (!(IsFormalMainRun || IsSideIsland)) yield break;
+        if (IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) yield break;
+        if (!NormalOnlyContentAllowed(BattleDifficulty)) yield break;
+
+        IntruderEventTable.Row row;
+        bool has = IsSideIsland
+            ? IntruderEventDirector.TryGetRescueForIsland(SideIslandId.ToString(), out row)
+            : IntruderEventDirector.TryGetRescueForChapter(CurrentChapter, out row);
+        if (!has) yield break;
+        var data = SaveSystem.Instance?.Data;
+        if (data != null && data.HasIntruderStorySeen(row.eventId)) yield break;
+
+        data?.MarkIntruderStorySeen(row.eventId);
+        _rescueShownThisStage = true;
+        SpawnRescueSquad(1f, entryMode: false);   // 满血入场，与旧救场同口径
+        if (_rescueSquad.Count == 0)
+        {
+            Debug.LogError("[BattleManager] Boss 前助阵三人一个都没生成，跳过演出（Boss 波照常）");
+            yield break;
+        }
+        // 玩家已点「开始战斗」就只落人不演，别挡开打（与 T6 入场救援同口径）
+        if (!_liveStartRequested)
+            yield return CoRescueBattleScene();
     }
 
     /// <summary>
@@ -1530,7 +1551,11 @@ public partial class BattleManager
         if (_waves == null || waveIdx < 0 || waveIdx >= _waves.Count) return false;
         if (waveIdx != _waves.Count - 1) return false;      // 只末波（精英关末波 = 精英波）
         var w = _waves[waveIdx];
-        return w != null && !w.isBossWave;
+        if (w == null || w.isBossWave) return false;
+        // 【2026-11-26 二修】强盗波已按 Boss 打标（WavePlanner.Plan 写 isBossWave=true），
+        // 上方 `w.isBossWave` 已早退，「首领来袭」由 Boss 主链播；本行退役保留（不删）。
+        if (!string.IsNullOrEmpty(w.intruderEventId)) return false;
+        return true;
     }
 
     /// <summary>清完当前波后出下一波：第 1 波清场播全关唯一一次「下一波来袭」Gate，其余普通波清完直接出兵，Boss 波仍走 CoAnnounceThenSpawnNextWave 播「首领来袭」再出兵（2026-11-13 v5 口径）</summary>
@@ -1894,6 +1919,11 @@ public partial class BattleManager
                 if (!bondDone) Debug.LogWarning("[BattleManager] 羁绊副本 Boss 前剧情 5 分钟未完成，强制放行 Boss 波");
             }
 
+            // 【2026-11-26 主人拍板】友军助阵改到 Boss 战斗前就位，不再等 Boss 波打到 40% 血中途乱入。
+            // 放在「首领来袭」播报前：三人先走进场说完话，播报后 Boss 立刻刷出，时序干净。
+            if (boss)
+                yield return CoPreBossRescueArrival();
+
             // ===== T3 敌对乱入：目标波开打前播剧情，播完才刷怪 =====
             // 门禁复用现成出口：只在线性正式主线放行；引导 / 羁绊 / 竞技场 / 活动副本 / 裂隙 零触发。
             bool intruderWave = nextIdx >= 0 && _waves != null && nextIdx < _waves.Count
@@ -1903,9 +1933,19 @@ public partial class BattleManager
             bool intruderGate = IsFormalMainRun && !IsTutorialRun && !IsBondDungeon
                                 && !IsArena && !IsActivityDungeon && !IsEndlessRift
                                 && NormalOnlyContentAllowed(BattleDifficulty);   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
-            // 【2026-11-23 主人拍板】每章只在第6关触发：非投放关不播（Plan 打标已加同款门禁，此处双保险）
+            // 【2026-11-26 主人拍板】强盗原挪到关3/关7、替换末波；同日改回：关3 恢复本章怪物末波，只留关7。
+            // 门禁仍读多关位真源（Plan 打标同款双保险）；关3 狗营救剧情照旧，不再有强盗抢时序。
             int curIntruderStageIdx = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
-            if (intruderWave && intruderGate && curIntruderStageIdx == IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter))
+            // 【2026-11-26】剧情一次性下沉到这里：强盗怪每关必刷（Plan 不再用旗挡打标），
+            // 但对话仍按 eventId 全篇只播一次；老档在旧第6关播过 → 关7 照样刷强盗、只跳过台词。
+            var intruderSave = SaveSystem.Instance?.Data;
+            bool intruderStorySeen = false;
+            if (intruderWave && intruderSave != null)
+                intruderStorySeen = intruderSave.HasIntruderStorySeen(_waves[nextIdx].intruderEventId);
+            if (intruderWave && intruderGate
+                && IntruderEventDirector.IsBanditFlavorStage(curIntruderStageIdx)
+                && !IntruderEventDirector.IsDogRescueBanditStage(curIntruderStageIdx)
+                && !intruderStorySeen)
             {
                 bool done = false;
                 BattleEntryDraftPanel.Hide();   // 幂等：防抽奖按钮盖住对话窗（Settlement.cs:387 同款）

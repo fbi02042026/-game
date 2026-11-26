@@ -176,17 +176,21 @@ public partial class PetUI
         _feedGainAttr = attrName;
         _feedGainAmount = amount;
 
-        // 【2026-11-25 主人拍板】每次喂养都给反馈：立绘中心飘爱心 + 宠物叫一声。
-        // 引导那一拍的「叫两声」由 PetFeatureGuide 接管，这里只飘爱心，不叠第二套气泡。
-        PlayFeedHearts();
-        // 【2026-11-25 主人需求】喂养成功后 biaoqing 随机播一组表情粒子
-        PlayRandomBiaoqingFx();
+        // 【2026-11-26 主人拍板】表情统一：只播 prefab 里唯一一组 Love 特效，喂一次播一次；
+        // 引导那一拍的「叫两声」由 PetFeatureGuide 接管，这里只叫一声，不叠第二套气泡。
+        // 原来代码生成的飘心已去掉（Love 自带 BigHeart / TinyHearts，不再叠两套视觉）。
+        // 喂养成功后 biaoqing 整组播一次 Love（喂一次播一次，不再随机）
+        PlayFeedLoveFx();
         if (!PetFeatureGuide.IsFeedGuideActive)
         {
             var anchor = _petArt as RectTransform;
             var cries = PetBattleBanter.GetTwoCries(bodyId);
             if (anchor != null && cries.Length > 0)
-                BattleHeadTalkUI.Ensure().PlayLineAt(anchor, cries[0], 2.2f);
+            {
+                var talk = BattleHeadTalkUI.Ensure();
+                talk.SetSortOrderBoostOnce(GameConfig.UiSort.TownPopup + 40);
+                talk.PlayLineAt(anchor, cries[0], 2.2f);
+            }
         }
         GlobalToastUI.Show("喂养 " + def.name + " -" + cost + " 金币，好感 +1，" + attrName + " +" + amount);
         RefreshAll();
@@ -347,59 +351,4 @@ public partial class PetUI
             }, "购买");
     }
 
-    // ── 喂养爱心特效（2026-11-25 主人拍板：从项目现成资源取爱心图，飘在立绘中心）──
-    const string FeedHeartSpritePath = "UI/Art/Icons/表情包/爱心";
-    Coroutine _feedHeartCo;
-
-    void PlayFeedHearts()
-    {
-        var anchor = _petArt as RectTransform;
-        if (anchor == null) { Debug.LogError(TAG + "缺 Stage/PetArt，喂养爱心特效跳过"); return; }
-        var sp = Resources.Load<Sprite>(FeedHeartSpritePath);
-        if (sp == null) { Debug.LogError(TAG + "缺 Resources/" + FeedHeartSpritePath + "，喂养爱心特效跳过"); return; }
-        // 面板关闭会停掉协程：先清上一轮残留节点，避免连喂几次越堆越多。
-        for (int i = anchor.childCount - 1; i >= 0; i--)
-        {
-            var child = anchor.GetChild(i);
-            if (child.name.StartsWith("FeedHeart")) Destroy(child.gameObject);
-        }
-        if (_feedHeartCo != null) { StopCoroutine(_feedHeartCo); _feedHeartCo = null; }
-        _feedHeartCo = StartCoroutine(CoFeedHearts(anchor, sp));
-    }
-
-    IEnumerator CoFeedHearts(RectTransform anchor, Sprite sp)
-    {
-        const int Count = 3;
-        var hearts = new RectTransform[Count];
-        var imgs = new Image[Count];
-        for (int i = 0; i < Count; i++)
-        {
-            var go = new GameObject("FeedHeart" + i, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-            go.transform.SetParent(anchor, false);
-            hearts[i] = (RectTransform)go.transform;
-            hearts[i].sizeDelta = new Vector2(48f, 48f);
-            hearts[i].anchoredPosition = Vector2.zero;
-            imgs[i] = go.GetComponent<Image>();
-            imgs[i].sprite = sp;
-            imgs[i].raycastTarget = false;
-            imgs[i].color = new Color(1f, 1f, 1f, 0f);
-        }
-        float t = 0f;
-        while (t < 1.35f)
-        {
-            t += Time.unscaledDeltaTime;
-            for (int i = 0; i < Count; i++)
-            {
-                float p = Mathf.Clamp01((t - i * 0.12f) / 0.95f);
-                imgs[i].color = new Color(1f, 1f, 1f, Mathf.Clamp01(1f - p));
-                if (p <= 0f) continue;
-                hearts[i].anchoredPosition = new Vector2((i - 1) * 30f * p,
-                                                          46f * p + Mathf.Sin(p * Mathf.PI) * 14f);
-                hearts[i].localScale = Vector3.one * (0.55f + 0.55f * Mathf.Sin(p * Mathf.PI));
-            }
-            yield return null;
-        }
-        for (int i = 0; i < Count; i++) if (hearts[i] != null) Destroy(hearts[i].gameObject);
-        _feedHeartCo = null;
-    }
 }

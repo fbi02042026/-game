@@ -252,6 +252,8 @@ public class RunDraftDirector : MonoBehaviour
 
         RunLoadout.Save();
         RestoreRunMercs();
+        // 【2026-11-26】原「SyncRunMercLevels」已删：等级只能在局内抽到同一个佣兵时 +1，
+        // 那一刻就由 MercLevelUp 分支即时刷新，不存在「练了要等下一关才生效」的延迟。
         RefreshSkillPower();
     }
 
@@ -351,9 +353,29 @@ public class RunDraftDirector : MonoBehaviour
 
             case DraftCardKind.MercLevelUp:
             {
-                int lv = RunLoadout.TryLevelUpMerc(card.Id);
-                if (lv <= 0) { msg = "佣兵已离队"; return false; }
-                RefreshMercUnit(card.Id);
+                // 【2026-11-26 主人拍板定稿】抽到同一个佣兵 = 该佣兵等级 +1。
+                // 真源唯一 = MercLevelSystem（存档）；这里不再走 RunLoadout.TryLevelUpMerc
+                //（那只改本局账本 entry.level，会造出第二个等级数）。
+                if (RunLoadout.FindMerc(card.Id) == null) { msg = "佣兵已离队"; return false; }
+                if (MercLevelSystem.IsMaxLevel(card.Id))
+                {
+                    msg = $"{card.Title} 已满级 Lv{MercLevelSystem.MaxLevel}";
+                    return false;
+                }
+                int lv = MercLevelSystem.AddLevel(card.Id, 1);
+                SaveSystem.Instance?.Save();   // 永久等级：抽到即落盘，中途退出不回滚
+                RefreshMercUnit(card.Id);   // 内部已强制 BattleUI.UpdateCharacterSlots() 刷 LV 数字
+                // 【2026-11-26 主人追加】抽到队内重复佣兵 = 升级，但入场仪式照旧：
+                // 先播「佣兵上阵」横幅，再在对应头像叠升级特效。参数与 RecruitMerc 同一套真源，
+                // 不另写稀有度映射；card.HireId 为空时退 card.Id（CollectMercLevelCards 已按 hireId 优先取 key）。
+                string levelBannerHireId = !string.IsNullOrEmpty(card.HireId) ? card.HireId : card.Id;
+                bool hasLevelBannerRoster = MercRosterDefs.TryGetByHireId(levelBannerHireId, out var levelBannerRd);
+                MercJoinBannerUI.Show(levelBannerHireId,
+                    !string.IsNullOrEmpty(card.Title) ? card.Title : levelBannerHireId,
+                    hasLevelBannerRoster ? levelBannerRd.Rarity : MercRosterDefs.MercRarity.Common);
+                // 【2026-11-26 主人拍板】升级不再弹详情窗，改为在对应头像上把美术摆的 effect 播一次。
+                // 放在 RefreshMercUnit 之后：等级数字先落定，特效再盖上去。
+                BattleUI.Instance?.PlayMercLevelUpEffect(card.Id);
                 msg = $"{card.Title} 升至 Lv{lv}";
                 return true;
             }
@@ -557,7 +579,11 @@ public class RunDraftDirector : MonoBehaviour
     bool RecruitMerc(DraftCard card, out string msg)
     {
         msg = null;
-        var data = BuildMercData(card.Id, card.HireId, card.MercLevel, card.Star);
+        // 【2026-11-26 主人拍板】等级真源 = 存档永久等级（局内升级卡已下线）：入队直接取存档数，
+        // 不再用 card.MercLevel（卡面值，恒 1 的那套随升级卡一起作废）。
+        int savedLevel = Mathf.Max(1, MercLevelSystem.LevelOf(
+            !string.IsNullOrEmpty(card.HireId) ? card.HireId : card.Id));
+        var data = BuildMercData(card.Id, card.HireId, savedLevel, card.Star);
         if (data == null) { msg = "佣兵数据缺失"; return false; }
 
         var entry = new RunMercEntry
@@ -571,16 +597,15 @@ public class RunDraftDirector : MonoBehaviour
             skillId = data.skillId,
             passiveSkillId = data.passiveSkillId
         };
-        // 【2026-11-25 主人拍板】本局练过的佣兵（换下 / 主动离队过）再抽到，从原级数继续，
-        // 不重置回 Lv1 —— 等级真源仍只有 RunMercEntry.level 一处，面板与战斗同一份。
-        string levelKey = !string.IsNullOrEmpty(entry.hireId) ? entry.hireId : entry.mercId;
-        if (RunLoadout.TryGetMercLevelMemory(levelKey, out int keepLv) && keepLv > entry.level)
-        {
-            Debug.Log($"[RunDraft] 佣兵级数继承：{entry.displayName}({levelKey}) Lv{entry.level} → Lv{keepLv}");
-            entry.level = keepLv;
-        }
-        // 【2026-11-24 主人拍板】满员抽到不同佣兵：不直接拒绝，弹「换下谁」（新佣兵 + 现有两位）。
-        // 只有波间免费三选一会把佣兵卡放进池子（老虎机付费抽仍按原样：满员不出佣兵方向）。
+        // 【2026-11-26 主人拍板】「本局级数记忆」整段下线：等级真源唯一 = 存档 MercLevelSystem
+        //（抽到同一个佣兵才 +1），不存在「本局练到几级」这回事。11-25 的继承代码已删，别再恢复。
+        //
+        // 【2026-11-24 主人拍板】满员抽到**不同**佣兵：不直接拒绝，弹「换下谁」（新佣兵 + 现有两位）。
+        // 满员时两类卡分工（2026-11-26 定稿，主人原话「抽奖池还是战斗队列中任意的佣兵」）：
+        //   · 换人卡 = 队列里还没入队的人 → 抽到就弹「换下谁」；
+        //   · 升级卡 = 队里那两位 → 抽到就 +1 级。
+        // 两类同池同权重（各 1），老虎机付费抽 / 波间三选一 / 免费三选一 / 通关奖励全部一致，
+        // 不再有「满员只能抽到相同卡」这回事。
         if (RunLoadout.IsMercFull)
         {
             MercReplaceConfirmUI.Show(entry, idx =>
@@ -951,6 +976,8 @@ public class RunDraftDirector : MonoBehaviour
         var entry = RunLoadout.FindMerc(hireIdOrMercId);
         if (merc == null || entry == null) return;
 
+        string lvKey = !string.IsNullOrEmpty(entry.hireId) ? entry.hireId : entry.mercId;
+        entry.level = Mathf.Max(1, MercLevelSystem.LevelOf(lvKey));
         merc.Init(entry.mercId, Mathf.Max(1, entry.level));
         // 【2026-11-25 主人拍板恢复局内升级】Init → ResetForReuse 会把 OnDead 清空（UnitBase.Damage.cs:266），
         // 升级刷新后必须按 PromoteMerc 同款「先摘再挂」补回来，否则这只佣兵之后阵亡
@@ -986,6 +1013,11 @@ public class RunDraftDirector : MonoBehaviour
         var bm = BattleManager.Instance;
         var mm = MercenaryManager.Instance;
         if (bm == null || mm == null || e == null || string.IsNullOrEmpty(e.mercId)) return;
+
+        // 【2026-11-26 主人拍板】等级 = 存档永久等级（全局唯一）：生成前把账本同步成存档数，
+        // 属性基底、头像栏、信息框、战力四处拿的是同一个值。战场上练的新等级在这里生效。
+        string lvKey = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
+        e.level = Mathf.Max(1, MercLevelSystem.LevelOf(lvKey));
 
         // 【2026-10-10 主人拍板】引导局：场上天降的塔克替身**直接转正**，不再"收掉 → 重新生成"
         // （主人反馈「第二次抽奖时塔克消失了但名字还在，不要让塔克消失」）。

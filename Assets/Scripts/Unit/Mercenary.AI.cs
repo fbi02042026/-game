@@ -241,6 +241,11 @@ public partial class Mercenary : UnitBase
 
     protected override void AIUpdate()
     {
+        // 【2026-11-26 主人拍板】夜薇专属：被贴脸时复用怪物三段遁走演出闪开（详见 Mercenary.Bandit.cs）。
+        // 非夜薇单位 TryBanditBlink 首行即 false，零开销；闪现起协程的本帧交还行动权。
+        if (banditRole == BanditRole.NightWei && TryBanditBlink())
+            return;
+
         // 【2026-11-06】先刷新冲刺/掉队加速开关，本帧所有移动点统一走 GetCombatMoveSpeed。
         UpdateSpeedBoostState();
 
@@ -550,11 +555,23 @@ public partial class Mercenary : UnitBase
                 _acquireLock = null;
             else if (!AcceptAcquireTarget(_acquireLock))
                 _acquireLock = null;   // 【2026-11-25】子类过滤（Pet 护送只咬右侧怪），基类恒收
+            // 【2026-11-26】阿刃专属「打一下换目标」：当前锁是刚命中过的目标就清锁，
+            // 下一帧 FindBanditTarget 排除它另挑脆皮。只命中过才清（_banditHitsOnTarget>0），
+            // 不会被空锁反复抖；场上仅剩一个目标时 FindBanditTarget 会回退仍锁它。
+            else if (banditRole == BanditRole.Arens && _banditHitsOnTarget > 0 && _acquireLock == _banditLastVictim)
+            {
+                _acquireLock = null;
+                _banditHitsOnTarget = 0;   // 必须归零：否则场上一旦只剩上次目标，会每帧清锁→重选同一人，白跑索敌
+            }
         }
 
         if (_acquireLock == null)
         {
-            _acquireLock = seekOnField ? FindNearestEnemyOnField() : FindNearestEnemyInDetectRange();
+            // 【2026-11-26 主人拍板】阿刃专属：随机挑脆皮、每命中一次换目标（详见 Mercenary.Bandit.cs）。
+            // 其余单位（含我方佣兵/竞技场/普通强盗）一律走原最近索敌，行为零变化。
+            _acquireLock = banditRole == BanditRole.Arens
+                ? FindBanditTarget(seekOnField)
+                : (seekOnField ? FindNearestEnemyOnField() : FindNearestEnemyInDetectRange());
             // 全场最近怪被过滤掉（护送期身后怪）就空手等待，不回退锁第二个最近目标
             if (_acquireLock != null && !AcceptAcquireTarget(_acquireLock))
                 _acquireLock = null;

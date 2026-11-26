@@ -18,8 +18,12 @@ using UnityEngine.UI;
 /// </summary>
 public class MercReplaceConfirmUI : MonoBehaviour
 {
-    /// <summary>与 <see cref="EquipReplaceConfirmUI.PrefabPath"/> 同值：借它的底，不复制资源。</summary>
-    public const string PrefabPath = EquipReplaceConfirmUI.PrefabPath;
+    /// <summary>
+    /// 换人窗 prefab（2026-11-26 起）。新 prefab = 美术稿 MercReplaceArtPopup：
+    /// 三栏三钮已静态做全、缩放置好，运行时不再克隆；素材 guid 已在 prefab 内挂好。
+    /// 旧 EquipReplaceConfirmPopup 仅留作 EquipReplaceConfirmUI（装备替换）使用，本窗不再借它。
+    /// </summary>
+    public const string PrefabPath = "Prefabs/Battle/MercReplaceArtPopup";
 
     /// <summary>与获得佣兵弹窗同一层（925）：波间三选一 920 之上，抽奖 920 之上。</summary>
     const int SortOrder = 925;
@@ -56,6 +60,8 @@ public class MercReplaceConfirmUI : MonoBehaviour
     Text _title;
     Text _verdict;
     bool _built;
+    /// <summary>true = prefab 静态已做全三栏三钮（新 MercReplaceArtPopup），位置以 prefab 为准不重摆。</summary>
+    bool _staticTriad;
 
     RunMercEntry _newEntry;
     /// <summary>结果回调：0/1 = 换下第几位；-1 = 不要了 / 没得选。</summary>
@@ -115,6 +121,10 @@ public class MercReplaceConfirmUI : MonoBehaviour
         // 借底不借逻辑：装备替换的控制器必须干掉，否则它也在同一个 Root 上抢按钮/刷内容
         var stale = go.GetComponent<EquipReplaceConfirmUI>();
         if (stale != null) Destroy(stale);
+        // 美术落地脚本已完成任务（素材 guid 已静态挂进 prefab），运行时留着会在 Awake 里
+        // 按老路径重贴、覆盖主人在编辑器里替换好的图 —— 直接禁用（组件保留，方便回退）。
+        var artApply = go.GetComponent<MercReplaceArtApply>();
+        if (artApply != null) artApply.enabled = false;
 
         var canvas = go.GetComponent<Canvas>();
         if (canvas == null) canvas = go.AddComponent<Canvas>();
@@ -153,7 +163,8 @@ public class MercReplaceConfirmUI : MonoBehaviour
         _panel = UiFind.Deep(_root.transform, "Panel");
         _colNew = UiFind.Deep(_root.transform, "ColumnNew");
         _colOldA = UiFind.Deep(_root.transform, "ColumnOld");
-        _title = GetText(UiFind.Deep(_root.transform, "Title"));
+        _title = GetText(UiFind.Deep(_root.transform, "Title"))
+                 ?? GetText(UiFind.Deep(_root.transform, "biaoti"));
         _verdict = GetText(UiFind.Deep(_root.transform, "Verdict"));
         _cancelBtn = UiFind.Deep(_root.transform, "KeepButton")?.GetComponent<Button>();
         _dimBtn = UiFind.Deep(_root.transform, "Dim")?.GetComponent<Button>();
@@ -173,32 +184,43 @@ public class MercReplaceConfirmUI : MonoBehaviour
         if (_built) return;
         if (_panel == null || _colOldA == null || _cancelBtn == null) return;
 
-        // 第三栏：克隆 ColumnOld（与另两栏同结构：Iconbg/Icon/Name/Info/Desc）
-        var colB = Instantiate(_colOldA.gameObject, _panel);
-        colB.name = "ColumnOld2";
-        _colOldB = colB.transform;
+        // 新 prefab（MercReplaceArtPopup）：第三栏 / 第二颗替换钮已静态做全且摆位已定，
+        // 直接绑定现成节点，绝不克隆、绝不重摆（旧 ColX/BtnY 常量是 640 面板年代的，套到
+        // 现在 550 面板会把三栏挤出框）。静态节点缺失时才回退到旧的克隆分支。
+        _colOldB = UiFind.Deep(_root.transform, "ColumnOld2");
+        _btnA = UiFind.Deep(_root.transform, "ReplaceButton")?.GetComponent<Button>();
+        _btnB = UiFind.Deep(_root.transform, "ReplaceButton2")?.GetComponent<Button>();
+        bool staticReady = _colOldB != null && _btnA != null && _btnB != null;
+        _staticTriad = staticReady;
 
-        // 两颗「替换」钮：克隆预制体现成的 ReplaceButton（同一套底图/字号）
-        var srcBtn = UiFind.Deep(_root.transform, "ReplaceButton")?.GetComponent<Button>();
-        if (srcBtn == null)
+        if (staticReady)
         {
-            Debug.LogError("[MercReplace] 预制体缺少 ReplaceButton，无法克隆「替换」钮");
-            _built = true;
-            return;
+            // 静态三栏三钮：位置/缩放全以 prefab 为准，代码一个 rect 都不动。
+            if (_btnA != null) _btnA.onClick.RemoveAllListeners();
+            if (_btnB != null) _btnB.onClick.RemoveAllListeners();
         }
-        _btnA = CloneButton(srcBtn, "ReplaceBtnA");
-        _btnB = CloneButton(srcBtn, "ReplaceBtnB");
-        srcBtn.gameObject.SetActive(false);   // 原按钮不用，改由两颗克隆各管一栏
-
-        // 三栏摆位（顶对齐，x 均匀）
-        PlaceColumn(_colNew, -ColX);
-        PlaceColumn(_colOldA, 0f);
-        PlaceColumn(_colOldB, ColX);
-
-        // 三颗钮一行：左「替换」/ 中「替换」/ 右「不要了」（原 KeepButton 挪到右位）
-        PlaceButton(_btnA, -ColX);
-        PlaceButton(_btnB, 0f);
-        PlaceButton(_cancelBtn, ColX);
+        else
+        {
+            // 旧底回退（仅当 prefab 没做全三栏时才会走到）：克隆 + 按常量重摆。
+            var srcBtn = UiFind.Deep(_root.transform, "ReplaceButton")?.GetComponent<Button>();
+            if (srcBtn == null)
+            {
+                Debug.LogError("[MercReplace] 预制体缺少 ReplaceButton，无法克隆「替换」钮");
+                _built = true;
+                return;
+            }
+            _colOldB = Instantiate(_colOldA.gameObject, _panel).transform;
+            _colOldB.name = "ColumnOld2";
+            _btnA = CloneButton(srcBtn, "ReplaceBtnA");
+            _btnB = CloneButton(srcBtn, "ReplaceBtnB");
+            srcBtn.gameObject.SetActive(false);
+            PlaceColumn(_colNew, -ColX);
+            PlaceColumn(_colOldA, 0f);
+            PlaceColumn(_colOldB, ColX);
+            PlaceButton(_btnA, -ColX);
+            PlaceButton(_btnB, 0f);
+            PlaceButton(_cancelBtn, ColX);
+        }
         SetLabel(_cancelBtn, "不要了");
 
         _btnA.onClick.AddListener(() => Answer(0));
@@ -276,8 +298,8 @@ public class MercReplaceConfirmUI : MonoBehaviour
         if (_colOldB != null) _colOldB.gameObject.SetActive(hasB);
         if (_btnB != null) _btnB.gameObject.SetActive(hasB);
 
-        // 只有一位（理论不该发生：满员才弹）→ 左钮居中，别摆空位
-        if (!hasB && _btnA != null) PlaceButton(_btnA, 0f);
+        // 只有一位（理论不该发生：满员才弹）→ 旧底把左钮居中；静态三栏位置已定，不挪。
+        if (!hasB && _btnA != null && !_staticTriad) PlaceButton(_btnA, 0f);
 
         if (_btnA != null) _btnA.gameObject.SetActive(mercs != null && mercs.Count > 0);
 
@@ -298,6 +320,9 @@ public class MercReplaceConfirmUI : MonoBehaviour
             SetText(col, "Name", "无");
             SetText(col, "Info", "");
             SetText(col, "Desc", "");
+            SetText(col, "Lv", "");
+            SetText(col, "Head", "");
+            SetRoleBadge(col, null);
             SetIconBg(col, MercRosterDefs.MercRarity.Common, false);
             SetIcon(col, null);
             return;
@@ -318,16 +343,35 @@ public class MercReplaceConfirmUI : MonoBehaviour
 
         int power = PowerCalc.MercPowerOf(
             string.IsNullOrEmpty(e.hireId) ? e.mercId : e.hireId, e.mercId, Mathf.Max(1, e.level));
-        string desc = "战力 " + power;
-        if (isNew) desc += "\n新获得";
-        else desc += e.fallen ? "\n已阵亡" : "\n在场";
-        SetText(col, "Desc", desc);
+        // Desc 只放战力一行：Lv 节点就在 Desc 下方（y=-269），
+        // Desc 多拼一行状态会直接压在 Lv 上面。
+        SetText(col, "Desc", "战力 " + power);
+
+        // Head = 栏顶状态标签（原预制体自带节点）。
+        // 不写就会一直显示 prefab 里的静态文案，换人后状态就错了。
+        string state = isNew ? "新获得" : (e.fallen ? "已阵亡" : "在场");
+        SetText(col, "Head", state);
+        var headT = GetText(UiFind.Deep(col, "Head"));
+        if (headT != null)
+            headT.color = isNew ? RarityPalette.Gold
+                : (e.fallen ? RarityPalette.PowerLoss : Color.white);
 
         // 名字/稀有度行跟稀有度同色（与头像栏、卡面同一张 RarityPalette）
         var nameT = GetText(UiFind.Deep(col, "Name"));
         if (nameT != null) nameT.color = RarityPalette.Get(rarity);
         var infoT = GetText(UiFind.Deep(col, "Info"));
         if (infoT != null) infoT.color = RarityPalette.Get(rarity);
+        FitNameLine(col, "Name");
+        FitNameLine(col, "Info");
+
+        // Lv 节点：局内佣兵等级真源 = RunMercEntry.level（与战力计算同值）
+        SetText(col, "Lv", "Lv " + Mathf.Max(1, e.level));
+
+        // Role 节点：职业四分类徽标，唯一出口 JobIconResolver.CombatBadge（招募卡同款口径）。
+        // 取不到就隐藏节点，不换图兜底（R2）。
+        string job = hasRoster ? def.JobName
+            : (MercenaryManager.Instance != null ? MercenaryManager.Instance.GetJobName(e.mercId) : null);
+        SetRoleBadge(col, JobIconResolver.CombatBadge(job));
 
         SetIcon(col, MercPortraitSprites.GetHead(string.IsNullOrEmpty(e.hireId) ? e.mercId : e.hireId));
         SetIconBg(col, rarity, true);
@@ -347,13 +391,34 @@ public class MercReplaceConfirmUI : MonoBehaviour
 
     static Text GetText(Transform t) => t != null ? t.GetComponent<Text>() : null;
 
+    /// <summary>名字/稀有度行：长文本换行不溢出栏宽（字号保持 prefab 设定，不放大）。</summary>
+    static void FitNameLine(Transform col, string node)
+    {
+        var t = GetText(UiFind.Deep(col, node));
+        if (t == null) return;
+        t.horizontalOverflow = HorizontalWrapMode.Wrap;
+        t.verticalOverflow = VerticalWrapMode.Truncate;
+        t.resizeTextForBestFit = false;
+    }
+
+    /// <summary>Role 职业徽标：只换图片。
+    /// ◆ 节点宽高 / preserveAspect / 颜色全以 prefab 作者设定为准，代码一律不碰。</summary>
+    static void SetRoleBadge(Transform col, Sprite sp)
+    {
+        var img = UiFind.Deep(col, "Role")?.GetComponent<Image>();
+        if (img == null) return;
+        img.sprite = sp;
+        // 空图时关掉组件避免露出纯色块；不改任何 RectTransform
+        img.enabled = sp != null;
+    }
+
     static void SetIcon(Transform col, Sprite sp)
     {
         var icon = UiFind.Deep(col, "Icon")?.GetComponent<Image>();
         if (icon == null) return;
         icon.sprite = sp;
+        // 头像节点宽高 / preserveAspect 以 prefab 为准，不在这里重设
         icon.enabled = sp != null;
-        icon.preserveAspect = true;   // 佣兵头像是方的，别被框拉扁
     }
 
     static void SetIconBg(Transform col, MercRosterDefs.MercRarity rarity, bool on)
@@ -361,9 +426,12 @@ public class MercReplaceConfirmUI : MonoBehaviour
         var bg = UiFind.Deep(col, "Iconbg")?.GetComponent<Image>();
         if (bg == null) return;
         if (!on) { bg.sprite = null; bg.enabled = false; return; }
-        // 佣兵头像框真源 = MercHireSession.LoadPortraitFrame（与战斗头像栏同一套三档框）
-        var sp = MercHireSession.LoadPortraitFrame(rarity);
+        // 头像框真源 = 主人定的酒馆竖版三档（204×248，与招募池/竞技场货架/佣兵获得弹窗同套）。
+        // ◆ 不要回退成 LoadPortraitFrame：那是战斗 HUD 的 200×96 横条框，
+        // 塞进 110×110 节点会被拉伸变形（2026-11-26 主人反复指出过）。
+        var sp = MercHireSession.LoadTavernCardFrame(rarity);
         bg.sprite = sp;
+        // 框节点宽高 / Image.Type / preserveAspect 全按 prefab 作者设定，只换图不改比例
         bg.enabled = sp != null;
     }
 

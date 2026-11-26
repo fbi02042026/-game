@@ -80,4 +80,41 @@ public class MercBattleBanter : MonoBehaviour
         }
         return list;
     }
+
+    // ============================================================
+    // 【2026-11-26 主人拍板】佣兵升级时说的那一句：几个通用短句，所有佣兵换着说。
+    // 叙事文案不入表（同 ChapterBattleFlavor / MonsterAffixBanter 口径），改词只改这里；
+    // 不按佣兵定制（那是 MercLineTable 的活，目前表里没有升级场景）。
+    // 气泡挂在战斗头像上（BattleHeadTalkUI.PlayLineAt），不走世界坐标跟随。
+    // ============================================================
+    static readonly string[] LevelUpLines =
+    {
+        "嗯，这下更稳了。",
+        "变强了！交给我吧。",
+        "嘿嘿，感觉不错。",
+        "再来几个，我还能升！",
+        "这点提升，小菜一碟。",
+        "多谢关照，接下来更卖力。",
+        "力量涌上来了！",
+        "好兆头，接着来。",
+    };
+    static int _lastLevelUpLine = -1;
+
+    /// <summary>
+    /// 升级时在对应头像上冒一句。与自动闲聊共用同一个气泡，正在说话时不抢
+    ///（主人拍板过「两句话撞车」要禁掉，剧情 / 引导 / 上一句还在就跳过本句）。
+    /// </summary>
+    public static void SayLevelUpAt(Transform anchor)
+    {
+        if (anchor == null) return;
+        var alive = BattleHeadTalkUI.Instance;
+        if (alive != null && alive.IsShowing) return;
+
+        int idx = Random.Range(0, LevelUpLines.Length);
+        if (idx == _lastLevelUpLine)
+            idx = (idx + 1) % LevelUpLines.Length;   // 「换着说」：相邻两次不重复同一句
+        _lastLevelUpLine = idx;
+
+        BattleHeadTalkUI.Ensure().PlayLineAt(anchor, LevelUpLines[idx]);
+    }
 }

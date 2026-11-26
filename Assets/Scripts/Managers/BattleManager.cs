@@ -151,6 +151,7 @@ public partial class BattleManager : Singleton<BattleManager>, ICombatBoundSingl
         Hero.Instance?.attr?.ClearTimedBuffs();
         ResetMpForNewStage();
         MercenaryManager.Instance?.ClearAllMercs();
+        ClearBattlePets();
         allyUnits.RemoveAll(u => u == null || u is Mercenary);
 
         HidePortal();

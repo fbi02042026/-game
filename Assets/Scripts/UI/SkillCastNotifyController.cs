@@ -275,6 +275,10 @@ public class SkillCastNotifyController : MonoBehaviour
         var c = Instance;
         if (c == null) return;
         var icon = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetPlayerIcon() : null;
+        // 【2026-11-26 诊断 · 主人报「玩家技能条头像变成重武佣兵」】一次打全：这条到底用了哪张图。
+        string diagIcon = icon != null ? icon.name : "NULL";
+        Debug.Log("[SkillCastNotify][诊断] 玩家条 skill=" + skillId + " icon=" + diagIcon
+                  + " mm=" + (MercenaryManager.Instance != null));
         if (icon == null)
         {
             Debug.LogWarning($"[SkillCastNotify] 玩家技能条无头像：skillId={skillId}，回退技能图标");
@@ -292,6 +296,9 @@ public class SkillCastNotifyController : MonoBehaviour
         var c = Instance;
         if (c == null) return;
         var icon = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetIcon(mercId) : null;
+        // 【2026-11-26 诊断】同上：确认「重武头像」是不是从佣兵条这条线出来的。
+        string diagIcon = icon != null ? icon.name : "NULL";
+        Debug.Log("[SkillCastNotify][诊断] 佣兵条 merc=" + mercId + " skill=" + skillId + " icon=" + diagIcon);
         if (icon == null)
         {
             Debug.LogWarning($"[SkillCastNotify] 佣兵技能条无头像：mercId={mercId} skillId={skillId}，回退技能图标");

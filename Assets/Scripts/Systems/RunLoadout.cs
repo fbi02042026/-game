@@ -75,13 +75,9 @@ public class RunLoadoutData
     public string savedUtc = "";
     public List<RunSkillEntry> skills = new List<RunSkillEntry>();
     public List<RunMercEntry> mercs = new List<RunMercEntry>();
-    /// <summary>
-    /// 【2026-11-25 主人拍板】本局佣兵等级记忆（id = hireId，没有 hireId 时存 mercId；value = 已练到的等级）。
-    /// 换下 / 主动离队时把级数记在这里，之后本局再抽到同一人从原级数继续 —— 主人原话
-    /// 「每次抽到就能继承上回自己的级数，一直能保持自己的局内级数」。
-    /// 只在本局（RunLoadout）有效：撤离 / 死亡 / 通关时 _data 置空，记忆随档作废，与局外养成无关。
-    /// </summary>
-    public List<StringIntEntry> mercLevelMemory = new List<StringIntEntry>();
+    // 【2026-11-26 已删】mercLevelMemory（2026-11-25 的「本局佣兵级数记忆」）：
+    // 等级真源唯一 = 存档 MercLevelSystem（局内抽到同一个佣兵才 +1），换人/离队不再需要记级数，
+    // 同时消除「本局还有一份等级」这个陷阱。别再恢复。
     /// <summary>流派势能（Phase 2）：累积点，不换不退。</summary>
     public List<StringIntEntry> themeEntries = new List<StringIntEntry>();
     /// <summary>
@@ -574,53 +570,12 @@ public static class RunLoadout
 
     public static bool IsMercFull => _data?.mercs != null && _data.mercs.Count >= MaxRunMercs;
 
-    /// <summary>
-    /// 【2026-11-25 主人拍板】记下某位佣兵本局已练到的等级（换下 / 主动离队时调用，唯一写入点 = 本方法）。
-    /// 只写本局记忆，不碰存档；同一 key 覆盖不重复追加。再招募时由 <see cref="TryGetMercLevelMemory"/> 取回。
-    /// </summary>
-    public static void RememberMercLevel(RunMercEntry e)
-    {
-        if (_data == null || e == null) return;
-        string key = !string.IsNullOrEmpty(e.hireId) ? e.hireId : e.mercId;
-        if (string.IsNullOrEmpty(key)) return;
-        int lv = Mathf.Max(1, e.level);
-        _data.mercLevelMemory ??= new List<StringIntEntry>();
-        for (int i = 0; i < _data.mercLevelMemory.Count; i++)
-        {
-            if (_data.mercLevelMemory[i] == null) continue;
-            if (_data.mercLevelMemory[i].id != key) continue;
-            _data.mercLevelMemory[i].value = lv;
-            return;
-        }
-        _data.mercLevelMemory.Add(new StringIntEntry { id = key, value = lv });
-    }
-
-    /// <summary>
-    /// 【2026-11-25 主人拍板】取回本局记忆的等级；没有记录（本局没带过 / 没换下过）返回 false，
-    /// 调用方保留原等级（新招募 = Lv1），不拿 1 顶替「无记录」。
-    /// </summary>
-    public static bool TryGetMercLevelMemory(string key, out int level)
-    {
-        level = 0;
-        if (_data?.mercLevelMemory == null || string.IsNullOrEmpty(key)) return false;
-        for (int i = 0; i < _data.mercLevelMemory.Count; i++)
-        {
-            var row = _data.mercLevelMemory[i];
-            if (row == null || row.id != key) continue;
-            if (row.value <= 0) return false;
-            level = row.value;
-            return true;
-        }
-        return false;
-    }
-
     /// <summary>把指定下标的佣兵替换为新条目（羁绊副本满员时保证该佣兵进队用；下标越界 = 无操作）。</summary>
     public static void ReplaceMercAt(int index, RunMercEntry entry)
     {
         if (_data?.mercs == null || entry == null) return;
         if (index < 0 || index >= _data.mercs.Count) return;
-        // 【2026-11-25 主人拍板】顶掉的旧人要记住级数，本局再抽到他从原级数继续
-        RememberMercLevel(_data.mercs[index]);
+        // 2026-11-26：不再记级数（等级在存档，见 MercLevelSystem）
         _data.mercs[index] = entry;
     }
 
@@ -634,8 +589,7 @@ public static class RunLoadout
         if (_data?.mercs == null) return null;
         if (index < 0 || index >= _data.mercs.Count) return null;
         var removed = _data.mercs[index];
-        // 【2026-11-25 主人拍板】主动离队同样记住级数，本局再抽到从原级数继续
-        RememberMercLevel(removed);
+        // 2026-11-26：不再记级数（等级在存档，见 MercLevelSystem）
         _data.mercs.RemoveAt(index);
         Save();
         return removed;
@@ -727,23 +681,32 @@ public static class RunLoadout
         return null;
     }
 
-    /// <summary>佣兵升级（只能由抽卡触发；不再随关卡自动升级）。返回升级后的等级，失败返回 0。</summary>
+    /// <summary>
+    /// 佣兵升级入口（<b>唯一真源转发</b>）：等级写在存档 <see cref="MercLevelSystem"/>，
+    /// 这里只把它同步回本局账本 <c>RunMercEntry.level</c> 供属性计算读。
+    /// <para>【2026-11-26 主人拍板】涨级方式 = 局内抽到同一个佣兵 → +1 级；禁止在这里自己 +1，
+    /// 否则本局账本与存档会分裂成两个等级。</para>
+    /// 返回升级后的等级，佣兵不在本局返回 0。
+    /// </summary>
     public static int TryLevelUpMerc(string hireIdOrMercId)
     {
         var m = FindMerc(hireIdOrMercId);
         if (m == null) return 0;
-        m.level = Mathf.Max(1, m.level) + 1;
+        string key = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+        int lv = MercLevelSystem.AddLevel(key, 1);
+        m.level = Mathf.Max(1, lv);
         return m.level;
     }
 
-    /// <summary>佣兵升星：★+1 且等级 +1。已满星返回 false。</summary>
+    /// <summary>佣兵升星：★+1（不再附带等级 +1，等级见 MercLevelSystem）。已满星返回 false。</summary>
     public static bool TryUpgradeMercStar(string hireIdOrMercId)
     {
         var m = FindMerc(hireIdOrMercId);
         if (m == null) return false;
         if (m.star >= MaxMercStar) return false;
         m.star++;
-        m.level = Mathf.Max(1, m.level) + 1;
+        // 【2026-11-26 主人拍板】升星不再附带等级 +1：等级只在战斗内（MercLevelSystem，战斗外不受影响），
+        // 升星只管星级乘区，否则一次升星会在局内造出第二个等级数。
         return true;
     }
 

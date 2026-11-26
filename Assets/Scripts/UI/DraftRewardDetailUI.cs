@@ -7,6 +7,8 @@ using UnityEngine.UI;
 /// <summary>
 /// 【2026-10-13 主人拍板】抽中瞬间的「奖励详情」弹窗：抽中技能 / 装备 / 佣兵弹「是什么 + 干什么 + 参数」，
 /// 抽中重复（升星 / 升级）弹「★N → ★N+1（LvN → LvN+1）+ 每项参数前后变化」。
+/// 【2026-11-26 主人拍板】「佣兵升级」这一档不再弹本窗：改为在战斗头像上播一次特效 + 刷新 LV 数字
+///（见 NeedsDetail 与 BattleUI.PlayMercLevelUpEffect），其余档不变。
 ///
 /// <para>与 <see cref="DraftPrizePopupUI"/>（1 秒自动淡出的开奖卡）分工：那个管「喜悦」，这个管「看明白」。
 /// 金币 / 强化安慰奖不弹（<see cref="NeedsDetail"/>）。</para>
@@ -56,7 +58,9 @@ public class DraftRewardDetailUI : MonoBehaviour
             case DraftCardKind.SkillNew:
             case DraftCardKind.SkillUp:
             case DraftCardKind.MercRecruit:
-            case DraftCardKind.MercLevelUp:
+            // 【2026-11-26 主人拍板】佣兵升级不再弹这张详情卡：升级生效后只在对应头像上
+            // 播一次 effect 粒子 + 刷新 LV 数字。三处调用点（实时抽 / 免费抽 / 三选一）统一走这里，
+            // 删掉本分支即全部不弹，Toast 仍照常提示。
             case DraftCardKind.MercStarUp:
             case DraftCardKind.Equip:
                 return card.IsValid;

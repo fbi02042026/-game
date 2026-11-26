@@ -18,7 +18,8 @@ public partial class PetUI
     // 详情
     Transform _skinSlot, _skinPortrait, _skinLock, _skinName;
     Transform _nameText, _petArt;
-    // 喂养表情粒子（主人 11-25 手工搭的 Stage/biaoqing，7 个 Emoji* 粒子组）
+    // 喂养特效（主人 11-26 把 Stage/biaoqing 里 7 组 Emoji 表情删掉，换成唯一一组 Love：
+    // Love 根粒子 + BigHeart / TinyHearts 两个子粒子，喂一次整组播一次）
     Transform _biaoqing;
     ParticleSystem[] _biaoqingAll = System.Array.Empty<ParticleSystem>();
     readonly List<ParticleSystem[]> _biaoqingGroups = new List<ParticleSystem[]>();
@@ -111,9 +112,10 @@ public partial class PetUI
     }
 
     /// <summary>
-    /// 绑定喂养表情粒子：biaoqing 下每个顶层子节点（Emoji*）算一组，组内含其 ExtraFX 子粒子。
-    /// prefab 里 playOnAwake=1，不处理的话面板每次打开会 7 组齐喷——
-    /// 运行时一律关 playOnAwake 并清空，只在喂养成功后随机播一组（2026-11-25 主人需求）。
+    /// 绑定喂养特效：biaoqing 下每个顶层子节点算一组，组内含其子粒子。
+    /// 主人 11-26 已把原来的 7 组 Emoji 表情删掉，只留唯一一组 Love（BigHeart / TinyHearts 子粒子）。
+    /// prefab 里 playOnAwake=1，不处理的话面板每次打开会自己喷——
+    /// 运行时一律关 playOnAwake 并清空，只在喂养成功后播这一组（2026-11-26 主人需求）。
     /// </summary>
     void BindBiaoqingFx()
     {
@@ -146,18 +148,26 @@ public partial class PetUI
         }
     }
 
-    /// <summary>喂养成功后随机播一组表情粒子：先清上一组，再整组 Play（含 ExtraFX 子粒子）。
+    /// <summary>喂养成功后播一次 Love 特效：先清上一轮残留，再整组 Play（含 BigHeart / TinyHearts）。
+    /// 【2026-11-26 主人「统一喂一次播放一次这个就行」】不再随机选表情，只播 biaoqing 下唯一的 Love 组。
     /// 【2026-11-25 主人「弹窗自适应了，特效也要跟着放大」】只此一个播放出口按 Panel 当前 s 等比放大；
     /// 基准取 prefab 原 scale，每次重设不累积；Panel s=1（无自适应）时特效原样。</summary>
-    void PlayRandomBiaoqingFx()
+    void PlayFeedLoveFx()
     {
         if (_biaoqingGroups.Count == 0) return;
-        int pick = UnityEngine.Random.Range(0, _biaoqingGroups.Count);
-        var group = _biaoqingGroups[pick];
+        int idx = 0;   // 唯一一组：Love（原来的 Emoji 表情已删，不再随机）
+        var group = _biaoqingGroups[idx];
         StopAllBiaoqingFx();
         float s = _panel != null && Mathf.Abs(_panel.localScale.x) > 0.01f ? _panel.localScale.x : 1f;
-        if (pick < _biaoqingRoots.Count && _biaoqingRoots[pick] != null && pick < _biaoqingBaseScales.Count)
-            _biaoqingRoots[pick].localScale = _biaoqingBaseScales[pick] * s;
+        if (idx < _biaoqingRoots.Count && _biaoqingRoots[idx] != null && idx < _biaoqingBaseScales.Count)
+            _biaoqingRoots[idx].localScale = _biaoqingBaseScales[idx] * s;
+        // LoVe 粒子是场景 renderer，需抬到弹窗 Canvas 之上才可见
+        for (int i = 0; i < group.Length; i++)
+        {
+            if (group[i] == null) continue;
+            var r = group[i].GetComponent<ParticleSystemRenderer>();
+            if (r != null) r.sortingOrder = GameConfig.UiSort.TownPopup + 1;
+        }
         for (int i = 0; i < group.Length; i++)
             if (group[i] != null) group[i].Play(true);
     }

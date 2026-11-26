@@ -98,11 +98,20 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
     Queue<DamageTextInstance> _pool = new Queue<DamageTextInstance>();
     List<DamageTextInstance> _active = new List<DamageTextInstance>();
     static float _nextTextScaleMul = 1f;
+    // 【2026-11-26 主人拍板「连杀 10 档飘字换色，做质变不做量变」】下一跳飘字的颜色覆盖（用后即清）。
+    // null = 不覆盖，走原 GetStyle 颜色；只在 CombatJuice 连杀 10 档设置，不改变平时伤害字。
+    static Color? _nextTextColorOverride;
 
     /// <summary>连杀等临时放大下一跳飘字（用后自动复位 1）。</summary>
     public static void SetNextTextScaleMul(float mul)
     {
         _nextTextScaleMul = Mathf.Max(1f, mul);
+    }
+
+    /// <summary>连杀等临时改下一跳飘字颜色（用后自动复位为 null）。</summary>
+    public static void SetNextTextColorOverride(Color color)
+    {
+        _nextTextColorOverride = color;
     }
 
     class DamageTextInstance
@@ -271,6 +280,12 @@ public class DamageTextSystem : Singleton<DamageTextSystem>, ICombatBoundSinglet
         // 火 / 冰附加伤害：飘字整体换成橙 / 蓝（主人 2026-09-26 口径）
         if (element != DamageElement.None)
             color = ElementColor(element);
+        // 【2026-11-26】连杀档位临时换色（用后即清）：优先级高于元素色，只影响这一跳
+        if (_nextTextColorOverride.HasValue)
+        {
+            color = _nextTextColorOverride.Value;
+            _nextTextColorOverride = null;
+        }
 
         DamageTextInstance inst = GetOrCreateInstance();
         float ox = Random.Range(-spreadRadiusX, spreadRadiusX);

@@ -615,7 +615,7 @@ public class FirstRunGuide : MonoBehaviour
         // 店内无法再弹气泡；toast 11000 层盖得住，且走 ShowPersona 统一人设出口。
         // 完成判据＝进过店且已关掉（shopWasOpened && !MileageShopOpen），进店边沿只报一次。
         bool shopWasOpened = false;
-        yield return CoPoint("点这个图标就行——里程商店。哼，看完就关掉回来。",
+        yield return CoPoint("点这个图标就行——里程商店。",
             MileageShopEmblemRect,
             () =>
             {
@@ -623,7 +623,7 @@ public class FirstRunGuide : MonoBehaviour
                 if (open && !shopWasOpened)
                 {
                     shopWasOpened = true;
-                    GlobalToastUI.ShowPersona("只要你里程点数够，这儿随便挑，哼。");
+                    GlobalToastUI.ShowPersona("这儿是里程商店，攒够点数好东西随便挑～");
                 }
                 return shopWasOpened && !open;
             },

@@ -22,6 +22,11 @@ public class CharacterSlotUI
     // 主人原话：「是个金色的大圆圈，如果是技能好的就去掉，不用显示；cd 好了、释放条件允许就自动释放。」
     // 自动释放不需要「就绪提示」——玩家点了也没用，那圈金环只会糊住头像。整条链路删除，不留开关。
     public Text levelLabel;             // 等级标签 "Lv.4"
+    /// <summary>
+    /// 【2026-11-26 主人拍板】两个佣兵头像下美术各摆了一个 effect 粒子节点（内含 MagicDust，非循环 2 秒）。
+    /// 只用于「佣兵升级」时播一次，绑定后默认收起；不补建，取不到只报错。玩家槽没有这层。
+    /// </summary>
+    public GameObject levelUpEffect;
     public Text nameText;               // 角色名（签名后延用）
     public Image hpBarFill;             // 血条填充 HPBarFill
     public Text hpText;                 // HP数值 "28/28"

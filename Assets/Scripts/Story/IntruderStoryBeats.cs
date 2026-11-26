@@ -136,14 +136,14 @@ public static class IntruderStoryBeats
     // ============================================================
     // 批次6（2026-11-20）：敌对乱入固定反派三人组（主人供立绘三张并授权改名）。
     // 剧情立绘走 MercStand 通道（文件名即 id）；战斗单位同一套人设走职业模板
-    //（IntruderPicker 固定返回 zhongzhan201 / fashi202 / kuangzhan201，均为非 101 玩家脸），
+    //（IntruderPicker 数据 id 固定 zhongzhan201 / fashi202 / kuangzhan201，战斗脸已换 bandit_* 专属模型），
     // 避免「剧情张三、战斗李四」对不上。三人关系：老雷领队 / 夜薇算账 / 阿刃莽。
     // ============================================================
-    /// <summary>独眼老雷 · 重武大哥（立绘 bandit_boss / 战斗 zhongzhan201）。</summary>
+    /// <summary>独眼老雷 · 重武大哥（立绘 / 战斗同为 bandit_boss）。</summary>
     const string BanditBoss = "bandit_boss";
-    /// <summary>夜薇 · 女法师（立绘 bandit_witch / 战斗 fashi202）。</summary>
+    /// <summary>夜薇 · 女法师（立绘 / 战斗同为 bandit_witch）。</summary>
     const string BanditWitch = "bandit_witch";
-    /// <summary>阿刃 · 狂战小弟（立绘 bandit_blade / 战斗 kuangzhan201）。</summary>
+    /// <summary>阿刃 · 狂战小弟（立绘 / 战斗同为 bandit_blade）。</summary>
     const string BanditBlade = "bandit_blade";
 
     /// <summary>
@@ -201,7 +201,7 @@ public static class IntruderStoryBeats
         return new List<EntryBattleLine>
         {
             L(EntrySpeaker.Gabriel, "让让！盾立住了，一只都别想越线！", 1.2f),
-            L(EntrySpeaker.Lina, "先回血，别的回头说。", 1.2f),
+            L(EntrySpeaker.Lina, "我勒个豆，奶给你拉满，冲就完了！", 1.2f),
         };
     }
 
@@ -252,7 +252,7 @@ public static class IntruderStoryBeats
     {
         return new List<StoryBeat>
         {
-            StoryDirector.Solo("艾拉", "全队打成这样？胆子挺肥啊你们。", SquadElla),
+            StoryDirector.Solo("艾拉", "巧了不是——正好陪你们把这帮家伙收拾了！", SquadElla),
             StoryDirector.Solo("你", "你们是哪位？我没点外援啊。", StoryPortraits.Player),
             StoryDirector.Solo("加百列", "有人托了我们，让我们盯着你点。细节回头聊——先回镇上歇着。", SquadGabriel),
         };

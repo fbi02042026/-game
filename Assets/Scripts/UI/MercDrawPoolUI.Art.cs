@@ -16,6 +16,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
     static void ShowMercDetail(string hireId, MercRosterDefs.Def def,
         bool showReplace = false, System.Action onReplace = null)
     {
+        // 【2026-11-26 主人拍板·彻底隔离】佣兵池 = 战斗外界面：等级/星级都读存档永久实例，
+        // <b>不读</b> MercLevelSystem（那是战斗内等级，写完不写回、也不许外溢到这里）。
         int level = 1, star = 1;
         var data = SaveSystem.Instance?.Data;
         if (data?.permanentMercs != null)

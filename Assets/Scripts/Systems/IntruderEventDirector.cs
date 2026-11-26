@@ -57,17 +57,30 @@ public static class IntruderEventDirector
     }
 
     /// <summary>
-    /// 【强盗投放关位唯一真源（2026-11-23 主人拍板每章第6关）】
-    /// 8 章递进组合不变，只把触发关位收敛到 stageIdx0=5（第6关，0-based），
-    /// 避开章节剧情关（第1关）、Boss 救援关（第5/10关）、精英关（第3/8关）。
-    /// 所有“只在该关触发”的门禁统一读这里；返回 5 不随 chapter 变化。
+    /// 【2026-11-26 主人拍板】强盗原从「每章固定第6关」挪到「第3关 + 第7关」两关投放；
+    /// 同日再拍板：第3关狗营救关恢复本章怪物末波，只留第7关投放强盗（8 章递进组合不变）。
+    /// 真源 = 0-based stageIdx0 集中数组；换关位只改这里一处。
+    /// 所有门禁（Plan 打标 / 首波前剧情 / 目标波前剧情 / 词条怪门禁）统一走 <see cref="IsBanditFlavorStage"/>，
+    /// 不再有「单关位」语义 —— 旧 <see cref="IntruderStageIndexForChapter"/> 退役仅留签名兼容。
     /// </summary>
-    public static int IntruderStageIndexForChapter(int chapter)
+    static readonly int[] BanditFlavorStageIndices0 = { 6 };   // 仅第7关（1-based）→ 0-based；第3关已恢复本章怪物末波
+
+    /// <summary>是否强盗调味关：真源唯一出口，所有门禁调用点一律读这里。</summary>
+    public static bool IsBanditFlavorStage(int stageIdx0)
     {
-        if (ActProgressionDefs.TypeOfStage(5) != StageType.Normal)
-            UnityEngine.Debug.LogError("[IntruderEventDirector] 第6关不再是普通关，强盗投放会撞 Boss/精英剧情，请重选关位并同步 IntruderStageIndexForChapter");
-        return 5;
+        for (int i = 0; i < BanditFlavorStageIndices0.Length; i++)
+            if (BanditFlavorStageIndices0[i] == stageIdx0) return true;
+        return false;
     }
+
+    /// <summary>【已无调用场景·保留签名】旧「第3关强盗只刷怪不播剧情」门禁；第3关已无强盗，不影响任何关卡。</summary>
+    public static bool IsDogRescueBanditStage(int stageIdx0) => stageIdx0 == 2;
+
+    /// <summary>
+    /// 【已退役 2026-11-26】原「每章第6关」单关位真源。新逻辑一律改读 <see cref="IsBanditFlavorStage"/>；
+    /// 此处返回首个调味关位仅作历史调用兜底，新代码勿用。
+    /// </summary>
+    public static int IntruderStageIndexForChapter(int chapter) => BanditFlavorStageIndices0[0];
 
     /// <summary>
     /// 查询出口（T4 友军救场·主线）：按章号取第一条 type=="Rescue" 的事件（Row.chapter 匹配）。

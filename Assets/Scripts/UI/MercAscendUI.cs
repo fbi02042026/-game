@@ -759,7 +759,11 @@ public class MercAscendUI : MonoBehaviour
         if (rowRoots[idxMagicDef] != null) rowRoots[idxMagicDef].SetActive(magic);
     }
 
-    /// <summary>存档里该佣兵等级（无实例按 1 级显示；口径同 MercDrawPoolUI.ShowMercDetail）。</summary>
+    /// <summary>
+    /// 存档里该佣兵等级（无实例按 1 级显示；口径同 MercDrawPoolUI.ShowMercDetail）。
+    /// 【2026-11-26 主人拍板·彻底隔离】进阶界面属战斗外：只读 permanentMercs，
+    /// 不读 MercLevelSystem（战斗内等级不写回、也不外溢到这里）。
+    /// </summary>
     static int ResolveSavedLevel(string hireId, MercRosterDefs.Def def)
     {
         var data = SaveSystem.Instance?.Data;

@@ -131,6 +131,15 @@ public partial class BattleManager
         if (!IsFormalMainRun) return false;                            // 副本/竞技场/裂隙/支线岛一律不弹
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return false; // 难度局不发加成
         if (Rules.Active || Rules.DirectorOwnsWaves) return false;     // 引导局有自己的节奏
+        // 【2026-11-26 主人拍板】三选一只允许「每 10 关剧情」这一处；战前 Boss 三选一只留大 Boss 关（关 10）。
+        // 关 5 是小 Boss（BossKind=1）不再弹 buff 三选一；关号真源 BossKindOfStage，不写死数字。
+        var cm = ChapterManager.Instance;
+        if (cm == null)
+        {
+            Debug.LogError("[BossBlessing] 取不到 ChapterManager，三选一按不弹处理");
+            return false;
+        }
+        if (ActProgressionDefs.BossKindOfStage(cm.CurrentSubIndex0) != 2) return false;
         return currentStage != null && currentStage.type == StageType.Boss;
     }
 

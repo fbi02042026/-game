@@ -122,6 +122,10 @@ public partial class BattleManager
         // 击杀不再喂玩家可见等级（经验唯一入口 = LevelSystem.AddStageClearExp，主线/支线完成关卡才给）
         HiddenLevelSystem.AddKillExp(m);
 
+        // 【2026-11-26 主人拍板】佣兵等级**不走击杀经验**（原话「打怪升级玩家会刷」）：
+        // 涨级方式 = 局内再抽到同一个佣兵 → 该佣兵 +1 级（见 RunDraftDirector 的 MercLevelUp 分支）。
+        // 这里不写任何等级代码，避免又长出一条会被刷的成长线。
+
         // 连杀：累计击杀连击数（≥3 起会在下方兑现额外金币，见 COMBO_BONUS_GOLD）
         float now = Time.time;
         if (now - _lastKillTime <= GameConfig.COMBO_WINDOW)
@@ -286,6 +290,7 @@ public partial class BattleManager
     public bool MercHealHasPatient(Mercenary merc) => SkillCast.MercHealHasPatient(merc);
 
     SkillSystem.ActiveSkill ResolveSkill(string skillId) => SkillCast.ResolveSkill(skillId);
+
 
     // ============================================================
     // 关卡通关

@@ -279,16 +279,17 @@ public static class SlotMachineDefs
     // 为什么佣兵不再垫底：本局**最多只能带 2 位佣兵**（`RunLoadout.MaxRunMercs`），位子很快满，
     //   满之后整类只剩「升级 / 升星」两张卡 —— 但主人仍要求拉到 20%，以此为准。
     //
+    // 【2026-11-26 主人拍板】装备最多、技能与佣兵差不多 → 装备 45 / 技能 25 / 佣兵 25（金币 5 不变，合计 100）。
     // ⚠ 真源只有这三个常量 + <c>CategoryWeight()</c>，别在别处再写一份概率。
     // ⚠ 概率公示（`DraftPool.BuildOddsRows`）用**同一套权重**现算 → 弹窗数字永远等于实际。
     // ============================================================
 
     /// <summary>「装备」类被抽中的权重（<b>2026-11-24 主人拍板：45，给佣兵让路</b>；10-20 那版是 55）。</summary>
     public const int CATEGORY_WEIGHT_EQUIP = 45;
-    /// <summary>「技能」类被抽中的权重（<b>2026-10-20 主人拍板：20</b>，不变）。</summary>
-    public const int CATEGORY_WEIGHT_SKILL = 20;
-    /// <summary>「佣兵」类被抽中的权重（<b>2026-11-24 主人拍板：30，前期更容易抽到佣兵</b>；10-20 那版是 20）。</summary>
-    public const int CATEGORY_WEIGHT_MERC = 30;
+    /// <summary>「技能」类被抽中的权重（<b>2026-11-26 主人拍板：25，与佣兵拉平</b>；此前 20）。</summary>
+    public const int CATEGORY_WEIGHT_SKILL = 25;
+    /// <summary>「佣兵」类被抽中的权重（<b>2026-11-26 主人拍板：25，与技能拉平</b>；11-24 那版 30 作废）。</summary>
+    public const int CATEGORY_WEIGHT_MERC = 25;
 
     /// <summary>
     /// 【2026-10-24 主人拍板】不保底传奇、保底稀有：每 N 次装备方向抽奖保底 1 次稀有+

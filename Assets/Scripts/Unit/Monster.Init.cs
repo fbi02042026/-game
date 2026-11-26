@@ -193,6 +193,13 @@ public partial class Monster
         float statScale = endlessRift
             ? GameConfig.EndlessDifficultyMul(BattleManager.Instance.EndlessRiftStage)
             : GameConfig.GetStatScale(chapter, GrandIndexForStatScale(), stageIdx0);
+        // 【2026-11-26 主人拍板「第一章难度还原、只稍微提高精英和 Boss，第二章再整体提高」】
+        // 第一章主线正式关的「普通怪」走回 11-24 章内曲线（含旧关5墙 1.10），血/攻同时还原到
+        // 「开局木剑剑盾 2 刀一只」；第一章精英/Boss 与第二章起所有怪继续吃现行 11-25 曲线
+        // （峰谷更大 = 血略高，属于只稍微提高）。裂隙 / 副本 / 引导 / 支线岛一律不命中。
+        if (!endlessRift && chapter == 1 && !eliteWave && !_isBossUnit
+            && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun)
+            statScale = GameConfig.Chapter1LegacyStatScale(stageIdx0);
         float guildScale = 1f + GameConfig.GUILD_SCALE_PER * guildLv;
         float diffScale = BattleManager.Instance != null ? BattleManager.Instance.DifficultyStatScale : 1f;
         float scale = statScale * guildScale * diffScale;
@@ -221,6 +228,10 @@ public partial class Monster
                 baseAtk = GameConfig.MONSTER_BOSS_ATK;
             baseDef = GameConfig.MONSTER_BOSS_DEF;
             atkInterval = GameConfig.MONSTER_BOSS_ATK_INTERVAL;
+            // 【2026-11-26 主人拍板】第一章 Boss 出招间隔收回 1.6 秒（全局 1.0 频率翻 2.2 倍太狠）；
+            // 第二章起与裂隙 / 副本 / 引导仍走全局 1.0，零影响。
+            if (chapter == 1 && BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun)
+                atkInterval = GameConfig.CH1_BOSS_ATK_INTERVAL;
         }
         else if (eliteWave)
         {
@@ -422,7 +433,10 @@ public partial class Monster
         // 只压攻击/魔攻，血防不动；无尽裂隙不参与（强度只随层数走）。
         // 【2026-11-23 主人拍板「引导和正式关卡数值一致」】引导普通小怪与正式关同吃章级减免；
         // 只有引导局里的精英 / Boss 槽位保留 10-23 的原始攻击（压轴「打不完 → 撤离」靠它撑住压力）。
-        float earlyAtkMul = !endlessRift && !tutorialKeepOriginal ? GameConfig.ChapterAtkMul(gChapter) : 1f;
+        // 【2026-11-26 主人拍板】第一章按怪类分流：普通怪 0.35（还原）/ 精英与 Boss 0.45（小幅提高）；
+        // 第二章起仍走原表（11-25 的高难度），详见 GameConfig.ChapterAtkMul(chapter, eliteOrBoss)。
+        float earlyAtkMul = !endlessRift && !tutorialKeepOriginal
+            ? GameConfig.ChapterAtkMul(gChapter, eliteWave || _isBossUnit) : 1f;
         // 魔法型强制改法球弹道(Ranged)→视觉与伤害类型(魔法)一致；物理型保持表内 style。
         // 普通小怪的魔法型本就等于「表里是法师」，这里赋值与表内原值一致；
         // 只有精英/Boss 掷骰命中魔法时，这里才会真的把 Melee/Bow 改成法球。

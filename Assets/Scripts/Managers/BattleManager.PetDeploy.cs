@@ -38,6 +38,14 @@ public partial class BattleManager
         return null;
     }
 
+    /// <summary>换关清场：销毁上一关遗留的战斗宠物实例（含脱离 allyUnits 的孤儿狗），避免旧残血狗跨关残留。</summary>
+    void ClearBattlePets()
+    {
+        var pets = FindObjectsOfType<Pet>();
+        for (int i = 0; i < pets.Length; i++)
+            if (pets[i] != null) Destroy(pets[i].gameObject);
+    }
+
     void DeployDeployedPet()
     {
         if (!IsFormalMainRun || IsTutorialRun) return;

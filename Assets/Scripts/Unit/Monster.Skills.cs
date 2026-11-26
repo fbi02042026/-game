@@ -25,6 +25,8 @@ public partial class Monster
     Vector3 _hpChargeBaseScale = Vector3.one;
     Vector3 _hpChargeCenter;
     float _hpChargeRadius;
+    /// <summary>【2026-11-26】临门一脚（最后 16% 染色 + 短震）每次预警只触发一次；建圈 / 收圈时清零。</summary>
+    bool _telegraphTerminalFired;
     private MonsterAttackStyle _swingStyle = MonsterAttackStyle.Melee;
     /// <summary>
     /// 【2026-11-05 主人拍板「近战 boss 不要出现闪现」】Init 时表给的原始攻击风格（掷骰前），终身不变。
@@ -84,6 +86,9 @@ public partial class Monster
             _hpChargeProgress.transform.localScale =
                 new Vector3(_hpChargeBaseScale.x * grow, _hpChargeBaseScale.y * grow, 1f);
         }
+        // 【2026-11-26 主人拍板「预警要读秒」】攒槽进最后窗口 → 双圈染醒目色 + 一次轻震。
+        // 与头顶条同一进度数，不另算计时；染色只改 RGB，alpha 不动。
+        TryFireTelegraphTerminal(Mathf.Clamp01(_skillEnergy), _hpChargeDisc, _hpChargeProgress);
     }
 
     /// <summary>【2026-11-24】打断惩罚冷却：被打断后本次技能作废，且这段时间内不能重新攒槽（与放招冷却同量级）。</summary>
@@ -138,6 +143,7 @@ public partial class Monster
         if (_hpChargeDisc != null) { Destroy(_hpChargeDisc); _hpChargeDisc = null; }
         if (_hpChargeProgress != null) { Destroy(_hpChargeProgress); _hpChargeProgress = null; }
         _hpChargeRadius = 0f;
+        ResetTelegraphTerminal();
     }
 
     /// <summary>
@@ -503,6 +509,7 @@ public partial class Monster
             // 深色进度圈从中心缩放 0 线性放大到跟范围一样大，用时＝预警时长。
             Color? telegraphTint = _isBossUnit && GetBossPhase() >= 2 ? GameConfig.TELEGRAPH_ENRAGED_COLOR : (Color?)null;
             baseScale = CreateTelegraphPair(center, radius, out disc, out progressDisc, telegraphTint);
+            ResetTelegraphTerminal();   // 新一轮协程预警，临门一脚标志从头计
         }
         // 【2026-10-16】冻场（UnitsCanAct=false）期间不计时，红圈原地等，解冻才继续；砸下瞬间出波纹扩散。
         // 蓄力底账：身体缩放（精英 ×2.0 根缩放含在内）与玩家影子 —— 任何退出路径都在 finally 里还原
@@ -546,6 +553,8 @@ public partial class Monster
                     float grow = Mathf.Clamp01(t / warn);
                     progressDisc.transform.localScale = new Vector3(baseScale.x * grow, baseScale.y * grow, 1f);
                 }
+                // 【2026-11-26 主人拍板「预警要读秒」】固定秒数预警同样在最后窗口染色 + 一次轻震
+                TryFireTelegraphTerminal(Mathf.Clamp01(t / warn), disc, progressDisc);
                 // 蓄力压扁：身体 Y 随预警进度线性压到 ELITE_LEAP_SQUASH（主人原话「慢慢缩小Y轴」；
                 // X/Z 不动，精英 ×2.0 根缩放不破坏；JY 光环是根直子节点不受影响）
                 if (eliteLeap && MoveRoot != null)
@@ -1104,6 +1113,41 @@ public partial class Monster
         float dia = Mathf.Max(1.2f, radius * 2f);
         return new Vector3(dia, dia * GameConfig.TELEGRAPH_DISC_Y_RATIO, 1f);
     }
+
+    /// <summary>
+    /// 【2026-11-26 主人拍板「预警要读秒」】预警进度进最后窗口时：双圈染醒目色 + 一次短震（幂等）。
+    /// <para>两条预警路径（近战 Boss 攒槽圈 / 固定秒数协程）都调这里，标志在本单位内共享，
+    /// 每次预警只染一次、震一次；建圈 / 收圈 / 对象池复用时由 <see cref="ResetTelegraphTerminal"/> 清零。</para>
+    /// <para>只改 SpriteRenderer 的 RGB，alpha 保持各圈原值（范围圈 0.28 / 进度圈 0.85），
+    /// 避免最后一下糊成实心盘挡住地面；不改预警时长 / 圆心 / 判定。</para>
+    /// </summary>
+    void TryFireTelegraphTerminal(float progress01, GameObject rangeDisc, GameObject progressDisc)
+    {
+        if (_telegraphTerminalFired) return;
+        if (GameConfig.TELEGRAPH_TERMINAL_WINDOW_RATIO <= 0f) return;
+        if (progress01 < 1f - GameConfig.TELEGRAPH_TERMINAL_WINDOW_RATIO) return;
+
+        _telegraphTerminalFired = true;
+        Color c = GameConfig.TELEGRAPH_TERMINAL_COLOR;
+        // 范围圈
+        var srRange = rangeDisc != null ? rangeDisc.GetComponent<SpriteRenderer>() : null;
+        if (srRange != null)
+        {
+            Color a = srRange.color;
+            srRange.color = new Color(c.r, c.g, c.b, a.a);
+        }
+        // 进度圈
+        var srProg = progressDisc != null ? progressDisc.GetComponent<SpriteRenderer>() : null;
+        if (srProg != null)
+        {
+            Color a = srProg.color;
+            srProg.color = new Color(c.r, c.g, c.b, a.a);
+        }
+        CombatJuice.Shake(GameConfig.TELEGRAPH_TERMINAL_SHAKE_AMP, GameConfig.TELEGRAPH_TERMINAL_SHAKE_DUR);
+    }
+
+    /// <summary>新一轮预警开始前清掉临门一脚标志（建圈 / 收圈 / 复用统一走这里）。</summary>
+    void ResetTelegraphTerminal() => _telegraphTerminalFired = false;
 
     static Sprite MakeCircleSprite()
     {

@@ -20,7 +20,7 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// </summary>
     Transform _uiAnchor;
     /// <summary>固定 UI 锚点模式下气泡底部相对锚点的抬高（屏幕像素）。纵向偏移可留（铁律20）。</summary>
-    const float UiAnchorLiftPx = 0f;    // 【2026-11-24】相机统一后锚点回到顶部；【2026-11-25】主人验证太高，96→76→56→36→16→0（16 那步画面无变化，归零验证是否到下限）
+    const float UiAnchorLiftPx = -40f;    // 【2026-11-24】相机统一后锚点回到顶部；【2026-11-25】主人验证太高，96→76→56→36→16→0（16 那步画面无变化，归零验证是否到下限）；【2026-11-26】主人「喂养叫声框往下40」→ -40
     Coroutine _co;
     bool _skipTyping;
     bool _advance;

@@ -189,9 +189,10 @@ public partial class BattleManager
     /// <summary>
     /// 【2026-11-24 主人拍板】固定剧情关判定（唯一出口）：这些关不投放「新词条怪」，
     /// 让玩家先在非剧情关认全词条，避免新词条首次登场的左缘图标提示撞剧情气泡。
-    /// 固定关位：每章首关(stageIdx0=0，战前剧情)、第6关(乱入)、Boss关(第5/10关，战后剧情)、关3精英(狗营救)。
+    /// 固定关位：每章首关(stageIdx0=0，战前剧情)、强盗调味关(仅关7，2026-11-26 第3关已恢复本章怪物末波)、
+    /// Boss关(第5/10关，战后剧情)、关3精英(狗营救)。
     /// 只认正式主线；副本/裂隙/支线/竞技场/引导一律 false（它们本就不播主线剧情或无词条池）。
-    /// 关位真源：Boss=ActProgressionDefs.BossKindOfStage，乱入=IntruderEventDirector.IntruderStageIndexForChapter，
+    /// 关位真源：Boss=ActProgressionDefs.BossKindOfStage，强盗=IntruderEventDirector.IsBanditFlavorStage，
     /// 关3=PetRescueStoryBeats.IsDogRescueStage 同一关位（路线 B 下 currentStageIndex 与 sub0 一致）。
     /// </summary>
     public static bool IsFixedStoryStage(int chapter, int stageIdx0)
@@ -200,7 +201,7 @@ public partial class BattleManager
         if (bm == null || !bm.IsFormalMainRun) return false;
         if (stageIdx0 == 0) return true;
         if (ActProgressionDefs.BossKindOfStage(stageIdx0) != 0) return true;
-        if (stageIdx0 == IntruderEventDirector.IntruderStageIndexForChapter(chapter)) return true;
+        if (IntruderEventDirector.IsBanditFlavorStage(stageIdx0)) return true;
         if (chapter == 1 && stageIdx0 == 2) return true;
         return false;
     }

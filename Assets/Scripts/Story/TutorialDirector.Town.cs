@@ -656,40 +656,10 @@ public partial class TutorialDirector
             yield return null;
         }
 
-        // 收尾链压轴：引导完成祝福（每日登录关掉之后，屏幕上始终只有一件事）
-        // 【2026-11-15】这一条字号比引导里的其它提示小一档：字 28；上下留白 48（2026-11-22 由 24 再翻倍，框高随留白自适应）。
-        // 只经 Show 的单次 layout 传入，Hide 即清空；全局常量与其余引导一字不动。
-        // 【2026-11-16】这条是对话类叙述，必须用默认对话底框（深蓝金引导底框）。箭头气泡只给提示类用。
-        // 若此刻正好有「换人引导 / 可升星」箭头气泡在显示（其 5s 计时未到），它的一次性底框会串到本条上：
-        // 先收掉它并回滚其已读标记，让它在本条 6s 自动消失后由 TownHubController 轮询重新正常弹出。
-        var outroHint = TutorialHintUI.Ensure();
-        if (outroHint.IsVisible)
-        {
-            string cur = outroHint.CurrentHint;
-            var saveSys = SaveSystem.Instance;
-            var d = saveSys != null ? saveSys.Data : null;
-            bool rolledBack = false;
-            if (d != null)
-            {
-                if (cur == MercSwapHint.TavernText) { d.mercSwapHintTavernShown = false; rolledBack = true; }
-                else if (cur == MercSwapHint.QueueText) { d.mercSwapHintQueueShown = false; rolledBack = true; }
-                else if (cur == MercStarReadyHint.Text) { d.mercStarReadyHintShown = false; rolledBack = true; }
-            }
-            if (rolledBack) saveSys.Save();
-            outroHint.Hide();
-        }
-        outroHint.SetTapToHideOnce();   // 【2026-11-16】点任意处即可收掉（一次性，Hide 即失效）
-        outroHint.Show("引导完成！祝你好运，接下来的冒险就交给你啦～", null, 4f, false,
-            new TutorialHintUI.HintLayout
-            {
-                FontSize = 28,
-                PadX = 40f,
-                PadY = 48f,
-                LineSpacing = 1.2f,
-            });
-        // Show 内部遇战斗头顶台词会直接 return：没真显示出来就把一次性点击标志退掉，防串给下一条引导
-        if (!outroHint.IsVisible) outroHint.SetTapToHideOnce(false);
-
+        // 【2026-11-26 主人拍板】原「引导完成！祝你好运，接下来的冒险就交给你啦～」这句整段撤掉：
+        // 上面 PlayOutro「教完了，表现……勉强合格」已经是收尾话，每日登录关掉后再补一句
+        // 「引导完成」等于同一件事说两遍（主人原话「本来说是引导完成了 但是每日登录关闭后 又说了一句引导结束了」）。
+        // 原先为这句服务的「收掉别的箭头气泡 + 回滚已读标记」逻辑一并撤掉——留着会白收一次气泡。
         _townFlowBusy = false;
         _flow = null;
     }

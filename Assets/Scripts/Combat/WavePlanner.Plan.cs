@@ -340,28 +340,29 @@ public partial class WavePlanner
                 string intruderNode = "preBattle:" + CurrentChapter;
                 if (IntruderEventDirector.TryGetIntruderForNode(intruderNode, out var intruderEv)
                     && intruderEv.chapter == CurrentChapter
-                    && stageIdx == IntruderEventDirector.IntruderStageIndexForChapter(CurrentChapter))
+                    && IntruderEventDirector.IsBanditFlavorStage(stageIdx))
                 {
-                    // 批次5 修2：存档级一次性（§一.8「全篇 3-5 次」拍板）——该乱入剧情已看过 → 整块跳过：
-                    // 不打标 → Execute 不替换怪，剧情钩子查不到事件自然不播。Plan 为运行期（战斗开始时经
-                    // BattleManager 调用），读 SaveSystem 安全（Entry 链 BattleManager.Waves.cs:754 同款）；
-                    // data 为空视为未看（老档兼容，fail-open 与既有语义一致）。
-                    var intruderSave = SaveSystem.Instance?.Data;
-                    // 【2026-11-22 主人拍板】强盗怪保留到困难/噩梦：剧情对话只在普通难度播（播放层已按
-                    // NormalOnlyContentAllowed 隔离），存档级「看过」一次性只管普通难度。顺主线进度打难度局时
-                    // 普通剧情标记早写过，若难度局仍认该标记 → 整波强盗不打标、变回普通怪。难度局不认标记，
-                    // 照常打标强盗三人组、直接打；普通难度原一次性口径不变。
-                    bool intruderSeen = !BattleManager.NormalOnlyContentAllowed(bm.BattleDifficulty)
-                        ? false
-                        : (intruderSave != null && intruderSave.HasIntruderStorySeen(intruderEv.eventId));
+                    // 【2026-11-26 主人拍板】强盗当「调味剂」每关必出：打标不再受剧情「看过」旗抑制。
+                    // 老档在第6关已看过强盗剧情 → 若继续拿该旗挡打标，关3/关7 会一只强盗都不刷。
+                    // 一次性语义下沉到「剧情对话」层（CoAnnounce 分支查旗/写旗），战斗编成只认关位。
+                    // 难度口径不变：强盗怪困难/噩梦照出，剧情对话只在普通难度播（播放层 NormalOnlyContentAllowed 隔离）。
                     string trig = intruderEv.triggerNode;
                     bool waveHit = !string.IsNullOrEmpty(trig)
                         && trig.StartsWith("wave", System.StringComparison.OrdinalIgnoreCase)
                         && int.TryParse(trig.Substring(4), out int intruderWaveNo)
                         && intruderWaveNo == i + 1;
-                    if (waveHit && !intruderSeen)
+                    // 【2026-11-26 主人拍板】强盗只留关 7 当「调味剂」：替换该关末波
+                    //（关 3 同日改回本章怪物末波 / 关 7 = 压轴普通波），不再用表里的 wave1。表 triggerNode 口径保留不删，
+                    // 仅对调味关覆盖为目标末波；slot / assetIds / 记账全部沿用既有强盗链路，零外溢。
+                    if (IntruderEventDirector.IsBanditFlavorStage(stageIdx))
+                        waveHit = i == waveCount - 1;
+                    if (waveHit)
                     {
                         wave.intruderEventId = intruderEv.eventId;
+                        // 【2026-11-26 主人拍板】强盗三人组按 Boss 出场：波级打 Boss 标记 →
+                        // 播「首领来袭」大图、切 Boss 曲、不再流式叠刷（强盗槽已占满本波名额）。
+                        // 顶部血条另由 Mercenary.IsBandit 接入（见 BattleBossHpBar.PickTargets）。
+                        wave.isBossWave = true;
                         wave.intruderSlotCount = Mathf.Min(intruderEv.replaceCount, wave.monsterCount);
                         // 【2026-11-22 主人拍板】强盗和普通怪是两类，禁止同波出现：乱入波整波只出强盗。
                         // monsterCount 压到强盗数 → Execute 循环只跑这几只、全部命中强盗分支，普通怪一个不刷；
@@ -688,8 +689,12 @@ public partial class WavePlanner
         var candidate = new List<int>();
         for (int i = 0; i < _waves.Count; i++)
         {
-            if (_waves[i] != null && !_waves[i].isBossWave && i > 0)
-                candidate.Add(i);
+            if (_waves[i] == null || _waves[i].isBossWave || i == 0) continue;
+            // 【2026-11-26 修正】强盗调味波整波只出强盗，不挂事件：
+            // REINFORCE 会把 monsterCount ×1.3，而 intruderSlotCount 不变 → 强盗槽后面混进普通怪，
+            // 破坏「乱入波整波只出强盗」口径（2026-11-22 拍板）。
+            if (!string.IsNullOrEmpty(_waves[i].intruderEventId)) continue;
+            candidate.Add(i);
         }
         if (candidate.Count == 0) return;
 

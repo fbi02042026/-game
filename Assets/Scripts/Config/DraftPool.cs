@@ -46,6 +46,15 @@ public static class DraftPool
 {
     public const int CardCount = 3;
 
+    /// <summary>
+    /// 【2026-11-26 主人拍板】满员时「已上阵」的佣兵比队列里还没上阵的略容易被抽中：
+    /// 升级卡权重 3 / 换人卡权重 2 = <b>1.5 倍</b>（Weight 是 int，只能按整数比调）。
+    /// 例：队列 6 人（队内 2 / 队外 4）→ 升级占 6/14 ≈ 43%；1:1 时是 33%。
+    /// ⚠ 两个常量都必须 ≥ 1，写 0 = 该类卡永远抽不到。
+    /// </summary>
+    const int MercInSquadWeight = 3;    // 已在队里（抽到 = 等级 +1）
+    const int MercOutSquadWeight = 2;   // 队列里还没入队（抽到 = 弹「换下谁」）
+
     // ============================================================
     // 第一层：方向标签
     // ============================================================
@@ -104,16 +113,20 @@ public static class DraftPool
     }
 
     /// <param name="allowWhenFull">
-    /// 【2026-11-24 主人拍板】true = 满员也给招募卡（波间免费三选一用：抽到就弹「换下谁」）。
-    /// 默认 false = 原有口径（满员不出佣兵方向），老虎机付费抽不受影响。
+    /// 【2026-11-24 主人拍板】true = 满员也给招募卡（抽到就弹「换下谁」）。
+    /// 【2026-11-26 主人拍板】默认改为 true：「抽奖池 = 战斗队列里任意佣兵」，
+    /// 满员时换人卡与升级卡同池共存，老虎机付费抽也一样。
     /// </param>
-    public static bool HasMercContent(bool allowWhenFull = false)
+    public static bool HasMercContent(bool allowWhenFull = true)
     {
-        if ((allowWhenFull || !RunLoadout.IsMercFull) && CollectRecruitMercs(allowWhenFull).Count > 0) return true;
+        if (CollectRecruitMercs(allowWhenFull).Count > 0) return true;
         // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子没有升级卡」的口径不一致（与 2026-10-20 升星下架同款）。
         // 【2026-11-25 主人拍板恢复】局内佣兵升级重新进池（10-23「改走局外养成线」作废）：
         // 后期怪物随章节涨到 12 倍而佣兵局内恒 Lv1，被秒；恢复升级线补上这条成长通道。
+        // 【2026-11-26 主人拍板】升级卡恢复进池，但来源变了：不再按「玩家点升级」产出，
+        // 而是「再抽到已在本局队伍的同一个佣兵」= 该佣兵等级 +1（见 CollectMercLevelCards）。
+        // 升级卡（满员才产）与上面的换人卡同池，两者任一非空就算佣兵方向有货。
         if (CollectMercLevelCards().Count > 0) return true;
         // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：升星卡已不进池，这里也不能再把它算作有效内容，
         // 否则会出现「判定佣兵类有货、实际池子为空」的空转。恢复时把这行注释放开、删掉 return false。
@@ -152,7 +165,9 @@ public static class DraftPool
     /// 独立方向，权重 5 不随佣兵联动），不再混进任何类的池子 → 本参数不再往池里塞金币卡（见 <see cref="AddConsolation"/>）。
     /// 保留签名是为了不动六处调用点；<see cref="SlotMachineSystem.GoldAllowed"/> 才是「这一抽出不出金币方向」的唯一出口。
     /// </param>
-    public static List<DraftCard> BuildCards(DraftCategory c, bool consolation, bool allowMercWhenFull = false)
+    /// 【2026-11-26 主人拍板】抽奖池 = 战斗队列里任意佣兵：满员也照常出换人卡，
+    /// 所以 allowMercWhenFull 的默认值改为 true（老虎机/免费三选一/通关奖励统一口径）。
+    public static List<DraftCard> BuildCards(DraftCategory c, bool consolation, bool allowMercWhenFull = true)
     {
         switch (c)
         {
@@ -186,7 +201,7 @@ public static class DraftPool
     /// 抽奖币是独立方向（<see cref="DraftCategory.Gold"/>），只在 <see cref="PickOne"/> 的 Gold 分支出卡。
     /// </summary>
     /// <param name="forceAtLeastRare">【2026-10-24 主人拍板】保底稀有：true 时装备生成 roll 出普通（白）强制升档稀有。默认 false，概率公示等既有调用点零改动。</param>
-    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation, bool forceAtLeastRare = false, bool allowMercWhenFull = false)
+    static List<WeightedCard> BuildWeightedPool(DraftCategory c, bool consolation, bool forceAtLeastRare = false, bool allowMercWhenFull = true)
     {
         var pool = new List<WeightedCard>();
         switch (c)
@@ -196,6 +211,11 @@ public static class DraftPool
                 // 【2026-10-23 主人拍板】战斗佣兵升级暂时注释：升级卡不再进池（佣兵升级改走局外养成线）。
                 // 【2026-11-25 主人拍板恢复】升级卡重新进池（10-23 口径作废）：佣兵局内等级 =
                 // RunMercEntry.level，抽到 Lv+1 一直累积、跨关不重置、换下/离队再抽到也继承（RunLoadout 记忆）。
+                // 【2026-11-26 主人拍板定稿】池子 = 「战斗队列里每一个佣兵各一张卡」：
+                //   · 在队里的 → 升级卡（抽到 = 该佣兵等级 +1，见 CollectMercLevelCards）；
+                //   · 不在队里的 → 换人卡（抽到 = 弹「换下谁」，见 CollectRecruitMercs）。
+                // 两类都在池里（队内权重略高，3:2），不会因为满员就只剩「相同卡」。
+                // 不走击杀经验（主人：「打怪升级玩家会刷」）；不走局内升星（会与局外升星撞车）。
                 pool.AddRange(CollectMercLevelCards());
                 // 【2026-10-20 主人拍板】战斗佣兵升星暂时注释：不会抽取一样的佣兵（已在本局的招募卡直接跳过），
                 // 升星卡没有来源口径，先下架不再进池。恢复时把下面这行注释放开即可。
@@ -1007,9 +1027,10 @@ public static class DraftPool
             // Mercenary.SetHireId 幂等补挂 —— 两条链路属性完全同源。不再用 1+heroLv/2 自造局内等级
             //（10-25 换存档等级源后玩家 4/5 级恒出 Lv3）。卡面连等级数字也不显示（见下方 Desc）。
             int level = 1;
-            // 【2026-10-19 主人拍板】只能从上架队列出 → 每名上架佣兵单独等概率（权重全 1），
+            // 【2026-10-19 主人拍板】只能从上架队列出 → 每名上架佣兵单独等概率，
             // 旧的「空池全池按稀有度加权（普通62/稀有33/传奇5）」随空池回落一起作废。
-            int weight = 1;
+            // 【2026-11-26 主人拍板】队外的权重比队内低一点（见 MercOutSquadWeight / MercInSquadWeight）。
+            int weight = MercOutSquadWeight;
             // 2026-09-17 稀有度映射统一走 SkillRarityUtil（三档对三档，佣兵不出「史诗」），
             // 卡面文字也随之统一，别再各写一份三目。
             SkillRarity rar = SkillRarityUtil.FromMerc(def.Rarity);
@@ -1038,7 +1059,9 @@ public static class DraftPool
                     Star = star,
                     MercLevel = level,
                     IsAffinity = false,
-                    PowerDelta = PowerCalc.MercPowerOf(def.HireId, def.AssetId, level)
+                    // 【2026-11-26】卡面 +战力按存档永久等级算（等级唯一真源），不再按恒 1 的卡面值
+                    PowerDelta = PowerCalc.MercPowerOf(def.HireId, def.AssetId,
+                        Mathf.Max(1, MercLevelSystem.LevelOf(def.HireId)))
                 },
                 Weight = weight,
                 Key = "merc_" + def.HireId
@@ -1051,16 +1074,26 @@ public static class DraftPool
         return list;
     }
 
+    /// <summary>
+    /// 【2026-11-26 主人拍板定稿】「抽到同样的佣兵 → 该佣兵等级 +1」的卡。
+    /// <para>只在队伍满员（2/2）后产出：没满员时佣兵卡应该用来凑人，不该被升级卡挤占。</para>
+    /// <para>与换人卡（CollectRecruitMercs）同池，权重略高（MercInSquadWeight : MercOutSquadWeight = 3:2）：抽到队内的 = 升级，抽到队外的 = 换人。</para>
+    /// <para>等级真源唯一 = <see cref="MercLevelSystem"/>（存档）；这里只读它算卡面战力差，不自己数等级。</para>
+    /// <para>满级的佣兵不产卡（否则会抽到一张没反应的卡）。</para>
+    /// </summary>
     static List<WeightedCard> CollectMercLevelCards()
     {
         var list = new List<WeightedCard>();
+        if (!RunLoadout.IsMercFull) return list;
         var mercs = RunLoadout.Mercs();
         for (int i = 0; i < mercs.Count; i++)
         {
             var m = mercs[i];
             if (m == null || string.IsNullOrEmpty(m.mercId)) continue;
-            string key = m.hireId ?? m.mercId;
-            int next = Mathf.Max(1, m.level) + 1;
+            string key = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+            int cur = MercLevelSystem.LevelOf(key);
+            if (cur >= MercLevelSystem.MaxLevel) continue;   // 满级不出卡
+            int next = cur + 1;
             // 【2026-11-25 主人拍板】卡面不带升级信息（原「等级 Lv5 → Lv6　生命/攻击成长」整行去掉），
             // 只留稀有度、与招募卡同款；等级统一在佣兵信息框 / 头像栏看。
             var rar = SkillRarityUtil.FromMercStar(m.star);
@@ -1078,11 +1111,13 @@ public static class DraftPool
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
                     MercLevel = next,
-                    // 升 1 级的战力增量：求差走同一套属性公式，保证与 RunLoadout 入账、佣兵面板完全一致
+                    // 升 1 级的战力增量：求差走同一套属性公式，两端都取存档等级（不读 m.level 那个旧字段）
                     PowerDelta = PowerCalc.MercPowerOf(m.hireId, m.mercId, next)
-                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level))
+                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, cur)
                 },
-                Weight = 8,
+                // 【2026-11-26 主人拍板】已上阵的比队外略容易被抽中：3 : 2（1.5 倍），
+                // 比例只在 MercInSquadWeight / MercOutSquadWeight 两个常量里调，别在这里写裸数字。
+                Weight = MercInSquadWeight,
                 Key = "merc_lv_" + key
             });
         }
@@ -1109,15 +1144,14 @@ public static class DraftPool
                     Id = key,
                     HireId = m.hireId,
                     Title = m.displayName,
-                    Desc = $"★{star} → ★{star + 1}　星级 +1，同时等级 +1",
+                    // 【2026-11-26 主人拍板】等级不再随升星 +1（等级真源 = 存档永久等级），只升星。
+                    Desc = $"★{star} → ★{star + 1}",
                     Rarity = SkillRarityUtil.FromMercStar(star + 1),
                     Tag = SynergyTag.Summon,
                     Star = star + 1,
-                    MercLevel = Mathf.Max(1, m.level) + 1,
-                    // 升 1 星且升 1 级的战力增量：只有等级那一档真加属性（局内星级只加 MP 池），
-                    // 所以求差同样走属性公式，与 RunLoadout 入账、佣兵面板一致
-                    PowerDelta = PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level) + 1)
-                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, Mathf.Max(1, m.level))
+                    MercLevel = Mathf.Max(1, m.level),   // 【2026-11-26】等级不变，只升星
+                    // 局内星级只加 MP 池，不加血攻防 → 战力增量为 0（与 RunLoadout 入账、佣兵面板一致）
+                    PowerDelta = 0
                 },
                 Weight = 4,
                 Key = "merc_star_" + key

@@ -42,6 +42,13 @@ public static class MonsterAffixBanter
         var bm = BattleManager.Instance;
         if (bm != null && bm.IsEndlessRift) return;
         if (m == null || m.isDead) return;
+        // 【2026-11-26 主人拍板】精英/Boss 出场不冒词缀吐槽气泡：
+        // ① 它们有自己的演出（引导局宿敌对白 / 正式关 Boss 大图），和台词抢同一个
+        //    BattleHeadTalkUI；后一句 CoPlayLine 开头 HideNow 会把前一句掐掉，
+        //    表现就是「我勒个豆」一闪而过，接着才是「来了个大的」（引导精英出场实锤）。
+        // ② 精英/Boss 的词缀本来就显示在屏幕血条后缀（Monster.Init.cs 的精英/Boss 词缀通路），
+        //    气泡属于重复信息。普通词缀怪的进屏介绍照旧。
+        if (m.IsBossUnit || m.IsEliteWave) return;
         var affix = MonsterAffix.Get(m);
         if (affix == null || affix.Count <= 0) return;
 

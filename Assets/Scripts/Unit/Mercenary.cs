@@ -197,6 +197,9 @@ public partial class Mercenary : UnitBase
     {
         if (PassiveRunner != null && target != null && !target.isDead && damage > 0f)
             PassiveRunner.OnBasicAttackHit(target, attr != null ? attr.GetAttr(AttrType.Attack) : 0f);
+        // 【2026-11-26】阿刃专属：命中即记一次 → 下次索敌换脆皮（Mercenary.Bandit.cs）；其余单位零开销早退。
+        if (banditRole == BanditRole.Arens && damage > 0f)
+            OnBanditTargetHit(target);
     }
 
     public void Init(string id, int level = 1)
@@ -237,6 +240,7 @@ public partial class Mercenary : UnitBase
         _healWaitTimer = 0f;
         _healWaitAbandoned = false;
         HealCastBar.Cancel(this);   // 切关/对象池复用：上一局没读完的奶条不许留到新关
+        ResetBanditState();         // 【2026-11-26】强盗打标/闪现互斥/命中计数随复用归零（详见 Mercenary.Bandit.cs）
     }
 
     public void SetHireId(string id)
