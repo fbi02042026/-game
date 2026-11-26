@@ -124,6 +124,12 @@
    **SDK 包与微信小游戏配置不入库**（2026-11-06 主人拍板：提交时排除 `LocalPackages/`、`Packages/com.google.external-dependency-manager@1.2.179/`、
    TapTap 依赖改动（manifest / packages-lock / PackageManagerSettings）、微信小游戏配置（MiniGameConfig / activeSubplatform / WeixinMiniGame 贴图 meta）。
    同理 `minigame/`（微信构建产物，约 280MB）与 `TextToolDatas/`（约 83MB 数据）也不入库。
+5. 🔴 **`activeSubplatform` 两个 GitHub 仓库一律排除提交（2026-11-26 主人拍板，覆盖 11-06 误提交）**：
+   `ProjectSettings/ProjectSettings.asset` 里的 `activeSubplatform`（0=主平台/安卓，1=微信小游戏子平台）
+   属**各机本地状态**，**小游戏端 + 安卓端两个 GitHub 仓库都不得提交这一行的改动**。
+   提交时若该文件 diff 含此行，**只还原这一行**再提交（其余字段照常入库，不要整文件跳过）。
+   `.gitignore` 按文件生效、无法按行排除，故只能靠此纪律；历史 `64794cab`（1→0）是误提交，以后不再复现。
+   本地按需切换，切换后不必再管远程；`git pull` 遇到远程动过该文件时，保留本地该行即可。
 
 ## 4. 工作纪律
 
