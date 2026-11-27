@@ -87,7 +87,8 @@ public static class BattleResultScreen
     /// </summary>
     public static void Show(bool victory, BattleRunStats stats, Action onDone, bool battleSceneOnly = true,
         List<SettlementRewardCell> extraCells = null, bool holdUntilTap = false,
-        Action onNextStage = null, Func<bool> onNextStageGuard = null, Action onRewardsShown = null)
+        Action onNextStage = null, Func<bool> onNextStageGuard = null, Action onRewardsShown = null,
+        string unlockText = null)
     {
         if (!Application.isPlaying || (battleSceneOnly && !GameSceneGate.IsBattle))
         {
@@ -107,7 +108,8 @@ public static class BattleResultScreen
         // 显式限定 UnityEngine.Object；本类非 MonoBehaviour，不能裸调 Instantiate。
         var go = UnityEngine.Object.Instantiate(prefab);
         var ui = go.GetComponent<BattleResultScreenUI>() ?? go.AddComponent<BattleResultScreenUI>();
-        ui.Play(victory, stats, onDone, extraCells, holdUntilTap, onNextStage, onNextStageGuard, onRewardsShown);
+        ui.Play(victory, stats, onDone, extraCells, holdUntilTap, onNextStage, onNextStageGuard, onRewardsShown,
+            unlockText);
     }
 
     /// <summary>
@@ -287,6 +289,11 @@ public class BattleResultScreenUI : MonoBehaviour
     float _confirmBaseX;       // 确定钮预制体原 x（= 主人摆的可分享位；打开时读值，不写死）
     bool _shareEntryReported;  // 分享入口曝光埋点只报一次（可分享态才算曝光）
 
+    /// <summary>【2026-11-27 主人拍板】本关新开启的功能清单（多行；null = 不建框）。</summary>
+    string _unlockText;
+    Transform _unlockBannerT;  // 动态建的金框黄字框（确定钮下方），销毁随界面
+    Transform _rewardPanelT;   // 胜利节点下的奖励 Panel（建新功能框时当父节点，同 BuildShareRewardRow 口径）
+
     // —— 失败选择模式（复活/返回）专用状态 ——
     bool _choiceMode;
     bool _chosen;
@@ -306,10 +313,13 @@ public class BattleResultScreenUI : MonoBehaviour
     /// 【2026-10-31】holdUntilTap = 失败界面停留后不自动收，等点击（见 <see cref="BattleResultScreen.Show"/>）。</summary>
     public void Play(bool victory, BattleRunStats stats, Action onDone, List<SettlementRewardCell> extraCells = null,
         bool holdUntilTap = false, Action onNextStage = null, Func<bool> onNextStageGuard = null,
-        Action onRewardsShown = null)
+        Action onRewardsShown = null, string unlockText = null)
     {
         _onDone = onDone;
         _holdUntilTap = holdUntilTap;
+        // 【2026-11-27 主人拍板】本关新开启功能清单（多行文本，null = 不显示）；
+        // 真源在 FeatureUnlock.NewlyUnlockedText，调用方算好传进来，本类只管画。
+        _unlockText = unlockText;
         // 【2026-11-14 修误点】只有胜利演出需要「早期误点作废」；失败/复活选择/竞技场失败
         // 走 CoPlay/PlayChoice/PlayArenaFailure，_victoryFlow=false 让 Skip 保持原行为零改动。
         _victoryFlow = victory;
@@ -417,6 +427,7 @@ public class BattleResultScreenUI : MonoBehaviour
             Debug.LogError("[BattleResultScreen] 胜利节点下缺奖励 Panel（预制体结构被改过？），奖励区不显示");
             return;
         }
+        _rewardPanelT = rewardPanel;
         _rewardCg = rewardPanel.GetComponent<CanvasGroup>();
         if (_rewardCg == null)
             _rewardCg = rewardPanel.gameObject.AddComponent<CanvasGroup>();
@@ -482,6 +493,88 @@ public class BattleResultScreenUI : MonoBehaviour
         bool isTutorial = BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
         RefreshShareLayout(isTutorial);
     }
+
+    /// <summary>
+    /// 【2026-11-27 主人拍板「通关战斗结束界面下面上加一条框和几行黄字，把开启的功能写上」】
+    /// 在【确定/下一关】按钮行下方挂一条金框黄字框，多行写本关新开启的功能（文案真源 =
+    /// <see cref="FeatureUnlock.NewlyUnlockedText"/>，本类只负责画）。
+    /// 底框用主人点名素材「角色_0002s_0010_图层-7」（深底金框九宫格，与概率公示/装备掉落弹窗同款，
+    /// 2026-11-27 下午拍板）；黄字统一游戏「金黄字」口径（同「限定」角标），字号 24 同开奖卡第三行。
+    /// 与 BuildShareRewardRow 同套路：运行时建树、不碰预制体（铁律 9/32 —— 预制体与已有节点零改动）。
+    /// 尺寸走本段常量，改样式只动这里；不接 raycast，绝不挡「点任意处跳过」。
+    /// </summary>
+    void BuildUnlockBanner(Transform rewardPanel)
+    {
+        if (string.IsNullOrEmpty(_unlockText) || rewardPanel == null || _confirmRt == null) return;
+
+        // 行数：正文按换行拆 + 顶部标题 1 行（文案里不折行，宽度按最长一行给足）
+        int bodyLines = _unlockText.Split('\n').Length;
+        float h = Mathf.Max(UnlockMinHeight, (bodyLines + 1) * UnlockLineH + UnlockPadY * 2f);
+
+        var go = new GameObject("新功能开启", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        go.transform.SetParent(rewardPanel, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.sizeDelta = new Vector2(UnlockBannerWidth, h);
+
+        var bg = go.GetComponent<Image>();
+        // 底框：项目标配深底金框（九宫格 spriteBorder 已在导入设置配好，Sliced 拉伸不变形）
+        var frame = Resources.Load<Sprite>(UnlockFrameRes);
+        if (frame != null)
+        {
+            bg.sprite = frame;
+            bg.type = Image.Type.Sliced;
+            bg.color = Color.white;
+        }
+        else
+        {
+            Debug.LogError("[BattleResultScreen] 新功能框底图缺失：Resources/" + UnlockFrameRes +
+                           ".png（应按铁律4从 Assets/Art/UI/NavCharacter/ 同名挪入），退回纯色底");
+            bg.color = UnlockBannerBg;   // 缺图兜底纯色，不静默
+        }
+        bg.raycastTarget = false;
+
+        // 位置：确定钮实际底边往下（按钮已被 EnlargeResultButton 缩放过，按实际算，同 BuildShareRewardRow）
+        float btnHalfH = _confirmRt.rect.height * Mathf.Abs(_confirmRt.localScale.y) * 0.5f;
+        float btnBottomY = _confirmRt.anchoredPosition.y - btnHalfH;
+        rt.anchoredPosition = new Vector2(0f, btnBottomY - UnlockGapY - h * 0.5f);
+
+        var txtGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        txtGo.transform.SetParent(go.transform, false);
+        var txtRt = (RectTransform)txtGo.transform;
+        txtRt.anchorMin = new Vector2(0f, 0f);
+        txtRt.anchorMax = new Vector2(1f, 1f);
+        txtRt.offsetMin = new Vector2(UnlockPadX, UnlockPadY);
+        txtRt.offsetMax = new Vector2(-UnlockPadX, -UnlockPadY);
+
+        var txt = txtGo.GetComponent<Text>();
+        txt.font = GameFonts.GetChinese();
+        txt.fontSize = UnlockFontSize;
+        txt.fontStyle = FontStyle.Normal;
+        txt.alignment = TextAnchor.MiddleCenter;
+        txt.color = UnlockTextColor;
+        txt.raycastTarget = false;
+        txt.horizontalOverflow = HorizontalWrapMode.Overflow;   // 文案已按行写好，不靠自动折行
+        txt.verticalOverflow = VerticalWrapMode.Overflow;
+        txt.lineSpacing = 1.1f;
+        txt.text = "新功能开启\n" + _unlockText;
+
+        _unlockBannerT = go.transform;
+    }
+
+    // ── 新功能框样式（2026-11-27 下午拍板：素材底框 + 统一金黄字；改观感只动这一组）─────────
+    /// <summary>底框素材：主人点名「角色_0002s_0010_图层-7」（与概率公示/装备掉落弹窗底框同款）。</summary>
+    const string UnlockFrameRes = "UI/NavCharacter/角色_0002s_0010_图层-7";
+    const float UnlockBannerWidth = 560f;   // 与奖励面板内宽（620 - 两侧留白）对齐，比按钮行宽一圈
+    const float UnlockMinHeight = 100f;     // 不小于原图视觉高（353×125 的框压扁会挤边框）
+    const float UnlockPadX = 44f;           // 左右留白避开金框装饰（原图边框宽 66/83px，等比缩放后约 40px）
+    const float UnlockPadY = 16f;
+    const float UnlockLineH = 34f;          // 单行高度（24 号字 + 行距）
+    const float UnlockGapY = 22f;           // 与按钮行底边的间距
+    const int   UnlockFontSize = 24;        // 同开奖卡第三行（DraftPrizePopupUI Third 行）
+    static readonly Color UnlockBannerBg   = new Color(0.10f, 0.10f, 0.13f, 0.94f);   // 缺图兜底纯色（同开奖卡底）
+    static readonly Color UnlockTextColor  = new Color(1f, 0.9f, 0.5f, 1f);           // 金黄字（同「限定」角标口径）
 
     /// <summary>
     /// 【2026-10-29 主人拍板 v4（预制体手摆版）】绑主人预制体手摆的分享节点（缺了 LogError 不静默，铁律 14）：
@@ -819,11 +912,14 @@ public class BattleResultScreenUI : MonoBehaviour
         // 升级窗一定在本界面上弹出并看完，不会再退化成「跳过→回城后弹到冒险界面」。
         if (!_skipped)
             _onRewardsShown?.Invoke();
+        // 【2026-11-27 主人拍板】先在按钮行下方挂「新功能开启」金框黄字框（本关解锁了功能才建；
+        // 第 3 关也建 = 日常/周常任务，见 FeatureUnlock.NewlyUnlockedText）。
+        // 再弹宠物指路气泡：第 3 关两样同刻出现，气泡锚到本框底（_unlockBannerT）往下错开，两框不撞。
+        BuildUnlockBanner(_rewardPanelT);
         // 【2026-11-25 主人拍板】第一章第三关首通：结算界面下方贴一条「回角色界面开启宠物上阵」气泡。
-        // 判定与文案真源在 PetFeatureGuide；本类只负责在奖励展示完这个时点把确定按钮当锚点交出去。
-        // 【2026-11-25 主人拍板】结算界面出完就弹：不等战斗头顶台词（原 8s 等待太慢）。
-        // 台词残留不强制收：结算引导走 TutorialHintUI.Show 的单次放行，剧情演出零影响。
-        PetFeatureGuide.TryShowSettlementGuide(_confirmRt);
+        // 判定与文案真源在 PetFeatureGuide；本类只负责在奖励展示完这个时点把锚点交出去。
+        // 【2026-11-27】有解锁框时锚到框底，没框时仍锚确定按钮（原口径）。
+        PetFeatureGuide.TryShowSettlementGuide(_unlockBannerT != null ? (RectTransform)_unlockBannerT : _confirmRt);
         // 奖励演完 → 放开「点任意处跳过」（之后照旧可跳过收窗）；升级窗显示期间仍由 Skip() 挡住。
         _blockEarlySkip = false;
 

@@ -6,8 +6,9 @@ using NUnit.Framework;
 /// 锚定拍板口径：
 ///   - 每日次数三本各自独立计数，都是 2 次（2026-10-24 拍板）
 ///   - 体力：金币/徽记/礼物 10、卷轴 15（2026-10-24 拍板；礼物 10-26 未单独给价按同价）
-///   - 章节门槛：金币=第1章、徽记=第2章、卷轴=第3章、礼物=第1章（FeatureUnlock 唯一出口）
-///   - 战斗场景章：金=1 森林 / 徽=2 亡灵 / 卷=6 洞穴 / 礼=6 暂同洞穴（2026-10-24 拍板）
+///   - 关卡门槛（2026-11-27 主人拍板重排·下午三档版）：四种副本全压进第一章，按**全局关号**分两档——
+///     金币 / 徽记 = 通关第 6 关；卷轴 / 礼物 = 通关第 10 关（第一章通关）。FeatureUnlock 唯一出口。
+///   - 战斗场景章：金=1 森林 / 徽=2 亡灵 / 卷=6 洞穴 / 礼=6 暂同洞穴（2026-10-24 拍板；与解锁门槛无关）
 ///   - TEST_OPEN_ALL=false（2026-11-07 主人拍板：正式包恢复开放日 + 难度逐级解锁）
 ///     → 回测试期翻 true 时，下面两条正式口径用例要按测试口径改回期望值，不许删测试绕过。
 /// </summary>
@@ -92,25 +93,52 @@ public class ActivityDungeonRulesTests
         StringAssert.Contains("周六", ActivityDungeonRules.OpenDayHint(ActivityDungeonKind.Gift));
     }
 
-    // ---------- 章节门槛（FeatureUnlock 唯一出口） ----------
+    // ---------- 关卡门槛（FeatureUnlock 唯一出口） ----------
 
     [Test]
     public void GateChapter_DelegatesToFeatureUnlock_Pinned()
     {
-        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Gold), "金币=第1章（D2）");
-        Assert.AreEqual(2, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Badge), "徽记=第2章（与金币错开）");
-        Assert.AreEqual(3, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Scroll), "卷轴=第3章");
-        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Gift), "礼物=第1章");
+        // 2026-11-27 起四种副本全在第一章内按「关号」解锁，不再按章分摊，故 GateChapter 恒返回第 1 章；
+        // 真正的区分在 FeatureUnlock.DungeonOpen（第 6 关 / 第 10 关两档）。
+        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Gold), "金币=第1章内（通关第6关）");
+        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Badge), "徽记=第1章内（通关第6关）");
+        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Scroll), "卷轴=第1章内（通关第10关）");
+        Assert.AreEqual(1, ActivityDungeonRules.GateChapter(ActivityDungeonKind.Gift), "礼物=第1章内（通关第10关）");
+    }
+
+    /// <summary>造一个「第 1 章已通到第 n 关（1 基）」的存档：清 1_0 .. 1_(n-1)。</summary>
+    static SaveData ClearedUpTo(int stageNo1Based)
+    {
+        var d = new SaveData();
+        for (int i = 0; i < stageNo1Based && i < 10; i++) d.clearedStages.Add("1_" + i);
+        return d;
     }
 
     [Test]
-    public void DungeonOpen_ByClearedChapters()
+    public void DungeonOpen_ByStageGate()
     {
-        var data = new SaveData();
-        data.clearedChapterIds.Add(1);
-        Assert.IsTrue(FeatureUnlock.DungeonOpen(data, ActivityDungeonKind.Gold), "通了第1章 → 金币本开");
-        Assert.IsFalse(FeatureUnlock.DungeonOpen(data, ActivityDungeonKind.Badge), "没通第2章 → 徽记本关");
-        Assert.IsFalse(FeatureUnlock.DungeonOpen(data, ActivityDungeonKind.Scroll), "没通第3章 → 卷轴本关");
+        var none = new SaveData();
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(none, ActivityDungeonKind.Gold), "一关没通 → 金币本关");
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(none, ActivityDungeonKind.Scroll), "一关没通 → 卷轴本关");
+
+        var s5 = ClearedUpTo(5);
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(s5, ActivityDungeonKind.Gold), "只到第5关 → 金币本仍关（差第6关）");
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(s5, ActivityDungeonKind.Badge), "只到第5关 → 徽记本仍关");
+
+        var s6 = ClearedUpTo(6);
+        Assert.IsTrue(FeatureUnlock.DungeonOpen(s6, ActivityDungeonKind.Gold), "通第6关 → 金币本开");
+        Assert.IsTrue(FeatureUnlock.DungeonOpen(s6, ActivityDungeonKind.Badge), "通第6关 → 徽记本开");
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(s6, ActivityDungeonKind.Scroll), "未通第10关 → 卷轴本关");
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(s6, ActivityDungeonKind.Gift), "未通第10关 → 礼物本关");
+
+        var s8 = ClearedUpTo(8);
+        Assert.IsTrue(FeatureUnlock.DungeonOpen(s8, ActivityDungeonKind.Gold), "通第8关 → 金币本早该开了");
+        Assert.IsFalse(FeatureUnlock.DungeonOpen(s8, ActivityDungeonKind.Scroll), "未通第10关 → 卷轴本关");
+
+        var s10 = ClearedUpTo(10);
+        Assert.IsTrue(FeatureUnlock.DungeonOpen(s10, ActivityDungeonKind.Scroll), "第一章通关 → 卷轴本开");
+        Assert.IsTrue(FeatureUnlock.DungeonOpen(s10, ActivityDungeonKind.Gift), "第一章通关 → 礼物本开");
+
         Assert.IsFalse(FeatureUnlock.DungeonOpen(null, ActivityDungeonKind.Gold), "null 存档不炸且判未解锁（fail-closed）");
         Assert.IsFalse(FeatureUnlock.AnyDungeonOpen(null));
     }
@@ -119,9 +147,9 @@ public class ActivityDungeonRulesTests
     public void AnyDungeonOpen_AnyOneUnlocked()
     {
         var data = new SaveData();
-        Assert.IsFalse(FeatureUnlock.AnyDungeonOpen(data), "全没通 → 标签页不可切");
-        data.clearedChapterIds.Add(2);
-        Assert.IsTrue(FeatureUnlock.AnyDungeonOpen(data), "只通第2章（徽记）→ 标签页可切");
+        Assert.IsFalse(FeatureUnlock.AnyDungeonOpen(data), "一关没通 → 标签页不可切");
+        data = ClearedUpTo(6);
+        Assert.IsTrue(FeatureUnlock.AnyDungeonOpen(data), "通第6关（金币/徽记开）→ 标签页可切");
     }
 
     // ---------- 每日次数（三本独立计数 + 日刷新） ----------

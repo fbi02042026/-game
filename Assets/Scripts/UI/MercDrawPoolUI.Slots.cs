@@ -187,13 +187,16 @@ public partial class MercDrawPoolUI : MonoBehaviour
     }
 
     /// <summary>
-    /// 锁格解锁条件文案（点击 toast 用，见 Swap.OnPoolSlotClick；第 4 格 = 通关第 2 章，
-    /// 第 5 格 = 2026-10-23 主人拍板改 100 钻解锁，条件在 SaveData.DrawPoolSlots）。
-    /// 【2026-11-01 主人拍板】格子上不再显示本文案（改「未解锁」），本方法只供 toast 取条件。
+    /// 锁格解锁条件文案（点击 toast 用，见 Swap.OnPoolSlotClick）。
+    /// 【2026-11-27 主人拍板】第 4 格 = 通关第 10 关（第一章通关），第 5 格 = 花 100 钻解锁；
+    /// 条件真源在 SaveData.DrawPoolSlots。格子上只显示「未解锁」，本文案只供 toast 取条件。
     /// </summary>
     static string LockHintOf(int index)
     {
-        return index == 3 ? "通关第 2 章" : index == 4 ? $"花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁" : "";
+        // 返回完整 toast 文案（调用方不再拼后缀，避免「解锁后开启」这类病句）
+        return index == 3 ? "通关第 10 关后开启"
+             : index == 4 ? $"花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁"
+             : "";
     }
 
     // ============================================================

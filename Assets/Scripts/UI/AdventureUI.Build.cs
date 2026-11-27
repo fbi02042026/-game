@@ -292,20 +292,21 @@ public partial class AdventureUI
     void BuildStageNodes(Transform container)
     {
         // 相对于容器中心的偏移（归一化：容器宽550×高约480，可自由调整）
-        // 参考截图顺序：1-1左上，1-2中上，1-3右上，BOSS中，1-4右中，1-5右下，1-6右下，1-6左，1-7左下
+        // 参考截图顺序：第1关左上，第2关中上，第3关右上，BOSS中，第4关右中，第5关右下，第6关右下，第6关左，第7关左下
         var positions = new Vector2[]
         {
-            new Vector2(-180,  140),  // 1-1
-            new Vector2( -40,  175),  // 1-2
-            new Vector2(  90,  185),  // 1-3（高亮）
+            new Vector2(-180,  140),  // 第 1 关
+            new Vector2( -40,  175),  // 第 2 关
+            new Vector2(  90,  185),  // 第 3 关（高亮）
             new Vector2(   0,   50),  // BOSS
-            new Vector2( 160,   80),  // 1-4
-            new Vector2( 145,  -40),  // 1-5
-            new Vector2(  50, -130),  // 1-6 右
-            new Vector2(-130, -130),  // 1-6 左（截图有两个1-6，一个应为1-7的占位）
-            new Vector2(-175,  -45),  // 1-7
+            new Vector2( 160,   80),  // 第 4 关
+            new Vector2( 145,  -40),  // 第 5 关
+            new Vector2(  50, -130),  // 第 6 关 右
+            new Vector2(-130, -130),  // 第 6 关 左（截图有两个第6关，一个应为第7关的占位）
+            new Vector2(-175,  -45),  // 第 7 关
         };
-        string[] labels = { "1-1","1-2","1-3","BOSS","1-4","1-5","1-6","1-6","1-7" };
+        // 【2026-11-27 主人拍板】全局关号 1~80：第一章 9 个节点按 1~7 + BOSS 显示，不再写「1-1」这种两级格式。
+        string[] labels = { "1","2","3","BOSS","4","5","6","6","7" };
         bool[]   isBoss = { false,false,false,true,false,false,false,false,false };
         int[]    stars  = { 3,3,4,4,3,3,3,3,3 };
 
@@ -457,7 +458,7 @@ public partial class AdventureUI
         float y = -14f;
 
         stageNameLabel = CreateTextGO(panel.transform, "StageName",
-            "1-3  哥布林营地", DetailNameFontSize, TextAnchor.MiddleLeft,
+            "第 3 关  哥布林营地", DetailNameFontSize, TextAnchor.MiddleLeft,
             new Vector2(16, y - 12), new Vector2(400, 32));
         stageNameLabel.color = new Color(1f, 0.92f, 0.7f);
 

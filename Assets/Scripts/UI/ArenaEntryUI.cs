@@ -21,11 +21,9 @@ public static class ArenaEntryUI
 
     const string IconPath = "UI/Art/Main/对战";   // 主界面美术包里的对战图标（交叉双剑+蓝红火焰，2026-10-30 主人指定）
 
-    // ── 解锁门槛（2026-11-02 主人拍板；2026-11-25 提前到第 5 关）──────
-    // 2026-11-25 主人原话「第 5 关吧」：通关第 1 章第 5 关（章内小 Boss 节，sub0 = 4）就开，
-    // 原「通关 1-10 = 完成第 1 章才开」作废；与佣兵招募（FeatureUnlock.MercRecruitOpen = HasStageCleared(1,4)）同批。
-    // 🔴 路线 B 后每章 = 1 座大关 × 10 节（关号 = sub0 + 1），别再按「第 N 座大关末关」换算——
-    //    旧注释里的「显示关卡 2-5 / 3-1 开启」是路线 B 之前的残留口径，已废。
+    // ── 解锁门槛（2026-11-02 立；11-25 提前到第 5 关；11-27 改全局关号）──────
+    // 通关全局第 5 关（章内小 Boss 节，sub0 = 4）就开，与佣兵招募同批（FeatureUnlock.MercRecruitOpen）。
+    // 🔴 关卡一律写全局关号 1~80，不再写「第 1 章第 5 关」「1-10」「2-5 / 3-1」这种两级格式。
     /// <summary>解锁所需的章内节下标（0 起）：第 5 关 = 4。真源在 FeatureUnlock.ARENA_UNLOCK_SUB0，
     /// 本类只读它——门槛只许有一处常量，别在这里再写一份数字。</summary>
     public static int UnlockSub0 => FeatureUnlock.ARENA_UNLOCK_SUB0;

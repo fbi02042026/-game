@@ -48,7 +48,7 @@ public static partial class SlgMapUI
     {
         if (!SlgSystem.IsUnlocked())
         {
-            GlobalToastUI.ShowQueued("通关第 1 章第 10 关后开启城镇入口");
+            GlobalToastUI.ShowQueued("通关第 10 关后开启城镇入口");
             return;
         }
         EnsureCanvas();

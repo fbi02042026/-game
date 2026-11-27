@@ -757,14 +757,17 @@ public class ChapterManager : Singleton<ChapterManager>
     }
 
     /// <summary>
-    /// 获取关卡显示名称 "1-3"
-    /// 【2026-11-01 主人拍板】编号 = 全局大关号-小关号（大关跨篇连续：1-1…10-5 → 11-1…18-5 → …），
-    /// 不再是「章号-小关号」（旧写法第 2 章第 1 关会显示 2-1，与新编号口径冲突）。
+    /// 获取关卡显示名称（2026-11-27 主人拍板：全局关号 1~80 的纯数字，如 "3"）。
+    /// 旧口径「大关号-小关号」（1-1 / 10-5 / 11-1）作废，不再出现连字符格式。
+    /// 换算：本章之前的累计关数 + 本关在章内的节序号（1 起）。
     /// </summary>
     public string GetStageDisplayName(int stageIndex)
     {
         int globalGrand = ActProgressionDefs.StartGrandOf(currentChapter) + Mathf.Max(1, currentGrand) - 1;
-        return $"{globalGrand}-{stageIndex + 1}";
+        int inAct = ActProgressionDefs.GlobalStageInAct(globalGrand, stageIndex + 1);
+        int before = 0;
+        for (int a = 1; a < currentChapter; a++) before += ActProgressionDefs.StageCountOf(a);
+        return (before + inAct).ToString();
     }
 
     /// <summary>

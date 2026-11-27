@@ -26,8 +26,8 @@ public partial class MercDrawPoolUI : MonoBehaviour
         if (index >= slots)
         {
             // 【2026-10-20 主人拍板】点锁格必须弹提示 —— force 弹，防被酒馆气泡/对话压制吞掉
-            // 【2026-10-23 主人拍板】第 5 格（最后一格）在通第 2 章后可花钻解锁：弹确认窗，确认扣钻开格；
-            // 没通第 2 章时按顺序提示先通关（花钻开的一定是最后一格，不乱序）。
+            // 【2026-11-27 主人拍板】第 5 格（最后一格）第一章通关后可花钻解锁：弹确认窗，确认扣钻开格；
+            // 没通第一章时按顺序提示先通关（花钻开的一定是最后一格，不乱序）。
             if (index == SaveData.DrawPoolMaxSlots - 1)
             {
                 if (data != null && data.CanPaidUnlockDrawPoolSlot)
@@ -35,15 +35,17 @@ public partial class MercDrawPoolUI : MonoBehaviour
                     TryPaidUnlockLastSlot(data);
                     return;
                 }
-                if (data == null || !data.HasClearedChapter(2))
+                // 🔴 HasClearedChapter 是「已解锁」（第 1 章开局即真），判通关要走 HasTrulyClearedChapter
+                if (data == null || !data.HasTrulyClearedChapter(1))
                 {
-                    // 【2026-11-01 主人拍板】点锁格弹解锁条件 toast：第 5 格条件 = 通关第 2 章 + 花钻，一次说全
+                    // 第 5 格条件 = 第一章通关（第 10 关）+ 花钻；未通第一章先提示通关
                     UIManager.Instance?.ShowToast(
-                        $"通关第 2 章后，可花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁", true);
+                        $"通关第 10 关后，可花费{SaveData.DrawPoolPaidUnlockCost}钻石解锁", true);
                     return;
                 }
             }
-            UIManager.Instance?.ShowToast(LockHintOf(index) + "后开启", true);
+            string hint = LockHintOf(index);
+            UIManager.Instance?.ShowToast(string.IsNullOrEmpty(hint) ? "该格尚未开放" : hint, true);
             return;
         }
         var ordered = _picked;

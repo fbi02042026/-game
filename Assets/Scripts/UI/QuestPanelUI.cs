@@ -431,7 +431,7 @@ public class QuestPanelUI : MonoBehaviour
         if (save != null && !save.DailyTasksUnlocked)
         {
             if (_headerText != null) _headerText.text = "每日任务";
-            AddRow("通关 1-3 后开启", "打通 1-3 解锁每日 / 周常任务", 0, null);
+            AddRow("通关第 3 关后开启", "打通第 3 关解锁每日 / 周常任务", 0, null);
             return;
         }
 

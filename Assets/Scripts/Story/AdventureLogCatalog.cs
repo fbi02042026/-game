@@ -544,13 +544,13 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "C1A", Title = "第一章·一 蘑菇小径", Unlock = "通关 1-1",
+            Id = "C1A", Title = "第一章·一 蘑菇小径", Unlock = "通关第 1 关",
             Summary = "玩家独自深入暮影森林，遭遇大量森野蘑菇与喷孢蘑菇，发现怪物比往年更躁动。",
             Extra = "这些蘑菇往年不会离开腐木区，有人在惊扰它们。"
         },
         new StoryEntry
         {
-            Id = "C1B", Title = "第一章·二 浆果与史莱姆", Unlock = "通关 1-3",
+            Id = "C1B", Title = "第一章·二 浆果与史莱姆", Unlock = "通关第 3 关",
             Summary = "穿过浆果怪聚集区与森林史莱姆湿地，老盾在营地休息时提起自己第一次下裂隙的糗事。",
             Extra = "我第一次下裂隙，比你还紧张。至少你没把火把扔进蘑菇堆。"
         },
@@ -562,7 +562,7 @@ public static class AdventureLogCatalog
         },
         new StoryEntry
         {
-            Id = "C1D", Title = "第一章·四 甲虫巡逻道", Unlock = "通关 1-5",
+            Id = "C1D", Title = "第一章·四 甲虫巡逻道", Unlock = "通关第 5 关",
             Summary = "沿甲虫巡逻道前进，硬壳甲虫数量异常增多，似乎被某种气息驱赶向森林外围。",
             Extra = "它们在逃。前面有什么东西让它们害怕。"
         },

@@ -2566,16 +2566,24 @@ public partial class BattleManager
             // 同 ContinueToNextStageInPlace ① 段口径）；NoteStageProgress 有 IsActive 守卫会 no-op 不重落盘。
             BattleStateSaver.Instance?.ClearBattleState();
             bool canNext = Mode.Id == BattleModeId.Normal && HasChapterNextStageForSettlement();
+            // 【2026-11-27 主人拍板】结算界面下方的「新功能开启」清单：只在主线 Normal 算，
+            // 支线岛/活动副本/竞技场不解锁任何功能，不占屏。文案与门槛同源（FeatureUnlock 唯一真源）。
+            string unlockText = Mode.Id == BattleModeId.Normal && ChapterManager.Instance != null
+                ? FeatureUnlock.NewlyUnlockedText(RunStats.Chapter,
+                    ChapterManager.Instance.currentStageIndex, BattleDifficulty)
+                : null;
             if (canNext)
                 BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this),
                     true, null, false,
                     ContinueToNextStageInPlace,
                     TrySpendStaminaForNextStage,
-                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); });
+                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); },
+                    unlockText);
             else
                 BattleResultScreen.Show(true, RunStats, () => Mode.SettleStageClear(this),
                     true, null, false, null, null,
-                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); });
+                    () => { LevelUpPopup.FlushPending(); PetFeatureGuide.ShowUnlockToastOnVictory(); },
+                    unlockText);
         }
         else
             Mode.SettleStageClear(this);

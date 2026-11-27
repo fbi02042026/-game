@@ -39,7 +39,7 @@ public static class TalentSystem
     public const long CHANGE_JOB_DIAMOND_COST = 500;
 
     /// <summary>
-    /// 【2026-11-20 主人拍板】换职业的关卡门槛：通关「第 1 章第 5 关」后才允许换。
+    /// 【2026-11-20 立；11-27 改全局关号】换职业的关卡门槛：通关全局第 5 关后才允许换。
     /// 判定走主线进度真源 <c>SaveData.HasStageCleared(chapter, stageIndex0)</c>；stageIndex0 为 0 基，故第 5 关 = 4。
     /// 🔴 主人要求「可以改，到时看测试进度」——测试期要调门槛只改这两个数，不动判定代码。
     /// 🔴 只判进度、不清进度：换职业全程不碰 clearedStages，关卡记录天然保留。
@@ -53,7 +53,7 @@ public static class TalentSystem
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null || !data.HasStageCleared(CHANGE_JOB_UNLOCK_CHAPTER, CHANGE_JOB_UNLOCK_STAGE_INDEX0))
         {
-            reason = $"切换职业\n通过第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁";
+            reason = $"切换职业\n通关第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁";
             return false;
         }
         reason = null;
