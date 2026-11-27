@@ -270,6 +270,7 @@ public class FirstRunGuide : MonoBehaviour
     /// <summary>全部走完的标记：存档 + 本地各写一份（存档为准）。</summary>
     void MarkDone()
     {
+        Analytics.TutorialDone();   // 场景分析漏斗终点：引导曝光(dim=1) → 完成点击(dim=1)，branchId=BCBgAAoXHx5d1g2oaP3wEP
         var data = SaveSystem.Instance?.Data;
         if (data != null)
         {

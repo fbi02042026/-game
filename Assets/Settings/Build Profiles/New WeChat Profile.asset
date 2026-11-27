@@ -15,7 +15,7 @@ MonoBehaviour:
   m_BuildTarget: 47
   m_Subtarget: 0
   m_ModuleName: WeixinMiniGame
-  m_BuildPath: Y:/PixelAdventureTown/minigame
+  m_BuildPath: Y:/xiangsumaoxian-weixin/minigame
   m_PlatformSettings:
     rid: 5188113834924834818
   m_MiniGameSettings:
@@ -52,14 +52,14 @@ MonoBehaviour:
         m_Editor:
           rid: 5188113834924834820
         ProjectConf:
-          projectName: 
-          Appid: 
-          CDN: 
+          projectName: 像素冒险裂隙之刃
+          Appid: wx37eb4c2fee0fecf8
+          CDN: http://192.168.10.50:8080
           assetLoadType: 0
           compressDataPackage: 1
           VideoUrl: 
           relativeDST: 
-          DST: Y:/PixelAdventureTown/minigame
+          DST: Y:/xiangsumaoxian-weixin/minigame
           StreamCDN: 
           bundleHashLength: 32
           bundlePathIdentifier: StreamingAssets;
