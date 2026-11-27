@@ -295,11 +295,10 @@ public class ArenaRulesTests
         var data = NewSave();
         data.arenaFreshWinsLeft = 0;
         data.arenaLossStreak = 0;
-        data.arenaPityTarget = 4;
-        data.arenaWinStreak = 3;
-        data.arenaWinCapTarget = 3;   // 连赢达标
+        data.arenaLowPityLeft = 0;
+        data.arenaWinStreak = ArenaRules.WinCapMin;   // 2026-11-25 固定 5 场熔断（EnsureValveTargets 会写死 WinCapMin）
         Assert.AreEqual(ArenaRules.ValveHardPowerMul, ArenaRules.GetValvePowerMultiplier(data),
-            "连赢熔断应加压 ×1.9");
+            "连赢 5 场达标应加压 ×1.9");
     }
 
     [Test]
@@ -381,7 +380,7 @@ public class ArenaRulesTests
     {
         // 升版本 = 故意整榜重建（老档玩家按当前积分重新插位）。
         // 这里红掉说明有人动了 DistVersion——确认重建口径（玩家进度不丢）后再同步本用例。
-        Assert.AreEqual(7, ArenaRules.DistVersion);
+        Assert.AreEqual(8, ArenaRules.DistVersion, "v8（2026-11-25）：战力曲线 PowerTop 60000→24000，机器人战力变了必须整榜重建");
     }
 
     [Test]
