@@ -517,7 +517,7 @@ public static class MainQuestSystem
             case "daily_merc_talk": return FeatureUnlock.MercBondOpen(d);
             case "daily_activity_clear": return FeatureUnlock.AnyDungeonOpen(d);
             case "daily_rift_clear": return FeatureUnlock.RiftOpen(d);
-            case "daily_arena_battle": return FeatureUnlock.ArenaOpen(d);   // 2026-11-25 加回：通第 5 关后可见
+            case "daily_arena_battle": return FeatureUnlock.ArenaOpen(d);   // 2026-11-25 加回；2026-11-27 定稿试炼场第 8 关
             default: return true;
         }
     }

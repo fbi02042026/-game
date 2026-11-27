@@ -21,14 +21,14 @@ public static class ArenaEntryUI
 
     const string IconPath = "UI/Art/Main/对战";   // 主界面美术包里的对战图标（交叉双剑+蓝红火焰，2026-10-30 主人指定）
 
-    // ── 解锁门槛（2026-11-02 立；11-25 提前到第 5 关；11-27 改全局关号）──────
-    // 通关全局第 5 关（章内小 Boss 节，sub0 = 4）就开，与佣兵招募同批（FeatureUnlock.MercRecruitOpen）。
+    // ── 解锁门槛（2026-11-02 立；11-25 第 5 关；11-27 定稿顺延到第 8 关）──────
+    // 通关全局第 8 关（章内 sub0 = 7）才开。第 5 关让位给佣兵招募，试炼场顺延到第 8 关与升阶/徽记同批。
     // 🔴 关卡一律写全局关号 1~80，不再写「第 1 章第 5 关」「1-10」「2-5 / 3-1」这种两级格式。
-    /// <summary>解锁所需的章内节下标（0 起）：第 5 关 = 4。真源在 FeatureUnlock.ARENA_UNLOCK_SUB0，
+    /// <summary>解锁所需的章内节下标（0 起）：第 8 关 = 7。真源在 FeatureUnlock.ARENA_UNLOCK_SUB0，
     /// 本类只读它——门槛只许有一处常量，别在这里再写一份数字。</summary>
     public static int UnlockSub0 => FeatureUnlock.ARENA_UNLOCK_SUB0;
 
-    /// <summary>试炼场是否已解锁（＝通关第 5 关）。2026-11-25 起判定收口到 FeatureUnlock.ArenaOpen，
+    /// <summary>试炼场是否已解锁（＝通关第 8 关）。2026-11-25 起判定收口到 FeatureUnlock.ArenaOpen，
     /// 入口显隐、冒险页 toast、日常任务门槛共用同一个出口（别再在这里写第二份 HasStageCleared）。</summary>
     public static bool IsUnlocked(SaveData data) => FeatureUnlock.ArenaOpen(data);
 
@@ -47,7 +47,7 @@ public static class ArenaEntryUI
             return;
         }
 
-        // 【2026-11-02 拍板；2026-11-25 提前】通关第 5 关后入口才出现：未达标整颗隐藏、不接线。
+        // 【2026-11-02 拍板；2026-11-27 定稿第 8 关】通关后入口才出现：未达标整颗隐藏、不接线。
         // 每次主界面打开都会走到这里（GuildHallUI.WireHallClicks），达标后自动重新点亮。
         // 解锁判断单一真源 = IsUnlocked（冒险页 toast 同用一处）。
         if (!IsUnlocked(SaveSystem.Instance?.Data))

@@ -454,7 +454,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
         if (!warmupOnly)
         {
-            // 【2026-11-02 立；11-27 改全局关号】试炼场解锁提示：通关第 5 关后第一次进冒险页 toast 一次（主界面入口同刻亮出）。
+            // 【2026-11-02 立；11-27 定稿第 8 关】试炼场解锁提示：通关第 8 关后第一次进冒险页 toast 一次（主界面入口同刻亮出）。
             // 放 warmupOnly 块内：进镇预热点亮那遍不触发、不写标记（同 SideIslandGuide 口径）。
             TryShowArenaUnlockToast();
 

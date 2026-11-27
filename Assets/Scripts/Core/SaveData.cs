@@ -1457,7 +1457,7 @@ public class SaveData
         MigrateChapterSets();   // 【2026-11-05】集合启动初始化 = 只按落盘镜像重建，不重算、不补写、无老档兼容
         // 【2026-10-29 主人拍板】支线岛改为「通关门槛到了才开放」：若门槛未到却已派定支线岛
         // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
-        // 等门槛到了由 EnsureForkRoll 重新随机派定。（2026-11-27 起门槛 = 通关第 8 关）
+        // 等门槛到了由 EnsureForkRoll 重新随机派定。（2026-11-27 起门槛 = 通关第 6 关）
         // 【2026-11-17 主人拍板「支线后挪」；2026-11-27 门槛重排】对齐 FeatureUnlock.SideIslandOpen（现= 通关第 6 关）。
         // 🔴 原写法 `DerivedGrandProgressFromClearedStages(1) < 10` 恒为真（该函数返回篇内「大关数」，路线 B 每章仅 1 座大关，
         //    最大值 1），会把 branchRoll 每次读档都清零、支线岛永远派不出来 —— 2026-11-27 一并修正为走唯一真源。
@@ -2020,7 +2020,7 @@ public class SaveData
     }
 
     /// <summary>
-    /// 抽奖池当前开放格数。【2026-11-27 主人拍板】第 4 格 = 第一章通关（全局第 10 关）免费开；
+    /// 抽奖池当前开放格数。【2026-11-27 定稿】第 4 格 = 通关全局第 16 关（第 2 章节下标 5）免费开；
     /// 第 5 格 = 只花 <see cref="DrawPoolPaidUnlockCost"/> 钻石开，不再要求通关章节（老档通章白送口径作废）。
     /// </summary>
     public int DrawPoolSlots
@@ -2028,8 +2028,8 @@ public class SaveData
         get
         {
             int s = DrawPoolDefaultSlots;
-            // 🔴 注意：clearedChapterIds 是「已解锁」集合（第 1 章开局即已解锁），判「通关」必须走真源 HasTrulyClearedChapter。
-            if (HasTrulyClearedChapter(1)) s++;   // 第 4 格：第一章真通关（全局第 10 关）
+            // 【2026-11-27 定稿】第 4 格后移到第 16 关（账号级深度档，与换职业同批）。
+            if (HasStageCleared(2, 5)) s++;       // 第 4 格：全局第 16 关
             if (drawPoolPaidUnlock) s++;          // 第 5 格：只认付费标记
             // 本文件是纯数据层，不依赖 UnityEngine，故用 System.Math.Min 而非 Mathf.Min
             s = System.Math.Min(s, DrawPoolMaxSlots);
@@ -2041,12 +2041,12 @@ public class SaveData
     public const int DrawPoolPaidUnlockCost = 100;
 
     /// <summary>
-    /// 第 5 格是否还可花钻解锁：只需第 4 格已开（第一章通关，保证花钻开的是最后一格、不乱序）且未付费解锁。
+    /// 第 5 格是否还可花钻解锁：只需第 4 格已开（通关第 16 关，保证花钻开的是最后一格、不乱序）且未付费解锁。
     /// 【2026-11-27】不再附加「老档未通第 3 章」条件——通章白送已作废。
     /// </summary>
     public bool CanPaidUnlockDrawPoolSlot
         => DrawPoolSlots == DrawPoolMaxSlots - 1 && !drawPoolPaidUnlock
-           && HasTrulyClearedChapter(1);
+           && HasStageCleared(2, 5);
 
     /// <summary>置位第 5 格付费解锁（扣钻由 UI 层负责，这里只管存档位）。幂等，返回是否发生了变化。</summary>
     public bool MarkDrawPoolPaidUnlock()
