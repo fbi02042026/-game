@@ -173,7 +173,7 @@ public partial class TalentUI
         costIcon.raycastTarget = false;
         var cost = CreateText(box.transform, "CostText", "", 30, BubbleTextOnNavy);
         SetAnchored(cost.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f),
-            new Vector2(12f, -268f), new Vector2(150f, 34f));
+            new Vector2(28f, -268f), new Vector2(180f, 34f));
 
         // ⑥ 彩色按钮（确定按钮）：【2026-11-19 主人拍板「按钮太大」】260×84 → 180×60（贴合确定按钮 100×33 的 3:1 比例）
         // 【2026-11-19 主人拍板「按钮挡住金币数」】按钮从底部 y=104 下移到 y=55：按钮顶边不再压到金币行底边。

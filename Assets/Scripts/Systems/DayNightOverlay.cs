@@ -210,23 +210,30 @@ public class DayNightOverlay : MonoBehaviour
         return true;
     }
 
-    /// <summary>满屏白Sprite：优先内置 UISprite，取不到再运行时造 4x4 白贴图（静态缓存，进程级一份）。</summary>
+    /// <summary>
+    /// 满屏白 Sprite：直接运行时造一张 4×4 白贴图（静态缓存，进程级一份）。
+    /// <para>【2026-11-28 修日志刷屏】原写法先 <c>Resources.GetBuiltinResource&lt;Sprite&gt;("UI/UISprite.psd")</c>，
+    /// 该路径不存在（引擎内置的是 <c>UI/Skin/UISprite.psd</c>），每次进战斗必刷两条
+    /// 「Failed to find UI/UISprite.psd」+「could not be loaded from the resource file」，
+    /// 然后才落到下面的兜底 —— 等于白问一次。且内置 Sprite 在打包后不保证可取。</para>
+    /// <para>夜战压暗的 Shader 是纯程序化计算、不采样贴图，只要有一张白图把 Image 的几何撑出来即可，
+    /// 故不再向引擎要内置资源，直接造（4×4 = 64 字节，代价可忽略）。</para>
+    /// </summary>
     static Sprite WhiteSprite
     {
         get
         {
             if (_whiteSprite == null)
             {
-                _whiteSprite = Resources.GetBuiltinResource<Sprite>("UI/UISprite.psd");
-                if (_whiteSprite == null)
-                {
-                    var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-                    var px = new Color[16];
-                    for (int i = 0; i < px.Length; i++) px[i] = Color.white;
-                    tex.SetPixels(px);
-                    tex.Apply();
-                    _whiteSprite = Sprite.Create(tex, new Rect(0f, 0f, 4f, 4f), new Vector2(0.5f, 0.5f), 1f);
-                }
+                var tex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                tex.name = "DayNightOverlayWhite";
+                tex.wrapMode = TextureWrapMode.Clamp;
+                tex.filterMode = FilterMode.Point;
+                var px = new Color[16];
+                for (int i = 0; i < px.Length; i++) px[i] = Color.white;
+                tex.SetPixels(px);
+                tex.Apply();
+                _whiteSprite = Sprite.Create(tex, new Rect(0f, 0f, 4f, 4f), new Vector2(0.5f, 0.5f), 1f);
             }
             return _whiteSprite;
         }

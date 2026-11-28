@@ -24,15 +24,15 @@ public partial class Pet : Mercenary
     /// <summary>移动动画倍率上下限（11-22：步频跟位移，别再出现「动画慢移动快」滑步）。</summary>
     const float MOVE_ANIM_SPEED_MIN = 0.6f;
     const float MOVE_ANIM_SPEED_MAX = 3f;
-    /// <summary>11-22 主人「移动动画放慢一倍」：在按位移算出的步频倍率上再乘此系数，只影响宠物腿部动画频率，不改实际位移。</summary>
-    const float PET_MOVE_ANIM_RATE = 0.5f;
+    /// <summary>移动动画倍率（11-28 主人「所有动物的走路频率一致」）：全部宠物统一用 clip 原速 1.0，取消按物种分档与减速。只影响腿部动画频率，不改实际位移。</summary>
+    const float PET_MOVE_ANIM_RATE = 1.0f;
     /// <summary>
     /// 宠物移速（11-22）：整体在玩家基准上慢 10%，主人再要求「移动再减 30%」→ 基准 0.9×0.7=0.63；
     /// 再按外貌微调——狗/狼灵活稍快，羊迟缓稍慢。
     /// 皮肤 id 带本体前缀，走同一系数（dog_fox/wolf_demon/goat_mushroom 跟随本体）。
     /// </summary>
     const float PET_MOVE_BASE_RATIO = 0.8316f; // 11-25「移速+10%」0.63×1.1=0.693；11-26 主人「再+20%」：0.693 × 1.2
-    const float MOVE_RATE_DOG = 1.05f;        // 狗：灵活，比其它宠物快但仍比原速慢
+    const float MOVE_RATE_DOG = 1.155f;       // 狗：灵活，比其它宠物快但仍比原速慢；11-28 主人「狗移速+10%」1.05×1.1=1.155（含狐狸皮肤）
     const float MOVE_RATE_WOLF = 1.05f;       // 狼：灵活，同上
     const float MOVE_RATE_GOAT = 0.85f;       // 羊：迟缓
     const float MOVE_RATE_BIRD = 1.1f;       // 鸟（巨嘴鸟/鹦鹉）：2026-11-25 主人拍板 +10%

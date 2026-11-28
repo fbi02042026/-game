@@ -3,8 +3,9 @@ using UnityEngine;
 
 /// <summary>
 /// 佣兵主动技冷却与自动释放调度（始终自动，无手动开关）。
-/// <para>2026-10-06 主人拍板：CD 之外再加一道 MP（蓝条）闸门 ——
-/// 冷却好了还得蓝够才放；蓝不足<b>直接不放</b>，CD 不重置、不排队、不透支。</para>
+/// <para>【2026-11-28 主人拍板「所有技能都走 CD」】蓝条（MP）闸门整条拆除：
+/// 技能只看冷却，不再查蓝/扣蓝。MP 字段与回复逻辑保留（不删旧代码），但不再参与释放判定 ——
+/// 这样助战/救援这类不在出战槽位的友方佣兵也能正常放技能（原来找不到蓝条槽位 → 恒判蓝不够 → 技能永不释放）。</para>
 /// </summary>
 public class MercSkillCaster : MonoBehaviour
 {
@@ -20,9 +21,6 @@ public class MercSkillCaster : MonoBehaviour
 
     /// <summary>单次耗蓝（0 = 无蓝技能，不扣蓝）。</summary>
     float _mpCost = 0f;
-
-    /// <summary>有蓝定位却取不到合法耗蓝值 → 拒绝释放（fail closed，Bind 时已 LogError）。</summary>
-    bool _mpBlocked = false;
 
     public string ActiveSkillId => _activeSkillId;
     public float CooldownRemain => _cooldownRemain;
@@ -49,28 +47,14 @@ public class MercSkillCaster : MonoBehaviour
         // 倒数仍吃 UnitsCanAct 闸（10-31 口径）→ 5 秒从点「开始战斗」解冻那刻算，不从进场算。
         ResetOpeningCooldown();
 
-        // 2026-10-06：定位与耗蓝只在绑定时取一次，运行时不再查表
+        // 【2026-11-28 主人拍板「所有技能都走 CD」】定位与耗蓝只在绑定时取一次，
+        // 现在仅保留给 UI/日志展示 —— 不再校验耗蓝列、不再 fail-closed（蓝量已不拦释放）。
         _mpType = MpProfile.OfMercSkill(activeSkillId);
         _mpCost = 0f;
-        _mpBlocked = false;
         if (_mpType != MpArchetype.None)
         {
-            // 耗蓝唯一出口 MercSkillTable.MpCostOf：-1 = 表里查不到，0 = 该列没填
             float cost = MercSkillTable.MpCostOf(activeSkillId);
-            if (cost < 0f)
-            {
-                Debug.LogError($"[MercSkillCaster] 技能 {activeSkillId} 在 merc_skills 表里查不到 → 拒绝释放（fail closed）");
-                _mpBlocked = true;
-            }
-            else if (cost <= 0f)
-            {
-                Debug.LogError($"[MercSkillCaster] 技能 {activeSkillId} 是「{_mpType}」型（有蓝）但 merc_skills「耗蓝」列为空/0 → 拒绝释放（fail closed）");
-                _mpBlocked = true;
-            }
-            else
-            {
-                _mpCost = cost;
-            }
+            if (cost > 0f) _mpCost = cost;
         }
         Debug.Log($"[MercSkillCaster] 绑定 {activeSkillId} 定位={_mpType} 单次耗蓝={_mpCost:0.#} 有效CD={_normalCooldown:0.#}s 开场CD={CooldownTotal:0.#}s");
     }
@@ -78,7 +62,7 @@ public class MercSkillCaster : MonoBehaviour
     /// <summary>
     /// 重新挂开场 CD（2026-11-12 主人拍板「第二关重新算，每关都先走 5 秒」）。
     /// Bind 与 MercenaryManager.ResetMercenaries 共用此出口；不重算 _normalCooldown（技能固有 CD 不随关卡变）。
-    /// 只重置计时，不动 _mpType / _mpCost / _mpBlocked（绑定期常量）。
+    /// 只重置计时，不动 _mpType / _mpCost（绑定期常量）。
     /// </summary>
     public void ResetOpeningCooldown()
     {
@@ -126,7 +110,7 @@ public class MercSkillCaster : MonoBehaviour
         if (_merc == null || _merc.isDead || string.IsNullOrEmpty(_activeSkillId)) return false;
         if (_cooldownRemain > 0f) return false;
         if (BattleManager.Instance == null) return false;
-        if (_mpBlocked) return false;
+        // 【2026-11-28】纯 CD 制：蓝量不再拦释放（原 _mpBlocked / HasMercMp / TrySpendMercMp 三道闸全删）
         // 2026-10-18 主人拍板：攻击技在场上没有目标（无活怪）时不释放 ——
         // 不扣蓝、不进冷却，出怪后下一帧自动补发；治疗/增益/护盾类目标是自己人，不受此限。
         // 闸必须放在扣蓝之前：放后面的话没目标时返回 false，蓝已扣、CD 不重置，会每帧空扣蓝。
@@ -139,7 +123,7 @@ public class MercSkillCaster : MonoBehaviour
         // 满血站桩就变成头顶条无限重来（每轮还白扣一次蓝）。前置后根本不启动读条。
         // 口径不在这里另写一份：MercHealHasPatient / HasMercMp 都是结算侧同一个出口。
         if (IsGatedHealActiveSkill() && !BattleManager.Instance.MercHealHasPatient(_merc)) return false;
-        if (_mpType != MpArchetype.None && !BattleManager.Instance.HasMercMp(_merc, _mpCost)) return false;
+        // 【2026-11-28 主人拍板「所有技能都走 CD」】蓝量不再拦技能（原 HasMercMp 闸删除）
 
         // 【2026-11-18 主人拍板】治疗技读满 1 秒才扣蓝 / 进 CD / 出特效 / 出左侧条。
         // 读条期间施法者定身（UnitBase.Update 里 HealCastBar.IsCasting 早退）、防重入。
@@ -154,8 +138,7 @@ public class MercSkillCaster : MonoBehaviour
             });
             return true;
         }
-        // 2026-10-06 主人拍板：蓝不足不能释放。MP 闸在施法之前，扣不到蓝就不放 —— CD 也不重置。
-        if (_mpType != MpArchetype.None && !BattleManager.Instance.TrySpendMercMp(_merc, _mpCost)) return false;
+        // 【2026-11-28 主人拍板「所有技能都走 CD」】不再扣蓝（原 TrySpendMercMp 闸删除）。
         bool ok = BattleManager.Instance.TryCastMercActiveSkill(_merc, _activeSkillId, manual: false);
         if (ok)
         {

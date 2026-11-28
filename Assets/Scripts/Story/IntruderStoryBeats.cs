@@ -133,6 +133,32 @@ public static class IntruderStoryBeats
     const string SquadElla = "H015";      // 艾拉 · 游侠
     const string SquadLina = "H017";      // 莉娜 · 牧师（naima102 战斗模板与塞拉同款，零 prefab 改动）
 
+    // 【2026-11-28 主人「换个名」】助战三人对外一律用昵称（赤壁 / 风羽 / 圣光）：
+    // 根因是 H015 艾拉与我方 H005 米娅共用同一套战斗形象 gongshou101（另有莉娜/路加同为牧师、加百列/马库斯同为剑盾），
+    // 玩家看到「凭空落三个人、长得跟我佣兵一样」就当成自己人。主人拍板不换美术、改名字区分。
+    // 🔴 只改这三人在<b>剧情台词 + 战场头顶名</b>上的称呼；花名册真名（MercRosterDefs / 招募池 / 图鉴）一个字不动。
+    /// <summary>加百列（H023）的对外称呼。</summary>
+    const string SquadGabrielName = "赤壁";
+    /// <summary>艾拉（H015）的对外称呼。</summary>
+    const string SquadEllaName = "风羽";
+    /// <summary>莉娜（H017）的对外称呼。</summary>
+    const string SquadLinaName = "圣光";
+
+    /// <summary>
+    /// 救场小队战场显示名的<b>唯一出口</b>：hireId → 昵称；非小队成员返回 null（调用方回退花名册真名）。
+    /// 与上方台词常量同源，改称呼只改一处。
+    /// </summary>
+    public static string RescueSquadDisplayName(string hireId)
+    {
+        switch (hireId)
+        {
+            case SquadGabriel: return SquadGabrielName;
+            case SquadElla: return SquadEllaName;
+            case SquadLina: return SquadLinaName;
+            default: return null;
+        }
+    }
+
     // ============================================================
     // 批次6（2026-11-20）：敌对乱入固定反派三人组（主人供立绘三张并授权改名）。
     // 剧情立绘走 MercStand 通道（文件名即 id）；战斗单位同一套人设走职业模板
@@ -183,13 +209,48 @@ public static class IntruderStoryBeats
 
     /// <summary>
     /// 救场战场演出台词：islandId 非空 → 支线岛版；chapter ≥ 7 → 揭底版；其余（含第 1 章首遇）→ 首遇版。
-    /// 说话人槽位与入场救援同一套（0/1/2 = 加百列/艾拉/莉娜，3 = 玩家）。
+    /// 说话人槽位与入场救援同一套（0/1/2 = 加百列/艾拉/莉娜，对外称呼见 Squad*Name：赤壁/风羽/圣光；3 = 玩家）。
     /// </summary>
     public static List<EntryBattleLine> RescueBattleLines(int chapter, string islandId)
     {
         if (!string.IsNullOrEmpty(islandId)) return BuildRescueIslandLines();
         if (chapter >= 7) return BuildRescueRevealLines();
         return BuildRescueFirstMeetLines();
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人「佣兵进来后应该说的是剧情的对话 不是说的上阵的台词」】
+    /// Boss 波前助阵（<see cref="BattleManager.CoPreBossRescueArrival"/>）的入场台词 = <b>剧情版</b>：
+    /// 交代「他们是谁、为什么来」，不再用 <see cref="RescueBattleLines"/> 那两句战中喊话（拦怪 / 回血）。
+    /// 与战中救场的分工：这里在 Boss 刷出前、冻着场说，玩家有耐心听；濒死救场（T5）那一刻正在挨打，
+    /// 仍走短句，不把这段挪过去。
+    /// 暗线口径不变：第 7 章前不点破委托人（艾丽娅），只留「有人托的，名字打完再说」，
+    /// 揭底仍由战后台词 <see cref="TryPlayRescueAfterBattle"/> 负责 —— 两段不重复、不互相剧透。
+    /// hold 给 1.6s：比战中短句稍长，够读完一句。
+    /// </summary>
+    public static List<EntryBattleLine> RescueArriveStoryLines()
+    {
+        return new List<EntryBattleLine>
+        {
+            L(EntrySpeaker.Gabriel, "让开道——我们三个，这一关跟你一起打。", 1.6f),
+            L(EntrySpeaker.Player,  "你们谁啊？我可没叫外援。", 1.6f),
+            L(EntrySpeaker.Ella,    "有人托的。名字，打完再说。", 1.6f),
+            L(EntrySpeaker.Lina,    "血我盯着，往前冲就行。", 1.6f),
+        };
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人「boss 之前还是没有佣兵」】Boss 前助阵·复访版：
+    /// 存档里该救场剧情已看过（EV01/EV04 一次性旗）时用这一句。
+    /// 旧写法是「看过剧情 = 不再来人」，终 Boss 前永远没援军；现在兵力每次都来，
+    /// 台词只留 1 句打招呼，不重播整段「谁托的」（整段只首播一次，不腻、也不剧透战后揭底）。
+    /// </summary>
+    public static List<EntryBattleLine> RescueArriveRepeatLines()
+    {
+        return new List<EntryBattleLine>
+        {
+            L(EntrySpeaker.Gabriel, "还是我们仨。这回直接上。", 1.2f),
+        };
     }
 
     /// <summary>救场·首遇版（第 1 章拍板口径；2~6 章若未来配表也走本段，措辞不绑第 1 章专属名词）。
@@ -252,9 +313,9 @@ public static class IntruderStoryBeats
     {
         return new List<StoryBeat>
         {
-            StoryDirector.Solo("艾拉", "巧了不是——正好陪你们把这帮家伙收拾了！", SquadElla),
+            StoryDirector.Solo(SquadEllaName, "巧了不是——正好陪你们把这帮家伙收拾了！", SquadElla),
             StoryDirector.Solo("你", "你们是哪位？我没点外援啊。", StoryPortraits.Player),
-            StoryDirector.Solo("加百列", "有人托了我们，让我们盯着你点。细节回头聊——先回镇上歇着。", SquadGabriel),
+            StoryDirector.Solo(SquadGabrielName, "有人托了我们，让我们盯着你点。细节回头聊——先回镇上歇着。", SquadGabriel),
         };
     }
 
@@ -263,9 +324,9 @@ public static class IntruderStoryBeats
     {
         return new List<StoryBeat>
         {
-            StoryDirector.Solo("艾拉", "这岛的怪比字条上写的多三倍——独眼又瞒报了。", SquadElla),
+            StoryDirector.Solo(SquadEllaName, "这岛的怪比字条上写的多三倍——独眼又瞒报了。", SquadElla),
             StoryDirector.Solo("你", "你们怎么跟到岛上来的？", StoryPortraits.Player),
-            StoryDirector.Solo("加百列", "有人托了我们。托我们的人说，你在哪，我们就在哪。", SquadGabriel),
+            StoryDirector.Solo(SquadGabrielName, "有人托了我们。托我们的人说，你在哪，我们就在哪。", SquadGabriel),
         };
     }
 
@@ -274,10 +335,10 @@ public static class IntruderStoryBeats
     {
         return new List<StoryBeat>
         {
-            StoryDirector.Solo("加百列", "委托人你其实天天见——公会前台，赛琳。", SquadGabriel),
-            StoryDirector.Solo("艾拉", "前台背后还有一位。她带队走之前就料到凶多吉少，才把话托给赛琳。", SquadElla),
+            StoryDirector.Solo(SquadGabrielName, "委托人你其实天天见——公会前台，赛琳。", SquadGabriel),
+            StoryDirector.Solo(SquadEllaName, "前台背后还有一位。她带队走之前就料到凶多吉少，才把话托给赛琳。", SquadElla),
             StoryDirector.Solo("你", "……艾丽娅。", StoryPortraits.Player),
-            StoryDirector.Solo("加百列", "对。别让那句嘱咐白托付——活着，一起回去。", SquadGabriel),
+            StoryDirector.Solo(SquadGabrielName, "对。别让那句嘱咐白托付——活着，一起回去。", SquadGabriel),
         };
     }
 
@@ -289,7 +350,7 @@ public static class IntruderStoryBeats
     // 收尾三处刀光，不再单独出字。
     // ------------------------------------------------------------
 
-    /// <summary>战场演出说话人槽位：0/1/2 = 救场小队出场顺序（加百列/艾拉/莉娜），3 = 玩家。</summary>
+    /// <summary>战场演出说话人槽位：0/1/2 = 救场小队出场顺序（加百列/艾拉/莉娜，对外称呼 赤壁/风羽/圣光），3 = 玩家。</summary>
     public enum EntrySpeaker { Gabriel = 0, Ella = 1, Lina = 2, Player = 3 }
 
     /// <summary>战场演出一条：谁说、说什么、气泡停多久（秒，unscaled）。</summary>
@@ -359,9 +420,9 @@ public static class IntruderStoryBeats
         return new List<StoryBeat>
         {
             StoryDirector.Narration("最后一只怪倒下。挂了彩的、差点躺下的，都被你从围圈里捞了回来——三个人，一个不少。"),
-            StoryDirector.Solo("加百列", "呼——都活着。谢了，是她让我们看着你的。", SquadGabriel),
-            StoryDirector.Solo("艾拉", "就是惨了点，箭袋比脸都干净，闪身步都跑出火星子了。你走的每一步，我们都替她看着。", SquadElla),
-            StoryDirector.Solo("莉娜", "伤都归我管，回镇上喝两天热汤就好。别把挂彩当勋章。", SquadLina),
+            StoryDirector.Solo(SquadGabrielName, "呼——都活着。谢了，是她让我们看着你的。", SquadGabriel),
+            StoryDirector.Solo(SquadEllaName, "就是惨了点，箭袋比脸都干净，闪身步都跑出火星子了。你走的每一步，我们都替她看着。", SquadElla),
+            StoryDirector.Solo(SquadLinaName, "伤都归我管，回镇上喝两天热汤就好。别把挂彩当勋章。", SquadLina),
             StoryDirector.BlackLine("三人互相搀着退进通道深处。受伤，但没人掉队。"),
         };
     }

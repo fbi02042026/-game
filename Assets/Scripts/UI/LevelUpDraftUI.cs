@@ -667,7 +667,8 @@ public class LevelUpDraftUI : MonoBehaviour
             case DraftCardKind.SkillNew: return "新技能";
             case DraftCardKind.SkillUp: return $"升星 ★{card.Star}";
             case DraftCardKind.MercRecruit: return "招募佣兵";
-            case DraftCardKind.MercLevelUp: return $"佣兵升级 Lv{card.MercLevel}";
+            // 【2026-11-28】抽卡给经验，不再写「升级 LvN」这种承诺性文案
+            case DraftCardKind.MercLevelUp: return $"佣兵经验 Lv{Mathf.Max(1, card.MercLevel)}";
             case DraftCardKind.MercStarUp: return $"佣兵升星 ★{card.Star}";
             case DraftCardKind.Equip: return "本局装备";
             // 2026-10-05 安慰奖只剩一档（强化石那档主人拍板删了），别落进 default 显示成「强化」

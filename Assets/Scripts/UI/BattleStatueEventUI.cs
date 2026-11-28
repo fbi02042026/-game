@@ -188,16 +188,20 @@ public class BattleStatueEventUI : MonoBehaviour
         HealUnit(alive[Random.Range(0, alive.Count)], HealSoloRatio);
     }
 
-    /// <summary>全体（主角 + 存活佣兵）回 pct% MaxHp —— 复用波清回血同款原语 SkillCast.ApplyHealToUnit。</summary>
+    /// <summary>全体（主角 + 存活佣兵 + 场上宠物）回 pct% MaxHp —— 复用波清回血同款原语 SkillCast.ApplyHealToUnit。</summary>
     static void HealAllParty(float pct)
     {
         var bm = BattleManager.Instance;
         if (bm == null) return;
         HealUnit(bm.hero, pct);
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs == null) return;
-        for (int i = 0; i < mercs.Count; i++)
-            HealUnit(mercs[i], pct);
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+                HealUnit(mercs[i], pct);
+        }
+        // 【2026-11-28 主人拍板「让加血也给宠物加」】宠物不在 GetActiveMercs，单独补一份
+        bm.ForEachAlivePet(p => HealUnit(p, pct));
     }
 
     static void HealUnit(UnitBase u, float pct)

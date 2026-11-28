@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;   // 【2026-11-28】冲撞命中去重用 HashSet<UnitBase>
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
@@ -35,6 +36,21 @@ public partial class Monster
     /// </summary>
     MonsterAttackStyle _baseAttackStyle = MonsterAttackStyle.Melee;
     bool _skillTelegraphing;
+
+    // ===== 【2026-11-28】前期肉盾 Boss「石灵」专属直线冲撞（mon_charge）=====
+    // 长条预警演出中：锁方向 → 长条从 0 涨到满 → 沿条冲刺 → 矩形走廊逐帧判定。
+    // 与砸地共用 _skillEnergy（头顶条）+ 血量档触发 + AI 演出闸门，只把「双圈」换成「双条」。
+    bool _bossCharging;
+    GameObject _chargeLaneRange;   // 满长度铺底的浅红长条
+    GameObject _chargeLaneFill;    // 条内从左端 0→满的深红填充
+    Vector3 _chargeLaneStart;      // 预警瞬间锁定的走廊起点（Boss 当时位置）
+    float _chargeLaneDir;          // ±1：预警瞬间锁定的 X 方向，冲刺中不再追踪
+    float _chargeLaneHalfHeight;   // 走廊半高（判定与演出同位）
+    Vector3 _chargeLaneBaseScale;  // 填充条满尺寸基准缩放
+
+    /// <summary>当前主动技是否为「直线冲撞」（石灵专属）。</summary>
+    bool IsChargeSkill => _skillId == SkillRegistry.MonsterChargeSkillId;
+
     /// <summary>【只读】主动技能演出进行中（红圈聚力 → 精英蓄力跳 → 落地砸地结算，finally 里才清）。
     /// 引导遗言靠它等精英落地再开口，避免气泡挂在半空、判死后尸体也悬空。</summary>
     public bool IsSkillPerforming => _skillTelegraphing;
@@ -79,16 +95,21 @@ public partial class Monster
         if (!_hpSkillCharging || _skillEnergy >= 1f) return;
         if (ShouldHoldSkillCharge(BattleManager.Instance, _eliteWave, _isBossUnit)) return;
         _skillEnergy = Mathf.Min(1f, _skillEnergy + dt * (1f / 3f));   // 【2026-11-16 主人】3 秒攒满（原 0.28/s≈3.57s）
+        float grow = Mathf.Clamp01(_skillEnergy);
         // 【2026-11-16】进度圈跟槽走（与头顶条同一个数）：圈涨满＝槽满＝当帧砸，一次预警只走一遍
         if (_hpChargeProgress != null)
         {
-            float grow = Mathf.Clamp01(_skillEnergy);
             _hpChargeProgress.transform.localScale =
                 new Vector3(_hpChargeBaseScale.x * grow, _hpChargeBaseScale.y * grow, 1f);
         }
+        // 【2026-11-28】冲撞长条：条内填充与头顶条同一个数，涨满＝当帧冲，只走一遍预警。
+        if (_chargeLaneFill != null) SyncChargeLaneFill(grow);
         // 【2026-11-26 主人拍板「预警要读秒」】攒槽进最后窗口 → 双圈染醒目色 + 一次轻震。
         // 与头顶条同一进度数，不另算计时；染色只改 RGB，alpha 不动。
-        TryFireTelegraphTerminal(Mathf.Clamp01(_skillEnergy), _hpChargeDisc, _hpChargeProgress);
+        if (IsChargeSkill)
+            TryFireTelegraphTerminal(grow, _chargeLaneRange, _chargeLaneFill);
+        else
+            TryFireTelegraphTerminal(grow, _hpChargeDisc, _hpChargeProgress);
     }
 
     /// <summary>【2026-11-24】打断惩罚冷却：被打断后本次技能作废，且这段时间内不能重新攒槽（与放招冷却同量级）。</summary>
@@ -127,6 +148,13 @@ public partial class Monster
         // 没技能（不放招）就别铺圈，否则槽满没人接、圈会常驻在地上
         if (!(_isBossUnit || _eliteWave) || !_canUseActiveSkill || string.IsNullOrEmpty(_skillId)) return;
         if (MonsterAttackStyleTable.IsRanged(_attackStyle)) return;
+        // 【2026-11-28】石灵专属冲撞：攒槽期铺「长条预警」而不是红圈。
+        // 方向在预警瞬间锁定（玩家当时在哪边就往哪边冲），之后玩家换道/绕后都能真躲。
+        if (IsChargeSkill)
+        {
+            StartChargeLaneTelegraph();
+            return;
+        }
         Vector3 center = target != null
             ? new Vector3(target.transform.position.x, GROUND_Y + 0.02f, target.transform.position.z)
             : new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
@@ -142,8 +170,79 @@ public partial class Monster
     {
         if (_hpChargeDisc != null) { Destroy(_hpChargeDisc); _hpChargeDisc = null; }
         if (_hpChargeProgress != null) { Destroy(_hpChargeProgress); _hpChargeProgress = null; }
+        ClearChargeLane();
         _hpChargeRadius = 0f;
         ResetTelegraphTerminal();
+    }
+
+    /// <summary>【2026-11-28】铺冲撞长条：起点 = Boss 当前位置，方向 = 预警瞬间玩家所在一侧。
+    /// 两条叠在同一走廊上：浅色满长度底条 + 深红从左端 0 涨到满的填充条（由 AdvanceHpSkillCharge 驱动）。</summary>
+    void StartChargeLaneTelegraph()
+    {
+        ClearChargeLane();
+        float length = Mathf.Max(1f, GameConfig.BOSS_CHARGE_LENGTH);
+        _chargeLaneHalfHeight = Mathf.Max(0.2f, GameConfig.BOSS_CHARGE_HALF_HEIGHT);
+        // 起点用 Boss 自己（不是玩家），走廊从脚下往玩家方向铺出去；只认 X 左右，Y 走车道。
+        Vector3 foot = new Vector3(transform.position.x, GROUND_Y + 0.02f, transform.position.z);
+        _chargeLaneStart = foot;
+        float dx = target != null ? target.transform.position.x - foot.x : 0f;
+        _chargeLaneDir = Mathf.Abs(dx) < 0.05f ? GetVfxFacingDir() : Mathf.Sign(dx);
+        if (Mathf.Abs(_chargeLaneDir) < 0.5f) _chargeLaneDir = 1f;
+        Vector3 center = foot + Vector3.right * (_chargeLaneDir * length * 0.5f);
+        float visualH = _chargeLaneHalfHeight * 2f;   // 世界高度 = 判定半高 ×2，演出与判定同位
+        _chargeLaneBaseScale = new Vector3(length, visualH, 1f);
+
+        Color? tint = _isBossUnit && GetBossPhase() >= 2 ? GameConfig.TELEGRAPH_ENRAGED_COLOR : (Color?)null;
+        _chargeLaneRange = CreateChargeLaneBar("SkillChargeLaneRange", center,
+            _chargeLaneBaseScale, GameConfig.CHARGE_LANE_RANGE_ALPHA, tint, false);
+        // 填充条：初速 scale=0，由 AdvanceHpSkillCharge 同步 _skillEnergy；每帧把左端钉在 _chargeLaneStart。
+        _chargeLaneFill = CreateChargeLaneBar("SkillChargeLaneFill", foot,
+            Vector3.zero, GameConfig.CHARGE_LANE_PROGRESS_ALPHA, tint, true);
+        ResetTelegraphTerminal();
+    }
+
+    /// <summary>1×1 世界尺寸白图专用（PPU=贴图宽），保证 scale.x 就是世界长度。</summary>
+    static Sprite _chargeLaneSprite;
+    static Sprite ChargeLaneWhite()
+    {
+        if (_chargeLaneSprite != null) return _chargeLaneSprite;
+        var tex = Texture2D.whiteTexture;
+        _chargeLaneSprite = Sprite.Create(tex, new Rect(0f, 0f, tex.width, tex.height),
+            new Vector2(0.5f, 0.5f), tex.width);
+        return _chargeLaneSprite;
+    }
+
+    /// <summary>生成一条长条图元（代码生成白图，不新增美术资源）。isFill 决定层级：底条 11 / 填充 12。</summary>
+    static GameObject CreateChargeLaneBar(string name, Vector3 pos, Vector3 scale, float alpha,
+                                          Color? tint, bool isFill)
+    {
+        var go = new GameObject(name);
+        go.transform.position = pos;
+        go.transform.localScale = scale;
+        var sr = go.AddComponent<SpriteRenderer>();
+        sr.sprite = ChargeLaneWhite();
+        Color rgb = tint.HasValue ? tint.Value : new Color(0.9f, 0.07f, 0.06f, 1f);
+        sr.color = new Color(rgb.r, rgb.g, rgb.b, alpha);
+        sr.sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+        sr.sortingOrder = GameConfig.SORT_MAPROOT + (isFill ? 2 : 1);
+        return go;
+    }
+
+    /// <summary>把填充条按进度 grow 铺出去：左端始终钉在 _chargeLaneStart，往锁定方向延伸。</summary>
+    void SyncChargeLaneFill(float grow)
+    {
+        if (_chargeLaneFill == null) return;
+        float len = Mathf.Max(0.001f, _chargeLaneBaseScale.x * Mathf.Clamp01(grow));
+        _chargeLaneFill.transform.localScale = new Vector3(len, _chargeLaneBaseScale.y, 1f);
+        _chargeLaneFill.transform.position = _chargeLaneStart
+            + Vector3.right * (_chargeLaneDir * len * 0.5f);
+    }
+
+    /// <summary>收掉冲撞长条； Death / 转交协程 / 对象池复用统一走这里。</summary>
+    void ClearChargeLane()
+    {
+        if (_chargeLaneRange != null) { Destroy(_chargeLaneRange); _chargeLaneRange = null; }
+        if (_chargeLaneFill != null) { Destroy(_chargeLaneFill); _chargeLaneFill = null; }
     }
 
     /// <summary>
@@ -179,7 +278,8 @@ public partial class Monster
     /// </summary>
     void TryReleaseChargedSkill()
     {
-        if (_hpChargeDisc == null) return;                 // 没铺圈（远程 / 普通小怪）：不接管
+        // 【2026-11-28】石灵冲撞铺的是长条不是圈：两种预铺都算「槽满当帧就放」，不能漏掉冲撞。
+        if (_hpChargeDisc == null && _chargeLaneFill == null) return;   // 没铺圈/条（远程 / 普通小怪）：不接管
         if (_skillTelegraphing) return;                    // 已在演出中
         if (!_canUseActiveSkill || string.IsNullOrEmpty(_skillId)) return;
         if (BattleManager.Instance != null
@@ -362,7 +462,7 @@ public partial class Monster
         // 进度圈由 AdvanceHpSkillCharge 按同一个 _skillEnergy 驱动 —— 条涨完＝圈涨满＝当帧砸，只走一遍。
         // 挂在这里而不是血量触发处：攒槽有两个来源（血量触发 / 按时间），这里两条都能覆盖。
         if (!MonsterAttackStyleTable.IsRanged(_attackStyle)
-            && e > 0.001f && e < 0.999f && _hpChargeDisc == null)
+            && e > 0.001f && e < 0.999f && _hpChargeDisc == null && _chargeLaneFill == null)
             StartHpChargeTelegraph();
         if (_chargeFlashT > 0f)
         {
@@ -455,6 +555,14 @@ public partial class Monster
         // 【2026-11-14 主人「远程怪蓄力不要也走红圈，红圈是砸地专属的，远程 cd 好了直接释放」】
         // 远程判定改用最终风格真源 _attackStyle（含魔法型强制 Ranged），不再用 _swingStyle 的表风格快照：
         // 后者是 Init / Attack 时才同步的中间量，判「远程」应以最终风格为准（与弹幕技、索敌同口径）。
+        // 【2026-11-28】石灵冲撞：攒槽期已铺长条，槽满直接沿条冲刺，不再进红圈/跳砸协程。
+        // 长条理论上必已铺好（TryReleaseChargedSkill 就认它）；这里只做防御性补铺，保证石灵永远不出砸地。
+        if (IsChargeSkill)
+        {
+            if (_chargeLaneFill == null) StartChargeLaneTelegraph();
+            StartCoroutine(CoBossChargeDash(damage));
+            return;
+        }
         if ((_isBossUnit || _eliteWave) && !MonsterAttackStyleTable.IsRanged(_attackStyle))
         {
             StartCoroutine(CoSkillTelegraphThenCast(primaryTarget, damage, radius, kit, telegraph));
@@ -462,6 +570,96 @@ public partial class Monster
         }
 
         ExecuteActiveSkillNow(primaryTarget, damage, radius, kit);
+    }
+
+    /// <summary>
+    /// 【2026-11-28】石灵专属「直线冲撞」冲刺段：槽满当帧起跑，沿预警瞬间锁定的长条冲到头。
+    /// <para>判定＝矩形走廊（X 在已冲过的区间、Y 在长条半高内），逐个命中一次，走 TakeDamage（自带击退）+ ApplyStun。</para>
+    /// <para>冻场 / 死亡 / 剧情打断一律在 finally 里收干净，绝不让 _bossCharging 卡死成站桩。</para>
+    /// </summary>
+    IEnumerator CoBossChargeDash(float damage)
+    {
+        _bossCharging = true;
+        _skillTelegraphing = true;
+        _skillBusySince = Time.time;
+        // 长条从攒槽协程转交给本协程：先摘引用，finally 统一销毁，避免两条路径各 Destroy 一次。
+        GameObject laneRange = _chargeLaneRange;
+        GameObject laneFill = _chargeLaneFill;
+        _chargeLaneRange = null;
+        _chargeLaneFill = null;
+        Vector3 start = _chargeLaneStart;
+        float dir = Mathf.Abs(_chargeLaneDir) < 0.5f ? 1f : _chargeLaneDir;
+        float length = Mathf.Max(1f, _chargeLaneBaseScale.x);
+        float halfH = Mathf.Max(0.2f, _chargeLaneHalfHeight);
+        Vector3 end = start + Vector3.right * (dir * length);
+        float speed = Mathf.Max(0.1f,
+            (attr != null ? attr.GetAttr(AttrType.MoveSpeed) : GameConfig.BASE_MOVE_SPEED)
+            * GameConfig.BOSS_CHARGE_SPEED_MUL);
+        var hit = new HashSet<UnitBase>();
+        int faceDir = dir >= 0f ? 1 : -1;
+        facingDir = faceDir;
+        ApplyFacing(faceDir);
+        if (rb != null) rb.velocity = Vector2.zero;
+        if (unitAnim != null) unitAnim.SetMove(false, facingDir);
+        CombatJuice.Shake(GameConfig.BOSS_SKILL_RELEASE_SHAKE_AMP, GameConfig.BOSS_SKILL_RELEASE_SHAKE_DUR);
+
+        try
+        {
+            float t = 0f;
+            float dur = Mathf.Max(0.05f, length / speed);
+            while (t < dur)
+            {
+                if (isDead || this == null || !gameObject.activeInHierarchy) yield break;
+                // 冻场（剧情 / 对白 / 抽奖）：不推进、不越权出伤害，解冻才继续。
+                if (BattleManager.Instance != null && !BattleManager.Instance.UnitsCanAct)
+                {
+                    yield return null;
+                    continue;
+                }
+                t += Time.deltaTime;
+                Vector3 next = Vector3.Lerp(start, end, Mathf.Clamp01(t / dur));
+                GameConfig.SetWorldPosition(transform, next);
+                ApplyChargeHits(next, halfH, faceDir, damage, hit);
+                yield return null;
+            }
+            if (!isDead && gameObject.activeInHierarchy)
+                ApplyChargeHits(end, halfH, faceDir, damage, hit);
+        }
+        finally
+        {
+            if (laneRange != null) Destroy(laneRange);
+            if (laneFill != null) Destroy(laneFill);
+            _bossCharging = false;
+            _skillTelegraphing = false;
+            if (!_leaping && !_teleporting && !_bossPhaseShiftBusy)
+                _skillBusySince = 0f;
+        }
+    }
+
+    /// <summary>冲撞逐帧命中：矩形走廊（X 已冲过区间 + Y 在半高内）；每人只中一次。</summary>
+    void ApplyChargeHits(Vector3 cursor, float halfH, int faceDir, float damage, HashSet<UnitBase> hit)
+    {
+        if (this == null || isDead || !gameObject.activeInHierarchy) return;
+        var allies = BattleManager.Instance?.allyUnits;
+        if (allies == null || allies.Count == 0) return;
+        float minX = Mathf.Min(_chargeLaneStart.x, cursor.x) - 0.35f;
+        float maxX = Mathf.Max(_chargeLaneStart.x, cursor.x) + 0.35f;
+        float laneY = _chargeLaneStart.y;
+        for (int i = 0; i < allies.Count; i++)
+        {
+            var u = allies[i];
+            if (u == null || u.isDead || hit.Contains(u)) continue;
+            Vector3 p = u.transform.position;
+            if (p.x < minX || p.x > maxX) continue;
+            if (Mathf.Abs(p.y - laneY) > halfH) continue;   // 上下换道 = 真躲开
+            hit.Add(u);
+            bool crit = attr != null && Random.value < attr.GetAttr(AttrType.CritRate);
+            float dmg = crit ? damage * DamageFormula.CritMultiplier(attr) : damage;
+            // TakeDamage 内置击退（精英/Boss 打我方 → KNOCKBACK_ALLY），冲撞不用另写位移。
+            u.TakeDamage(dmg, crit, false, true, faceDir, this);
+            // 【2026-11-28】眩晕走统一出口（SPUM DEBUFF 动画 + 停 AI + 头顶 xuanyun 转圈星星）。
+            if (!u.isDead) u.ApplyStun(GameConfig.BOSS_CHARGE_STUN_SEC);
+        }
     }
 
     IEnumerator CoSkillTelegraphThenCast(UnitBase primaryTarget, float damage, float radius, AttackVfxKit kit, float telegraphSec)

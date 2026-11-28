@@ -157,7 +157,12 @@ public partial class WavePlanner
                 yield return new WaitForSeconds(stagger);
 
             if (wave == null || BattleLootMode.Active)
+            {
+                // 【2026-11-28】与协程末尾同款清理：主清场链新增 _spawnWaveCo 闸，
+                // 这条提前退出路径不清会让「所有波刷完」永远为假 → 关卡卡死不通关。
+                _spawnWaveCo = null;
                 yield break;
+            }
             // ===== T2 敌对乱入：目标波前 intruderSlotCount 个槽位改走机器人（不增波数、不吞怪数）=====
             // 放在词条/模板选择之前：避免 continue 吞掉 affix 预选槽，或遗留 SetPendingBias 未清。
             // 解析/生成失败会 LogError 并回落普通怪，保证本波怪数与非目标波一致。
@@ -653,8 +658,12 @@ public partial class WavePlanner
         int banditGrand = bMgr != null && bMgr.IsFormalMainRun && ChapterManager.Instance != null
             ? ChapterManager.Instance.currentGrand : 1;   // 与 Monster.Init.GrandIndexForStatScale 同款
         float banditScale = GameConfig.GetStatScale(banditChapter, banditGrand, banditStage);
-        float banditHpMul = 3f * banditScale * GameConfig.BOSS_TTK_HP_MUL;   // 血：boss TTK 血档，随章爬坡
-        float banditAtkMul = 2f * banditScale;                               // 攻：只吃章内曲线，不吃 boss 攻击削减
+        // 【2026-11-28 主人「第7关强盗血量减10%」】只乘强盗波血量，Boss/普通怪零影响。
+        // 【2026-11-28 主人「阿刃的血减20% 攻击也减20%」】阿刃（BanditRole.Arens）专属，在上列强盗波倍率上再×0.8；
+        // 老雷/夜薇保持原倍率，Boss/普通怪零影响。阿刃目前是物理系，法攻那行走不到，但同口径一起缩。
+        float arenNerf = banditRole == Mercenary.BanditRole.Arens ? 0.8f : 1f;
+        float banditHpMul = 3f * banditScale * GameConfig.BOSS_TTK_HP_MUL * 0.9f * arenNerf;   // 血：boss TTK 血档×0.9×阿刃0.8，随章爬坡
+        float banditAtkMul = 2f * banditScale * arenNerf;                   // 攻：只吃章内曲线，不吃 boss 攻击削减
         var a = merc.attr;
         a.SetBaseAndCurrent(AttrType.MaxHp, a.GetAttr(AttrType.MaxHp) * banditHpMul);
         a.SetBaseAndCurrent(AttrType.Attack, a.GetAttr(AttrType.Attack) * banditAtkMul);

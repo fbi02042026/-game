@@ -1029,6 +1029,29 @@ public class SaveData
         mercLevels[hireId] = Math.Max(1, level);
     }
 
+    // === 佣兵战斗经验（2026-11-28 主人拍板：打怪得经验、经验满升级，抽卡升级卡改为给经验）===
+    // 与 mercLevels 同一套隔离口径：key = 花名册 HireId（H001…），战斗内涨、存本存档；
+    // 战斗外界面一律不读（局外仍读 permanentMercs.level）。
+    // 存的是「当前等级内已攒经验」：升级时由 MercLevelSystem.AddExp 扣掉所需值、余量滚存。
+    // 旧存档无此列表 → 空字典 = 全员 0 经验，不需要迁移。
+    public List<StringIntEntry> mercExpEntries = new List<StringIntEntry>();
+    [NonSerialized] public Dictionary<string, int> mercExp = new Dictionary<string, int>();
+
+    /// <summary>查佣兵当前级内经验（hireId；无记录返回 0）。</summary>
+    public int GetMercExpRaw(string hireId)
+    {
+        if (string.IsNullOrEmpty(hireId)) return 0;
+        return mercExp != null && mercExp.TryGetValue(hireId, out int v) ? v : 0;
+    }
+
+    /// <summary>写佣兵当前级内经验（只落运行时字典；entries 由 SyncListsFromRuntime 镜像）。</summary>
+    public void SetMercExp(string hireId, int exp)
+    {
+        if (string.IsNullOrEmpty(hireId)) return;
+        mercExp ??= new Dictionary<string, int>();
+        mercExp[hireId] = Math.Max(0, exp);
+    }
+
     // === 佣兵升阶 / 局外养成等级（2026-10-23 施工单 T3，与升星 mercOutStars 两套并行系统互不干扰）===
     // key = 花名册 HireId（H001…）。没有记录 = Lv1 无加成（旧存档兼容）。
     // 养成消耗只有金币 + 职业徽记【2026-10-23 主人拍板 C1=A】，本条目不含任何碎片字段。
@@ -1356,6 +1379,17 @@ public class SaveData
                 var e = mercLevelEntries[i];
                 if (e == null || string.IsNullOrEmpty(e.id)) continue;
                 mercLevels[e.id] = Math.Max(1, e.value);
+            }
+        }
+        // 【2026-11-28】佣兵战斗经验重建：旧存档没有这个列表 → 空字典 = 全员 0 经验，兼容
+        mercExp = new Dictionary<string, int>();
+        if (mercExpEntries != null)
+        {
+            for (int i = 0; i < mercExpEntries.Count; i++)
+            {
+                var e = mercExpEntries[i];
+                if (e == null || string.IsNullOrEmpty(e.id)) continue;
+                mercExp[e.id] = Math.Max(0, e.value);
             }
         }
         // 【2026-10-26 信任交流】信任重建：从 entries 灌回字典（旧存档无列表 → 空字典 = 全员 0，兼容）
@@ -2750,6 +2784,11 @@ public class SaveData
         mercLevelEntries = new List<StringIntEntry>(mercLevels.Count);
         foreach (var kv in mercLevels)
             mercLevelEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
+        // 【2026-11-28】佣兵战斗经验镜像落盘（字典 → entries）
+        mercExp ??= new Dictionary<string, int>();
+        mercExpEntries = new List<StringIntEntry>(mercExp.Count);
+        foreach (var kv in mercExp)
+            mercExpEntries.Add(new StringIntEntry { id = kv.Key, value = kv.Value });
         // 【2026-10-26 信任交流】信任镜像落盘（字典 → entries）
         mercTrust ??= new Dictionary<string, int>();
         mercTrustEntries = new List<StringIntEntry>(mercTrust.Count);

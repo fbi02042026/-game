@@ -338,7 +338,7 @@ public class PetFeatureGuideDriver : MonoBehaviour
         {
             if (!PetUI.IsOpen) break;
             bubble.SetSortOrderBoostOnce(GameConfig.UiSort.TownPopup + 40);
-            var co = bubble.StartCoroutine(bubble.CoPlayLineAt(anchor, cries[i], 2.2f));
+            var co = bubble.StartCoroutine(bubble.CoPlayLineAt(anchor, cries[i], 2.2f, -50f));   // 【2026-11-28】宠物气泡往下 50
             // 【2026-11-25 主人报「喂养后退出，狗的气泡跑到角色页主角头上」】
             // 每帧盯宠物界面开合：一关就停当前这句并收气泡，不等 2.2s 播完，
             // 免得 anchor 已隐藏还把气泡钉在角色页。

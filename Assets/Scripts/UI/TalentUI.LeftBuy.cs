@@ -190,6 +190,37 @@ public partial class TalentUI
     }
 
     /// <summary>
+    /// 【2026-11-28 主人「有两个及以上的天赋可升的时候在一键升级按钮上也加个红点」】
+    /// 一键升级「现在能升几个」的计数：左列能连买的个数 + 右列能连升的次数。
+    /// 口径与 <see cref="OnClickBuyAll"/> 的预览完全一致（金币/天赋石按顺序逐笔扣），不另写一套判定；
+    /// 只有红点用它，亮/灰仍走 <see cref="HasBuyAllTarget"/>（那个还认「等级到了但钱不够」的解锁态）。
+    /// </summary>
+    static int CountBuyAllTargets(SaveData data)
+    {
+        if (data == null) return 0;
+        var talents = data.talents;
+
+        int leftCount = 0;
+        long gold = ResourceWallet.Get(data, ResourceWallet.ResourceType.Gold);
+        int unlocked = TalentDefs.LeftUnlockedCount(talents);
+        int playerLv = LevelSystem.CurrentLevel;
+        for (int i = unlocked; i < TalentDefs.Left.Length; i++)
+        {
+            if (playerLv < TalentDefs.LeftNodeUnlockLevel(i + 1)) break;
+            int c = TalentSystem.GetLeftGoldCost(TalentDefs.Left[i], talents);
+            if (gold < c) break;
+            gold -= c;
+            leftCount++;
+        }
+
+        int stones = data.talentPoints;
+        int rightCount = 0;
+        string why = null;
+        PreviewBuyAllRight(talents, ref stones, ref rightCount, ref why);
+        return leftCount + rightCount;
+    }
+
+    /// <summary>
     /// 连买的实际执行：左列复用 TryUnlockLeft，右列复用 TryUnlockRightNode / TryUpgradeRightNode；
     /// 顺序与预览一致（左列 → 右列逐节点多轮），遇到门槛/互斥/货币不足自然停；最后统一刷新 + 汇总 toast。
     /// </summary>

@@ -61,6 +61,11 @@ public partial class PetUI
         _deployLabel = FindDeep(_panel, "Stage/DeployBtn/Label");
         // 喂养消耗：在 DeployBtn 上挂金币图标+数字（prefab 无此节点，运行时新建，不动现有节点）
         EnsureFeedCostBadge();
+        // 【2026-11-28】喂养按钮 / 皮肤槽红点（走 RedDot 统一出口，缺节点不静默）
+        if (_deployBtn != null) RedDot.Bind(_deployBtn, RedDot.PetFeed);
+        else Debug.LogError(TAG + "喂养按钮红点绑定失败：缺 Stage/DeployBtn");
+        if (_skinSlot != null) RedDot.Bind(_skinSlot, RedDot.PetSkin);
+        else Debug.LogError(TAG + "皮肤槽红点绑定失败：缺 Stage/皮肤");
 
         _hpText = FindDeep(_panel, "InfoPanel/HpText");
         _atkText = FindDeep(_panel, "InfoPanel/AtkText");

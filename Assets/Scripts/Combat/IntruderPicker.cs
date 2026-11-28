@@ -84,6 +84,23 @@ public static class IntruderPicker
         }
     }
 
+    /// <summary>
+    /// 【2026-11-28】强盗专属头像 id（Resources/UI/Icons/MercHead/bandit_*.png），与
+    /// <see cref="BanditPrefabOfAssetId"/> 同源同值：头像/战斗模型共用 bandit_* 文件名，职责分开。
+    /// 🔴 只按 assetId 判：H022/H013/H009 等 hireId 传进来不会被误认，我方同脸佣兵零影响。
+    /// 非三人组返回 null → 调用方照旧走常规头像链，不做兜底造图。
+    /// </summary>
+    public static string BanditHeadOfAssetId(string assetId)
+    {
+        switch (assetId)
+        {
+            case BanditBoss: return "bandit_boss";
+            case BanditWitch: return "bandit_witch";
+            case BanditBlade: return "bandit_blade";
+            default: return null;
+        }
+    }
+
     /// <summary>排除集：ArenaRules 英雄位 heroAssetId + PlayerJobDefs 三职业 101 脸（Q2 建议排除）。</summary>
     static HashSet<string> BuildExcludedAssetIds()
     {

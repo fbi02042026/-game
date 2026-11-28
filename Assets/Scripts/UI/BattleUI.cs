@@ -261,8 +261,10 @@ public partial class BattleUI : MonoBehaviour
     float _liveBarTimer;
 
     float _lastPlayerHp = -1f, _lastPlayerMaxHp = -1f, _lastPlayerEnergy = -1f, _lastPlayerExp = -1f;
-    float _lastMerc1Hp = -1f, _lastMerc1Energy = -1f;
-    float _lastMerc2Hp = -1f, _lastMerc2Energy = -1f;
+    float _lastMerc1Hp = -1f, _lastMerc2Hp = -1f;
+    // 【2026-11-28】佣兵头像下第二条改为经验条，差异闸改盯「当前级内经验/升级门槛」
+    int _lastMerc1Exp = -1, _lastMerc1ExpNeed = -1;
+    int _lastMerc2Exp = -1, _lastMerc2ExpNeed = -1;
     const float LiveBarInterval = 0.1f;
 
     void Update()
@@ -319,7 +321,9 @@ public partial class BattleUI : MonoBehaviour
                 _lastPlayerMaxHp = maxHp;
                 _lastPlayerEnergy = energy;
                 playerSlot.UpdateSlot(PlayerIdentity.DisplayName, hero.level, hero.currentHp, maxHp, showLevel: false);
-                playerSlot.SetEnergy(energy);   // 蓝条留给技能能量
+                // 【2026-11-28 主人拍板「所有技能都走 CD」】玩家槽第二条不再显示技能能量：
+                // 走 SetUltCharge（雷击奥义关闭态整条隐藏），避免 SetEnergy 每 0.1s 又把空能量条拉出来。
+                playerSlot.SetUltCharge(0f, 0, GameConfig.THUNDER_ULT_NEED_MIN, false);
             }
         }
 
@@ -343,29 +347,35 @@ public partial class BattleUI : MonoBehaviour
         {
             var m = mercs[0];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f;
-            if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || !Mathf.Approximately(_lastMerc1Energy, energy))
+            string expKey1 = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+            int exp1 = MercLevelSystem.ExpOf(expKey1);
+            int need1 = MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(expKey1));
+            if (!Mathf.Approximately(_lastMerc1Hp, m.currentHp) || _lastMerc1Exp != exp1 || _lastMerc1ExpNeed != need1)
             {
                 _lastMerc1Hp = m.currentHp;
-                _lastMerc1Energy = energy;
+                _lastMerc1Exp = exp1;
+                _lastMerc1ExpNeed = need1;
                 // 2026-10-11 拍板：头像栏名字一律真名（与 SetupMercSlot / 场景头顶名同源 DisplayName），
                 // 旧写法 GetJobName 每帧把名字覆盖回职业名（如「水系法师」），已纠正。
                 mercSlot1.UpdateSlot(m.DisplayName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
-                mercSlot1.SetEnergy(energy);
+                mercSlot1.SetExpBar(exp1, need1);
             }
         }
         if (maxSlots > 1 && mercSlot2 != null && mercs != null && mercs.Count > 1 && mercs[1] != null)
         {
             var m = mercs[1];
             float maxHp = m.attr.GetAttr(AttrType.MaxHp);
-            float energy = BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(1) : 0f;
-            if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || !Mathf.Approximately(_lastMerc2Energy, energy))
+            string expKey2 = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+            int exp2 = MercLevelSystem.ExpOf(expKey2);
+            int need2 = MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(expKey2));
+            if (!Mathf.Approximately(_lastMerc2Hp, m.currentHp) || _lastMerc2Exp != exp2 || _lastMerc2ExpNeed != need2)
             {
                 _lastMerc2Hp = m.currentHp;
-                _lastMerc2Energy = energy;
+                _lastMerc2Exp = exp2;
+                _lastMerc2ExpNeed = need2;
                 // 同上：真名，不再用职业名覆盖
                 mercSlot2.UpdateSlot(m.DisplayName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
-                mercSlot2.SetEnergy(energy);
+                mercSlot2.SetExpBar(exp2, need2);
             }
         }
     }

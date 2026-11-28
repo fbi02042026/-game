@@ -57,6 +57,10 @@ public partial class UnitBase
         // 【2026-11-25 主人「所有剑盾攻速加10%」】剑盾系（玩家剑盾职业 + 剑盾卫士佣兵）统一 ×1.1
         if (IsSwordShieldUnit())
             atkSpd *= GameConfig.SWORD_SHIELD_ATTACK_SPEED_MUL;
+        // 【2026-11-28 主人「狂战攻速跟剑盾差不多，应该比剑盾快」】我方狂战 ×1.25；
+        // 只给 isAlly，敌方狂战（含强盗阿刃）不吃，避免已嫌硬的强盗更快。
+        if (isAlly && IsBerserkerUnit())
+            atkSpd *= GameConfig.BERSERKER_ATTACK_SPEED_MUL;
         return 1f / Mathf.Max(0.05f, atkSpd);
     }
 
@@ -68,6 +72,14 @@ public partial class UnitBase
     {
         if (this is Hero) return PlayerJobDefs.GetSelected() == PlayerJobId.SwordShield;
         if (this is Mercenary m) return MercRosterDefs.IsSwordShieldJob(m.hireId, m.mercId);
+        return false;
+    }
+
+    /// <summary>【2026-11-28】我方狂战判定：玩家看当前职业，佣兵看花名册行（优先 hireId，共用 asset 各判各的）。</summary>
+    bool IsBerserkerUnit()
+    {
+        if (this is Hero) return PlayerJobDefs.GetSelected() == PlayerJobId.Berserker;
+        if (this is Mercenary m) return MercRosterDefs.IsBerserkerJob(m.hireId, m.mercId);
         return false;
     }
 

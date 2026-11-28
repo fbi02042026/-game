@@ -21,6 +21,9 @@ public class BattleHeadTalkUI : MonoBehaviour
     Transform _uiAnchor;
     /// <summary>固定 UI 锚点模式下气泡底部相对锚点的抬高（屏幕像素）。纵向偏移可留（铁律20）。</summary>
     const float UiAnchorLiftPx = -40f;    // 【2026-11-24】相机统一后锚点回到顶部；【2026-11-25】主人验证太高，96→76→56→36→16→0（16 那步画面无变化，归零验证是否到下限）；【2026-11-26】主人「喂养叫声框往下40」→ -40
+    /// <summary>【2026-11-28】本次 UI 锚点气泡在公共偏移之上再叠加的纵向像素（宠物界面往下 50 用）。
+    /// 仅 PlayLineAt / CoPlayLineAt 显式传入；默认 0，战斗升级台词 / 抽卡气泡等其它调用方行为不变。</summary>
+    float _uiAnchorLiftExtra;
     Coroutine _co;
     bool _skipTyping;
     bool _advance;
@@ -180,9 +183,10 @@ public class BattleHeadTalkUI : MonoBehaviour
     /// 固定 UI 锚点模式（2026-11-22 宠物界面「叫两声」）：气泡浮在 anchor 节点上方。
     /// 与 <see cref="PlayLine"/> 共用 _co / 打字机 / 排序层，天然互斥打断，不新增第二套气泡。
     /// </summary>
-    public Coroutine PlayLineAt(Transform anchor, string content, float hold = -1f)
+    public Coroutine PlayLineAt(Transform anchor, string content, float hold = -1f, float liftExtra = 0f)
     {
         _uiAnchor = anchor;
+        _uiAnchorLiftExtra = liftExtra;
         return BeginLine(null, content, hold);
     }
 
@@ -206,9 +210,10 @@ public class BattleHeadTalkUI : MonoBehaviour
     }
 
     /// <summary>可被外部直接 yield（固定 UI 锚点版，宠物叫两声串行播放用）。</summary>
-    public IEnumerator CoPlayLineAt(Transform anchor, string content, float hold = -1f)
+    public IEnumerator CoPlayLineAt(Transform anchor, string content, float hold = -1f, float liftExtra = 0f)
     {
         _uiAnchor = anchor;
+        _uiAnchorLiftExtra = liftExtra;
         return CoPlayLine(null, content, hold);
     }
 
@@ -246,9 +251,11 @@ public class BattleHeadTalkUI : MonoBehaviour
         if (IsShowing || _co != null)
         {
             var keepAnchor = _uiAnchor;
+            float keepLift = _uiAnchorLiftExtra;   // 【2026-11-28】HideNow 会清本次偏移，宠物气泡的要补回
             int keepBoost = _sortOrderBoostOnce;   // 【2026-11-24】HideNow 会清抬层，本次气泡的要补回
             HideNow();
             _uiAnchor = keepAnchor;
+            _uiAnchorLiftExtra = keepLift;
             _sortOrderBoostOnce = keepBoost;
             if (_sortOrderBoostOnce > 0)
             {
@@ -388,7 +395,7 @@ public class BattleHeadTalkUI : MonoBehaviour
             }
             else worldTop = _uiAnchor.position;
             screen = RectTransformUtility.WorldToScreenPoint(followCam, worldTop);
-            screen.y += UiAnchorLiftPx;
+            screen.y += UiAnchorLiftPx + _uiAnchorLiftExtra;   // 【2026-11-28】宠物气泡往下 50：调用方传 liftExtra=-50
             // 【2026-11-25 根因修复】UI 相机就架在 UI 平面上，锚点投影的 z 恒为 ≈0，
             // 但 screen.x/y 是有效坐标。旧代码把 z<=0 当「落相机后方」→ 每次覆盖成屏幕中心固定值，
             // 气泡位置永远不跟随锚点。这里只把 z 归一为 1 供反投影用，x/y 一律保留。
@@ -448,6 +455,7 @@ public class BattleHeadTalkUI : MonoBehaviour
         }
         _follow = null;
         _uiAnchor = null;
+        _uiAnchorLiftExtra = 0f;   // 【2026-11-28】本次宠物气泡偏移随结束复位，不影响下一次气泡
         // 【2026-11-24】一次性抬层随本次气泡结束还原默认，战斗气泡层级不受影响
         _sortOrderBoostOnce = 0;
         var cv = GetComponent<Canvas>();

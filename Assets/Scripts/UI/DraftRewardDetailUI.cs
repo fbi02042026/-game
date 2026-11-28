@@ -317,12 +317,19 @@ public class DraftRewardDetailUI : MonoBehaviour
                 break;
 
             case DraftCardKind.MercLevelUp:
-                _kindText.text = "佣兵升级";
-                _metaText.text = "Lv" + Mathf.Max(1, card.MercLevel - 1) + " → Lv" + Mathf.Max(1, card.MercLevel);
+            {
+                // 【2026-11-28 主人拍板】抽卡给经验、不保证升级 → 文案改「经验 +N」，
+                // 属性行也不再列「LvN → LvN+1」对比（那会许诺一次并不发生的升级）。
+                string expKey = !string.IsNullOrEmpty(card.HireId) ? card.HireId : card.Id;
+                int curLv = Mathf.Max(1, MercLevelSystem.LevelOf(expKey));
+                int expGain = Mathf.Max(1, MercLevelSystem.ExpForLevel(curLv) / 2);
+                _kindText.text = "佣兵经验";
+                _metaText.text = $"Lv{curLv}　经验 +{expGain}";
                 body = MercDescOf(card);
                 icon = MercStandOf(card);
-                paramsText = MercParamLines(card, true);
+                paramsText = MercParamLines(card, false);
                 break;
+            }
 
             case DraftCardKind.MercStarUp:
                 _kindText.text = "佣兵升星";

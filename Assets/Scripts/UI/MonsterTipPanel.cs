@@ -40,8 +40,9 @@ public static class MonsterTipPanel
     static Transform _host;
 
     // === 版式（2026-11-11：宽度固定、高度按正文自动算）===
-    const float Width = 470f;        // 弹窗固定宽（图鉴与战斗提示同宽）
-    const float MinHeight = 236f;    // 正文极短时的下限，不让窗体缩成一条
+    // 【2026-11-28 主人「词条关那个介绍框大点」】470→560 / 236→280（×1.19）；边宽 FrameBorderScale 仍为 1，标题板不拉伸变形。
+    const float Width = 560f;        // 弹窗固定宽（图鉴与战斗提示同宽）
+    const float MinHeight = 280f;    // 正文极短时的下限，不让窗体缩成一条
     const float BodyTop = 122f;      // 窗体顶 → 正文起点（顶部 113px 是标题板，留 9px 缝）
     const float BodyBottom = 50f;    // 正文底 → 窗体底（下边框 36px + 14px 呼吸）
     const float BodyPadX = 36f;      // 正文左右内缩（与标题板左右边对齐；20 号字正文净宽 = 470-72 = 398）

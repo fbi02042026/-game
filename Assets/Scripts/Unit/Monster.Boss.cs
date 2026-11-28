@@ -30,7 +30,8 @@ public partial class Monster
         // 由 Monster.Update 每帧重查（与 TryBeginEnrage 同口径），预警结束的下一帧补起手。
         // 【2026-11-16】只拦「地上已经铺着攒槽红圈」的攒槽（近战 Boss）：这时插狂暴砸地会两套圈叠在一起。
         // 远程 Boss / 没技能的 Boss 不建圈（_hpChargeDisc 恒 null），阶段切换逐字不变，不会被攒槽拖住。
-        if (_skillTelegraphing || _bossPhaseShiftBusy || _hpChargeDisc != null) return;
+        // 【2026-11-28】石灵冲撞攒槽/冲刺中与二阶段红圈互斥，避免两套预警叠在地上。
+        if (_skillTelegraphing || _bossPhaseShiftBusy || _hpChargeDisc != null || _chargeLaneFill != null || _bossCharging) return;
         _bossPhase2Started = true;
         StartCoroutine(CoBossPhaseShift());
     }

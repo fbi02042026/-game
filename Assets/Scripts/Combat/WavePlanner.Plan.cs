@@ -778,6 +778,8 @@ public partial class WavePlanner
                 for (int i = 0; i < mercs.Count; i++)
                     HealUnitPct(mercs[i], pct);
         }
+        // 【2026-11-28 主人拍板「让加血也给宠物加」】宠物不在 GetActiveMercs，补给事件也要带到
+        if (bm != null) bm.ForEachAlivePet(p => HealUnitPct(p, pct));
         if (!string.IsNullOrEmpty(wave.stageEventTelegraph))
             GlobalToastUI.Show(wave.stageEventTelegraph);
     }

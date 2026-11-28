@@ -193,6 +193,10 @@ public partial class DialogueUI
         float delay = 1f / Mathf.Max(1f, typeCharsPerSecond);
         for (int i = 1; i <= full.Length; i++)
         {
+            // 【2026-11-28 主人截图「第 1 后整段跳到第二行」根因】CjkBreakHint 插在汉字**之后**，
+            // 打字机逐字输出时刚打出的那个字还没带上断行点，UGUI 把「1 章的路口…」整段当成一个词
+            // 推到下一行。零宽空格必须与前一个可见字同帧输出，不单独占一次打字节拍。
+            if (i < full.Length && full[i] == CjkBreakHint) i++;
             if (dialogueText != null)
                 dialogueText.text = full.Substring(0, i);
             ScrollDialogueText();

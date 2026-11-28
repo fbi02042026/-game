@@ -164,7 +164,11 @@ public partial class BattleUI : MonoBehaviour
         // 【2026-11-09 主人拍板「点亮原来隐藏的替换现在抽奖币的位置 累计」】金币本点亮金币条
         //（GoldDisplay，图标本就是金币）显示本局逐怪累计金币（真源 RunEarnedGold，UpdateGold 驱动，
         // 逐怪发放走 GrantRunGold 唯一出口）；其余模式维持 2026-10-26 的整条隐藏。
-        if (BattleManager.Instance != null && BattleManager.Instance.IsGoldDungeon)
+        // 【2026-11-28】探测走 InstanceQuiet：本方法在 BattleUI.Awake 里就会调，早于 AutoGameInitializer
+        // 装配 BattleManager。拿不到 = 模式未知 → 先按「非金币本」落位，系统就绪后
+        // AutoGameInitializer 会再调一次 UpdateTopBarResources() 纠正。
+        var bmHud = BattleManager.InstanceQuiet;
+        if (bmHud != null && bmHud.IsGoldDungeon)
             ShowTopBarEntryByLabel(goldText);
         else
             HideTopBarEntryByLabel(goldText);          // 金币条（GoldDisplay）
@@ -172,8 +176,7 @@ public partial class BattleUI : MonoBehaviour
         HideTopBarEntryByLabel(enchantStoneText);  // 天赋石（旧布局第三资源位 EnchantText，新顶栏借它显示天赋石）
         // 【2026-11-09 主人拍板「去掉抽奖币资源条」】资源副本（金币/徽记/卷轴/礼物）抽奖全免费、
         // 局内抽奖币无消费出口 → DraftDisplay 整条隐藏；竞技场（「剩余N次」）/裂隙/正式关不受影响。
-        if (BattleManager.Instance != null
-            && (BattleManager.Instance.IsResourceDungeon || BattleManager.Instance.IsBondDungeon))
+        if (bmHud != null && (bmHud.IsResourceDungeon || bmHud.IsBondDungeon))
             HideTopBarEntryByLabel(draftCoinText);
         else
             ShowTopBarEntryByLabel(draftCoinText);   // 【11-11】只藏不亮补齐：主线/裂隙/竞技场恢复（刚打过资源本后条不亮）

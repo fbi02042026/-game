@@ -771,6 +771,29 @@ public class BattleVFXSystem : Singleton<BattleVFXSystem>, ICombatBoundSingleton
         SpawnVFX(vfxLevelUp, position, 2f);
     }
 
+    GameObject _vfxMercLevelUp;
+
+    /// <summary>
+    /// 【2026-11-28 主人「佣兵升级没有看到升级特效」】佣兵升级：在本人脚下放一次现成的「增益」爆发。
+    /// <para>为什么不用 <see cref="PlayLevelUp"/>：它要的 `Resources/VFX/Level Up/Particles/VFX_Level_Up_01_Color`
+    /// 从来没入过库（源文件叫 `..._Color_Static`，且不在 Resources 下），LoadVFX 只会打一条 Warning 返回 null ——
+    /// 也就是说玩家升级那支其实一直没播。本方法改用包里已有的 `VFX/Skills/Ally/ally_atk_up`（技能增伤那支），
+    /// 不新增任何美术资源、不改包体。</para>
+    /// 寿命 1.2s、原位播一次即回收（走 PlayPreparedVfx 的池化回收，不常驻）。
+    /// </summary>
+    public void PlayMercLevelUp(Vector3 position)
+    {
+        if (_vfxMercLevelUp == null)
+            _vfxMercLevelUp = Resources.Load<GameObject>("VFX/Skills/Ally/ally_atk_up");
+        if (_vfxMercLevelUp == null)
+        {
+            Debug.LogWarning("[BattleVFXSystem] 缺佣兵升级特效 Resources/VFX/Skills/Ally/ally_atk_up");
+            return;
+        }
+        var go = PlayPreparedVfx(_vfxMercLevelUp, position, 1, 1.2f, 1f, prepareParticles: false);
+        if (go != null) ApplyFactionLook(go, VfxFaction.Ally);
+    }
+
     public void PlayDust(Vector3 position)
     {
         if (vfxDust == null) vfxDust = LoadVFX("Dust");

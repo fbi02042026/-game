@@ -292,6 +292,12 @@ public partial class TalentUI
                 img.color = canBuy ? Color.white : new Color(0.55f, 0.55f, 0.55f, 1f);
             resetButton.gameObject.SetActive(true);
             resetButton.interactable = true;
+
+            // 【2026-11-28 主人「有两个及以上的天赋可升的时候在一键升级按钮上也加个红点」】
+            // 计数与 OnClickBuyAll 预览同口径（左列能连买 + 右列能连升）；≥2 才亮，1 个时别催。
+            // 红点走全工程统一出口 RedDot（贴图/尺寸/键都从那里取，不另建图、不写死大小）。
+            RedDot.Bind(resetButton.transform, RedDot.TalentBuyAll);
+            RedDot.Set(RedDot.TalentBuyAll, CountBuyAllTargets(data) >= 2);
         }
     }
 

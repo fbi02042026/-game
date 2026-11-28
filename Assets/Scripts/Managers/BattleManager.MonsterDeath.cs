@@ -122,9 +122,10 @@ public partial class BattleManager
         // 击杀不再喂玩家可见等级（经验唯一入口 = LevelSystem.AddStageClearExp，主线/支线完成关卡才给）
         HiddenLevelSystem.AddKillExp(m);
 
-        // 【2026-11-26 主人拍板】佣兵等级**不走击杀经验**（原话「打怪升级玩家会刷」）：
-        // 涨级方式 = 局内再抽到同一个佣兵 → 该佣兵 +1 级（见 RunDraftDirector 的 MercLevelUp 分支）。
-        // 这里不写任何等级代码，避免又长出一条会被刷的成长线。
+        // 【2026-11-28 主人拍板·覆盖 11-26 口径】佣兵战斗等级改回打怪得经验、经验满升级：
+        // 击杀者全额、其他存活佣兵半额；抽卡升级卡改为给经验（不再是抽一次直接 +1 级）。
+        // 唯一涨级出口 = MercLevelSystem.AddExp，本处只负责按击杀归属派发经验值。
+        GrantMercKillExp(m);
 
         // 连杀：累计击杀连击数（≥3 起会在下方兑现额外金币，见 COMBO_BONUS_GOLD）
         float now = Time.time;
@@ -185,6 +186,57 @@ public partial class BattleManager
             // 延迟到本帧列表清理后判断；用协程下一帧
             if (!Rules.SkipWaveAnnounce && _waveAnnounceCo == null && !_allWavesSpawned)
                 StartCoroutine(CoCheckWaveClearNextFrame());
+        }
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人拍板】打怪给佣兵发战斗经验：击杀者全额、其他存活佣兵半额。
+    /// <para>击杀归属取 <see cref="UnitBase.LastDamageSource"/>（UnitBase.Damage.cs:74 赋值），
+    /// 与上方 RecordAllyKill 同一口径；玩家补刀时无全额得主，全员拿半额。</para>
+    /// <para>经验值复用隐藏经验的 8/20/50 三档常量（GameConfig.Progression.cs:55-57），
+    /// 不另造一份数值；满级与连升多级由 MercLevelSystem.AddExp 统一处理。</para>
+    /// </summary>
+    void GrantMercKillExp(Monster m)
+    {
+        var mm = MercenaryManager.Instance;
+        if (mm == null) return;
+        var alive = mm.GetActiveMercs();
+        if (alive == null || alive.Count == 0) return;
+
+        int exp = m.IsBossUnit ? GameConfig.HIDDEN_EXP_KILL_BOSS
+                : m.IsEliteWave ? GameConfig.HIDDEN_EXP_KILL_ELITE
+                : GameConfig.HIDDEN_EXP_KILL_NORMAL;
+
+        Mercenary killer = m.LastDamageSource as Mercenary;
+        if (killer != null && !killer.isAlly) killer = null;   // 敌方佣兵补刀不算我方得主
+
+        for (int i = 0; i < alive.Count; i++)
+        {
+            var merc = alive[i];
+            if (merc == null) continue;
+            string key = !string.IsNullOrEmpty(merc.hireId) ? merc.hireId : merc.mercId;
+            if (string.IsNullOrEmpty(key)) continue;
+
+            int gain = merc == killer ? exp : Mathf.Max(1, exp / 2);
+            MercLevelSystem.AddExp(key, gain, out int levelsGained);
+            // 【2026-11-28 主人拍板】每次得经验都在对应头像经验条上飘绿色 "+gain"（含未满级/未升级）
+            BattleUI.Instance?.PlayMercExpGainEffect(key, gain);
+            if (levelsGained <= 0) continue;   // 没升级只攒经验，不落盘/不刷场（UI 每 0.1s 自己读）
+
+            SaveSystem.Instance?.Save();
+            RunDraftDirector.Instance?.RefreshMercUnit(key);
+            // 【2026-11-28 主人「佣兵升级没有看到升级特效」】播报必须排在头像气泡之前：
+            // PlayMercLevelUpEffect 内部会 MercBattleBanter.SayLevelUpAt 开头顶气泡，
+            // 而 ShowFlythrough 第一道门就是 AnyBubbleShowing → 气泡一开，屏幕飞字当场被吞。
+            GlobalToastUI.ShowFlythrough($"{merc.DisplayName} 升至 Lv{MercLevelSystem.LevelOf(key)}");
+            // 升级特效 = 头像槽上美术摆的 effect（MagicDust）。之前「看不到」是两个原因，
+            // 已在 BattleUI.TuneLevelUpFx 里修：粒子速度按世界尺度给的（400~1400px/s，0.1s 飞出屏幕）
+            // + 渲染 sortingOrder 21 被根画布 950 压住。这里只管调用，参数矫正归 CharacterBar。
+            BattleUI.Instance?.PlayMercLevelUpEffect(key);
+            // 【2026-11-28】战场上再放一次（佣兵本人脚下，复用包里现成的 ally_atk_up）：
+            // 打怪升级时玩家盯的是战场，头像栏在最上面，只修头像那支还是容易「什么都没看见」。
+            if (merc != null)
+                BattleVFXSystem.Instance?.PlayMercLevelUp(merc.transform.position);
         }
     }
 

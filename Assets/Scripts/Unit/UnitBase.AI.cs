@@ -22,6 +22,7 @@ public partial class UnitBase
         if (_stunVisualActive && !IsStunned)
         {
             if (unitAnim != null) unitAnim.ClearDebuff();
+            ClearStunStars();   // 【2026-11-28】眩晕到期：头顶转圈星星一并收掉
             _stunVisualActive = false;
         }
         if (isDead) return;
@@ -62,6 +63,45 @@ public partial class UnitBase
             unitAnim.PlayDebuff();
             _stunVisualActive = true;
         }
+        // 【2026-11-28 主人「加了个眩晕 buff 放头顶的」】头顶转圈星星：所有眩晕共用这一出口，
+        // 冲撞/砸地/暴击眩晕表现统一。重复 ApplyStun 只刷新时长、不重复挂特效。
+        ShowStunStars();
+    }
+
+    // ===== 眩晕头顶特效（Resources/VFX/buff/xuanyun，按路径加载，不依赖 guid）=====
+    GameObject _stunStars;
+    const string StunStarsResPath = "VFX/buff/xuanyun";
+
+    void ShowStunStars()
+    {
+        if (_stunStars != null) return;   // 幂等：眩晕刷新不重复挂
+        var prefab = Resources.Load<GameObject>(StunStarsResPath);
+        if (prefab == null)
+        {
+            Debug.LogError("[UnitBase] 头顶眩晕特效缺失：" + StunStarsResPath);
+            return;   // 按项目口径：报错不兜底，不造替代特效
+        }
+        _stunStars = Instantiate(prefab, transform, false);
+        // 摆到单位头顶：X/Z 跟身体，Y 取包围盒顶 + 一点间隙（拿不到 SpriteRenderer 用固定兜底）。
+        float topY = 1.2f;
+        var sr = GetComponentInChildren<SpriteRenderer>();
+        if (sr != null && sr.sprite != null)
+            topY = sr.bounds.max.y - transform.position.y + 0.15f;
+        _stunStars.transform.localPosition = new Vector3(0f, topY, 0f);
+        // 粒子渲染层对齐战斗层：默认 Default 层会被单位盖住看不见。
+        var rs = _stunStars.GetComponentsInChildren<ParticleSystemRenderer>(true);
+        for (int i = 0; i < rs.Length; i++)
+        {
+            rs[i].sortingLayerName = GameConfig.BATTLE_SORTING_LAYER;
+            rs[i].sortingOrder = GameConfig.SORT_VFX + 6;
+        }
+    }
+
+    void ClearStunStars()
+    {
+        if (_stunStars == null) return;
+        Destroy(_stunStars);
+        _stunStars = null;
     }
 
     /// <summary>

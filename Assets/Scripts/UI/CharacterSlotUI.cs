@@ -30,7 +30,13 @@ public class CharacterSlotUI
     public Text nameText;               // 角色名（签名后延用）
     public Image hpBarFill;             // 血条填充 HPBarFill
     public Text hpText;                 // HP数值 "28/28"
-    public Image lanBarFill;            // 蓝条/技能能量 lanBarFill
+    public Image lanBarFill;            // 蓝条/技能能量 lanBarFill（佣兵槽改作绿色经验条）
+    /// <summary>
+    /// 【2026-11-28 主人拍板】true = 本槽血条下那条改显佣兵战斗经验（绿条），
+    /// SetEnergy 对这类槽整体停写，避免与经验条抢同一个 lanBarFill。
+    /// 绑定时按根节点名 MercSlot* 自动置位；玩家槽保持 false。
+    /// </summary>
+    public bool ExpBarMode { get; set; }
     /// <summary>未解锁/空槽时为 false，蓝条强制保持 0</summary>
     public bool EnergyEnabled { get; private set; } = true;
     public Text lanText;                // 蓝条文字
@@ -67,21 +73,16 @@ public class CharacterSlotUI
 
     // ============================================================
     // 蓝色盾条（抵扣型护盾：先扣盾、再扣血）
-    // 建在血条底框（HPBarBg）里、血条正下方，只在有护盾时 SetActive(true)，
-    // 平时隐藏不占地方。不动血条 / 蓝条本身的布局与颜色。
+    // 【2026-11-28 主人拍板】从「血条下方 4px 的一条」改成<b>直接叠在血条上</b>：
+    // 有盾时蓝色条盖住血条，盾量减少蓝色缩短、下面的血条跟着露出来；没盾整层隐藏。
+    // 盾条不画底色（否则会把血条整条遮死），只一层半透明蓝。
     // 一键关掉整条盾条：CharacterSlotUI.ShieldBarEnabled = false。
     // ============================================================
     /// <summary>盾条总开关：置 false 则三个角色槽都不再显示盾条。</summary>
     public static bool ShieldBarEnabled = true;
     const string ShieldBarNodeName = "ShieldBar";
-    /// <summary>盾条高度（像素）。血条 12px、与下方雷击充能条之间只有 ≈4.3px 空档，默认 4 刚好不压到。</summary>
-    const float ShieldBarHeight = 4f;
-    /// <summary>盾条与血条底边的间距（像素）。</summary>
-    const float ShieldBarGap = 0f;
-    /// <summary>盾条填充色（蓝）。</summary>
-    static readonly Color ShieldBarFillColor = new Color(0.30f, 0.68f, 1.00f, 0.95f);
-    /// <summary>盾条底色（深蓝）。</summary>
-    static readonly Color ShieldBarBgColor = new Color(0.08f, 0.16f, 0.28f, 0.80f);
+    /// <summary>盾条填充色（半透明蓝，能透出底下的血条）。</summary>
+    static readonly Color ShieldBarFillColor = new Color(0.30f, 0.68f, 1.00f, 0.82f);
 
     GameObject _shieldBarRoot;
     Image _shieldBarFill;
@@ -585,6 +586,9 @@ public class CharacterSlotUI
     /// <summary>技能能量：底栏 lanBar 显示进度，满时仅显示光边（不改头像框）</summary>
     public void SetEnergy(float energy)
     {
+        // 【2026-11-28】佣兵槽那条已是经验条：所有旧能量写入点（UpdateSkillEnergy /
+        // TickMercMp / 击杀回调）统一在这里短路，不再另改调用方。
+        if (ExpBarMode) return;
         if (!EnergyEnabled) energy = 0f;
         _lastEnergy = energy;
         float e = Mathf.Clamp01(energy);
@@ -607,20 +611,29 @@ public class CharacterSlotUI
         // 「就绪」这件事不该再往头像上糊一层装饰。能量进度仍然走 lanBarFill / lanText。
     }
 
+    /// <summary>经验条填充色（绿 #7CE07C，与 RarityPalette.PowerGain 同款绿）。</summary>
+    static readonly Color MercExpBarColor = new Color(0.486f, 0.878f, 0.486f, 1f);
+
     /// <summary>
-    /// 头像下「蓝条」改为经验进度（玩家槽专用；佣兵槽仍用 SetEnergy 显示技能能量）。
-    /// 仅驱动 lanBarFill + lanText，不影响能量环/光边。
+    /// 【2026-11-28 主人拍板】佣兵槽血条下那条 = 绿色经验条：cur/need 为当前级内经验与升级门槛。
+    /// 只驱动 lanBarFill + lanText；玩家槽（ExpBarMode=false）不参与。
+    /// 满级 need=0 时显示满条 + MAX。
     /// </summary>
-    /// <summary>
-    /// 等级/经验已从战斗中移除：蓝条不再显示经验，直接隐藏（蓝条留给技能能量）。
-    /// 保留方法供旧调用点编译通过。
-    /// </summary>
-    public void SetExpBar(float ratio, int cur, int max)
+    public void SetExpBar(int cur, int need)
     {
+        if (!ExpBarMode) return;
+        float ratio = need > 0 ? Mathf.Clamp01(cur / (float)need) : 1f;
+        if (lanBarFill != null)
+        {
+            lanBarFill.gameObject.SetActive(true);
+            lanBarFill.enabled = true;
+            lanBarFill.color = MercExpBarColor;
+            lanBarFill.fillAmount = ratio;
+        }
         if (lanText != null)
         {
-            lanText.gameObject.SetActive(false);
-            lanText.text = "";
+            lanText.gameObject.SetActive(true);
+            lanText.text = need > 0 ? $"{cur}/{need}" : "MAX";
         }
     }
 
@@ -706,11 +719,12 @@ public class CharacterSlotUI
         if (exist == null)
         {
             go.transform.SetParent(host, false);
+            // 【2026-11-28】盾条只画一层蓝，不画底色：底色会把血条整条盖死，
+            // 主人要的是「盾减少能看到下面的血条」。
             var bgImg = go.GetComponent<Image>();
             bgImg.raycastTarget = false;
-            bgImg.sprite = RuntimeUiArt.Bar();
-            bgImg.color = ShieldBarBgColor;
-            bgImg.type = Image.Type.Simple;
+            bgImg.color = Color.clear;
+            bgImg.enabled = false;
 
             var fillGo = new GameObject("Fill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             fillGo.transform.SetParent(go.transform, false);
@@ -738,9 +752,11 @@ public class CharacterSlotUI
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(w, ShieldBarHeight);
-        // 血条底边再往下 ShieldBarGap：正好落在血条与雷击充能条之间的空档里
-        rt.anchoredPosition = new Vector2(0f, -(h * 0.5f + ShieldBarHeight * 0.5f + ShieldBarGap));
+        // 【2026-11-28】与血条同尺寸、同中心：盾满盖满血条，盾掉一段露一段血条。
+        rt.sizeDelta = new Vector2(w, h);
+        rt.anchoredPosition = Vector2.zero;
+        // 放在血条之上（宿主里最后一层），保证蓝色能盖住红/绿血条
+        go.transform.SetAsLastSibling();
 
         _shieldBarRoot = go;
         Transform fillT = go.transform.Find("Fill");

@@ -26,6 +26,23 @@ public partial class Mercenary
     public BanditRole banditRole { get; private set; } = BanditRole.None;
     public bool IsBandit => banditRole != BanditRole.None;
 
+    /// <summary>
+    /// 【2026-11-28 主人「头像跟其他单位一样，哪里需要就用到哪里」】强盗专属头像 id
+    /// （MercHead/bandit_*）。按 mercId=assetId 走 <see cref="IntruderPicker.BanditHeadOfAssetId"/>
+    /// 唯一映射，不另写 role→id 表；非强盗恒 null，调用方照旧走常规头像链，零影响。
+    /// </summary>
+    public string BanditHeadId => IsBandit ? IntruderPicker.BanditHeadOfAssetId(mercId) : null;
+
+    /// <summary>强盗头像 Sprite（按路径从 Resources 取）；取不到返回 null，回退或露白由调用方定，不兜底造图。</summary>
+    public Sprite BanditHeadSprite
+    {
+        get
+        {
+            string id = BanditHeadId;
+            return string.IsNullOrEmpty(id) ? null : MercPortraitSprites.GetHead(id);
+        }
+    }
+
     // 老雷：眩晕 CD（妝 Time.time，不随切关持久化，重新生成即归零）
     float _banditStunCdUntil;
 

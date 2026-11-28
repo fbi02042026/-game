@@ -29,7 +29,10 @@ public static class ArenaBattleSkip
     public static void Ensure(Transform uiRoot)
     {
         if (uiRoot == null) return;
-        var bm = BattleManager.Instance;
+        // 【2026-11-28】探测走 InstanceQuiet：Ensure 在 BattleUI.Awake → EnsureBattleControls 里就会调，
+        // 早于 AutoGameInitializer 装配 BattleManager；拿不到 = 还不知道模式，按非竞技场处理（按钮不建）。
+        // 系统就绪后 AutoGameInitializer 会调 RebindAfterSystemsReady → 再次 Ensure 补齐。
+        var bm = BattleManager.InstanceQuiet;
         bool arena = bm != null && bm.Mode != null && bm.Mode.Id == BattleModeId.Arena;
         if (!arena)
         {

@@ -203,15 +203,16 @@ public partial class Monster
         if (_skillBusySince > 0f
             && Time.time - _skillBusySince > SKILL_BUSY_WATCHDOG_SEC)
         {
-            Debug.LogWarning($"[Monster.Skills] {gameObject.name} 演出标志超时自愈（协程疑似被强停）：telegraph={_skillTelegraphing} leap={_leaping} blink={_teleporting} phase2={_bossPhaseShiftBusy}");
+            Debug.LogWarning($"[Monster.Skills] {gameObject.name} 演出标志超时自愈（协程疑似被强停）：telegraph={_skillTelegraphing} leap={_leaping} blink={_teleporting} phase2={_bossPhaseShiftBusy} charge={_bossCharging}");
             _skillTelegraphing = false;
             _leaping = false;
             _teleporting = false;
             _bossPhaseShiftBusy = false;
+            _bossCharging = false;   // 【2026-11-28】冲撞协程被强停时一并自愈，防永久站桩
             _skillBusySince = 0f;
-            ClearHpChargeTelegraph();   // 收掉可能残留的攒槽预铺圈
+            ClearHpChargeTelegraph();   // 收掉可能残留的攒槽预铺圈 / 冲撞长条
         }
-        if (_skillTelegraphing || _bossPhaseShiftBusy || _leaping || _teleporting)
+        if (_skillTelegraphing || _bossPhaseShiftBusy || _leaping || _teleporting || _bossCharging)
         {
             if (rb != null) rb.velocity = Vector2.zero;
             if (unitAnim != null) unitAnim.SetMove(false, facingDir);

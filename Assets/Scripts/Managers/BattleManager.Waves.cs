@@ -563,6 +563,13 @@ public partial class BattleManager
         if (IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) return;
         if (!NormalOnlyContentAllowed(BattleDifficulty)) return;   // 剧情只普通难度：困难/噩梦不播（与主线剧情统一口径）
         if (!IsBossWaveActive) return;                  // 只在 Boss 波进行中触发
+        // 【2026-11-28 主人「只有最终boss来助阵 按剧情来」】同一支 SQ_MAIN 只在章末大 Boss 出场，
+        // 关5 中 Boss 濒死也不再空降三人（支线岛豁免，它本身就是单 Boss 战）。
+        if (!IsSideIsland)
+        {
+            int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
+            if (ActProgressionDefs.BossKindOfStage(stageIdx0) != 2) return;
+        }
         if (unit == null || unit.attr == null) return;
         if (unit.currentHp <= 0f) return;               // 已到致死一击的不算（死亡走各自流程，不和复活链叠加）
         float maxHp = Mathf.Max(1f, unit.attr.GetAttr(AttrType.MaxHp));
@@ -573,13 +580,16 @@ public partial class BattleManager
             ? IntruderEventDirector.TryGetRescueForIsland(SideIslandId.ToString(), out row)
             : IntruderEventDirector.TryGetRescueForChapter(CurrentChapter, out row);
         if (!has) return;
-        // 批次5 修1：存档级一次性（§一.8「全篇 3-5 次」拍板）——该救场剧情已看过 → 直接放行：
-        // 不触发、不置旗、不播。eventId 天然隔离主线 EV01 / 支线岛 EV04；data 为空视为未看（老档兼容）。
+        // 批次5 修1：存档级一次性（§一.8「全篇 3-5 次」拍板）——该救场剧情已看过 → 不再演，但人照来。
+        // 【2026-11-28 主人「boss 之前还是没有佣兵」·同一病根收口】旧写法 `HasIntruderStorySeen → return`
+        // 把剧情一次性旗当成了兵力开关（看过一次 → 这章以后濒死也没人来）。与 CoPreBossRescueArrival /
+        // CoEntryRescueBeforeFirstWave 统一口径：**兵力每次都来，台词只首播一次**。
+        // eventId 天然隔离主线 EV01 / 支线岛 EV04；data 为空视为未看（老档兼容）。
         var rescueData = SaveSystem.Instance?.Data;
-        if (rescueData != null && rescueData.HasIntruderStorySeen(row.eventId)) return;
+        bool rescueStorySeen = rescueData != null && rescueData.HasIntruderStorySeen(row.eventId);
+        if (!rescueStorySeen) rescueData?.MarkIntruderStorySeen(row.eventId);   // 开播即 Mark（照 Entry :775 口径：跳过也算看过）
         _rescueShownThisStage = true;   // 命中即置"本关已触发"，不再查
-        rescueData?.MarkIntruderStorySeen(row.eventId);   // 开播即 Mark（照 Entry :775 口径：跳过也算看过）
-        _rescueStoryCo = StartCoroutine(CoRescueArrival());
+        _rescueStoryCo = StartCoroutine(CoRescueArrival(rescueStorySeen));
     }
 
     /// <summary>
@@ -588,7 +598,9 @@ public partial class BattleManager
     /// Boss 波进行中，弹立绘等于「战斗中弹剧情 + 回来又变像素小人」（主人 11-23 拍板）。
     /// 先落人再演也让救场当场生效：莉娜的治疗与加百列的盾立刻接上，比「演完才落地」更救命。
     /// </summary>
-    IEnumerator CoRescueArrival()
+    /// <param name="storySeen">该救场剧情是否已看过（存档一次性旗）：true → 三人照常满血入场参战，只不演气泡台词。
+    /// 【2026-11-28】与 Boss 前助阵同口径：旗只管台词，不是兵力开关。</param>
+    IEnumerator CoRescueArrival(bool storySeen = false)
     {
         SpawnRescueSquad(1f, entryMode: false);   // 救场友军满血入场
         if (_rescueSquad.Count == 0)
@@ -598,17 +610,30 @@ public partial class BattleManager
             _rescueStoryCo = null;
             yield break;
         }
+        if (storySeen)
+        {
+            // 剧情已看过：人照来（满血参战），只是不再演一遍「让让！盾立住了」
+            Debug.Log("[BattleManager] 濒死救场：剧情已看过，只落人不演");
+            _rescueStoryCo = null;
+            yield break;
+        }
         yield return CoRescueBattleScene();
         _rescueStoryCo = null;
     }
 
     /// <summary>
     /// 救场·战场演出（2026-11-23）：三人轮流喊话 + 玩家回一句，气泡贴本人头上（跟着单位走）。
-    /// 【2026-11-23 主人「冻场」】对话期间冻住全场（UnitsCanAct=false），与引导 TalkBlock / 狗营救对话同源；
-    /// 三人先不冻场地走到编队位（冻着会僵在屏外），全员到位后才冻场开口，说完 finally 解冻继续打。
+    /// 【2026-11-23 主人「冻场」】对话期间冻住全场（UnitsCanAct=false），与引导 TalkBlock / 狗营救对话同源。
+    /// 默认（T5 濒死救场）：三人先不冻场地走到编队位（冻着会僵在屏外），全员到位后才冻场开口，说完 finally 解冻继续打。
+    /// 【2026-11-28 主人「助战佣兵来助战的时候要先冻场说个台词再开始」】<paramref name="freezeFromStart"/>=true
+    /// 用于 Boss 波前的助阵：入场那一刻就冻场（玩家不会再走开、三人稳稳站进画面），说完再解冻放 Boss 波。
+    /// 走入靠 <see cref="Mercenary.BeginMapEnter"/> 的 walkWhileFrozen，冻着照样走得进来，不会僵在屏外。
     /// 台词取 IntruderStoryBeats.RescueBattleLines（支线岛版/揭底版/首遇版），取不到人跳过该句。
+    /// 【2026-11-28】<paramref name="storyLines"/> 非空则用它替换默认台词：Boss 波前助阵走剧情版
+    /// （<see cref="IntruderStoryBeats.RescueArriveStoryLines"/>），濒死救场仍走默认的战中短句。
     /// </summary>
-    IEnumerator CoRescueBattleScene()
+    IEnumerator CoRescueBattleScene(bool freezeFromStart = false,
+        List<IntruderStoryBeats.EntryBattleLine> storyLines = null)
     {
         var talk = BattleHeadTalkUI.Ensure();
         if (talk == null)
@@ -616,23 +641,27 @@ public partial class BattleManager
             Debug.LogError("[BattleManager] BattleHeadTalkUI 取不到，救场演出跳过（友军已入场，战斗照常）");
             yield break;
         }
-        var lines = IntruderStoryBeats.RescueBattleLines(
+        var lines = storyLines ?? IntruderStoryBeats.RescueBattleLines(
             IsSideIsland ? 0 : CurrentChapter,
             IsSideIsland ? SideIslandId.ToString() : null);
 
-        // 走入期不冻场：冻着走不动会僵在屏外（T5 此刻 UnitsCanAct 为 true，走入照常）
-        for (int i = 0; i < lines.Count; i++)
-        {
-            if (_runClosed || _stageCleared) yield break;
-            var walker = ResolveSquadSpeaker(lines[i].Speaker);
-            if (walker == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
-            yield return CoWaitRescueSpeakerInPlace(walker);   // 走到位再开口，气泡不落在屏外
-        }
-
-        // 全员到位后整段冻场播台词：进来前谁能动才由谁冻，finally 只解自己冻的那次
+        // 整段（走入 + 台词）都在 try 里：冻场与解冻必须成对，任何一步异常都不能把 UnitsCanAct 卡在 false
         try
         {
-            if (UnitsCanAct) { UnitsCanAct = false; _rescueFrozeUnits = true; }
+            // 助阵口径：入场即冻，玩家不跑、三人站定再开口
+            if (freezeFromStart && UnitsCanAct) { UnitsCanAct = false; _rescueFrozeUnits = true; }
+
+            // 走入期默认不冻场：冻着走不动会僵在屏外（T5 此刻 UnitsCanAct 为 true，走入照常）
+            for (int i = 0; i < lines.Count; i++)
+            {
+                if (_runClosed || _stageCleared) yield break;
+                var walker = ResolveSquadSpeaker(lines[i].Speaker);
+                if (walker == null) continue;   // 该位已阵亡/未生成：跳过这句，不兜底换人
+                yield return CoWaitRescueSpeakerInPlace(walker);   // 走到位再开口，气泡不落在屏外
+            }
+
+            // 全员到位后整段冻场播台词：进来前谁能动才由谁冻，finally 只解自己冻的那次
+            if (!_rescueFrozeUnits && UnitsCanAct) { UnitsCanAct = false; _rescueFrozeUnits = true; }
             for (int i = 0; i < lines.Count; i++)
             {
                 if (_runClosed || _stageCleared) break;   // 玩家死了/已通关：立刻收掉气泡，别压在结算上
@@ -706,7 +735,10 @@ public partial class BattleManager
             return null;
         }
         merc.SetupBattleSkills(def.ActiveSkillId, def.PassiveSkillId);
-        merc.SetDisplayName(def.Name);
+        // 【2026-11-28 主人「换个名」】助战三人战场头顶名走昵称（赤壁/风羽/圣光），与我方同脸佣兵区分开；
+        // 花名册真名/招募池/图鉴一个字不动 —— Mercenary.SetDisplayName 的「一律用真名」口径对普通佣兵照旧，
+        // 这里只对救场小队开口子（唯一映射表在 IntruderStoryBeats.RescueSquadDisplayName，与剧情台词同源）。
+        merc.SetDisplayName(IntruderStoryBeats.RescueSquadDisplayName(hireId) ?? def.Name);
         merc.SetHireId(hireId);
         if (!allyUnits.Contains(merc))
             allyUnits.Add(merc);
@@ -844,7 +876,8 @@ public partial class BattleManager
     /// T6 入场救援（2026-11-23 改战场内演出）：进 Boss 关先把 3 名低血友军（startHpRatio=0.4，表值优先）
     /// 落在队伍前方 → 在场上用战斗小人 + 头顶气泡演「被咬住、搭把手」 → 首波照常刷。
     /// 挂点 = BattleStartSequenceCoroutine 的 FinishBattleIntro 之后（队伍与镜头都已就位）。
-    /// 一次性：存档级 intruderStorySeenKeys（key=eventId），多周目不重播（已看则整段不触发，友军也不生成）。
+    /// 一次性：存档级 intruderStorySeenKeys（key=eventId）只管**剧情**，多周目不重播；
+    /// 【2026-11-28】友军生成不再被这个旗挡（旗只管台词），重复进关照样三人到场参战。
     /// </summary>
     IEnumerator CoEntryRescueBeforeFirstWave()
     {
@@ -865,11 +898,13 @@ public partial class BattleManager
             yield break;
         }
         if (!has) yield break;
+        // 【2026-11-28 主人「boss 之前还是没有佣兵」】旧写法 `HasIntruderStorySeen → yield break`
+        // 把「剧情看过」当成「不再来人」：存档级 intruderStorySeenKeys 按 eventId 一次性，
+        // 看过一次之后这一章终 Boss 前就永远没有援军（主人实测就是这么「没有佣兵」的）。
+        // 现在拆开：**兵力每次进 Boss 关都来**，只有台词/演出首播一次（多周目不重播，剧情不腻）。
         var data = SaveSystem.Instance?.Data;
-        if (data != null && data.HasIntruderStorySeen(row.eventId)) yield break;   // 多周目不重播
-
-        // 开演即记存档（跳过也算看过，防同段重播；与 MarkPreStorySeen 同口径）
-        data?.MarkIntruderStorySeen(row.eventId);
+        bool storySeen = data != null && data.HasIntruderStorySeen(row.eventId);
+        if (!storySeen) data?.MarkIntruderStorySeen(row.eventId);   // 开演即记（跳过也算看过，同 MarkPreStorySeen 口径）
 
         // 先落人再演：旧流程是「全屏窗演完才生成友军」，画面里没有人、回来才是像素小人（割裂根因）。
         // 现在三人直接站在队伍前方（低血起步），气泡就贴在本人头上。
@@ -879,6 +914,12 @@ public partial class BattleManager
         {
             // 一个都没生成：不静默兜底造人，报错后照常放行首波（流程不能卡）
             Debug.LogError("[BattleManager] 入场救援三名友军一个都没生成，战场演出跳过（首波照常）");
+            yield break;
+        }
+        if (storySeen)
+        {
+            // 剧情已看过：人照来（低血友军照常参战），只是不再演一遍「被咬住、搭把手」
+            Debug.Log("[BattleManager] 入场救援：剧情已看过，只落人不演");
             yield break;
         }
 
@@ -892,8 +933,10 @@ public partial class BattleManager
     /// <summary>
     /// 【2026-11-26 主人拍板】友军助阵改为 Boss 波刷出前就位（原 T5 等 Boss 波打到 40% 血才中途来，
     /// 主人嫌乱）。挂点 = CoAnnounceThenSpawnNextWave 的 Boss 播报前，先落人再说话，播报后 Boss 立刻刷。
-    /// 门禁 / 查表 / 存档一次性全部复用 T5 现成出口；命中即置 _rescueShownThisStage，
+    /// 门禁 / 查表全部复用 T5 现成出口；命中即置 _rescueShownThisStage，
     /// 老受伤触发链 TryTriggerRescueOnWounded 首行早退，绝不在同一关再来一次。
+    /// 【2026-11-28】存档一次性旗只管台词：**兵力每次 Boss 波都来**，剧情只首播一次
+    ///（否则本章关5 中Boss 看过一次就把 EV01 消耗掉，关10 终 Boss 前永远没有援军）。
     /// 不动表：triggerNode=hp40 列保留不删（口径变更只改时机，不改事件身份）。
     /// </summary>
     IEnumerator CoPreBossRescueArrival()
@@ -903,16 +946,28 @@ public partial class BattleManager
         if (!(IsFormalMainRun || IsSideIsland)) yield break;
         if (IsTutorialRun || IsBondDungeon || IsArena || IsActivityDungeon || IsEndlessRift) yield break;
         if (!NormalOnlyContentAllowed(BattleDifficulty)) yield break;
+        // 【2026-11-28 主人「只有最终boss来助阵 按剧情来」】只在章末大 Boss（BossKind==2，stageIdx0=9）来人；
+        // 关5 中 Boss 不再助阵。支线岛本身就是一场单 Boss 战（BossKind 按章号算不到 2），豁免。
+        // 「按剧情来」= 章 2/3/4/6/8 没配 Rescue 行 → 仍无援军，不补表。
+        if (!IsSideIsland)
+        {
+            int stageIdx0 = ChapterManager.Instance != null ? ChapterManager.Instance.currentStageIndex : -1;
+            if (ActProgressionDefs.BossKindOfStage(stageIdx0) != 2) yield break;
+        }
 
         IntruderEventTable.Row row;
         bool has = IsSideIsland
             ? IntruderEventDirector.TryGetRescueForIsland(SideIslandId.ToString(), out row)
             : IntruderEventDirector.TryGetRescueForChapter(CurrentChapter, out row);
         if (!has) yield break;
+        // 【2026-11-28 主人「boss 之前还是没有佣兵」·同一病根】
+        // 旧写法 `HasIntruderStorySeen → yield break` 把剧情一次性旗当成兵力开关：
+        // EV01（第1章救场）在本章关5 中Boss 播过一次就永久消耗 → 关10 终 Boss 前再没人来。
+        // 现在拆开：**兵力每次 Boss 波都来**（满血三人照常参战），台词/冻场演出只首播一次。
         var data = SaveSystem.Instance?.Data;
-        if (data != null && data.HasIntruderStorySeen(row.eventId)) yield break;
+        bool storySeen = data != null && data.HasIntruderStorySeen(row.eventId);
+        if (!storySeen) data?.MarkIntruderStorySeen(row.eventId);
 
-        data?.MarkIntruderStorySeen(row.eventId);
         _rescueShownThisStage = true;
         SpawnRescueSquad(1f, entryMode: false);   // 满血入场，与旧救场同口径
         if (_rescueSquad.Count == 0)
@@ -920,9 +975,23 @@ public partial class BattleManager
             Debug.LogError("[BattleManager] Boss 前助阵三人一个都没生成，跳过演出（Boss 波照常）");
             yield break;
         }
-        // 玩家已点「开始战斗」就只落人不演，别挡开打（与 T6 入场救援同口径）
-        if (!_liveStartRequested)
-            yield return CoRescueBattleScene();
+        if (storySeen)
+        {
+            // 剧情已看过：人照来，只留一句「还是我们仨」（不重播整段 4 句、不入场即冻场，
+            // 冻场只发生在三人走到位之后那一句的 1.2s 里 —— 见 CoRescueBattleScene 的走入/冻场分段）
+            yield return CoRescueBattleScene(storyLines: IntruderStoryBeats.RescueArriveRepeatLines());
+            yield break;
+        }
+        // 【2026-11-28 主人「助战佣兵来助战的时候要先冻场说个台词再开始」】
+        // 旧写法是 `if (!_liveStartRequested) yield return CoRescueBattleScene();` —— 这个闸在正式关恒为 true：
+        // 正式关是实时抽/实时开打，玩家早在进关阶段就点过「开始战斗」（DoStartFight 置标记，Settlement.cs:1487），
+        // 一路到 Boss 波前都不会复位 → 台词永远不播，只凭空落三个人，观感就是「助战兵突然出现、谁都不认识」。
+        // 现在无条件演，且 freezeFromStart=true（入场即冻场，站定说完再解冻放 Boss 波）：
+        // 本协程在「首领来袭」播报之前、_waveAnnounceRunning=true 期间跑，场上没有新怪要刷，冻场不挡任何开打。
+        // 【2026-11-28 主人「佣兵进来后应该说的是剧情的对话 不是说的上阵的台词」】台词换成剧情版
+        //（谁、为什么来），战中那两句「盾立住了 / 奶给你拉满」只留给濒死救场 T5。
+        yield return CoRescueBattleScene(freezeFromStart: true,
+            storyLines: IntruderStoryBeats.RescueArriveStoryLines());
     }
 
     /// <summary>
@@ -1841,9 +1910,13 @@ public partial class BattleManager
     {
         HealUnitOnWaveCleared(hero);
         var mercs = MercenaryManager.Instance != null ? MercenaryManager.Instance.GetActiveMercs() : null;
-        if (mercs == null) return;
-        for (int i = 0; i < mercs.Count; i++)
-            HealUnitOnWaveCleared(mercs[i]);
+        if (mercs != null)
+        {
+            for (int i = 0; i < mercs.Count; i++)
+                HealUnitOnWaveCleared(mercs[i]);
+        }
+        // 【2026-11-28 主人拍板「让加血也给宠物加」】宠物不在 GetActiveMercs，波清回血也带到
+        ForEachAlivePet(p => HealUnitOnWaveCleared(p));
     }
 
     void HealUnitOnWaveCleared(UnitBase unit)
@@ -2263,7 +2336,11 @@ public partial class BattleManager
         _allWavesSpawned = allSpawned && (arenaSquadStage || (_waves != null && _waves.Count > 0));
 
         // 所有波次已刷完且场上无活怪 → 宝箱结算（用存活数，勿用 list.Count）
-        if (_allWavesSpawned && CountAliveMonsters() == 0 && _totalMonstersSpawnedThisStage > 0
+        // 【2026-11-28 主人「必须打完所有怪才算通关，看到 Boss 就中断退出也算通关」根因】
+        // wave.spawned 在刷怪协程启动时就置 true（WavePlanner.Execute.cs:98，为防并发重复刷波），
+        // 末波（强盗 Boss 波）刚打标、怪还没逐只刷出来时 _allWavesSpawned 已为真；此刻场上恰好无怪
+        // 就会误判通关。补 _spawnWaveCo 闸：刷怪协程没跑完一律不算通关（与 CutsceneDirector.WaitWaveCleared 同口径）。
+        if (_allWavesSpawned && _spawnWaveCo == null && CountAliveMonsters() == 0 && _totalMonstersSpawnedThisStage > 0
             && !_portalActive && !_stageCleared && !_rewardSequenceStarted
             && !SuppressStageClear)
         {

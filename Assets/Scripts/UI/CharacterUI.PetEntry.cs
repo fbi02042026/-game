@@ -42,6 +42,7 @@ public partial class CharacterUI
     void RefreshPetEntry()
     {
         if (_petEntryButton == null) return;
+        PutPetEntryBelowEquipBar();
         var save = SaveSystem.Instance?.Data;
         bool unlocked = save != null && save.HasStageCleared(1, 2);
         _petEntryButton.gameObject.SetActive(unlocked);
@@ -115,5 +116,24 @@ public partial class CharacterUI
         // 主人「红点要离图标近点」→ 只把偏移往图标内推（默认 -12,-9 悬在爪印框外）。
         RedDot.Bind(go.transform, RedDot.Pet, new Vector2(-24f, -22f));
         RefreshPetEntry();
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人拍板「打开装备弹窗应该在宠物图标上面」】装备槽必须压在宠物入口之上：
+    /// 宠物入口是运行时最后 SetParent 到 Popups 的（预制体zhuangbei在它前面），默认兄弟序最大会盖住装备栏左端槽，
+    /// 点左端槽开不了装备详情。把宠物入口插到 zhuangbei 之前即可（仍在 BackpackPanel 之上，只换兄弟序不动坐标）。
+    /// RefreshPetEntry 每次进页都调，幂等。
+    /// </summary>
+    void PutPetEntryBelowEquipBar()
+    {
+        if (_petEntryButton == null) return;
+        var popups = _petEntryButton.transform.parent;
+        var equipBar = popups != null ? (popups.Find("zhuangbei") ?? FindDeep(popups, "zhuangbei")) : null;
+        if (equipBar == null || equipBar.parent != popups) return;
+        // GetSiblingIndex 小 = 先渲染 = 在下面；把宠物入口挪到装备栏紧前面
+        int barIndex = equipBar.GetSiblingIndex();
+        int petIndex = _petEntryButton.transform.GetSiblingIndex();
+        if (petIndex > barIndex)
+            _petEntryButton.transform.SetSiblingIndex(barIndex);
     }
 }

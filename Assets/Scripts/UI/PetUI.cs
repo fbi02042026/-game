@@ -108,6 +108,8 @@ public partial class PetUI : MonoBehaviour
         RefreshDetail();
         // 【2026-11-25】解锁 / 上阵 / 喂养都会改「可解锁、可喂养」状态 → 顺带刷角色页宠物入口红点
         RefreshEntryRedDot();
+        // 【2026-11-28】宠物界面内部红点：喂养按钮 / 皮肤槽 / 列表逐只可解锁
+        RefreshInnerRedDots();
     }
 
     // Find 深度查找（prefab 同步工具）；找不到打日志不静默

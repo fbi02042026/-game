@@ -74,14 +74,8 @@ public sealed class SkillCastService
         // 查表（耗蓝/触发/冷却）一律用真 id，只有下面 PlaySkillVfx 继续用别名。
         string realId = PlayerSkillDefs.ResolveRealSkillId(skill.skillId);
 
-        // 2026-10-06 主人拍板：玩家侧也走蓝条（与佣兵同一套 MpProfile，4 个技能共用一条）。
-        // 蓝不足 → 不放、CD 不重置、不排队。扣蓝唯一出口 bm.TrySpendPlayerMp。
-        float mpCost = PlayerSkillDefs.MpCostOf(realId);
-        if (mpCost < 0f)
-        {
-            Debug.LogError($"[SkillCast] 玩家技能 {realId} 在 player_skills 里查不到耗蓝 → 拒绝释放（fail closed）");
-            return false;
-        }
+        // 【2026-11-28 主人拍板「所有技能都走 CD」】玩家技能同样只走冷却：
+        // 不再查耗蓝、不再因蓝不足拒绝释放（原 MpCostOf + TrySpendPlayerMp 两道闸整段删除）。
         UnitBase healTarget = null;
         bool isHeal = IsHealSkill(skill);
         bool isBuff = skill.skillType == SkillSystem.SkillType.Buff;
@@ -121,7 +115,7 @@ public sealed class SkillCastService
             });
             return true;
         }
-        if (!bm.TrySpendPlayerMp(mpCost)) return false;
+        // 【2026-11-28】纯 CD 制：不再扣玩家蓝
 
         // 2026-09-26 主人拍板：holy_barrier 改为「抵扣型护盾」——先扣盾、再扣血，不再走防御+35% buff 分支。
         // 【2026-11-12 主人拍板】只给玩家自己上盾（每次受伤抵 75%），与佣兵 SK008 全队盾分成两层、互不覆盖；
@@ -402,7 +396,12 @@ public sealed class SkillCastService
         if (merc.isAlly)
             SkillCastNotifyController.PushMercSkill(merc.mercId, merc.DisplayName, skill.skillId, skill.skillName);
         else
-            SkillCastNotifyController.PushEnemySkill(skill.skillId, merc.DisplayName, merc.sr != null ? merc.sr.sprite : null);
+        {
+            // 【2026-11-28 主人「三个强盗的头像绑下代码（技能条等按其他单位一样取图）」】
+            // 强盗放技能时技能条显示 MercHead/bandit_* 专属头像；非强盗（普通敌 / 竞技场）仍用自身模型 sprite，零影响。
+            Sprite enemyIcon = merc.BanditHeadSprite ?? (merc.sr != null ? merc.sr.sprite : null);
+            SkillCastNotifyController.PushEnemySkill(skill.skillId, merc.DisplayName, enemyIcon);
+        }
         Debug.Log($"[BattleManager] 佣兵技能释放: {merc.mercId} → {skill.skillName} ({skill.skillId}) manual={manual}");
         return true;
     }
@@ -687,9 +686,14 @@ public sealed class SkillCastService
 
         ApplyHealToUnit(hero, heal, healer);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
-        if (mercs == null) return;
-        foreach (var m in mercs)
-            ApplyHealToUnit(m, heal * 0.8f, healer);
+        if (mercs != null)
+        {
+            foreach (var m in mercs)
+                ApplyHealToUnit(m, heal * 0.8f, healer);
+        }
+        // 【2026-11-28 主人拍板「让加血也给宠物加」】宠物不在 GetActiveMercs 列表里，
+        // 团队治疗必须额外补一份（系数与佣兵一致 0.8），否则宠物永远吃不到奶。
+        if (bm != null) bm.ForEachAlivePet(p => ApplyHealToUnit(p, heal * 0.8f, healer));
     }
 
     /// <summary>

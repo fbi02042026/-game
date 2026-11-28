@@ -264,6 +264,17 @@ public partial class WavePlanner
                 trueBosses = trueBosses.Where(m => m.spriteIndex == GameConfig.BOSS_SPRITE_START).ToList();
             else if (formalMain && stageIdx == 9)
                 trueBosses = trueBosses.Where(m => m.spriteIndex > GameConfig.BOSS_SPRITE_START).ToList();
+            // 【2026-11-28 主人「为什么 boss 换了」】章 1/4/6/7 各配了 11、12 两只真 Boss，
+            // 旧写法直接 Random.Range 两只里抽 → 同一关每次进都换形象（章1 自然祭司 / 森林守护者 50/50），
+            // 玩家眼里就是「boss 被换了」。按 2026-11-11 拍板「8 章章末 Boss 目标统一取 B 位（12 号）正式名」
+            //（森林守护者 / 墓园仲裁者 / 秘境骇兽 / 洞穴沉睡者 / 深海之王 / 魔灵监视者 / 异种主宰 / 冰之守护神，
+            //  battle_quest.csv 与 AdventureLogCatalog A006/C1G 全是这套名字）→ 主线大 Boss 固定取本章 12 号。
+            // 副本 / 裂隙 / 支线岛 / 竞技场（formalMain=false）仍走原随机，行为一字不变。
+            if (formalMain && trueBosses.Count > 1)
+            {
+                int fixedSprite = trueBosses.Max(m => m.spriteIndex);
+                trueBosses = trueBosses.Where(m => m.spriteIndex == fixedSprite).ToList();
+            }
             // 下面原有 if(trueBosses.Count>0) 抽取/兜底逻辑一律不动
             if (trueBosses.Count > 0)
                 template = trueBosses[Random.Range(0, trueBosses.Count)];

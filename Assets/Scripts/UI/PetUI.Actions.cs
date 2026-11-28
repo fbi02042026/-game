@@ -190,7 +190,7 @@ public partial class PetUI
             {
                 var talk = BattleHeadTalkUI.Ensure();
                 talk.SetSortOrderBoostOnce(GameConfig.UiSort.TownPopup + 40);
-                talk.PlayLineAt(anchor, cries[0], 2.2f);
+                talk.PlayLineAt(anchor, cries[0], 2.2f, -50f);   // 【2026-11-28】宠物气泡往下 50（独立偏移，不影响战斗/抽卡气泡）
             }
         }
         GlobalToastUI.Show("喂养 " + def.name + " -" + cost + " 金币，好感 +1，" + attrName + " +" + amount);
@@ -262,6 +262,60 @@ public partial class PetUI
     internal static void RefreshEntryRedDot()
     {
         RedDot.Set(RedDot.Pet, HasActionable(SaveSystem.Instance?.Data));
+    }
+
+    /// <summary>
+    /// 【2026-11-28】宠物界面内部红点统一刷新：喂养按钮 / 皮肤槽 / 列表逐只可解锁。
+    /// 由 RefreshAll() 调用（界面打开 / 解锁 / 喂养 / 上阵 / 换肤后），此时 SelectedDef 已就绪。
+    /// 判定全部复用本文件已有的 HasFeedable 口径 + CanUnlockNow（与 HasUnlockable 同源），不另抄第二份。
+    /// </summary>
+    void RefreshInnerRedDots()
+    {
+        var save = SaveSystem.Instance?.Data;
+        var sel = SelectedDef;   // 列表选中的本体（实例属性）
+
+        // 喂养按钮：只有选中项就是上阵宠物（按钮显示「喂养」）时才亮，且喂得起。
+        bool feeding = sel != null && save != null && save.IsPetUnlocked(sel.id) && save.petDeployedId == sel.id;
+        RedDot.Set(RedDot.PetFeed, feeding && HasFeedable(save));
+
+        // 皮肤槽：当前选中本体已解锁 + 皮肤未拥有 + 钻石够买。
+        bool skinBuyable = false;
+        if (save != null && sel != null && save.IsPetUnlocked(sel.id))
+        {
+            var skin = PetDefs.SkinOf(sel.id);
+            if (skin != null && !save.IsPetUnlocked(skin.id)
+                && ResourceWallet.Get(save, ResourceWallet.ResourceType.Diamond) >= skin.unlockValue)
+                skinBuyable = true;
+        }
+        RedDot.Set(RedDot.PetSkin, skinBuyable);
+
+        // 列表逐只：每只单独一个键（pet.unlock.<bodyId>），判定口径与 HasUnlockable 一致。
+        var bodies = PetDefs.Bodies;
+        for (int i = 0; i < bodies.Count; i++)
+        {
+            var def = bodies[i];
+            if (def == null) continue;
+            RedDot.Set(RedDot.PetUnlockPrefix + def.id, CanUnlockNow(def, save));
+        }
+    }
+
+    /// <summary>单只宠物当前能否解锁（HasUnlockable 的逐只版本，口径逐字一致）。皮肤条目不计。</summary>
+    static bool CanUnlockNow(PetDefs.Def def, SaveData save)
+    {
+        if (def == null || save == null || save.IsPetUnlocked(def.id)) return false;
+        switch (def.unlock)
+        {
+            case PetDefs.UnlockType.Default: return true;
+            case PetDefs.UnlockType.Gold:
+                return ResourceWallet.Get(save, ResourceWallet.ResourceType.Gold) >= def.unlockValue;
+            case PetDefs.UnlockType.Chapter:
+                return save.IsChapterUnlocked(def.unlockValue);
+            case PetDefs.UnlockType.Diamond:
+                return ResourceWallet.Get(save, ResourceWallet.ResourceType.Diamond) >= def.unlockValue;
+            case PetDefs.UnlockType.AdWatch:
+                return save.petAdWatchCount >= def.unlockValue;
+            default: return false;
+        }
     }
 
     /// <summary>喂养定价按亲密度星级分档：1→2星 300、2→3星 400、满星后 500（规格 16:2x）。</summary>

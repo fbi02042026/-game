@@ -190,14 +190,36 @@ public partial class BattleEntryDraftPanel
         // PosY = 屏高/2 - a×panelH。屏高取父 RectTransform 当前 rect，禁写死 DESIGN_HEIGHT；
         // a 取子节点当时的 anchorMin.y（竖屏重锚可能把 0.5 改成 0/1，见 SetPivotLocalY 注释）。
         // _followers 里目前只有 GridContainer；BaseY 因此不再参与计算（死字段只报告不清理）。
+        // 【2026-11-28 修「拿不到战斗 UI 根的逻辑高」刷 Error】Build / BeginLive 都在 BattleUI.Awake 之后、
+        // Canvas 首次布局与 BattleViewportFit 适配之前跑，此刻父 RectTransform 的 rect 可能还是 0
+        // （实测每场刷两条 Error，这一关背包弹窗就没钉在屏幕中间）。
+        // 兜底顺序：父节点 rect → 根 Canvas rect → 屏幕高 / scaleFactor，三级全是实测值，
+        // 仍然不写死 DESIGN_HEIGHT；三级都拿不到才报错。
         var parentRt = _panel != null ? _panel.parent as RectTransform : null;
-        if (parentRt == null || parentRt.rect.height <= 1f)
+        float rootH = parentRt != null ? parentRt.rect.height : 0f;
+        if (rootH <= 1f)
+        {
+            var anyCanvas = _panel != null ? _panel.GetComponentInParent<Canvas>() : null;
+            if (anyCanvas != null)
+            {
+                var rootCanvas = anyCanvas.rootCanvas;   // BackpackPanel 自己挂着子 Canvas，必须取 rootCanvas
+                var rootCanvasRt = rootCanvas.transform as RectTransform;
+                if (rootCanvasRt != null) rootH = rootCanvasRt.rect.height;
+                if (rootH <= 1f)
+                {
+                    float sf = rootCanvas.scaleFactor;
+                    if (sf <= 0.0001f) sf = 1f;
+                    rootH = Screen.height / sf;
+                }
+            }
+        }
+        if (rootH <= 1f)
         {
             Debug.LogError("[BattleEntryDraftPanel] 拿不到战斗 UI 根的逻辑高，背包弹窗无法固定屏幕中间");
         }
         else
         {
-            float halfScreenH = parentRt.rect.height * 0.5f;
+            float halfScreenH = rootH * 0.5f;
             for (int i = 0; i < _followers.Count; i++)
             {
                 var f = _followers[i];

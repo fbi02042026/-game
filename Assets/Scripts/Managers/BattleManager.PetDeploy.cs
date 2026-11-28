@@ -38,6 +38,22 @@ public partial class BattleManager
         return null;
     }
 
+    /// <summary>
+    /// 【2026-11-28 主人拍板「让加血也给宠物加」】遍历场上所有存活宠物（含营救狗）。
+    /// <para>宠物是 <see cref="Pet"/>（Mercenary 子类）但<b>不在</b> MercenaryManager.GetActiveMercs()，
+    /// 所以任何「全体回血 / 团队治疗」都必须额外补这一份，否则宠物永远吃不到奶。</para>
+    /// <para>只遍历 allyUnits 里 is Pet 的项，不会重复奶佣兵。</para>
+    /// </summary>
+    public void ForEachAlivePet(System.Action<Pet> action)
+    {
+        if (action == null || allyUnits == null) return;
+        for (int i = 0; i < allyUnits.Count; i++)
+        {
+            if (allyUnits[i] is Pet p && p != null && !p.isDead)
+                action(p);
+        }
+    }
+
     /// <summary>换关清场：销毁上一关遗留的战斗宠物实例（含脱离 allyUnits 的孤儿狗），避免旧残血狗跨关残留。</summary>
     void ClearBattlePets()
     {

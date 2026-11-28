@@ -9,7 +9,10 @@ using System.Collections.Generic;
 /// <para>显示两类：</para>
 /// <para>① 计时 buff（技能给的 攻/防/暴 倍率，<see cref="AttrSystem.CollectActiveTimedBuffs"/> 唯一数据出口）：
 /// 图标下方带**数字倒计时**，到 0 消失；剩 20% 时间起**图标整体闪烁**提醒。</para>
-/// <para>② 常驻 buff（<c>BattleManager.tempBuffs</c>：局内强化卡加的 体/速/攻）：只亮牌、无倒计时。</para>
+/// <para>② 常驻 buff（<c>BattleManager.tempBuffs</c>：局内强化卡 + 本关战意属性）：只亮牌、无倒计时。</para>
+/// <para>③ 本关战意牌：<b>进关阶段（还没点「开始战斗」）只亮这一张</b>，让玩家选完战意立刻看到拿到了什么
+/// （2026-11-28 主人「选完当然要挂到 buff 那」）；开打后属性类战意由 ② 段自然亮牌，不重复。
+/// ⚠ 进关阶段整条要挪到「战斗力」正上方（<see cref="SyncEntryLayout"/>）：常规位正好压在「开始战斗」按钮上。</para>
 ///
 /// <para>⚠ 图标资源：【2026-10-12 主人给了 buff 图标】七张图在 <c>Resources/UI/BuffIcons/</c>
 /// （物攻/魔攻/生命/防御/暴击/攻速/移速），按路径加载 —— 图缺失时才退回「色块 + 汉字」占位。</para>
@@ -21,6 +24,13 @@ public class BuffHudUI : MonoBehaviour
     const float IconSize = 44f;
     const float Gap = 6f;
     const float RefreshInterval = 0.25f;
+
+    /// <summary>
+    /// 【2026-11-28 主人「buff 在开始战斗按钮上面了」】进关阶段（抽奖面板展开、还没点「开始战斗」）
+    /// 本条的额外上移量（单位 = 父级 PlayerSlot 本地，×CharacterBar 的 1.3 缩放 ≈ 73px）。
+    /// 只在上移后才和「战斗力」标签错开；见 <see cref="SyncEntryLayout"/> 的几何依据。
+    /// </summary>
+    const float EntryLiftY = 70f;
     /// <summary>剩余时间 < total×这个比例 时开始整体闪烁（主人拍板 20%）。</summary>
     const float BlinkRemainK = 0.2f;
 
@@ -40,6 +50,15 @@ public class BuffHudUI : MonoBehaviour
     readonly List<AttrSystem.ActiveTimedBuff> _timed = new List<AttrSystem.ActiveTimedBuff>();
     readonly HashSet<AttrType> _seen = new HashSet<AttrType>();
     float _timer;
+
+    /// <summary>本条容器（进关阶段要改锚点/位置，必须留引用）。</summary>
+    RectTransform _rt;
+    /// <summary>「战斗力」节点：常规位置与进关阶段位置的共同基准。</summary>
+    RectTransform _powerNode;
+    /// <summary>常规（战斗力右侧）时的 anchoredPosition.x。</summary>
+    float _rightX;
+    /// <summary>当前是否已按「进关阶段」挪过位（幂等标记，避免每拍重写 RectTransform）。</summary>
+    bool _entryLayout;
 
     struct BuffStyle
     {
@@ -156,6 +175,9 @@ public class BuffHudUI : MonoBehaviour
         rt.sizeDelta = new Vector2((IconSize + Gap) * 8f, IconSize);
 
         Instance = go.AddComponent<BuffHudUI>();
+        Instance._rt = rt;
+        Instance._powerNode = powerNode;
+        Instance._rightX = powerRight + 60f;
     }
 
     /// <summary>由 BattleUI.Update 的 0.1s 节流段驱动；内部再 0.25s 节流刷新内容。</summary>
@@ -168,19 +190,44 @@ public class BuffHudUI : MonoBehaviour
             Instance.gameObject.SetActive(false);
             return;
         }
-        // 【2026-11-15 修「战前 buff 挡住开始战斗」】进关阶段「开始战斗」还亮着：
-        // 战意/剧情加成已进 tempBuffs，buff 牌位置横穿按钮区域且画在上层 → 整条先收起来。
-        // 点「开始战斗」后 _onFight 清空（Refresh.cs DoContinue），下一拍自动恢复；其它模式判据恒 false。
-        if (BattleEntryDraftPanel.IsAwaitingStartFight)
-        {
-            Instance.gameObject.SetActive(false);
-            return;
-        }
+        // 【2026-11-28 主人「选完当然要挂到 buff 那」】进关阶段（还没点「开始战斗」）不再整条收起 ——
+        // 2026-11-15 的整条隐藏会让「刚选完战意」这一刻 buff 条全空，玩家以为没给 buff。
+        // 现在改由 Refresh 分支处理：进关阶段只亮「本关战意」一张牌，其余牌照旧收起；
+        // 位置由 SyncEntryLayout 挪到「战斗力」正上方（常规位正好压在「开始战斗」按钮上）。
         Instance.gameObject.SetActive(true);
+        Instance.SyncEntryLayout(BattleEntryDraftPanel.IsAwaitingStartFight);
         Instance._timer += Time.unscaledDeltaTime;
         if (Instance._timer < RefreshInterval) return;
         Instance._timer = 0f;
         Instance.Refresh();
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人「buff 在开始战斗按钮上面了」】进关阶段把整条挪到「战斗力」正上方。
+    /// <para>为什么非挪不可：常规位置是「战斗力右侧 + 向右排」，而进关时抽奖面板是展开态
+    ///（面板 750 / zhuangshi +80），CharacterBar 抬到 y≈632，牌就落在 y≈810 这一行；
+    ///「开始战斗」= BtnContinue 357×145、占 x -183~173 / y 760~905，牌正好落在按钮左端上（主人截图就是这张）。</para>
+    /// <para>挪到战斗力同一列（x = 战斗力.x）后牌完全落在按钮左侧，横向不交叠；
+    /// 再上抬 <see cref="EntryLiftY"/> 避开「战斗力」标签自身（标签 ≈61px 高，牌与它留出十几像素）。
+    /// 点「开始战斗」后 IsAwaitingStartFight 变 false，下一拍自动回到右侧常规位。</para>
+    /// </summary>
+    void SyncEntryLayout(bool entry)
+    {
+        if (_rt == null || _powerNode == null) return;
+        if (_entryLayout == entry) return;
+        _entryLayout = entry;
+
+        if (entry)
+        {
+            _rt.pivot = new Vector2(0.5f, _powerNode.pivot.y);
+            _rt.anchoredPosition = new Vector2(_powerNode.anchoredPosition.x,
+                                               _powerNode.anchoredPosition.y + EntryLiftY);
+        }
+        else
+        {
+            _rt.pivot = new Vector2(0f, _powerNode.pivot.y);
+            _rt.anchoredPosition = new Vector2(_rightX, _powerNode.anchoredPosition.y);
+        }
     }
 
     /// <summary>局内 buff 集合变了（抽了强化卡等）由外部喊一嗓子，下一拍立刻重排常驻牌。</summary>
@@ -189,6 +236,18 @@ public class BuffHudUI : MonoBehaviour
     void Refresh()
     {
         int idx = 0;
+        var bm = BattleManager.Instance;
+
+        // ⓪ 【2026-11-28 主人「先选再点开始战斗，选完当然要挂到 buff 那」】进关阶段：
+        // 只亮「本关战意」这一张牌，其余（计时 buff / 强化卡）照旧收起。
+        // 牌的位置已由 SyncEntryLayout 挪到「战斗力」正上方 —— 常规位（战斗力右侧）会压住「开始战斗」按钮；
+        // 点「开始战斗」后 _onFight 清空，下一拍自动切回完整列表与常规位置。
+        if (BattleEntryDraftPanel.IsAwaitingStartFight)
+        {
+            if (bm != null && bm.HasStageBlessing) idx = RenderStageBlessingBadge(idx);
+            HideFrom(idx);
+            return;
+        }
 
         // ① 计时 buff（带倒计时 / 快到期闪烁）
         var hero = Hero.Instance;
@@ -215,8 +274,7 @@ public class BuffHudUI : MonoBehaviour
             }
         }
 
-        // ② 常驻 buff（本局强化卡）：只亮牌、无倒计时
-        var bm = BattleManager.Instance;
+        // ② 常驻 buff（本局强化卡 + 本关战意的属性）：只亮牌、无倒计时
         if (bm != null && bm.tempBuffs != null)
         {
             _seen.Clear();
@@ -238,7 +296,35 @@ public class BuffHudUI : MonoBehaviour
             }
         }
 
-        // 多余的收起来
+        // ③ 非属性类战意的兜底牌。
+        // 【2026-11-28】当前 6 条战意全是属性类，已由 ② 段（tempBuffs）自然亮牌，这里恒不触发；
+        // 留着是为了以后再加「只改关卡系数、不进 tempBuffs」的战意时不至于又变成「选了看不见」。
+        if (bm != null && bm.StageBlessingNeedsBadge) idx = RenderStageBlessingBadge(idx);
+
+        HideFrom(idx);
+    }
+
+    /// <summary>
+    /// 亮出「本关战意」牌：图标取战意属性，点开显示「本关战意 / 暴击 +8%」。
+    /// 换关由 BattleManager.RevertBossStageBlessing 清空文案，下一拍自动消失。
+    /// </summary>
+    int RenderStageBlessingBadge(int index)
+    {
+        var bm = BattleManager.Instance;
+        if (bm == null) return index;
+        var icon = GetIcon(index);
+        icon.Root.SetActive(true);
+        ApplyStyle(icon, StyleOf(bm.StageBlessingIcon));
+        icon.Cd.gameObject.SetActive(false);
+        icon.Cg.alpha = 1f;
+        icon.TipName = "本关战意";
+        icon.TipValue = bm.StageBlessingLabel;
+        return index + 1;
+    }
+
+    /// <summary>把 idx 之后的牌全部收起（列表变短时复用同一段收尾逻辑）。</summary>
+    void HideFrom(int idx)
+    {
         for (int i = idx; i < _pool.Count; i++)
             _pool[i].Root.SetActive(false);
     }

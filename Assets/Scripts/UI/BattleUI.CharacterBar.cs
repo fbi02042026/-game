@@ -331,7 +331,10 @@ public partial class BattleUI : MonoBehaviour
         mercSlot1.UpdateSlot(tutName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
         // 【2026-10-19 主人拍板】教程佣兵名字同样随稀有度上色（塔克=稀有蓝）
         mercSlot1.SetNameColor(RarityPalette.Get(ResolveMercRarity(m.mercId, m.hireId)));
-        mercSlot1.SetEnergy(BattleManager.Instance != null ? BattleManager.Instance.GetMercMp(0) : 0f);
+        // 【2026-11-28】教程槽那条也是经验条（不再是技能能量）
+        string tutExpKey = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+        mercSlot1.SetExpBar(MercLevelSystem.ExpOf(tutExpKey),
+            MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(tutExpKey)));
     }
 
     /// <summary>
@@ -452,6 +455,10 @@ public partial class BattleUI : MonoBehaviour
                 var m = activeMercs[index];
                 float maxHp = m.attr.GetAttr(AttrType.MaxHp);
                 slot.UpdateSlot(mercName, m.mercLevel, m.currentHp, maxHp, showLevel: true);
+                // 【2026-11-28】血条下那条即时刷成经验条，不等 0.1s 的 RefreshLiveBars
+                string expKey = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
+                slot.SetExpBar(MercLevelSystem.ExpOf(expKey),
+                    MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(expKey)));
             }
             else
             {
@@ -465,6 +472,12 @@ public partial class BattleUI : MonoBehaviour
                 if (runMercs != null && index < runMercs.Count && runMercs[index] != null)
                     fallenLv = Mathf.Max(1, runMercs[index].level);
                 slot.UpdateSlot(mercName, fallenLv, 0, 0, showLevel: true);
+                // 【2026-11-28】阵亡槽经验条按存档真值刷（经验不因阵亡清零），别留上一帧残影
+                string fallenExpKey = index < mercHireIds.Count && !string.IsNullOrEmpty(mercHireIds[index])
+                    ? mercHireIds[index] : (index < mercIds.Count ? mercIds[index] : null);
+                if (!string.IsNullOrEmpty(fallenExpKey))
+                    slot.SetExpBar(MercLevelSystem.ExpOf(fallenExpKey),
+                        MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(fallenExpKey)));
                 slot.SetFallen(true);
             }
         }
@@ -621,10 +634,127 @@ public partial class BattleUI : MonoBehaviour
             MercBattleBanter.SayLevelUpAt(slot.root.transform);
     }
 
+    // ============================================================
+    // 【2026-11-28 主人拍板】佣兵获得经验时，在对应头像的经验条上飘一个绿色 "+X"。
+    // 与升级特效分开：每次加经验都飘（含未升级），升级另播 effect / 台词。
+    // 纯运行时白模、用完即毁；不动 prefab、不动经验条本身。
+    // ============================================================
+    /// <summary>按 hireId / mercId 找到对应头像槽，在经验条上方飘绿色 "+gain"。</summary>
+    public void PlayMercExpGainEffect(string hireIdOrMercId, int gain)
+    {
+        if (gain <= 0 || string.IsNullOrEmpty(hireIdOrMercId)) return;
+        int index = -1;
+        if (RunLoadout.IsActive)
+        {
+            var mercs = RunLoadout.Mercs();
+            for (int i = 0; i < (mercs != null ? mercs.Count : 0); i++)
+            {
+                var e = mercs[i];
+                if (e == null) continue;
+                if (string.Equals(e.hireId, hireIdOrMercId, System.StringComparison.Ordinal)
+                    || string.Equals(e.mercId, hireIdOrMercId, System.StringComparison.Ordinal))
+                { index = i; break; }
+            }
+        }
+        if (index < 0 || index > 1) return;   // 不在战内出战名单（局外/竞技场）：不飘，不报错
+        var slot = index == 0 ? mercSlot1 : mercSlot2;
+        if (slot == null || slot.lanBarFill == null) return;
+        StartCoroutine(CoPlayExpGainFloat(slot.lanBarFill.transform, gain));
+    }
+
+    static readonly Color MercExpGainColor = new Color(0.486f, 0.878f, 0.486f, 1f);   // 同经验条绿 #7CE07C
+
+    /// <summary>【2026-11-28 18:42 主人「再往右 20」】经验飘字在「0.26×经验条宽」之上再右移的像素。</summary>
+    const float ExpGainRightOffset = 20f;
+    /// <summary>【2026-11-28 18:42 主人「字往上飘」】飘字全程上浮的高度（本地单位，约等于字号 18 的一行）。</summary>
+    const float ExpGainRiseUp = 22f;
+
+    static System.Collections.IEnumerator CoPlayExpGainFloat(Transform bar, int gain)
+    {
+        var barRt = bar as RectTransform;
+        if (barRt == null) yield break;
+
+        // 同一条上重复获得经验：先清掉上一条残影，只留最新一次（沿用体力飘字口径）
+        var old = bar.Find("MercExpGainFloat");
+        if (old != null) Destroy(old.gameObject);
+
+        var go = new GameObject("MercExpGainFloat", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(bar, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        // 【2026-11-28 主人拍板】飘字挂在经验条上、偏右一点。经验条只有 12px 高、上方 4px 就是血条，
+        // 所以字号压到 18、起点 y 略下（-4），免得一开始就压在血条上。
+        // 【2026-11-28 18:42 主人「再往右 20 字往上飘」】起点在 0.26×条宽 基础上再右移 ExpGainRightOffset；
+        // 动画由早间的「原地右滑 10px」改成「向上飘 ExpGainRiseUp + 淡出」（淡出快，飘过血条时已很浅）。
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = new Vector2(barRt.rect.width * 0.26f + ExpGainRightOffset, -4f);
+        rt.sizeDelta = new Vector2(56f, 24f);
+        var t = go.GetComponent<Text>();
+        t.font = GameFonts.GetNumber();
+        t.fontSize = 18;
+        t.fontStyle = FontStyle.Bold;
+        t.color = MercExpGainColor;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.text = "+" + gain;
+        t.raycastTarget = false;
+
+        const float Life = 0.75f;
+        float baseX = rt.anchoredPosition.x;
+        float baseY = rt.anchoredPosition.y;
+        for (float a = 0f; a < Life; a += Time.unscaledDeltaTime)
+        {
+            // 【2026-11-28 修 MissingReferenceException 刷屏】飘字挂在经验条下面，而升级走
+            // RefreshMercUnit 会重建/销毁整个佣兵槽（连经验条带飘字一起没）→ 协程还在跑，
+            // 下一帧对已销毁的 RectTransform 写 anchoredPosition 就抛。
+            // 每帧判一次：对象没了直接收工（Unity 的假 null，Destroy 后即为 true）。
+            if (rt == null || t == null) yield break;
+            float k = Mathf.Clamp01(a / Life);
+            // 【2026-11-28 18:42 主人「字往上飘」】x 定死（只在起点右移那 20px），y 匀速上浮 + 同时淡出
+            rt.anchoredPosition = new Vector2(baseX, baseY + ExpGainRiseUp * k);
+            var c = t.color;
+            c.a = 1f - k;
+            t.color = c;
+            yield return null;
+        }
+        if (go != null) Destroy(go);
+    }
+
+    /// <summary>
+    /// 升级粒子「在头像槽里真的看得见」的两处运行时矫正。
+    /// 【2026-11-28 主人「佣兵升级没有看到升级特效」】美术在 MercSlot1/2 下摆的 effect（MagicDust）是按
+    /// 100px/单位 的世界尺度给的参数，直接塞进 170×100 的头像槽会失效：
+    /// ① startSpeed 4~14 → 世界 400~1400 px/s，粒子 0.1 秒就飞出屏幕，观感等于「压根没播」
+    ///    → 超过 3 的压到 0.3~1.2（30~120 px/s），环状粒子在槽内慢慢扩散完；
+    ///    寿命 / 颜色 / 形状 / 尺寸 / 发射量一律不动（美术口径只改这一项）。
+    /// ② ParticleSystemRenderer.sortingOrder 只有 21 —— 只比 BackpackPanel 画布(20) 高一点，
+    ///    被根画布 BattleHud(950) 整片压住 → 抬到 BattleHud+1，稳定盖在头像与血条之上。
+    /// </summary>
+    static void TuneLevelUpFx(ParticleSystem[] pss)
+    {
+        if (pss == null) return;
+        for (int i = 0; i < pss.Length; i++)
+        {
+            var ps = pss[i];
+            if (ps == null) continue;
+
+            var main = ps.main;
+            if (main.startSpeed.constantMax > 3f)
+                main.startSpeed = new ParticleSystem.MinMaxCurve(0.3f, 1.2f);
+
+            var r = ps.GetComponent<ParticleSystemRenderer>();
+            if (r != null)
+            {
+                int order = GameConfig.UiSort.BattleHud + 1;
+                if (r.sortingOrder < order) r.sortingOrder = order;
+            }
+        }
+    }
+
     static System.Collections.IEnumerator CoPlayLevelUpEffectOnce(GameObject fx)
     {
         if (fx == null) yield break;
         var pss = fx.GetComponentsInChildren<ParticleSystem>(true);
+        TuneLevelUpFx(pss);
         fx.SetActive(false);
         for (int i = 0; i < pss.Length; i++)
             if (pss[i] != null) pss[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);

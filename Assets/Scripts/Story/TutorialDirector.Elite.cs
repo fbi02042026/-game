@@ -13,10 +13,8 @@ public partial class TutorialDirector
     // 精英宿敌拍（2026-10-07 主人拍板）
     // ============================================================
 
-    /// <summary>【2026-10-19 主人拍板「血条到底再弹遗言」】降到 5% —— 死亡门把血钳到 1 点后
-    /// 1/maxHp 必然 ≤5%，遗言必定在血条到底那一刻才触发。</summary>
-    const float EliteLastWordsHpRatio = 0.05f;
-
+    // 【2026-11-28 主人拍板】遗言只认死亡门钳到 1 点（血条真到底）：
+    // 旧的 5% 阈值在 300~400 血档上 = 15~20 点，红条明显还挂一截就开口，反复复发。
     /// <summary>
     /// 等精英真刷出来（波次是异步进场的），找到就回调出去。
     /// 找精英只看 <c>Monster.IsEliteWave</c> 一处真源，找不到再按满血最高的那只兜 ——
@@ -106,8 +104,8 @@ public partial class TutorialDirector
             while (t < 25f)
             {
                 if (elite == null || elite.isDead) yield break;
-                // currentHp ≤1.5 = 被死亡门钳住（血条到底）；≤5% = 自然打到残血 —— 两种都算「到底」
-                if (elite.currentHp <= 1.5f || elite.currentHp / maxHp <= EliteLastWordsHpRatio) break;
+                // 只认死亡门钳住（currentHp≤1.5＝血条真到底）。5% 残血仍有一截，不再提前开口。
+                if (elite.currentHp <= 1.5f) break;
                 t += Time.unscaledDeltaTime;
                 yield return null;
             }

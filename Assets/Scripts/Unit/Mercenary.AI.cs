@@ -193,6 +193,12 @@ public partial class Mercenary : UnitBase
     /// </summary>
     bool TryForceRejoinWhenOffscreen()
     {
+        // 【2026-11-28 主人拍板】玩家冲锋期间不要"被屏幕推着走"：
+        // 冲锋是每帧写死坐标的瞬移式前进、相机跟着往前，佣兵一贴近相机左缘就被本函数用 2.2× 猛拉
+        // 回队，追到 MERC_LAG_EXIT_DIST 内又解除、再被落下、再猛拉 —— 表现就是一卡一卡。
+        // 佣兵本就允许出屏（ClampToScreen 对非 Hero 直接 return），冲锋时落后出屏没关系；
+        // 走 / 打怪交给正常 AI（掉队加速、拴绳、编队跟随、交战照旧），冲锋结束自然追回。
+        if (CareerSkillExecutor.IsCharging) return false;
         // 【2026-11-24】集结只驱动玩家，佣兵仍要按玩家范围自动回队，故去掉 BattleRally.Active 排除。
         if (!isAlly || _mapEnterActive || TutorialStunned) return false;
         var bm = BattleManager.Instance;

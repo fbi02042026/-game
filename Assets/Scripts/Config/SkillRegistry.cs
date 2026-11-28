@@ -22,6 +22,9 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
 
     public const string MonsterEliteMeleeSkillId = "mon_slam_multi";
     public const string MonsterEliteRangedSkillId = "mon_magic_burst";
+    /// <summary>【2026-11-28】前期近战肉盾 Boss 专属「直线冲撞」：长条预警 + 条内进度 + 沿条冲刺 + 击退眩晕。
+    /// 石灵（forest_110，第1章小 Boss）用它替代砸地；其余 Boss / 精英照旧 mon_slam_multi。</summary>
+    public const string MonsterChargeSkillId = "mon_charge";
 
     protected override void Awake()
     {
@@ -197,6 +200,11 @@ public class SkillRegistry : Singleton<SkillRegistry>, ICombatBoundSingleton
         bool ranged = MonsterAttackStyleTable.IsRanged(primaryStyle);
         if (isBossUnit || (template != null && template.isBoss))
         {
+            // 【2026-11-28 主人拍板】前期近战肉盾 Boss「石灵」专属直线冲撞，替换原来的砸地：
+            // 前期 Boss 只有 1 个技能（砸地或冲撞二选一），不叠两套；后期 Boss 才两个都有。
+            // 只按 template.id 精确匹配，不动其余 Boss / 精英 / 小怪。
+            if (!ranged && template != null && template.id == "forest_110")
+                return MonsterChargeSkillId;
             // Boss 两种技能轮换偏好：表内主风格决定首发
             return ranged ? MonsterEliteRangedSkillId : MonsterEliteMeleeSkillId;
         }

@@ -524,6 +524,15 @@ public static partial class GameConfig
     /// </summary>
     public const float SWORD_SHIELD_ATTACK_SPEED_MUL = 1.1f;
 
+    /// <summary>
+    /// 【2026-11-28 主人「狂战攻速跟剑盾差不多，应该比剑盾快」】狂战系攻速倍率 ×1.25：
+    /// 我方狂战佣兵表攻速 0.95~1.10、剑盾 0.80~1.00 且剑盾已吃 1.1 → 狂战原本几乎无优势。
+    /// 乘后我方狂战（最低 0.95×0.29×1.25≈0.345 次/秒）快过最快剑盾（1.00×0.29×1.1≈0.319 次/秒）。
+    /// 🔴 只加 isAlly：敌方狂战（含强盗阿刃 kuangzhan201）不吃，避免强盗更难打。
+    /// 只作用于 UnitBase.GetAttackCooldown；花名册表值不动，不触 CSV/.bytes/数组三处同值。
+    /// </summary>
+    public const float BERSERKER_ATTACK_SPEED_MUL = 1.25f;
+
 
     /// <summary>
     /// 玩家（Hero）行走/移动速度倍率。2026-09-28 主人要求「玩家行走速度再加快 10%」→ 1.1。
@@ -1157,6 +1166,20 @@ public static partial class GameConfig
     /// <summary>跨线短震的幅度 / 时长（很轻，只是"要砸了"的一记提示，不与释放震叠加成一坨）。</summary>
     public const float TELEGRAPH_TERMINAL_SHAKE_AMP = 0.045f;
     public const float TELEGRAPH_TERMINAL_SHAKE_DUR = 0.09f;
+    // ===== 【2026-11-28】前期肉盾 Boss「石灵」专属直线冲撞（mon_charge）=====
+    /// <summary>冲撞长条长度（世界单位）：预警长条 = 冲刺走廊总长。</summary>
+    public static float BOSS_CHARGE_LENGTH => CombatTuningTable.Get("BOSS_CHARGE_LENGTH", 9f);
+    /// <summary>冲撞长条半高（Y，世界单位）：Y 方向跑出这条走廊即可真躲开。</summary>
+    public static float BOSS_CHARGE_HALF_HEIGHT => CombatTuningTable.Get("BOSS_CHARGE_HALF_HEIGHT", 0.75f);
+    /// <summary>冲撞移动速度 = 自身移速 × 本倍率。</summary>
+    public static float BOSS_CHARGE_SPEED_MUL => CombatTuningTable.Get("BOSS_CHARGE_SPEED_MUL", 4.5f);
+    /// <summary>冲撞命中眩晕时长（秒）：与砸地共用同一个眩晕出口，不另起数值。</summary>
+    public const float BOSS_CHARGE_STUN_SEC = 1.0f;
+    /// <summary>长条视觉底色 alpha（满长度铺底的浅红）。</summary>
+    public const float CHARGE_LANE_RANGE_ALPHA = 0.28f;
+    /// <summary>长条内进度填充 alpha（从左端 0 涨到满的深红）。</summary>
+    public const float CHARGE_LANE_PROGRESS_ALPHA = 0.85f;
+
     /// <summary>精英预警时长（秒）。</summary>
     public const float TELEGRAPH_ELITE_SEC = 3f;
     /// <summary>Boss 预警时长（秒）。【2026-11-24 主人拍板】从 4s 减到 2.67s（-1/3）。</summary>

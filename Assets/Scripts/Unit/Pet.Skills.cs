@@ -65,7 +65,9 @@ public partial class Pet
             // 技能路径补进距硬闸（普攻早有 IsInBasicAttackRange，只有技能这条漏了）。
             // 闸按各自身 AttackRange 算：wolf 近战短闸、wolf_demon 远程长闸（_skillKey 归一到本体 wolf，
             // 但 GetEffectiveAttackRange 仍读各自属性），远处目标等待走近再放，不空挥。
-            if (_skillKey == "wolf" && !IsInBasicAttackRange(target))
+            // 2026-11-28：狗的猛扑同样是贴身强化物伤，此前只对 wolf 加了闸、dog 漏了
+            // → 开场 2s 暖机后对全场任意距离的怪照放（前冲+1.8倍伤害），老远就先打一次。补同一道闸。
+            if ((_skillKey == "wolf" || _skillKey == "dog") && !IsInBasicAttackRange(target))
             {
                 yield return new WaitForSeconds(SKILL_RETRY_INTERVAL);
                 continue;

@@ -1075,10 +1075,12 @@ public static class DraftPool
     }
 
     /// <summary>
-    /// 【2026-11-26 主人拍板定稿】「抽到同样的佣兵 → 该佣兵等级 +1」的卡。
-    /// <para>只在队伍满员（2/2）后产出：没满员时佣兵卡应该用来凑人，不该被升级卡挤占。</para>
-    /// <para>与换人卡（CollectRecruitMercs）同池，权重略高（MercInSquadWeight : MercOutSquadWeight = 3:2）：抽到队内的 = 升级，抽到队外的 = 换人。</para>
-    /// <para>等级真源唯一 = <see cref="MercLevelSystem"/>（存档）；这里只读它算卡面战力差，不自己数等级。</para>
+    /// 「抽到同样的佣兵 → 给一份经验」的卡。
+    /// <para>【2026-11-28 主人拍板】不再抽一次直接 +1 级：卡面给当前级所需经验的一半，
+    /// 经验攒满才升级；日常涨级主要靠打怪（见 BattleManager.GrantMercKillExp）。</para>
+    /// <para>只在队伍满员（2/2）后产出：没满员时佣兵卡应该用来凑人，不该被经验卡挤占。</para>
+    /// <para>与换人卡（CollectRecruitMercs）同池，权重略高（MercInSquadWeight : MercOutSquadWeight = 3:2）：抽到队内的 = 给经验，抽到队外的 = 换人。</para>
+    /// <para>等级/经验真源唯一 = <see cref="MercLevelSystem"/>（存档）；这里只读它算卡面战力差。</para>
     /// <para>满级的佣兵不产卡（否则会抽到一张没反应的卡）。</para>
     /// </summary>
     static List<WeightedCard> CollectMercLevelCards()
@@ -1093,9 +1095,8 @@ public static class DraftPool
             string key = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
             int cur = MercLevelSystem.LevelOf(key);
             if (cur >= MercLevelSystem.MaxLevel) continue;   // 满级不出卡
-            int next = cur + 1;
-            // 【2026-11-25 主人拍板】卡面不带升级信息（原「等级 Lv5 → Lv6　生命/攻击成长」整行去掉），
-            // 只留稀有度、与招募卡同款；等级统一在佣兵信息框 / 头像栏看。
+            // 【2026-11-28】卡面只表达「当前等级 + 一份经验」，不再许诺升到下一级
+            // （经验攒满才升级，是否本次升级由 RunDraftDirector.TryApplyCard 结算时决定）。
             var rar = SkillRarityUtil.FromMercStar(m.star);
 
             list.Add(new WeightedCard
@@ -1110,10 +1111,9 @@ public static class DraftPool
                     Rarity = rar,
                     Tag = SynergyTag.Summon,
                     Star = Mathf.Max(1, m.star),
-                    MercLevel = next,
-                    // 升 1 级的战力增量：求差走同一套属性公式，两端都取存档等级（不读 m.level 那个旧字段）
-                    PowerDelta = PowerCalc.MercPowerOf(m.hireId, m.mercId, next)
-                              - PowerCalc.MercPowerOf(m.hireId, m.mercId, cur)
+                    MercLevel = cur,
+                    // 经验卡不保证本次升级 → 不写「战力 +N」这种承诺性增量。
+                    PowerDelta = 0
                 },
                 // 【2026-11-26 主人拍板】已上阵的比队外略容易被抽中：3 : 2（1.5 倍），
                 // 比例只在 MercInSquadWeight / MercOutSquadWeight 两个常量里调，别在这里写裸数字。

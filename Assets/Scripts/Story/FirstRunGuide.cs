@@ -517,7 +517,7 @@ public class FirstRunGuide : MonoBehaviour
             // 【2026-10-22 修复】点完引导洞立刻判成，不等 CharacterPageOpen 的 0.5s 防抖：
             // 防抖只防「进镇预热闪现一帧」的假阳性，玩家亲手点中洞时不存在该场景，
             // 原样等防抖会让「点天赋」的下一条引导框晚半秒才弹（主人报「有延迟」）。
-            yield return CoPoint("哼，这就结束了？点「角色」用金币点天赋～",
+            yield return CoPoint("太好了，你回来了！点「角色」用金币点天赋～",
                 () => NavRect(MainNavTab.Character), () => _holeTriggered || CharacterPageOpen(), false, 0f);   // 【2026-11-04】不自动走
         }
 
@@ -644,8 +644,8 @@ public class FirstRunGuide : MonoBehaviour
 
         // 【2026-11-26 主人拍板】关店后收尾一句＝结束引导的话，替换原 Town 链「教完了」那句。
         // 无目标单发气泡（点任意处关闭），走 CoPoint 既有出口、不动游标；Town 链不再弹第二句。
-        yield return CoPoint("本小姐就教到这里了。以后有事别来找我——才不是等着你来问呢。",
-            null, null, true, 0f);
+        yield return CoPoint("我就教到这里了。以后有事随时来找我——我随时都在这里等你～",
+            null, null, true, 0f, instantClose: true);
 
         Hide();
         FinishStep(GuideStep.LogReward, "第一份委托领奖引导");
@@ -681,7 +681,7 @@ public class FirstRunGuide : MonoBehaviour
     /// </summary>
     IEnumerator CoPoint(string text, Func<RectTransform> target, Func<bool> isDone,
         bool tapToAdvance, float timeout, float bindTimeoutOverride = BindTimeout, bool bubbleAbove = false,
-        bool hideOnHoleClick = true)
+        bool hideOnHoleClick = true, bool instantClose = false)
     {
         _pointOk = false;
         _hiddenByStory = false;   // 上一步可能残留（完成/超时/切场景路径不会走到恢复分支）
@@ -727,7 +727,7 @@ public class FirstRunGuide : MonoBehaviour
         }
 
         _tapDone = false;
-        Show(follow, text, tapToAdvance, bubbleAbove);
+        Show(follow, text, tapToAdvance, bubbleAbove, instantClose);
 
         float t = 0f;
         float lostAccum = 0f;   // 目标连续丢失计时（自愈用，超过 2s 收遮罩放行点击）
@@ -751,12 +751,12 @@ public class FirstRunGuide : MonoBehaviour
                 if (needTarget)
                 {
                     follow = Safe(target);
-                    if (follow != null) Show(follow, text, tapToAdvance, bubbleAbove);
+                    if (follow != null) Show(follow, text, tapToAdvance, bubbleAbove, instantClose);
                     // 目标暂不可用就先不弹，交给下方「目标丢失自愈」在恢复时重新弹出
                 }
                 else
                 {
-                    Show(follow, text, tapToAdvance, bubbleAbove);
+                    Show(follow, text, tapToAdvance, bubbleAbove, instantClose);
                 }
             }
 
@@ -820,7 +820,7 @@ public class FirstRunGuide : MonoBehaviour
                     && !PlayerJobSelectUI.IsOpen && !_holeTriggered)
                 {
                     follow = liveTarget;
-                    Show(follow, text, tapToAdvance, bubbleAbove);
+                    Show(follow, text, tapToAdvance, bubbleAbove, instantClose);
                 }
                 lostAccum = 0f;
             }
@@ -1140,7 +1140,7 @@ public class FirstRunGuide : MonoBehaviour
         _target = target;
     }
 
-    void Show(RectTransform target, string text, bool tapToAdvance, bool bubbleAbove = false)
+    void Show(RectTransform target, string text, bool tapToAdvance, bool bubbleAbove = false, bool instantClose = false)
     {
         Build();
         if (_canvas != null) UICanvasSetup.RefreshPopup(_canvas, SortOrder);
@@ -1154,7 +1154,9 @@ public class FirstRunGuide : MonoBehaviour
         _shownAt = Time.unscaledTime;   // 【2026-10-22 加】挂屏看门狗计时起点
 
         // 2026-09-22：文字改为打字机逐字显示；「继续」按钮去掉，推进走 Update 里的全屏点击
+        // 【2026-11-28】收尾单发气泡跳过「第一击补全文、第二击才关」，点一次就消失。
         StartTyping(text);
+        if (instantClose) CompleteGuideTyping();
         if (_okBtn != null) _okBtn.gameObject.SetActive(false);
 
         if (_bubbleText != null)

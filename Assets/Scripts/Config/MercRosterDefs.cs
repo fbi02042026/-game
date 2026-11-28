@@ -67,9 +67,9 @@ public static class MercRosterDefs
         D("H005", "米娅", "小樱", "gongshou101", "游侠", MercRarity.Common, 1.00f, 244.8f,34.4f,23.9f, 1.50f, 4.2f, null, "SK002", 500, false, true),
         D("H006", "希尔", "鹰眼", "gongshou201", "游侠", MercRarity.Rare, 1.15f, 309.6f,49.8f,34.6f, 1.40f, 4.2f, "SK001", null, 2000, false, false),
         D("H007", "布罗克", "大锤", "kuangzhan101", "狂战士", MercRarity.Common, 1.00f, 269.5f,34f,24.7f, 1.00f, 4.03f, "SK023", "SK002", 600, true, true),   // 2026-11-24 加打断读条主动技破阵击（原为空，仅被动 SK002）
-        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
+        D("H008", "古恩", "斩铁", "kuangzhan102", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 1.00f, 4.03f, "SK003", null, 1600, false),
         D("H009", "莫丁", "碎岩", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 1.00f, 4.03f, "SK001", null, 1900, false, false),
-        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 452.3f,58.2f,42.2f, 1.10f, 4.03f, "SK005", "SK012", 6000, false, false),
+        D("H010", "凯恩", "狂牙", "kuangzhan202", "狂战士", MercRarity.Legendary, 1.30f, 452.3f,58.2f,42.2f, 1.00f, 4.03f, "SK005", "SK012", 6000, false, false),
         // 【2026-10-08 主人纠正】他是**男的**（见立绘 Assets/Art/UI/Icons/佣兵立绘/佣兵立绘_H011.png：
         //   光头 + 佛珠 + 锡杖 + 僧袍，标准东方僧侣）。H011 早前用过一个女性向的名字，既和这幅立绘、
         //   也和设定文档「初级光头牧师」的记载矛盾 → 由主人定名「路加」（圣路加为医者主保，贴合治疗）。
@@ -87,7 +87,7 @@ public static class MercRosterDefs
         // 与 merc_roster.csv / merc_roster.bytes 三处同值；改完跑「Tools → 佣兵 → 花名册三处同值校验」。
         // 获得口 = 看广告活动专属（MercSkillMapping.TavernExcludedHireIds 已摘池，见 2026-10-31 拍板）。
         D("H015", "艾拉", "风羽", "gongshou101", "游侠", MercRarity.Rare, 1.15f, 244.8f,58.2f,34.6f, 1.60f, 4.2f, null, "SK002", 500, false, true),
-        D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 0.95f, 4.03f, "SK003", null, 1600, false),
+        D("H016", "杜娅", "怒角", "kuangzhan201", "狂战士", MercRarity.Rare, 1.15f, 340.9f,49.3f,35.7f, 1.00f, 4.03f, "SK003", null, 1600, false),
         D("H017", "莉娜", "圣光", "naima102", "牧师", MercRarity.Rare, 1.15f, 382.6f,49.8f,37.3f, 0.84f, 3.5f, "SK004", null, 1700, false),
         D("H018", "布朗", "铁壁", "dunbing101", "剑盾卫士", MercRarity.Common, 1.00f, 335.5f,34.6f,39.1f, 0.85f, 3.15f, null, "SK006", 700, false, true),
         D("H019", "艾琳", "星火", "fashi101", "法师", MercRarity.Common, 1.00f, 211.8f,36.7f,22.5f, 1.35f, 3.5f, null, "SK017", 600, true, true),
@@ -510,6 +510,20 @@ public static class MercRosterDefs
             return d.JobName == "剑盾卫士";
         if (!string.IsNullOrEmpty(assetId) && TryGetByAssetId(assetId, out d))
             return d.JobName == "剑盾卫士";
+        return false;
+    }
+
+    /// <summary>
+    /// 【2026-11-28】是否狂战士：与剑盾同口径（优先 hireId 按行判，共用 asset 各判各的）；
+    /// 供 UnitBase.GetAttackCooldown 给我方狂战乘攻速倍率，敌方（强盗阿刃 kuangzhan201）由调用侧 isAlly 闸掉。
+    /// </summary>
+    public static bool IsBerserkerJob(string hireId, string assetId)
+    {
+        Def d;
+        if (!string.IsNullOrEmpty(hireId) && TryGetByHireId(hireId, out d))
+            return d.JobName == "狂战士";
+        if (!string.IsNullOrEmpty(assetId) && TryGetByAssetId(assetId, out d))
+            return d.JobName == "狂战士";
         return false;
     }
 

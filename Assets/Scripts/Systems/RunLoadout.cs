@@ -682,10 +682,10 @@ public static class RunLoadout
     }
 
     /// <summary>
-    /// 佣兵升级入口（<b>唯一真源转发</b>）：等级写在存档 <see cref="MercLevelSystem"/>，
+    /// 佣兵升级入口（<b>唯一真源转发</b>）：等级/经验写在存档 <see cref="MercLevelSystem"/>，
     /// 这里只把它同步回本局账本 <c>RunMercEntry.level</c> 供属性计算读。
-    /// <para>【2026-11-26 主人拍板】涨级方式 = 局内抽到同一个佣兵 → +1 级；禁止在这里自己 +1，
-    /// 否则本局账本与存档会分裂成两个等级。</para>
+    /// <para>【2026-11-28 主人拍板】涨级改为打怪得经验（抽卡升级卡也给经验），
+    /// 禁止在这里自己 +1，否则本局账本与存档会分裂成两个等级。</para>
     /// 返回升级后的等级，佣兵不在本局返回 0。
     /// </summary>
     public static int TryLevelUpMerc(string hireIdOrMercId)
@@ -693,7 +693,8 @@ public static class RunLoadout
         var m = FindMerc(hireIdOrMercId);
         if (m == null) return 0;
         string key = !string.IsNullOrEmpty(m.hireId) ? m.hireId : m.mercId;
-        int lv = MercLevelSystem.AddLevel(key, 1);
+        int need = MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(key));
+        int lv = MercLevelSystem.AddExp(key, Mathf.Max(1, need / 2));
         m.level = Mathf.Max(1, lv);
         return m.level;
     }

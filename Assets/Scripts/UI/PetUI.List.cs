@@ -98,6 +98,10 @@ public partial class PetUI
         _rowDeployBadges.Add(deployBadge);
 
         int idx = _rowBtns.Count - 1;
+        // 【2026-11-28】每行挂「可解锁」红点（键 = pet.unlock.<bodyId>）；行顺序与 PetDefs.Bodies 一致。
+        var bodies = PetDefs.Bodies;
+        if (idx < bodies.Count && bodies[idx] != null)
+            RedDot.Bind(row, RedDot.PetUnlockPrefix + bodies[idx].id);
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(() => Select(idx));
 

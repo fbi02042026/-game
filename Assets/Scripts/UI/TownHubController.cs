@@ -14,6 +14,13 @@ public class TownHubController : MonoBehaviour
     public static bool PendingOpenAdventure;
 
     /// <summary>
+    /// 【2026-11-28 主人拍板】战斗失败界面点「去提升」→ 回城后自动打开角色页
+    /// （装备强化 / 佣兵 / 天赋都在这一页，玩家下一步就是变强）。
+    /// 与 <see cref="PendingOpenAdventure"/> 同款一次性旗；两者同时置位时角色页后消费 → 盖住冒险页。
+    /// </summary>
+    public static bool PendingOpenCharacter;
+
+    /// <summary>
     /// 进镇预热是否已收起。片头等它结束再起播，避免与 AdventureUI.ShowPage/ApplyAdventureFit
     /// 的同步重活并发——那会占满主线程、把 VideoPlayer 帧推进饿死（片头黑屏几秒）。
     /// 无 controller 视为已收，片头不必等。
@@ -112,6 +119,7 @@ public class TownHubController : MonoBehaviour
         if (!_pagesPreloaded)
             PreloadAllPages();
         ConsumePendingAdventure();
+        ConsumePendingCharacter();   // 【2026-11-28】失败界面「去提升」→ 回城直接开角色页（排在冒险页之后，盖住它）
         PetFeatureGuide.TryConsumeOnTown();   // 1-3 首通宠物功能引导（回城后开冒险页阶段，引导内部等预热完成）
         TapTapRatePopup.ConsumePendingPrompt();   // 章末通关回城后弹好评引导（2026-10-25 主人拍板，每日最多一次）
         ArenaPopupUI.ConsumePendingOpen();        // 竞技场战斗返回 → 回到竞技场界面（2026-10-31 主人拍板）
@@ -238,6 +246,15 @@ public class TownHubController : MonoBehaviour
         PendingOpenAdventure = false;
         if (Instance == null) return;
         Instance.OpenAdventure(suppressGuide: true);
+    }
+
+    /// <summary>回城后打开角色页（2026-11-28 失败界面「去提升」用）。与 ConsumePendingAdventure 同款一次性旗。</summary>
+    public static void ConsumePendingCharacter()
+    {
+        if (!PendingOpenCharacter) return;
+        PendingOpenCharacter = false;
+        if (Instance == null) return;
+        Instance.OpenCharacter();
     }
 
     /// <param name="suppressGuide">

@@ -266,6 +266,10 @@ public partial class UnitBase
         OnDead = null;
         if (unitAnim != null)
             unitAnim.ResetToIdle();
+        // 【2026-11-28】回池复用：上一只的头顶眩晕星星不许带到新单位。
+        ClearStunStars();
+        _stunVisualActive = false;
+        _stunUntil = 0f;
         if (rb != null)
             rb.velocity = Vector2.zero;
     }

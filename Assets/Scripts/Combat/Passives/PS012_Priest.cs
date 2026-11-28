@@ -31,12 +31,19 @@ public class PS012_Priest : PlayerPassiveModule
         if (bm == null) return;
         PlayerPassiveCombat.HealUnit(hero, heal);
         var mercs = MercenaryManager.Instance?.GetActiveMercs();
-        if (mercs == null) return;
-        for (int i = 0; i < mercs.Count; i++)
+        if (mercs != null)
         {
-            var m = mercs[i];
-            if (m == null || m.isDead || m.attr == null) continue;
-            PlayerPassiveCombat.HealUnit(m, m.attr.GetAttr(AttrType.MaxHp) * _priestHealPct);
+            for (int i = 0; i < mercs.Count; i++)
+            {
+                var m = mercs[i];
+                if (m == null || m.isDead || m.attr == null) continue;
+                PlayerPassiveCombat.HealUnit(m, m.attr.GetAttr(AttrType.MaxHp) * _priestHealPct);
+            }
         }
+        // 【2026-11-28 主人拍板「让加血也给宠物加」】宠物不在 GetActiveMercs，按自身 MaxHp 同比例补
+        bm.ForEachAlivePet(p =>
+        {
+            if (p.attr != null) PlayerPassiveCombat.HealUnit(p, p.attr.GetAttr(AttrType.MaxHp) * _priestHealPct);
+        });
     }
 }

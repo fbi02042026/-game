@@ -66,3 +66,6 @@ BOSS_SCALE_MULTIPLIER,2.6,Boss 体型倍率（相对普通怪）
 # 【2026-10-10 主人拍板】引导关精英固定精灵：1 Forest 第 7 号 = 树精（近战大个子）。
 # 主人反馈「精英是个蘑菇，换个其他的怪」—— 不许再用蘑菇当精英。
 TUTORIAL_ELITE_SPRITE_ID,7,引导关精英固定精灵编号（Forest-07 树精）
+BOSS_CHARGE_LENGTH,9,前期肉盾 Boss 直线冲撞长条长度
+BOSS_CHARGE_HALF_HEIGHT,0.75,冲撞走廊半高
+BOSS_CHARGE_SPEED_MUL,4.5,冲撞速度 = 臑身速度 × 本倍率

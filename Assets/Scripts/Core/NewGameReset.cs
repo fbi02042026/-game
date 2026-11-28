@@ -39,6 +39,8 @@ public static class NewGameReset
         MercFavorUI.PendingOpenAfterBattleHireId = null;
         // 竞技场回城重开旗子：与上面同款（回城 ConsumePendingOpen 才消费），清档后不能让新档误弹竞技场
         ArenaPopupUI.PendingOpenAfterBattle = false;
+        // 【2026-11-28】失败界面「去提升」的回城开角色页旗子同款：清档后不能让新档一回城就弹角色页
+        TownHubController.PendingOpenCharacter = false;
         // 裂隙「新纪录」角标：回冒险页刷新才消费，清档后不能让新档误显上一档纪录
         EndlessRiftRules.NewRecordPendingShow = false;
         // 2026-11-12 升级弹窗队列是进程级 static，清档必须清

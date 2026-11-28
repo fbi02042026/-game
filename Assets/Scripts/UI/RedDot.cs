@@ -54,9 +54,19 @@ public static class RedDot
     /// <summary>2026-09-29：天赋入口红点 —— 右列有「新开通未点」节点时点亮
     ///（2026-11-05 拍板门槛=人物等级，升级跨门槛由 TalentSystem.NotifyLevelUp 刷，玩家点开对应节点才灭）。</summary>
     public const string Talent = "nav.talent";
+    /// <summary>【2026-11-28 主人「有两个及以上的天赋可升的时候在一键升级按钮上也加个红点」】
+    /// 天赋页 Footer「一键升级」按钮专属红点键。判定 = 左列能连买数 + 右列能连升次数 ≥ 2
+    /// （唯一出口 <c>TalentUI.RefreshResetButton</c>，计数走 <c>TalentUI.CountBuyAllTargets</c>）。</summary>
+    public const string TalentBuyAll = "talent.buyall";
     /// <summary>【2026-11-25 主人「宠物图标如果能喂养或者解锁要加红点」】角色页宠物入口专属红点键。
     /// 判定唯一出口 = PetUI.HasActionable（宠物功能未解锁 / 无可解锁 / 喂不起 → 灭）。</summary>
     public const string Pet = "nav.pet";
+    /// <summary>【2026-11-28】宠物界面内部红点：喂养按钮（上阵宠物喂得起一次）。判定 = PetUI.HasFeedable。</summary>
+    public const string PetFeed = "pet.feed";
+    /// <summary>【2026-11-28】宠物界面内部红点：皮肤槽（本体已解锁 + 皮肤未拥有 + 钻石够）。</summary>
+    public const string PetSkin = "pet.skin";
+    /// <summary>【2026-11-28】宠物界面内部红点：列表某只宠物现在可解锁。键 = 本前缀 + bodyId（逐只独立）。</summary>
+    public const string PetUnlockPrefix = "pet.unlock.";
     /// <summary>2026-10-16：每日登录入口红点 —— 有可领的登录奖励时亮起。</summary>
     public const string DailyLogin = "dailylogin";
     /// <summary>2026-10-31：看广告送佣兵活动入口红点（艾拉）—— 有可领里程碑时亮起；

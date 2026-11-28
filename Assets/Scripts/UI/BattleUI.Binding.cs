@@ -342,9 +342,12 @@ public partial class BattleUI : MonoBehaviour
             }
         }
         // 初值：BattleManager 未装配时先写 0，RefreshBattleHud / NotifyPoolGoldChanged 会补上
+        // 【2026-11-28】探测用 InstanceQuiet：BattleUI.Awake 早于 AutoGameInitializer 装配，走 Instance 会刷 Error
         if (draftCoinText != null)
-            draftCoinText.text = BattleManager.Instance != null
-                ? BattleManager.Instance.currentGold.ToString() : "0";
+        {
+            var bmGold = BattleManager.InstanceQuiet;
+            draftCoinText.text = bmGold != null ? bmGold.currentGold.ToString() : "0";
+        }
     }
 
     /// <summary>DFS 找指定名节点，但整个跳过 exclude 子树（含 exclude 自己）；exclude 为空时同 FindDeepChildIgnoreCase。</summary>
@@ -559,6 +562,9 @@ public partial class BattleUI : MonoBehaviour
 
         if (slot.levelLabel == null)
             slot.levelLabel = FindTextNamed(root, "LevelLabel", "Level", "Lv");
+        // 【2026-11-28 主人拍板】佣兵头像血条下那条 = 绿色经验条（打怪涨经验）；
+        // 玩家槽那条不变（保留技能能量/奥义充能口径）。技能都是 CD 制，能量不再显示。
+        slot.ExpBarMode = rootName.StartsWith("MercSlot", System.StringComparison.OrdinalIgnoreCase);
         // 【2026-11-26 主人拍板】佣兵升级特效节点：美术只在 MercSlot1 / MercSlot2 下各摆了一个
         // 「effect」（内含 MagicDust，2 秒非循环）。绑定后先收起，升级时由 PlayMercLevelUpEffect
         // 显式播一次；取不到不补建（玩家槽本来就没有，静默跳过）。

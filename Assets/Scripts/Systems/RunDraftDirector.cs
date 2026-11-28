@@ -353,17 +353,19 @@ public class RunDraftDirector : MonoBehaviour
 
             case DraftCardKind.MercLevelUp:
             {
-                // 【2026-11-26 主人拍板定稿】抽到同一个佣兵 = 该佣兵等级 +1。
-                // 真源唯一 = MercLevelSystem（存档）；这里不再走 RunLoadout.TryLevelUpMerc
-                //（那只改本局账本 entry.level，会造出第二个等级数）。
+                // 【2026-11-28 主人拍板】抽到同一个佣兵 = 给一份经验（当前级所需的一半），
+                // 不再是抽一次直接 +1 级；经验满才升级。真源唯一 = MercLevelSystem（存档）。
                 if (RunLoadout.FindMerc(card.Id) == null) { msg = "佣兵已离队"; return false; }
                 if (MercLevelSystem.IsMaxLevel(card.Id))
                 {
                     msg = $"{card.Title} 已满级 Lv{MercLevelSystem.MaxLevel}";
                     return false;
                 }
-                int lv = MercLevelSystem.AddLevel(card.Id, 1);
-                SaveSystem.Instance?.Save();   // 永久等级：抽到即落盘，中途退出不回滚
+                string expKey = !string.IsNullOrEmpty(card.HireId) ? card.HireId : card.Id;
+                int need = MercLevelSystem.ExpForLevel(MercLevelSystem.LevelOf(expKey));
+                int gain = Mathf.Max(1, need / 2);
+                int lv = MercLevelSystem.AddExp(expKey, gain, out int levelsGained);
+                SaveSystem.Instance?.Save();   // 战斗内等级/经验：抽到即落盘
                 RefreshMercUnit(card.Id);   // 内部已强制 BattleUI.UpdateCharacterSlots() 刷 LV 数字
                 // 【2026-11-26 主人追加】抽到队内重复佣兵 = 升级，但入场仪式照旧：
                 // 先播「佣兵上阵」横幅，再在对应头像叠升级特效。参数与 RecruitMerc 同一套真源，
@@ -374,9 +376,10 @@ public class RunDraftDirector : MonoBehaviour
                     !string.IsNullOrEmpty(card.Title) ? card.Title : levelBannerHireId,
                     hasLevelBannerRoster ? levelBannerRd.Rarity : MercRosterDefs.MercRarity.Common);
                 // 【2026-11-26 主人拍板】升级不再弹详情窗，改为在对应头像上把美术摆的 effect 播一次。
+                // 【2026-11-28】只有真升级才播特效；没攒满经验时只给经验提示。
                 // 放在 RefreshMercUnit 之后：等级数字先落定，特效再盖上去。
-                BattleUI.Instance?.PlayMercLevelUpEffect(card.Id);
-                msg = $"{card.Title} 升至 Lv{lv}";
+                if (levelsGained > 0) BattleUI.Instance?.PlayMercLevelUpEffect(card.Id);
+                msg = levelsGained > 0 ? $"{card.Title} 升至 Lv{lv}" : $"{card.Title} 获得 {gain} 经验";
                 return true;
             }
 
@@ -969,8 +972,11 @@ public class RunDraftDirector : MonoBehaviour
         if (merc != null) MercenaryManager.Instance?.DespawnMercenary(merc);
     }
 
-    /// <summary>抽卡升级/升星后：把场上该佣兵按新等级重算（Init 会重置满血，视为顺带补血）。</summary>
-    void RefreshMercUnit(string hireIdOrMercId)
+    /// <summary>
+    /// 升级/升星后：把场上该佣兵按新等级重算（Init 会重置满血，视为顺带补血）。
+    /// 【2026-11-28】打怪升级也要刷（BattleManager.GrantMercKillExp），故从 private 放开为 internal。
+    /// </summary>
+    internal void RefreshMercUnit(string hireIdOrMercId)
     {
         var merc = FindOutMerc(hireIdOrMercId);
         var entry = RunLoadout.FindMerc(hireIdOrMercId);

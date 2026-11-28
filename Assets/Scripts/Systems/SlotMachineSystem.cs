@@ -365,7 +365,11 @@ public static class SlotMachineSystem
     /// <para>真源 = <see cref="BattleManager.IsTutorialRun"/>（规则包 <c>TutorialRules.Active</c>），
     /// <b>这里不写第二份判定</b>；加引导特例请加规则包。</para>
     /// </summary>
-    static bool IsTutorialRun => BattleManager.Instance != null && BattleManager.Instance.IsTutorialRun;
+    /// 【2026-11-28 修启动期 Error 刷屏】改走 <see cref="Singleton{T}.InstanceQuiet"/>：
+    /// 调用链 BattleUI.Awake → ApplySoloBattleHud → TutorialDirector.ShowMercHud → 这里，
+    /// 早于 AutoGameInitializer 装配 BattleManager。走 Instance 会在每次进战斗刷一条
+    /// 「战斗必需系统未挂载」Error（InstanceQuiet 就是为这种「探测、拿不到当 false」准备的）。
+    static bool IsTutorialRun => BattleManager.InstanceQuiet != null && BattleManager.InstanceQuiet.IsTutorialRun;
 
     /// <summary>
     /// 本次抽奖给哪一类。

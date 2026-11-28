@@ -455,15 +455,19 @@ public class BattleBossHpBar : MonoBehaviour
         if (_fillRt == null) return;
         // 【2026-10-18 主人拍板】多个精英把血条数值加到一起：∑当前血 / ∑最大血
         float cur = 0f, max = 0f;
+        bool deathDoorClamped = false;
         for (int i = 0; i < _boundList.Count; i++)
         {
             var m = _boundList[i];
             if (m == null || m.isDead || m.attr == null) continue;
             cur += m.currentHp;
             max += m.attr.GetAttr(AttrType.MaxHp);
+            // 【2026-11-28】引导宿敌被死亡门钳到 1 点＝血条真到底，延迟层立刻贴齐：
+            // 否则红条到底后白条还挂着一截，遗言看着像「血没空就说了」。
+            if (m.holdAtDeathDoor && m.currentHp <= 1.5f) deathDoorClamped = true;
         }
         if (max <= 0f) return;
-        SetRatio(Mathf.Clamp01(cur / max));
+        SetRatio(Mathf.Clamp01(cur / max), deathDoorClamped);
     }
 
     /// <summary>
@@ -622,8 +626,12 @@ public class BattleBossHpBar : MonoBehaviour
             copy.wrapMode = TextureWrapMode.Clamp;
             copy.Apply(false, true);
 
-            // rect / pixelsPerUnit 继承源 sprite（该图 spriteBorder 全 0，Sliced 与红条同样退化整图拉伸）
-            var made = Sprite.Create(copy, src.rect, new Vector2(0.5f, 0.5f), src.pixelsPerUnit);
+            // 【2026-11-28 主人截图「血条的白底形状不对」】原实现只继承 rect/pixelsPerUnit，
+            // pivot 写死 0.5、border 走默认 0 —— 红条用源 sprite 的九宫格保住右端尖角，
+            // 白条 border=0 在 Sliced（Image.m_Type:1）下退化成整图拉伸，尖角被拉平变直角。
+            // 修法：rect / pivot / pixelsPerUnit / border 全部继承源 sprite，两层 Sliced 行为逐项一致。
+            var made = Sprite.Create(copy, src.rect, src.pivot, src.pixelsPerUnit, 0,
+                SpriteMeshType.FullRect, src.border);
             _whiteSpriteSrc = src;
             _whiteSprite = made;
             return made;

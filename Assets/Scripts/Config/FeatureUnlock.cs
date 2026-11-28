@@ -9,7 +9,7 @@
 /// （路线 B：8 章 × 每章 10 关）。节奏按「一类一起给、每批≤3、批间隔≥2 关」，
 /// 深度玩法跨章疏散，佣兵线留第一章。定稿节奏：
 /// ├ 引导结束 → 佣兵队列
-/// ├ 第 3 关 → 日常任务（宠物按剧情同关，不占本清单）
+/// ├ 第 3 关 → 日常任务（宠物按剧情同关；结算清单不列，避免与指路气泡重叠）
 /// ├ 第 5 关 → 佣兵招募（单独一批）
 /// ├ 第 6 关 → 支线岛（按剧情提示，不占本清单）
 /// ├ 第 8 关 → 试炼场 / 进阶升星 / 徽记副本（升阶+徽记配对）
@@ -190,7 +190,7 @@ public static class FeatureUnlock
     /// 门槛跨到第二章，故本章普通难度都判（不再只 chapter==1）；难度局不解锁功能。
     /// 🔴 隐藏入口一律不报：世界地图（冒险页图标整体隐藏）、城镇入口 SLG（主界面入口 EntryEnabled=false）——
     ///    报了玩家也点不进去。支线岛/宠物按剧情提示，不列本清单。
-    /// 宠物指路气泡在第 3 关同关弹，BattleResultScreen 已把气泡锚到本框下方错开。
+    /// 【2026-11-28 主人拍板】第 3 关不再列本清单（与宠物指路气泡同屏重叠），该关气泡仍锚确定按钮。
     /// </summary>
     public static string NewlyUnlockedText(int chapter, int stageIndex0, int difficulty)
     {
@@ -199,8 +199,8 @@ public static class FeatureUnlock
         {
             switch (stageIndex0)
             {
-                case 2:                         // 全局第 3 关
-                    return "日常任务";
+                case 2:                         // 全局第 3 关：不弹本清单（2026-11-28 主人拍板，与宠物指路气泡重叠）
+                    return null;
                 case MERC_RECRUIT_SUB0:         // 全局第 5 关
                     return "佣兵招募";
                 case MID_GATE_SUB0:             // 全局第 8 关
@@ -232,6 +232,40 @@ public static class FeatureUnlock
     // ────────────────────────────────────────────────────────────────
     // 内部
     // ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// 【2026-11-28 主人拍板「失败了的话把新开功能那个框换成可提升战力的方式」】
+    /// 战斗失败界面「提升战力」框的提升途径清单：按存档实际<b>已开放</b>的系统，挑出现在就能做的。
+    /// 【2026-11-28 主人纠正「没有强化装备」】只留真实存在的四条线：天赋 / 佣兵升星 / 招募佣兵 / 解锁宠物。
+    /// 【2026-11-28 主人「分成4列 有几种就分几列」】改成返回<b>短词组列表</b>（每条 4 字，横向分列排版），
+    /// 不再返回带换行的长句；调用方按 Count 分列。
+    /// 与上面门槛判定同源（不各写一份）；恒返回至少 1 条（天赋那条永远在）。
+    /// </summary>
+    public static System.Collections.Generic.List<string> PowerUpAdviceItems(SaveData data)
+    {
+        var items = new System.Collections.Generic.List<string>(4);
+        // ① 天赋：有剩点 = 去加点，没剩点 = 去解锁新天赋
+        items.Add(data != null && data.talentPoints > 0 ? "天赋加点" : "解锁天赋");
+        // ② 佣兵升星：第 8 关随「进阶升星」一起开
+        if (MercAscendOpen(data)) items.Add("佣兵升星");
+        // ③ 招募新佣兵：第 5 关开
+        if (MercRecruitOpen(data)) items.Add("招募佣兵");
+        // ④ 宠物：第 3 关首通开放（与 PetFeatureGuide 同一判据），且确实还有没解锁的本体
+        if (PetAdviceAvailable(data)) items.Add("解锁宠物");
+        return items;
+    }
+
+    /// <summary>失败建议里「解锁强力宠物」是否该出现：宠物功能已开（第 3 关首通，与 PetFeatureGuide 同源）
+    /// 且还有未解锁的本体（皮肤不计）。</summary>
+    static bool PetAdviceAvailable(SaveData data)
+    {
+        if (data == null || !data.HasStageCleared(1, 2)) return false;
+        var bodies = PetDefs.Bodies;
+        if (bodies == null) return false;
+        for (int i = 0; i < bodies.Count; i++)
+            if (bodies[i] != null && !data.IsPetUnlocked(bodies[i].id)) return true;
+        return false;
+    }
 
     /// <summary>第 1 篇已通关大关数是否 ≥ 门槛。路线 B 每章 1 座大关 = 10 关，
     /// 故 GrandCleared(data,1) = 第一章通关 = 全局第 10 关。

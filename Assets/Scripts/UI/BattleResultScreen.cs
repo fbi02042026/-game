@@ -300,6 +300,14 @@ public class BattleResultScreenUI : MonoBehaviour
     bool _choseGiveUp;
     Func<bool> _onRevive;
     Action _onGiveUp;
+    /// <summary>复活钮上方「共 N 钻」余额提示的字号/间距/宽度。
+    /// 【2026-11-28 主人「我说的一共有多少钻石要放到按钮上面的text 不要放到按钮里面」】
+    /// 提示是**按钮外**独立的一条 Text（父级 = 复活钮，所以跟着它 1.3 倍缩放 → 17 号实际约 22）。</summary>
+    const int ReviveHaveFontSize = 17;
+    const float ReviveHaveGapY = 8f;        // 文字底边离按钮顶边的距离（本地单位，父级缩放后约 10px）
+    const float ReviveHaveLabelW = 220f;    // 够放「共 9999999 钻」，横排不换行
+    /// <summary>余额提示色：浅蓝，与钻石 icon 同色系；描边走 PurchasePriceStyle 统一口径。</summary>
+    static readonly Color ReviveHaveColor = new Color(0.75f, 0.88f, 1f, 1f);
 
     // —— 失败停留等点击（2026-10-31 主人报「失败我没点自己就消失回城了」，竞技场失败专用）——
     bool _holdUntilTap;
@@ -536,9 +544,10 @@ public class BattleResultScreenUI : MonoBehaviour
         bg.raycastTarget = false;
 
         // 位置：确定钮实际底边往下（按钮已被 EnlargeResultButton 缩放过，按实际算，同 BuildShareRewardRow）
+        // 【2026-11-28 主人拍板】整框再往下挪 100（逻辑像素），只改本框位置，不动按钮/其它 UI
         float btnHalfH = _confirmRt.rect.height * Mathf.Abs(_confirmRt.localScale.y) * 0.5f;
         float btnBottomY = _confirmRt.anchoredPosition.y - btnHalfH;
-        rt.anchoredPosition = new Vector2(0f, btnBottomY - UnlockGapY - h * 0.5f);
+        rt.anchoredPosition = new Vector2(0f, btnBottomY - UnlockGapY - h * 0.5f - UnlockShiftDownY);
 
         var txtGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
         txtGo.transform.SetParent(go.transform, false);
@@ -558,23 +567,268 @@ public class BattleResultScreenUI : MonoBehaviour
         txt.horizontalOverflow = HorizontalWrapMode.Overflow;   // 文案已按行写好，不靠自动折行
         txt.verticalOverflow = VerticalWrapMode.Overflow;
         txt.lineSpacing = 1.1f;
-        txt.text = "新功能开启\n" + _unlockText;
+        // 【2026-11-28 主人拍板】标题用「新功能」（原「新功能开启」），下方仍是本关解锁项
+        txt.text = "新功能\n" + _unlockText;
 
         _unlockBannerT = go.transform;
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人拍板「失败了的话把新开功能那个框换成可提升战力的方式」】
+    /// 失败界面下方挂同款金框：标题「提升战力」+ 按存档已开放系统挑出的 2~3 条提升途径
+    /// （文案真源 = <see cref="FeatureUnlock.PowerUpAdviceItems"/>，本类只负责画），底部一颗「去提升」钮。
+    /// 【2026-11-28 主人「分成4列 有几种就分几列」】清单由「逐条换行」改成「一行 N 列」：
+    /// N = 当前已开放的途径数（1~4），列宽 = 安全区宽 / N，列间一条暗金细线；框高因此不再随条数变化。
+    /// 「去提升」= 放弃复活（与【返回】同一条收尾）+ 回城后自动打开角色页（TownHubController.PendingOpenCharacter）。
+    /// 与 BuildUnlockBanner 同套路：运行时建树、不碰预制体。
+    /// </summary>
+    void BuildPowerUpBanner(Transform parent)
+    {
+        if (parent == null) return;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        var items = FeatureUnlock.PowerUpAdviceItems(data);
+        if (items == null || items.Count == 0) return;
+        int cols = Mathf.Clamp(items.Count, 1, PowerMaxCols);
+
+        // 九宫格边宽（x=左 y=下 z=右 w=上，单位=UI 像素）：缺图时用素材实测值兜底。
+        // 🔴 这个框的金边特别宽（左 66 / 右 83），内边距必须按 border 实算，写死小数值就会压边（主人截图那版）。
+        var frame = Resources.Load<Sprite>(UnlockFrameRes);
+        float bL = 66f, bB = 32f, bR = 83f, bT = 29f;
+        if (frame != null) { bL = frame.border.x; bB = frame.border.y; bR = frame.border.z; bT = frame.border.w; }
+        float padL = bL + PowerInnerPadX, padR = bR + PowerInnerPadX;
+        float padT = bT + PowerInnerPadY, padB = bB + PowerInnerPadY;
+
+        // 【2026-11-28 主人「分成4列 有几种就分几列」】清单只占一行：N 列横排，框高不再随条数变
+        float h = padT + PowerTitleH + PowerTitleGap + PowerBodyLineH + PowerBtnGap + PowerBtnH + padB;
+
+        var go = new GameObject("提升战力", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        // 【2026-11-28 主人「这个框再往下 移到最下面」】不再跟着按钮行排（框顶正好压在角色立绘上），
+        // 直接钉在屏幕底部：父级改 Root（全屏、随安全区适配），底对齐 + 底边留 PowerBottomMarginY。
+        // Root 的子级顺序是 Dim → Panel → 本框（SetAsLastSibling），所以画在失败大图之上。
+        var rootRt = transform.Find("Root") as RectTransform;
+        go.transform.SetParent(rootRt != null ? rootRt : parent, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.sizeDelta = new Vector2(PowerBannerWidth, h);
+        rt.anchoredPosition = new Vector2(0f, PowerBottomMarginY);
+        rt.SetAsLastSibling();
+
+        var bg = go.GetComponent<Image>();
+        if (frame != null)
+        {
+            bg.sprite = frame;
+            bg.type = Image.Type.Sliced;
+            bg.color = Color.white;
+        }
+        else
+        {
+            Debug.LogError("[BattleResultScreen] 战力框底图缺失：Resources/" + UnlockFrameRes + ".png，退回纯色底");
+            bg.color = UnlockBannerBg;
+        }
+        bg.raycastTarget = false;
+
+        // 位置已在上面钉死（屏幕底部），不再按按钮行底边推算
+
+        // 标题：单独一条，字号比正文大、颜色更亮，跟清单拉开层级
+        var titleGo = new GameObject("Title", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        titleGo.transform.SetParent(go.transform, false);
+        var titleRt = (RectTransform)titleGo.transform;
+        titleRt.anchorMin = new Vector2(0f, 1f);
+        titleRt.anchorMax = new Vector2(1f, 1f);
+        titleRt.pivot = new Vector2(0.5f, 1f);
+        // 一次写死：左右内边距 padL/padR；上边离框顶 padT，下边再往下 PowerTitleH
+        titleRt.offsetMin = new Vector2(padL, -(padT + PowerTitleH));
+        titleRt.offsetMax = new Vector2(-padR, -padT);
+
+        var title = titleGo.GetComponent<Text>();
+        title.font = GameFonts.GetChinese();
+        title.fontSize = PowerTitleFontSize;
+        title.fontStyle = FontStyle.Normal;
+        title.alignment = TextAnchor.MiddleCenter;
+        title.color = PowerTitleColor;
+        title.raycastTarget = false;
+        title.horizontalOverflow = HorizontalWrapMode.Overflow;
+        title.verticalOverflow = VerticalWrapMode.Overflow;
+        title.text = PowerBannerTitle;
+
+        // 清单：一行 N 列（N = 当前已开放的途径数，最多 4），列间一条细分隔线
+        var rowGo = new GameObject("Items", typeof(RectTransform));
+        rowGo.transform.SetParent(go.transform, false);
+        var rowRt = (RectTransform)rowGo.transform;
+        rowRt.anchorMin = new Vector2(0f, 1f);
+        rowRt.anchorMax = new Vector2(1f, 1f);
+        rowRt.pivot = new Vector2(0.5f, 1f);
+        rowRt.offsetMin = new Vector2(padL, -(padT + PowerTitleH + PowerTitleGap + PowerBodyLineH));
+        rowRt.offsetMax = new Vector2(-padR, -(padT + PowerTitleH + PowerTitleGap));
+
+        float innerW = PowerBannerWidth - padL - padR;
+        float colW = innerW / cols;
+        for (int i = 0; i < cols; i++)
+        {
+            var cellGo = new GameObject("Item" + i, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            cellGo.transform.SetParent(rowGo.transform, false);
+            var cellRt = (RectTransform)cellGo.transform;
+            cellRt.anchorMin = cellRt.anchorMax = new Vector2(0.5f, 0.5f);
+            cellRt.pivot = new Vector2(0.5f, 0.5f);
+            cellRt.sizeDelta = new Vector2(colW, PowerBodyLineH);
+            cellRt.anchoredPosition = new Vector2(-innerW * 0.5f + colW * (i + 0.5f), 0f);
+
+            var cell = cellGo.GetComponent<Text>();
+            cell.font = GameFonts.GetChinese();
+            cell.fontSize = PowerColFontSize;
+            cell.fontStyle = FontStyle.Normal;
+            cell.alignment = TextAnchor.MiddleCenter;
+            cell.color = PowerBodyColor;
+            cell.raycastTarget = false;
+            cell.horizontalOverflow = HorizontalWrapMode.Overflow;   // 每条都是短词组，不折行
+            cell.verticalOverflow = VerticalWrapMode.Overflow;
+            cell.text = items[i];
+
+            // 列间分隔线（最后一列右侧不加）
+            if (i < cols - 1)
+            {
+                var sepGo = new GameObject("Sep", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                sepGo.transform.SetParent(rowGo.transform, false);
+                var sepRt = (RectTransform)sepGo.transform;
+                sepRt.anchorMin = sepRt.anchorMax = new Vector2(0.5f, 0.5f);
+                sepRt.pivot = new Vector2(0.5f, 0.5f);
+                sepRt.sizeDelta = new Vector2(1f, PowerBodyLineH * 0.55f);
+                sepRt.anchoredPosition = new Vector2(-innerW * 0.5f + colW * (i + 1), 0f);
+                var sep = sepGo.GetComponent<Image>();
+                sep.color = PowerSepColor;
+                sep.raycastTarget = false;
+            }
+        }
+
+        BuildPowerUpButton(go.transform, padB);
+    }
+
+    /// <summary>「去提升」钮：底图与预制体 确定/取消 同一张（绿底、深褐字），尺寸 150×50 并抬离金边。</summary>
+    void BuildPowerUpButton(Transform parent, float bottomPad)
+    {
+        var btnGo = new GameObject("去提升", typeof(RectTransform), typeof(CanvasRenderer),
+            typeof(Image), typeof(Button));
+        btnGo.transform.SetParent(parent, false);
+        var brt = (RectTransform)btnGo.transform;
+        brt.anchorMin = brt.anchorMax = new Vector2(0.5f, 0f);
+        brt.pivot = new Vector2(0.5f, 0f);
+        brt.sizeDelta = new Vector2(PowerBtnW, PowerBtnH);
+        brt.anchoredPosition = new Vector2(0f, bottomPad);
+
+        var img = btnGo.GetComponent<Image>();
+        var sp = Resources.Load<Sprite>(PowerBannerBtnRes);
+        if (sp != null)
+        {
+            img.sprite = sp;
+            img.type = Image.Type.Simple;
+            img.color = Color.white;
+        }
+        else
+        {
+            Debug.LogError("[BattleResultScreen] 去提升钮底图缺失：Resources/" + PowerBannerBtnRes + ".png，退回纯色底");
+            img.color = UnlockBannerBg;
+        }
+        img.raycastTarget = true;
+
+        var btn = btnGo.GetComponent<Button>();
+        btn.transition = Selectable.Transition.None;   // 与 WireChoiceButton 同口径：不改观感
+        btn.onClick.RemoveAllListeners();
+        btn.onClick.AddListener(OnPowerUpClicked);
+
+        var txtGo = new GameObject("Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        txtGo.transform.SetParent(btnGo.transform, false);
+        var trt = (RectTransform)txtGo.transform;
+        trt.anchorMin = Vector2.zero;
+        trt.anchorMax = Vector2.one;
+        trt.offsetMin = Vector2.zero;
+        trt.offsetMax = Vector2.zero;
+        var t = txtGo.GetComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = PowerBtnFontSize;                    // 22 号：150×50 的钮上留得出呼吸
+        t.fontStyle = FontStyle.Normal;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = PowerBannerBtnTextColor;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.text = PowerBannerBtnText;
+    }
+
+    /// <summary>
+    /// 【2026-11-28 主人拍板】「去提升」：放弃复活（与【返回】同一条收尾 → 回城），
+    /// 并置一次性旗让城镇页起来后直接打开角色界面（装备/佣兵/天赋都在那）。
+    /// </summary>
+    void OnPowerUpClicked()
+    {
+        if (_chosen) return;
+        TownHubController.PendingOpenCharacter = true;
+        OnGiveUpClicked();
     }
 
     // ── 新功能框样式（2026-11-27 下午拍板：素材底框 + 统一金黄字；改观感只动这一组）─────────
     /// <summary>底框素材：主人点名「角色_0002s_0010_图层-7」（与概率公示/装备掉落弹窗底框同款）。</summary>
     const string UnlockFrameRes = "UI/NavCharacter/角色_0002s_0010_图层-7";
     const float UnlockBannerWidth = 560f;   // 与奖励面板内宽（620 - 两侧留白）对齐，比按钮行宽一圈
-    const float UnlockMinHeight = 100f;     // 不小于原图视觉高（353×125 的框压扁会挤边框）
+    const float UnlockMinHeight = 180f;     // 【2026-11-28 主人拍板】框高加一点（原 100），字上下更松
     const float UnlockPadX = 44f;           // 左右留白避开金框装饰（原图边框宽 66/83px，等比缩放后约 40px）
-    const float UnlockPadY = 16f;
-    const float UnlockLineH = 34f;          // 单行高度（24 号字 + 行距）
+    const float UnlockPadY = 28f;           // 【2026-11-28 主人拍板】上下留白 16→28，字不贴金边
+    const float UnlockLineH = 56f;          // 单行高度（40 号字 + 行距；2026-11-28 改字号同步）
     const float UnlockGapY = 22f;           // 与按钮行底边的间距
-    const int   UnlockFontSize = 24;        // 同开奖卡第三行（DraftPrizePopupUI Third 行）
+    const float UnlockShiftDownY = 100f;    // 【2026-11-28 主人拍板】整框相对按钮行再往下挪 100 逻辑像素
+    const int   UnlockFontSize = 40;        // 【2026-11-28 主人拍板】48 偏大，改 40 号左右；改字号须同步 UnlockLineH
     static readonly Color UnlockBannerBg   = new Color(0.10f, 0.10f, 0.13f, 0.94f);   // 缺图兜底纯色（同开奖卡底）
     static readonly Color UnlockTextColor  = new Color(1f, 0.9f, 0.5f, 1f);           // 金黄字（同「限定」角标口径）
+
+    // ── 失败界面「提升战力」框（2026-11-28 主人拍板：失败时把「新功能」框换成可提升战力的方式）─────
+    // 与胜利那条金框同一套底图/金黄字，只换文案 + 底部多一颗「去提升」钮（点了放弃复活回城并开角色页）。
+    // 【2026-11-28 主人截图「这个排版就不能优化下吗」】内边距不再写死：底框素材九宫格边宽是 左66/下32/右83/上29，
+    // 一律按 border 实算再加余量，标题与正文拆成两个 Text 做层级，按钮放大并抬离底边。
+    // 【2026-11-28 18:42 主人「这个框小点」】整框等比收一圈：600×283 → 560×235，
+    // 字号 36/24/26 → 30/20/22，纵向间距 26/32 → 18/22，内边距 10/12 → 8/8。
+    // 收完 4 列仍放得下（内宽 395 ÷ 4 ≈ 99，4 字 ×20 号 = 80，留 19 的呼吸位）。
+    const float PowerBannerWidth  = 560f;   // 原 600（与失败大图同宽）；收 40 让整框不那么压屏
+    const float PowerInnerPadX    = 8f;     // 金边内侧再留的横向余量（实际 padX = border.x + 本值）
+    const float PowerInnerPadY    = 8f;     // 同上，纵向
+    const float PowerTitleH       = 38f;    // 标题行高（30 号字）
+    /// <summary>标题与清单的间距。
+    /// 【2026-11-28 主人「提升战力和按钮可以都空一行」】原 2 → 26；18:42「框小点」收到 18，仍是一整行空隙。</summary>
+    const float PowerTitleGap     = 18f;
+    const float PowerBodyLineH    = 30f;    // 清单行高（N 列横排，只有一行）
+    const int   PowerTitleFontSize = 30;
+    /// <summary>清单每列的字号：4 列时列宽约 99，4 字 × 20 号 = 80 刚好留出呼吸位。</summary>
+    const int   PowerColFontSize  = 20;
+    /// <summary>最多分几列（现在最多 4 条途径：天赋 / 升星 / 招募 / 宠物）。</summary>
+    const int   PowerMaxCols      = 4;
+    /// <summary>框底边离屏幕底边的距离。
+    /// 【2026-11-28 主人「这个框再往下 移到最下面」】原 `PowerBannerGapY=18`（框顶贴按钮行底边）作废，
+    /// 现在整框钉在屏幕底部。48 = 给刘海机底部小黑条留的安全量（本界面预制体没挂 SafeAreaFitter，
+    /// 24 那种小值在真机会压到 home indicator 上）；要更贴底只改这一个常量。</summary>
+    const float PowerBottomMarginY = 48f;
+    const float PowerBtnW         = 150f;   // 【2026-11-28 18:42 框小点】170×56 → 150×50
+    const float PowerBtnH         = 50f;    // 宽高比 3.0 ≈ 素材 100×33 的 3.03，拉伸不变形
+    /// <summary>清单与按钮的纵向间距。
+    /// 【2026-11-28 主人「提升战力和按钮可以都空一行」】原 12 → 32；18:42「框小点」收到 22。</summary>
+    const float PowerBtnGap       = 22f;
+    const int   PowerBtnFontSize  = 22;
+    /// <summary>按钮底图：与失败界面的 确定/取消 同一张（绿底圆角，文字浅黄）。</summary>
+    const string PowerBannerBtnRes = "UI/Art/Common/确定按钮";
+    /// <summary>框内标题（固定一句，正文随存档状态变）。
+    /// 【2026-11-28 主人「战力不足改成提升战力 不要否定 多肯定」】原「战力不足」带否定意味，改正向表述。</summary>
+    const string PowerBannerTitle = "提升战力";
+    /// <summary>按钮文字（2026-11-28 主人拍板：点了回城并直接打开角色界面）。</summary>
+    const string PowerBannerBtnText = "去提升";
+    /// <summary>标题色：比正文更亮一档，拉开层级。</summary>
+    static readonly Color PowerTitleColor = new Color(1f, 0.95f, 0.72f, 1f);
+    /// <summary>正文色：沿用金黄字口径。</summary>
+    static readonly Color PowerBodyColor  = new Color(1f, 0.88f, 0.52f, 1f);
+    /// <summary>列间分隔线色：暗金半透明，只做视觉分栏。</summary>
+    static readonly Color PowerSepColor   = new Color(0.79f, 0.64f, 0.15f, 0.45f);
+    /// <summary>按钮文字色。
+    /// 【2026-11-28 主人「按钮上的字不太明显换个颜色」】原「复活」钮同款浅黄（1, 0.98, 0.54）
+    /// 压在绿底上几乎糊成一片 → 改成深褐 0.16/0.10/0.03：绿底上对比最强，也贴合界面的木金配色。
+    /// 同款绿底钮在别处（复活/返回）仍用浅黄，这里只改「提升战力」框这颗，不联动。</summary>
+    static readonly Color PowerBannerBtnTextColor = new Color(0.16f, 0.10f, 0.03f, 1f);
 
     /// <summary>
     /// 【2026-10-29 主人拍板 v4（预制体手摆版）】绑主人预制体手摆的分享节点（缺了 LogError 不静默，铁律 14）：
@@ -913,8 +1167,8 @@ public class BattleResultScreenUI : MonoBehaviour
         if (!_skipped)
             _onRewardsShown?.Invoke();
         // 【2026-11-27 主人拍板】先在按钮行下方挂「新功能开启」金框黄字框（本关解锁了功能才建；
-        // 第 3 关也建 = 日常/周常任务，见 FeatureUnlock.NewlyUnlockedText）。
-        // 再弹宠物指路气泡：第 3 关两样同刻出现，气泡锚到本框底（_unlockBannerT）往下错开，两框不撞。
+        // 【2026-11-28 主人拍板】第 3 关不再建本框（与宠物指路气泡重叠），真源在 FeatureUnlock.NewlyUnlockedText）。
+        // 再弹宠物指路气泡：有解锁框时锚到框底，第 3 关无框则锚确定按钮，两框不撞。
         BuildUnlockBanner(_rewardPanelT);
         // 【2026-11-25 主人拍板】第一章第三关首通：结算界面下方贴一条「回角色界面开启宠物上阵」气泡。
         // 判定与文案真源在 PetFeatureGuide；本类只负责在奖励展示完这个时点把锚点交出去。
@@ -1007,6 +1261,10 @@ public class BattleResultScreenUI : MonoBehaviour
         // 【2026-10-31 主人拍板】复活选择窗的 确定/返回 钮放大 30%（与失败直出同一口径）
         EnlargeResultButton(confirmT);
         EnlargeResultButton(cancelT);
+        // 【2026-11-28 主人拍板「失败了的话把新开功能那个框换成可提升战力的方式」】
+        // 在双钮下方挂「提升战力」金框（内容按存档已开放系统自动挑 + 一颗「去提升」钮）。
+        // 【2026-11-28 主人「这个框再往下 移到最下面」】已改为钉在屏幕底部，不再依赖按钮位置。
+        BuildPowerUpBanner(showNode);
         // 价格文本同步真源（主人手摆格式「20复活」→ 用传入的 revivePrice，防预制体占位价过期）；
         // 广告档（2026-10-25 主人拍板）传 reviveLabel=「看广告复活」直接替换整段文案；
         // 【2026-10-29 主人拍板】广告档把确认钮上主人摆的钻石 icon **换成广告图**（AdIconUI：
@@ -1018,6 +1276,11 @@ public class BattleResultScreenUI : MonoBehaviour
             priceLbl.text = reviveLabel ?? $"{revivePrice}复活";
             PurchasePriceStyle.Apply(priceLbl);   // 2026-11-08：复活价格统一描边（文字色仍是预制体摆的）
         }
+        // 【2026-11-28 主人「我说的一共有多少钻石要放到按钮上面的text 不要放到按钮里面」】
+        // 余额提示独立成一条 Text，挂在复活钮正上方（父级 = 复活钮，跟着它的缩放/位置走）；
+        // 按钮里只留「{价}复活」主价签。广告档没有钻石消耗 → 不显示余额。
+        if (string.IsNullOrEmpty(reviveLabel))
+            BuildReviveHaveLabel(confirmT);
         if (useAdIcon)
         {
             if (!AdIconUI.Apply(confirmT))
@@ -1041,6 +1304,46 @@ public class BattleResultScreenUI : MonoBehaviour
         btn.onClick.RemoveAllListeners();
         btn.onClick.AddListener(action);
     }
+
+    /// <summary>
+    /// 【2026-11-28 主人「我说的一共有多少钻石要放到按钮上面的text 不要放到按钮里面」】
+    /// 复活钮正上方挂一条余额提示「共 N 钻」：父级 = 复活钮（跟着 1.3 倍缩放与摆位走），
+    /// 顶对齐 + 底边距按钮顶边 <see cref="ReviveHaveGapY"/>；按钮内只剩「{价}复活」主价签。
+    /// 数值走 <see cref="ResourceWallet"/> 钻石真源，与扣费同源；raycastTarget=false 不挡点击。
+    /// </summary>
+    void BuildReviveHaveLabel(Transform confirmT)
+    {
+        if (confirmT == null) return;
+        var old = confirmT.Find(ReviveHaveLabelName);
+        if (old != null) Destroy(old.gameObject);   // 幂等：重复调用不叠字
+
+        long have = 0;
+        var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
+        if (data != null) have = ResourceWallet.Get(data, ResourceWallet.ResourceType.Diamond);
+
+        var go = new GameObject(ReviveHaveLabelName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        go.transform.SetParent(confirmT, false);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);   // 按钮顶边中点为锚
+        rt.pivot = new Vector2(0.5f, 0f);                       // 文字底边对齐锚点
+        rt.sizeDelta = new Vector2(ReviveHaveLabelW, ReviveHaveFontSize + 8f);
+        rt.anchoredPosition = new Vector2(0f, ReviveHaveGapY);
+
+        var t = go.GetComponent<Text>();
+        t.font = GameFonts.GetChinese();
+        t.fontSize = ReviveHaveFontSize;
+        t.fontStyle = FontStyle.Normal;
+        t.alignment = TextAnchor.MiddleCenter;
+        t.color = ReviveHaveColor;
+        t.raycastTarget = false;
+        t.horizontalOverflow = HorizontalWrapMode.Overflow;
+        t.verticalOverflow = VerticalWrapMode.Overflow;
+        t.text = "共" + have + "钻";
+        PurchasePriceStyle.Apply(t);   // 压在大图上，统一描边保证可读
+    }
+
+    /// <summary>复活钮上方余额提示的节点名（重建时按名字清旧节点）。</summary>
+    const string ReviveHaveLabelName = "钻石总数";
 
     /// <summary>
     /// 竞技场失败·仅返回（2026-10-31 主人拍板）：失败图 + 【取消】钮（文本主人已写好「返回」）一个出口。
