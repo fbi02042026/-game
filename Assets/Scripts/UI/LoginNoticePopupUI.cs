@@ -17,23 +17,24 @@ public class LoginNoticePopupUI : MonoBehaviour
     /// 已读记录在 PlayerPrefs：老玩家点「清除数据」走 SaveSystem.DeleteLocalSaveAndReset（不碰 PlayerPrefs），
     /// 所以清完档不会再弹；SaveSystem 版本自动清档的 DeleteAll 会把它一起清掉（= 新版正好重弹一次，与清档同节奏）。
     /// </summary>
-    public const string CurrentNoticeId = "2026-11-23";
+    // 【2026-11-27 主人「公告改成欢迎新玩家的」】升期号 = 全员重弹一次；文案从老玩家回归口径改欢迎新人。
+    public const string CurrentNoticeId = "2026-11-27";
 
     const string SeenPrefKey = "login_notice_seen_id";
 
+    // 欢迎新玩家版本（2026-11-27）：9 行（含 2 空行）、每行最多 12 全角字，24 号字在 360 宽内不折行。
+    // 行高 24×1.4=33.6px ×9≈302px，从框顶(≈173)排到底≈-129，离书本装饰(y<-153)余 ≈24px，不压装饰。
+    // 核心信息：欢迎 → 游戏是什么 → 跟着引导 + 领邮箱欢迎信 → 自动存档 + 祝福。加群号放在欢迎信正文，公告不重复。
     const string NoticeBody =
-        "好久不见，久等啦！\n" +
+        "欢迎来到裂隙之刃！\n" +
+        "一款能挂机闯关、\n" +
+        "收集佣兵的像素小游戏。\n" +
         "\n" +
-        "新版加了全新关卡剧情\n" +
-        "和宠物玩法，等你来玩！\n" +
-        "关卡掉的装备也能带走！\n" +
+        "新手先跟着引导走一遍，\n" +
+        "金币钻石已经备好，\n" +
+        "邮箱欢迎信记得领。\n" +
         "\n" +
-        "老存档已经清空，\n" +
-        "大家从新档再出发。\n" +
-        "\n" +
-        "天赋也改版了！关卡还在调优，\n" +
-        "后面还会调整，请多包涵~\n" +
-        "新朋友不用理会，直接开玩！";
+        "进度自动保存，玩得开心！";
 
     static LoginNoticePopupUI _instance;
 
@@ -133,8 +134,8 @@ public class LoginNoticePopupUI : MonoBehaviour
         // 正文：按原图纸面安全区换算后两边再各缩进 15px（2026-10-20 主人拍板「框体两边往里缩，
         // 不要跟图片一样宽」），纸面 x∈[55,448] 宽 393 → 正文框 360 居中，两侧留白 ≈20px。
         // 字号 24：2026-11-23 主人要求「公告再大一些」（原 22，当年降 22 是旧文案最长 16 全角 24 号放不下；
-        // 现文案最长 14 全角 = 336px，24 号在 360 宽内放得下不折行；12 行总高 ≈293px，
-        // UpperCenter 从框顶排，底部离书本装饰（y<-153）余 ≈19px）。
+        // 现文案 9 行、最长 12 全角 = 288px，24 号在 360 宽内放得下不折行；9 行总高 ≈302px，
+        // UpperCenter 从框顶排，底部离书本装饰（y<-153）余 ≈24px（11-27 压缩空行后重算，旧 12 行版漏算空行会压装饰）。
         var body = NewText("Body", board.transform, NoticeBody);
         body.fontSize = 24;
         body.lineSpacing = 1.4f;

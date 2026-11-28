@@ -352,7 +352,7 @@ public class QuestBarBinder : MonoBehaviour
             // 已开启：「今日获取375/500金币」这类文案表里已带 {0}/{1}（DailyViews 里 string.Format 过），
             // 再补括号就是重复 → 只显示 desc（2026-11-01 主人口径）。
             if (!SaveSystem.Instance.Data.DailyTasksUnlocked)
-                _dailyText.text = "通关 1-3 后开启";
+                _dailyText.text = "通关第 3 关后开启";
             else
                 _dailyText.text = d.HasValue ? d.Value.desc : "今日已完成";
             FitInfoFont(_dailyText);   // 超长截断 + 统一字号
@@ -650,11 +650,11 @@ public class QuestBarBinder : MonoBehaviour
 
     void OnClickDaily()
     {
-        // 【2026-11-25】日常未开启（1-3 未通）：这一行是解锁目标，点了给一句去打通第三关的提示，不跳转。
+        // 【2026-11-25 立；11-27 改全局关号】日常未开启（第 3 关未通）：这一行是解锁目标，点了给一句去打通第三关的提示，不跳转。
         if (SaveSystem.Instance != null && SaveSystem.Instance.Data != null
             && !SaveSystem.Instance.Data.DailyTasksUnlocked)
         {
-            GlobalToastUI.Show("每日任务要打通 1-3 后开启");
+            GlobalToastUI.Show("每日任务要打通第 3 关后开启");
             return;
         }
         var d = QuestBarData.Build().daily;

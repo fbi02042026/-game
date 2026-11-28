@@ -12,7 +12,7 @@ using UnityEngine;
 ///    所有缓冲懒初始化，避免 Unity 反序列化 .ctor 期间触发 UnityException。
 /// 2. 所有上报都 try/catch 包住，禁止因埋点抛异常而中断游戏逻辑。
 /// 3. 上报目标可随时替换（We 分析 / TapDB / 自建），门面接口不变；当前微信上报走
-///    <see cref="WeChatAnalyticsBridge"/>（占位 + TODO，缺 .jslib / WX SDK 封装）。
+///    <see cref="WeChatAnalyticsBridge"/>（2026-11-27 已接官方 WX.ReportEvent，不再用占位）。
 /// 4. 内部做批处理 / 节流：每 FlushBatchSize 条或每 FlushIntervalSec 秒 flush 一次，不每次都上报。
 /// 5. 会话时长自己算：记住 SessionStart 的时间戳，SessionEnd 时算差值。
 /// </summary>
@@ -89,15 +89,33 @@ public static class Analytics
         }
     }
 
+    // 【2026-11-27 场景分析「章通关率」口径】曝光=进入本章首关，点击=打完本章大Boss。
+    // 只统计正式主线（Normal），副本/竞技场/裂隙/支线岛的 stageIndex 也可能是 0，必须挡掉，否则刷假曝光。
+    // 判据真源：章内关号 stageIndex 0-based（关1=0、关10=大Boss=9），见 ActProgressionDefs.BossKindOfStage。
+    static bool IsFormalMainRun() => BattleManager.Instance != null && BattleManager.Instance.IsFormalMainRun;
+
     public static void StageStart(int chapter, int stageIndex)
-        => Track("stage_start", ("chapter", chapter), ("stage_index", stageIndex));
+    {
+        Track("stage_start", ("chapter", chapter), ("stage_index", stageIndex));
+        // 场景分析漏斗起点：仅正式主线·本章首关(stageIndex==0)报一次曝光（dim=1）。
+        if (stageIndex == 0 && IsFormalMainRun())
+            WeChatSceneAnalyticsBridge.Report(WeChatSceneAnalyticsBridge.StageBranch(chapter),
+                WeChatSceneAnalyticsBridge.EventExposure, 1);
+    }
 
     public static void StageEnd(int chapter, int stageIndex, bool win, double durationSec)
-        => Track("stage_end",
+    {
+        Track("stage_end",
             ("chapter", chapter),
             ("stage_index", stageIndex),
             ("win", win),
             ("duration_sec", Math.Round(durationSec, 1)));
+        // 场景分析漏斗终点：仅正式主线·打完本章大Boss(stageIdx0==9,BossKind==2)且胜利报点击（dim=1），与首关曝光成对。
+        // ⚠ 用传入的 stageIndex 快照，不能现读 currentStageIndex——OnStageComplete 已把它重置为 0。
+        if (win && ActProgressionDefs.BossKindOfStage(stageIndex) == 2 && IsFormalMainRun())
+            WeChatSceneAnalyticsBridge.Report(WeChatSceneAnalyticsBridge.StageBranch(chapter),
+                WeChatSceneAnalyticsBridge.EventClick, 1);
+    }
 
     public static void ChapterReach(int chapter)
         => Track("chapter_reach", ("chapter", chapter));
@@ -129,7 +147,17 @@ public static class Analytics
         => Track("ad_fail", ("placement", placement), ("reason", reason));
 
     public static void TutorialStep(string stepName, int stepIndex)
-        => Track("tutorial_step", ("step", stepName), ("index", stepIndex));
+    {
+        Track("tutorial_step", ("step", stepName), ("index", stepIndex));
+        // 场景分析漏斗：引导进入=曝光（dim 固定 1，与 TutorialDone 点击同维度，后台才能按同 dim 配对算整体通过率）。
+        WeChatSceneAnalyticsBridge.Report(WeChatSceneAnalyticsBridge.BranchTutorial,
+            WeChatSceneAnalyticsBridge.EventExposure, 1);
+    }
+
+    /// <summary>引导全部完成=漏斗终点（点击）。由 FirstRunGuide 通关落盘处调用一次。</summary>
+    public static void TutorialDone()
+        => WeChatSceneAnalyticsBridge.Report(WeChatSceneAnalyticsBridge.BranchTutorial,
+            WeChatSceneAnalyticsBridge.EventClick, 1);   // dim=1 与 TutorialStep 曝光同维度，保证漏斗配对
 
     public static void QuestComplete(string questId)
         => Track("quest_complete", ("quest_id", questId));
@@ -146,6 +174,8 @@ public static class Analytics
         {
             if (_queue == null) _queue = new List<KeyValuePair<string, string>>(FlushBatchSize);
             _lastFlushTime = Time.unscaledTime;
+            // 微信构建用官方 WX.ReportEvent 真正上报；其它平台桥内只走日志，开关保持 false 语义一致。
+            WeChatAnalyticsBridge.UseWeChatReport = WeChatAnalyticsBridge.Available;
             SessionStart();
         }
         catch (Exception e)

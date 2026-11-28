@@ -136,6 +136,7 @@ public class SettingsPopupUI : MonoBehaviour
     void OnDestroy()
     {
         if (Instance == this) Instance = null;
+        WeChatGameClub.Hide();   // 【2026-11-27】弹窗销毁时收掉原生游戏圈按钮，防残留在画面上
     }
 
     public static void Toggle(SettingsHost host = SettingsHost.Auto)
@@ -169,6 +170,11 @@ public class SettingsPopupUI : MonoBehaviour
         RefreshHostChrome();
         GameFonts.ApplyToHierarchy(transform);
 
+        // 【2026-11-27 主人拍板「③加游戏圈」】微信小游戏：弹窗打开后把原生游戏圈按钮贴到锚点上。
+        // 原生按钮不随 Unity 布局，须等 Canvas 布局跑完（下一帧）再换算坐标；Close/OnDestroy 时收掉。
+        if (WeChatGameClub.Available && CurrentHost != SettingsHost.Battle)
+            StartCoroutine(ShowGameClubNextFrame());
+
         // #region agent log
         DebugAgentLog.Log("H11", "SettingsPopupUI.Open", "settings_open",
             $"{{\"host\":\"{CurrentHost}\",\"sort\":{ResolvePopupSort(CurrentHost)},\"rootActive\":{(root != null && root.activeSelf ? "true" : "false")}}}");
@@ -182,9 +188,74 @@ public class SettingsPopupUI : MonoBehaviour
             : GameConfig.UiSort.TownPopup;
     }
 
+    /// <summary>【2026-11-27】下一帧把原生游戏圈按钮贴到设置弹窗的锚点位置（等 Canvas 布局完成）。</summary>
+    System.Collections.IEnumerator ShowGameClubNextFrame()
+    {
+        yield return null;
+        var anchor = EnsureGameClubRow();
+        if (anchor != null) WeChatGameClub.ShowAt(anchor);
+    }
+
+    /// <summary>
+    /// 游戏圈入口行（幂等，同 EnsureClearDataButton 套路；预制体与运行时兜底都适用）。
+    /// 挂在 toggleList 里最后一个可见开关行下方；非微信平台不建（入口只在微信小游戏有意义）。
+    /// 返回右侧的锚点 RectTransform（原生按钮盖在这里），弹窗关闭时由 WeChatGameClub.Hide 收掉。
+    /// </summary>
+    RectTransform EnsureGameClubRow()
+    {
+        if (!WeChatGameClub.Available) return null;
+
+        var existing = FindDeep(transform, "GameClubRow") as RectTransform;
+        if (existing != null) return FindDeep(existing, "ClubAnchor") as RectTransform;
+
+        var list = toggleList != null ? toggleList : FindDeep(transform, "ToggleList");
+        if (list == null) return null;
+
+        // 参照行：跟在最后一个可见开关行（音效行）下方；结构异常时退到固定 y
+        float y = -240f;
+        var sfx = FindDeep(list, "SfxRow") as RectTransform;
+        if (sfx != null) y = sfx.anchoredPosition.y - 72f;
+        else
+        {
+            var music = FindDeep(list, "MusicRow") as RectTransform;
+            if (music != null) y = music.anchoredPosition.y - 144f;
+        }
+
+        var rowGo = new GameObject("GameClubRow", typeof(RectTransform));
+        rowGo.transform.SetParent(list, false);
+        var rowRt = (RectTransform)rowGo.transform;
+        rowRt.anchorMin = rowRt.anchorMax = new Vector2(0.5f, 1f);
+        rowRt.pivot = new Vector2(0.5f, 1f);
+        rowRt.anchoredPosition = new Vector2(0f, y);
+        rowRt.sizeDelta = new Vector2(500f, 64f);
+
+        var nameText = CreateText(rowGo.transform, "Name", "玩家社区 · 游戏圈", 28, TextAnchor.MiddleLeft);
+        nameText.color = new Color(0.92f, 0.78f, 0.42f, 1f);
+        var nrt = nameText.rectTransform;
+        nrt.anchorMin = nrt.anchorMax = new Vector2(0f, 0.5f);
+        nrt.pivot = new Vector2(0f, 0.5f);
+        nrt.anchoredPosition = new Vector2(8f, 0f);
+        nrt.sizeDelta = new Vector2(300f, 48f);
+
+        // 原生按钮锚点（透明占位）：运行时由 WeChatGameClub.ShowAt 按此换算微信屏幕坐标
+        var anchorGo = new GameObject("ClubAnchor", typeof(RectTransform), typeof(Image));
+        anchorGo.transform.SetParent(rowGo.transform, false);
+        var art = anchorGo.GetComponent<Image>();
+        art.color = Color.clear;
+        art.raycastTarget = false;
+        var artRt = (RectTransform)anchorGo.transform;
+        artRt.anchorMin = artRt.anchorMax = new Vector2(1f, 0.5f);
+        artRt.pivot = new Vector2(1f, 0.5f);
+        artRt.anchoredPosition = new Vector2(-12f, 0f);
+        artRt.sizeDelta = new Vector2(140f, 48f);
+
+        return artRt;
+    }
+
     public void Close()
     {
         if (root != null) root.SetActive(false);
+        WeChatGameClub.Hide();   // 【2026-11-27】弹窗关闭即收掉原生游戏圈按钮（原生按钮不随 Unity 隐藏）
         Time.timeScale = _prevTimeScale > 0.01f ? _prevTimeScale : 1f;
     }
 
@@ -218,6 +289,9 @@ public class SettingsPopupUI : MonoBehaviour
         // 清除数据：只在登录 / 城镇设置里出，战斗设置不放（主人 2026-10-19 口径）
         if (clearDataButton != null)
             clearDataButton.gameObject.SetActive(!battle);
+        // 游戏圈入口：战斗设置不放（撤离专用弹窗不掺社区入口；原生按钮同步收掉）
+        SetNamedActive("GameClubRow", !battle);
+        if (battle) WeChatGameClub.Hide();
 
         ApplyPanelAndButtonLayout();
         ApplyExtraToggleVisibility();

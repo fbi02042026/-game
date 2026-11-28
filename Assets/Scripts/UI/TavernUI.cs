@@ -169,12 +169,8 @@ public class TavernUI : MonoBehaviour, ITownPage
 
     public void Show()
     {
-        // 2026-09-26 主人拍板：酒馆暂不开（佣兵功能调好再开）。开关在 GameConfig.TAVERN_ENABLED。
-        if (!GameConfig.TAVERN_ENABLED)
-        {
-            GlobalToastUI.Show("酒馆暂未开放");
-            return;
-        }
+        // 【2026-11-27 主人拍板】酒馆总开关 TAVERN_ENABLED 是当初验证三选一的临时测试开关，
+        // 三选一早已正式开放，开关已删除；酒馆恒开，各功能仍由 FeatureUnlock 各自的门槛把关。
         ShowPage();
     }
     public void Hide() => HidePage();

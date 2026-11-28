@@ -1455,13 +1455,13 @@ public class SaveData
         }
 
         MigrateChapterSets();   // 【2026-11-05】集合启动初始化 = 只按落盘镜像重建，不重算、不补写、无老档兼容
-        // 【2026-10-29 主人拍板】支线岛改为「通关第 1 章后才开放」：若第 1 章尚未通关却已派定支线岛
+        // 【2026-10-29 主人拍板】支线岛改为「通关门槛到了才开放」：若门槛未到却已派定支线岛
         // （旧档 / 2026-10-26「引导完成即派」口径遗留），清掉重派——避免一进游戏就显示支线；
-        // 等门槛到了由 EnsureForkRoll 重新随机派定。
-        // 【2026-11-17 主人拍板「支线后挪」】对齐 FeatureUnlock.SideIslandOpen：
-        // 派岛门槛从「通第 1 座大关」后挪到「通第 1 章」（CHAPTER_GRANDS=10 关全通）。
-        // 🔴 一律从 clearedStages 推，不读 grandProgress 缓存（同 StartChapter / OnStageComplete / FeatureUnlock 口径）。
-        if (DerivedGrandProgressFromClearedStages(1) < 10) { branchRoll1 = 0; branchRoll2 = 0; }
+        // 等门槛到了由 EnsureForkRoll 重新随机派定。（2026-11-27 起门槛 = 通关第 6 关）
+        // 【2026-11-17 主人拍板「支线后挪」；2026-11-27 门槛重排】对齐 FeatureUnlock.SideIslandOpen（现= 通关第 6 关）。
+        // 🔴 原写法 `DerivedGrandProgressFromClearedStages(1) < 10` 恒为真（该函数返回篇内「大关数」，路线 B 每章仅 1 座大关，
+        //    最大值 1），会把 branchRoll 每次读档都清零、支线岛永远派不出来 —— 2026-11-27 一并修正为走唯一真源。
+        if (!FeatureUnlock.SideIslandOpen(this)) { branchRoll1 = 0; branchRoll2 = 0; }
         MigrateMercScrolls();
         if (unlockedMercIds.Count == 0)
             SeedDefaultUnlockedMercs();
@@ -2020,17 +2020,17 @@ public class SaveData
     }
 
     /// <summary>
-    /// 抽奖池当前开放格数（2026-10-13 主人拍板「剩下的格子当玩家通关第一章后面的章节开放」；
-    /// 2026-10-23 改版：第 4 格仍通关第 2 章开，第 5 格改花 <see cref="DrawPoolPaidUnlockCost"/> 钻石开）。
-    /// 老档已通关第 3 章的视为已付费解锁（格子不回缩），新玩家一律花钻。
+    /// 抽奖池当前开放格数。【2026-11-27 定稿】第 4 格 = 通关全局第 16 关（第 2 章节下标 5）免费开；
+    /// 第 5 格 = 只花 <see cref="DrawPoolPaidUnlockCost"/> 钻石开，不再要求通关章节（老档通章白送口径作废）。
     /// </summary>
     public int DrawPoolSlots
     {
         get
         {
             int s = DrawPoolDefaultSlots;
-            if (clearedChapterIds != null && clearedChapterIds.Contains(2)) s++;
-            if (drawPoolPaidUnlock || (clearedChapterIds != null && clearedChapterIds.Contains(3))) s++;
+            // 【2026-11-27 定稿】第 4 格后移到第 16 关（账号级深度档，与换职业同批）。
+            if (HasStageCleared(2, 5)) s++;       // 第 4 格：全局第 16 关
+            if (drawPoolPaidUnlock) s++;          // 第 5 格：只认付费标记
             // 本文件是纯数据层，不依赖 UnityEngine，故用 System.Math.Min 而非 Mathf.Min
             s = System.Math.Min(s, DrawPoolMaxSlots);
             return s;
@@ -2041,13 +2041,12 @@ public class SaveData
     public const int DrawPoolPaidUnlockCost = 100;
 
     /// <summary>
-    /// 第 5 格是否还可花钻解锁：须先通关第 2 章（第 4 格已开，保证花钻开的一定是最后一格，不乱序），
-    /// 且未解锁、老档未通第 3 章。
+    /// 第 5 格是否还可花钻解锁：只需第 4 格已开（通关第 16 关，保证花钻开的是最后一格、不乱序）且未付费解锁。
+    /// 【2026-11-27】不再附加「老档未通第 3 章」条件——通章白送已作废。
     /// </summary>
     public bool CanPaidUnlockDrawPoolSlot
         => DrawPoolSlots == DrawPoolMaxSlots - 1 && !drawPoolPaidUnlock
-           && (clearedChapterIds == null || !clearedChapterIds.Contains(3))
-           && clearedChapterIds != null && clearedChapterIds.Contains(2);
+           && HasStageCleared(2, 5);
 
     /// <summary>置位第 5 格付费解锁（扣钻由 UI 层负责，这里只管存档位）。幂等，返回是否发生了变化。</summary>
     public bool MarkDrawPoolPaidUnlock()
@@ -2358,7 +2357,7 @@ public class SaveData
         string today = DayKeyUtil.TodayKey();
         if (string.IsNullOrEmpty(today)) return 0;
         // 【2026-11-25 主人拍板「每日任务在第三关通关后开启」】未开启不累计、不产生待发经验，
-        // 避免玩家在 1-3 之前攒下「今日通关」进度，一解锁就白拿一条奖励。
+        // 避免玩家在第 3 关之前攒下「今日通关」进度，一解锁就白拿一条奖励。
         if (!DailyTasksUnlocked) return 0;
         if (dailyStageClearDayKey != today)
         {
@@ -2390,7 +2389,7 @@ public class SaveData
     /// 每日 / 周常任务是否已开启（2026-11-25 主人拍板「把每日任务在第三关通关后开启」）。
     /// 真源 = 正式主线第 1 篇第 3 关通关（clearedStages "1_2"），与宠物功能解锁同一个门槛
     /// （PetFeatureGuide.ShouldGuideFromSave / CharacterUI.RefreshPetEntry 同判据）。
-    /// 未开启：任务栏日常行只显示「通关 1-3 后开启」、面板日常页只给解锁提示、计数器不累加、Settle 不发放。
+    /// 未开启：任务栏日常行只显示「通关第 3 关后开启」、面板日常页只给解锁提示、计数器不累加、Settle 不发放。
     /// </summary>
     public bool DailyTasksUnlocked => HasStageCleared(1, 2);
 

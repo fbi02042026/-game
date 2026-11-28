@@ -159,7 +159,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
     public Button  adventureLogBtn;   // 冒险日志
 
     [Header("关卡详情面板")]
-    public Text    stageNameLabel;    // "1-3  哥布林营地"
+    public Text    stageNameLabel;    // "第 3 关  哥布林营地"（全局关号，2026-11-27）
     public Text    stageDescLabel;
     public Text    dropTitleLabel;    // "可能掉落"（字号对齐「敌人信息」）
     public Transform enemyIconContainer;
@@ -454,7 +454,7 @@ public partial class AdventureUI : MonoBehaviour, ITownPage, IBeginDragHandler, 
 
         if (!warmupOnly)
         {
-            // 【2026-11-02 主人拍板】试炼场解锁提示：2-5 通关后第一次进冒险页 toast 一次（主界面入口同刻亮出）。
+            // 【2026-11-02 立；11-27 定稿第 8 关】试炼场解锁提示：通关第 8 关后第一次进冒险页 toast 一次（主界面入口同刻亮出）。
             // 放 warmupOnly 块内：进镇预热点亮那遍不触发、不写标记（同 SideIslandGuide 口径）。
             TryShowArenaUnlockToast();
 

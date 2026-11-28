@@ -456,7 +456,7 @@ public static class MailSystem
     }
 
     /// <summary>
-    /// 首登欢迎邮件（给玩家的正式信）：含 800 金币 + 100 钻石 + 致谢与加群邀请。
+    /// 首登欢迎邮件（给玩家的正式信）：附件 800 金币 + 100 钻石；正文只做游戏介绍 + 欢迎（2026-11-27 主人拍板去掉玩法指引与加群邀请）。
     /// 【2026-11-23 主人拍板「只留欢迎信 给800金币 100钻石」】原 200 金币+5 天赋石改 800 金币+100 钻石，
     /// id 升版 v4 重发（老玩家也会收到新版一封；旧版 v3 与停发的补偿礼包由 DevGiftMail 清理）。
     /// 配图走表情包「高兴」（2026-10-16 主人原话：「表情用表情包里的图片 用高兴的那个」——不用佣兵头像顶表情位）。
@@ -471,17 +471,27 @@ public static class MailSystem
         const string WelcomeId = "welcome_2026_v4";
         // 【2026-11-25 主人「第一封就写个欢迎信、跟剧情相关点」】标题改短+贴游戏名；列表最大字数在 MailListUI。
         const string WelcomeTitle = "欢迎信·裂隙之刃";
+        // 【2026-11-27 主人「只是介绍一下游戏、欢迎玩家就行」】正文去掉玩法指引/加群邀请，只留游戏介绍+欢迎。
+        // 提成常量与新发/存量刷新共用，避免两处文案漂移；奖励仍走 flat 字段（800金币+100钻石）。
+        const string WelcomeBody =
+            "欢迎来到《像素冒险：裂隙之刃》！\n\n" +
+            "这是一个关于冒险与伙伴的故事：带着你的队伍闯过裂隙，" +
+            "一关关往下打，捡装备、遇同伴，慢慢变强。\n\n" +
+            "小队里每个人都有自己的脾气和本事，路还长，慢慢玩就好。\n\n" +
+            "希望你能在这里玩得开心。\n\n" +
+            "—— 像素冒险制作组";
         var data = SaveSystem.Instance.Data;
         var list = data.mailInbox;
 
-        // 【2026-11-25】存量欢迎信只刷标题文案，立刻在当前存档生效；不动 id / 奖励 / 标记，绝不重发。
-        // 只认 welcome_2026_v4 这一封，title 相同则跳过（幂等，不反复 Save）。
+        // 【2026-11-25 立；11-27 扩到正文】存量欢迎信刷标题 + 正文，立刻在当前存档生效；
+        // 不动 id / 奖励 / 标记，绝不重发。只认 welcome_2026_v4 这一封，文案相同则跳过（幂等，不反复 Save）。
         for (int i = 0; i < list.Count; i++)
         {
             var m = list[i];
-            if (m != null && m.id == WelcomeId && m.title != WelcomeTitle)
+            if (m != null && m.id == WelcomeId && (m.title != WelcomeTitle || m.body != WelcomeBody))
             {
                 m.title = WelcomeTitle;
+                m.body = WelcomeBody;
                 SaveSystem.Instance.Save();
                 break;
             }
@@ -511,12 +521,7 @@ public static class MailSystem
             id = WelcomeId,
             title = WelcomeTitle,
             sender = "制作组",
-            body = "感谢您下载并试玩《像素冒险：裂隙之刃》！\n\n" +
-                   "这是制作组的一点小心意——800 金币与 100 钻石请收下，祝您冒险顺利。\n\n" +
-                   "我们是个小团队，正努力把游戏做得更好玩。如果您在游戏里有任何想法、吐槽或建议，" +
-                   "非常欢迎加入玩家交流群（QQ 群号 1126152907），和我们一起聊游戏制作。\n\n" +
-                   "我们一定会认真听取大家合理的建议，让游戏变得更有趣。再次感谢您的支持！\n\n" +
-                   "—— 像素冒险制作组",
+            body = WelcomeBody,
             createTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             type = MailType.Reward,
             detailImagePath = "UI/Art/Stickers/高兴",   // 详情页表情：表情包「高兴」（2026-10-16 主人拍板，路径同 MailDetailUI.StickerDir 口径）

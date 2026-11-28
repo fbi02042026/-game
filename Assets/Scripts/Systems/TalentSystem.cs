@@ -39,13 +39,15 @@ public static class TalentSystem
     public const long CHANGE_JOB_DIAMOND_COST = 500;
 
     /// <summary>
-    /// 【2026-11-20 主人拍板】换职业的关卡门槛：通关「第 1 章第 5 关」后才允许换。
-    /// 判定走主线进度真源 <c>SaveData.HasStageCleared(chapter, stageIndex0)</c>；stageIndex0 为 0 基，故第 5 关 = 4。
+    /// 【2026-11-20 立；11-27 定稿改全局关号】换职业的关卡门槛：通关全局第 16 关后才允许换（账号级深度，跨章最末）。
+    /// 判定走主线进度真源 <c>SaveData.HasStageCleared(chapter, stageIndex0)</c>；第 16 关 = 第 2 章节下标 5。
     /// 🔴 主人要求「可以改，到时看测试进度」——测试期要调门槛只改这两个数，不动判定代码。
     /// 🔴 只判进度、不清进度：换职业全程不碰 clearedStages，关卡记录天然保留。
     /// </summary>
-    public const int CHANGE_JOB_UNLOCK_CHAPTER = 1;
-    public const int CHANGE_JOB_UNLOCK_STAGE_INDEX0 = 4;
+    public const int CHANGE_JOB_UNLOCK_CHAPTER = 2;
+    public const int CHANGE_JOB_UNLOCK_STAGE_INDEX0 = 5;
+    /// <summary>提示用全局关号（= (chapter-1)*10 + stageIndex0 + 1）；跨章后不能再用 stageIndex0+1。</summary>
+    public const int CHANGE_JOB_UNLOCK_GLOBAL_STAGE = (CHANGE_JOB_UNLOCK_CHAPTER - 1) * 10 + CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1;
 
     /// <summary>换职业关卡门槛是否已达成（唯一判定出口）。未达标 reason 给 UI 直接 toast。</summary>
     public static bool CanChangeJobByProgress(out string reason)
@@ -53,7 +55,7 @@ public static class TalentSystem
         var data = SaveSystem.Instance != null ? SaveSystem.Instance.Data : null;
         if (data == null || !data.HasStageCleared(CHANGE_JOB_UNLOCK_CHAPTER, CHANGE_JOB_UNLOCK_STAGE_INDEX0))
         {
-            reason = $"切换职业\n通过第{CHANGE_JOB_UNLOCK_STAGE_INDEX0 + 1}关后解锁";
+            reason = $"切换职业\n通关第{CHANGE_JOB_UNLOCK_GLOBAL_STAGE}关后解锁";
             return false;
         }
         reason = null;

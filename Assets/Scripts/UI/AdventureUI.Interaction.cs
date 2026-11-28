@@ -217,7 +217,7 @@ public partial class AdventureUI
     /// 【2026-10-31 重做】B2 落地后「通第 1 章」= 50 小关 ≈ 1.2 天，两个标签必须分开判，
     /// 否则会出现「标签能点、点进去被 toast 拦」的假开门：
     /// · 裂隙(2) → 第 1 座大关通关（与进本门槛 FeatureUnlock.RiftOpen 同源）；
-    /// · 活动副本(4) → 任一副本已解锁（金币 D2 先开，徽记 D3）。
+    /// · 活动副本(4) → 任一副本已解锁（徽记随升阶第 8 关先开，金币/卷轴/礼物第 12 关）。
     /// </summary>
     bool IsModeTabLocked(int idx)
     {

@@ -121,7 +121,7 @@ public static class ChapterRouteTable
         if (data == null) return;
         // 【2026-10-31 修】原第 122 行 `if (!data.HasClearedChapter(1)) return;` 会把下面的大关判定
         // 变成死代码（永远走不到），B2 后「通第 1 章」= 50 小关 → 支线岛被拖到第 2 天。
-        // 现统一走 FeatureUnlock.SideIslandOpen（第 1 座大关通关，≈25 体力）。
+        // 现统一走 FeatureUnlock.SideIslandOpen（2026-11-27 起 = 通关第 6 关）。
         if (!FeatureUnlock.SideIslandOpen(data)) return;
         if (data.branchRoll2 != 0) return;                       // 两条已派满（两条制）
         // 当前派定的岛还没打完 → 保留不动（正在打/没打完）
